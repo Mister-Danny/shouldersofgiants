@@ -532,6 +532,13 @@
 
   /* Free-play turn (Turns 2 remainder, 3, 4, 5) */
   function step_freeTurn(onEndTurn) {
+    // Close any open card-info popup so its backdrop doesn't block the board.
+    // During locked guided steps the target elements are tut-lit (z-index 950)
+    // and sit above the popup (z-index 200), so dragging still works there.
+    // But in the free turn nothing is lit, so an open popup blocks everything.
+    var popupEl = document.getElementById('battle-popup-backdrop');
+    if (popupEl) popupEl.classList.remove('visible');
+
     endTurnBtnEl.disabled = false;
     lit(endTurnBtnEl);
     TS.awaitAction = 'free_end_turn';

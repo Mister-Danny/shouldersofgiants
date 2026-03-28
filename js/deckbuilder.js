@@ -293,14 +293,33 @@
     if (_deckHowl && _deckHowl.playing()) { _deckHowl.stop(); }
   }
 
-  function saveDeck() {
+  /* ── Difficulty modal ────────────────────────────────────────── */
+
+  var diffBackdropEl = document.getElementById('difficulty-backdrop');
+
+  function openDifficultyModal() {
     if (selectedIds.size !== DECK_SIZE) return;
+    diffBackdropEl.classList.add('visible');
+  }
+
+  function chooseDifficulty(difficulty) {
+    diffBackdropEl.classList.remove('visible');
+    window.aiDifficulty = difficulty;   // read by game.js runAiSelection
     localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(selectedIds)));
-    // Stop music immediately before leaving the deck builder
     stopDeckMusic();
     showScreen('screen-battle');
     if (typeof initGame === 'function') initGame();
   }
+
+  document.getElementById('btn-difficulty-easy').addEventListener('click', function () {
+    chooseDifficulty('easy');
+  });
+  document.getElementById('btn-difficulty-hard').addEventListener('click', function () {
+    chooseDifficulty('hard');
+  });
+  diffBackdropEl.addEventListener('click', function (e) {
+    if (e.target === diffBackdropEl) diffBackdropEl.classList.remove('visible');
+  });
 
   /* ── Event wiring ────────────────────────────────────────────── */
 
@@ -316,7 +335,7 @@
     if (e.key === 'Escape' && popupCardId !== null) closePopup();
   });
 
-  saveBtn.addEventListener('click', saveDeck);
+  saveBtn.addEventListener('click', openDifficultyModal);
   backBtn.addEventListener('click', function () { showScreen('screen-home'); });
 
   // Export so tutorial.js can re-enter the deck builder after tutorial ends

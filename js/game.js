@@ -144,6 +144,9 @@
   ═══════════════════════════════════════════════════════════════ */
 
   function initGame() {
+    // Default to easy if no difficulty was chosen (e.g. launched from tutorial)
+    if (!window.aiDifficulty) window.aiDifficulty = 'easy';
+
     G.locations = pickLocations();
     window.initBattleUI(G.locations);
 
@@ -984,17 +987,27 @@
     G.aiRevealQueue = [];
     var budget = CAPITAL + G.aiBonusCapitalNextTurn;
     G.aiBonusCapitalNextTurn = 0;
+    var isHard = window.aiDifficulty === 'hard';
+
+    // Both modes shuffle randomly. Easy additionally skips ~1 in 3 cards.
     var hand = shuffle(G.aiHand.slice());
 
     // FIRST_CARD_HERE: on Turn 1, force AI's first card to the Great Rift Valley
     var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
     var aiFirstPlayed = false;
 
+    // Hard mode late-game: identify the 2 locations the AI is best positioned to win
+    var hardWinLocs = (isHard && G.turn >= 4) ? _aiWinLocs(2) : null;
+
     hand.forEach(function (cardId) {
       if (budget <= 0) return;
       var card = CARDS.find(function (c) { return c.id === cardId; });
       if (!card || card.cc > budget) return;
 
+      // Easy: randomly skip ~1 in 3 affordable cards to simulate carelessness
+      if (!isHard && Math.random() < 0.33) return;
+
+      // Build list of locations with an available slot
       var empties = [];
       G.locations.forEach(function (loc) {
         var fi = G.aiSlots[loc.id].indexOf(null);
@@ -1004,16 +1017,48 @@
 
       var t;
       if (riftLoc && G.turn === 1 && !aiFirstPlayed) {
-        // Must play first card to Rift Valley
+        // Turn 1 rule: first card must go to the Rift Valley
         var riftFi = G.aiSlots[riftLoc.id].indexOf(null);
-        if (riftFi === -1) return; // Rift Valley full, skip
+        if (riftFi === -1) return;
         t = { locId: riftLoc.id, slotIndex: riftFi };
         aiFirstPlayed = true;
       } else {
         aiFirstPlayed = true;
-        shuffle(empties);
-        t = empties[0];
+
+        if (!isHard) {
+          shuffle(empties);
+          t = empties[0];
+        } else if (G.turn <= 3) {
+          // Turns 1–3: contest — play to the location where AI is furthest behind.
+          // Tiebreak by picking the location with the fewest AI cards already (spread coverage).
+          empties.sort(function (a, b) {
+            var gapDiff = _aiLocGap(b.locId) - _aiLocGap(a.locId);
+            if (gapDiff !== 0) return gapDiff;
+            var aiCountA = G.aiSlots[a.locId].filter(Boolean).length;
+            var aiCountB = G.aiSlots[b.locId].filter(Boolean).length;
+            return aiCountA - aiCountB; // fewer AI cards = more urgent
+          });
+          t = empties[0];
+        } else {
+          // Turns 4–5: consolidate — maximize IP at the 2 locations most likely to win.
+          // Among those, prefer the one with the slimmest lead (needs more cushion).
+          var preferred = empties.filter(function (e) {
+            return hardWinLocs.indexOf(e.locId) !== -1;
+          });
+          if (preferred.length > 0) {
+            preferred.sort(function (a, b) {
+              // Smallest gap (or largest deficit) = higher priority within win-target locs
+              return _aiLocGap(b.locId) - _aiLocGap(a.locId);
+            });
+            t = preferred[0];
+          } else {
+            // Win-target locations are full — use any remaining slot
+            shuffle(empties);
+            t = empties[0];
+          }
+        }
       }
+
       var baseIP = card.ip + (G.aiCardIPBonus[cardId] || 0);
       G.aiSlots[t.locId][t.slotIndex] = { cardId: cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [] };
       G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
@@ -1023,6 +1068,29 @@
       var slotEl = getSlotEl('opp', t.locId, t.slotIndex);
       if (slotEl) { slotEl.dataset.cardId = cardId; setSlotFaceDown(slotEl); }
     });
+  }
+
+  /**
+   * _aiLocGap(locId)
+   * Returns playerIP − aiIP for revealed cards at a location.
+   * Positive = player leads, Negative = AI leads.
+   */
+  function _aiLocGap(locId) {
+    var pIP = G.playerSlots[locId].reduce(function (s, x) { return s + (x && x.revealed ? effectiveIP(x) : 0); }, 0);
+    var aIP = G.aiSlots[locId].reduce(   function (s, x) { return s + (x && x.revealed ? effectiveIP(x) : 0); }, 0);
+    return pIP - aIP;
+  }
+
+  /**
+   * _aiWinLocs(n)
+   * Returns the IDs of the n locations the AI is best positioned to win,
+   * sorted by lowest gap (most negative = largest AI lead).
+   */
+  function _aiWinLocs(n) {
+    return G.locations.slice()
+      .sort(function (a, b) { return _aiLocGap(a.id) - _aiLocGap(b.id); })
+      .slice(0, n)
+      .map(function (l) { return l.id; });
   }
 
   /* ═══════════════════════════════════════════════════════════════

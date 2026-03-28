@@ -80,6 +80,24 @@
     <!-- Save confirmation toast -->
     <div class="save-toast" id="save-toast">&#10003;&nbsp; Deck Saved</div>
 
+    <!-- Difficulty selection popup -->
+    <div id="difficulty-backdrop" class="popup-backdrop">
+      <div class="card-popup difficulty-popup">
+        <div class="popup-card-name">Difficulty Mode</div>
+        <div class="popup-divider"></div>
+        <div class="difficulty-options">
+          <button class="btn-snes btn-difficulty" id="btn-difficulty-easy">
+            <span class="diff-label">Serf</span>
+            <span class="diff-desc">Easy — The opponent is at your mercy</span>
+          </button>
+          <button class="btn-snes btn-difficulty" id="btn-difficulty-hard">
+            <span class="diff-label">Giant</span>
+            <span class="diff-desc">Hard — Get ready to be crushed</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Card Detail Popup — SNES dialogue box style ─────────── -->
     <!-- Clicking the backdrop (outside the panel) closes it       -->
     <div id="card-popup-backdrop" class="popup-backdrop">

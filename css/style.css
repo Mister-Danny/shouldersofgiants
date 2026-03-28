@@ -835,6 +835,58 @@ img    { display: block; }
 
 
 /* ══════════════════════════════════════════════════════════════════
+   DIFFICULTY POPUP
+══════════════════════════════════════════════════════════════════ */
+
+.difficulty-popup {
+  max-width: 480px;
+  width: 90%;
+}
+
+.difficulty-options {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.btn-difficulty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 20px;
+  width: 100%;
+  text-align: left;
+  border-color: var(--border-mid);
+  cursor: pointer;
+}
+
+.btn-difficulty:hover {
+  border-color: var(--snes-yellow);
+  color: var(--snes-yellow);
+}
+
+.btn-difficulty:hover .diff-desc {
+  color: var(--snes-yellow);
+  opacity: 0.85;
+}
+
+.diff-label {
+  font-family: var(--font);
+  font-size: 22px;
+  letter-spacing: 0.08em;
+}
+
+.diff-desc {
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+  transition: color 0.15s, opacity 0.15s;
+}
+
+/* ══════════════════════════════════════════════════════════════════
    SAVE TOAST
 ══════════════════════════════════════════════════════════════════ */
 
