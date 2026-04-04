@@ -166,16 +166,11 @@
     name.className   = 'battle-loc-name';
     name.textContent = loc.name;
 
-    var region = document.createElement('div');
-    region.className   = 'battle-loc-region';
-    region.textContent = loc.region;
-
     var ability = document.createElement('div');
     ability.className   = 'battle-loc-ability';
     ability.textContent = loc.abilityText;
 
     info.appendChild(name);
-    info.appendChild(region);
     info.appendChild(ability);
 
     var scorePlayer = document.createElement('div');
@@ -230,6 +225,23 @@
     el.appendChild(imgWrap);
     el.appendChild(ccEl);
     el.appendChild(ipEl);
+
+    // GSAP hover: pop card to full original size on enter, smooth return on leave
+    if (typeof gsap !== 'undefined') {
+      el.addEventListener('mouseenter', function () {
+        if (el.classList.contains('selected')) return;
+        gsap.killTweensOf(el);
+        gsap.set(el, { zIndex: 100 });
+        gsap.to(el, { scale: 1.35, duration: 0.14, ease: 'power2.out' });
+      });
+      el.addEventListener('mouseleave', function () {
+        gsap.killTweensOf(el);
+        gsap.to(el, {
+          scale: 1, duration: 0.22, ease: 'power2.inOut',
+          onComplete: function () { gsap.set(el, { zIndex: 1 }); }
+        });
+      });
+    }
 
     return el;
   }

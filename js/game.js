@@ -167,7 +167,7 @@
     G.phase             = 'select';
     G.capital           = CAPITAL;
     G.turnStartCapital  = CAPITAL;
-    G.playerFirst       = true;
+    G.playerFirst       = Math.random() < 0.5;
     G.playerRevealQueue = [];
     G.aiRevealQueue     = [];
 
@@ -201,6 +201,10 @@
     bindHandEvents();
     refreshMoveableCards();
     startBgMusic();
+
+    if (typeof Analytics !== 'undefined') {
+      Analytics.gameStarted(window.aiDifficulty);
+    }
   }
 
   /* ── Utilities ───────────────────────────────────────────────── */
@@ -290,8 +294,8 @@
   ═══════════════════════════════════════════════════════════════ */
 
   boardEl.addEventListener('dragstart', function (e) {
-    // Face-down slot → undo-play drag
-    var fdSlot = e.target.closest('.battle-card-slot.face-down[data-owner="player"]');
+    // Unplayed (face-up but not yet revealed) slot → undo-play drag
+    var fdSlot = e.target.closest('.battle-card-slot.unplayed[data-owner="player"]');
     if (fdSlot) {
       dragInfo = {
         source:    'slot',
@@ -436,7 +440,12 @@
     if (hEl) hEl.remove();
 
     var slotEl = getSlotEl('player', locId, si);
-    if (slotEl) { slotEl.dataset.cardId = cardId; setSlotFaceDown(slotEl); }
+    if (slotEl) {
+      slotEl.dataset.cardId = cardId;
+      slotEl.className = 'battle-card-slot occupied face-up unplayed';
+      slotEl.draggable = true;
+      buildCardFace(slotEl, card, baseIP);
+    }
     updateHeader();
   }
 
@@ -608,10 +617,11 @@
         slotEl.removeAttribute('draggable');
         delete slotEl.dataset.cardId;
       } else if (!sd.revealed) {
+        var uCard = CARDS.find(function (c) { return c.id === sd.cardId; });
         slotEl.dataset.cardId = sd.cardId;
-        slotEl.className      = 'battle-card-slot occupied face-down';
-        slotEl.innerHTML      = '';
+        slotEl.className      = 'battle-card-slot occupied face-up unplayed';
         slotEl.draggable      = true;
+        if (uCard) buildCardFace(slotEl, uCard, effectiveIP(sd));
       } else {
         var card = CARDS.find(function (c) { return c.id === sd.cardId; });
         if (card) {
@@ -711,7 +721,7 @@
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     if (slots[locId] && slots[locId][slotIndex]) slots[locId][slotIndex].revealed = true;
     slotEl.removeAttribute('draggable');
-    slotEl.classList.remove('face-down');
+    slotEl.classList.remove('face-down', 'unplayed');
     slotEl.classList.add('face-up');
     var sd = slots[locId] && slots[locId][slotIndex];
     buildCardFace(slotEl, card, sd ? effectiveIP(sd) : card.ip);
@@ -971,6 +981,7 @@
   });
 
   function onEndTurn() {
+    if (typeof Analytics !== 'undefined') Analytics.turnEnded(G.turn);
     endTurnBtn.disabled   = true;
     resetTurnBtn.disabled = true;
     runAiMovements();
@@ -1494,7 +1505,51 @@
     snapBack();            // Restore all queued cards to true origin slots
     refreshMoveableCards();
     updateHeader();
-    revealNext(buildRevealSequence(), 0);
+
+    // Flip all face-up unplayed player cards face-down before reveal begins
+    var unplayedEls = Array.prototype.slice.call(
+      boardEl.querySelectorAll('.battle-card-slot.unplayed[data-owner="player"]')
+    );
+    var afterFlip = function () {
+      showRevealFirstHighlight(G.playerFirst);
+      setTimeout(function () { revealNext(buildRevealSequence(), 0); }, 700);
+    };
+
+    if (unplayedEls.length && typeof gsap !== 'undefined') {
+      gsap.to(unplayedEls, {
+        scaleX: 0, duration: 0.15, ease: 'power2.in',
+        onComplete: function () {
+          unplayedEls.forEach(function (el) {
+            el.classList.remove('face-up', 'unplayed');
+            el.classList.add('face-down');
+            el.innerHTML = '';
+          });
+          gsap.to(unplayedEls, { scaleX: 1, duration: 0.12, ease: 'power2.out',
+            onComplete: afterFlip
+          });
+        }
+      });
+    } else {
+      unplayedEls.forEach(function (el) {
+        el.classList.remove('face-up', 'unplayed');
+        el.classList.add('face-down');
+        el.innerHTML = '';
+      });
+      afterFlip();
+    }
+  }
+
+  function showRevealFirstHighlight(playerFirst) {
+    var lucyAv = document.querySelector('.battle-avatar-lucy');
+    var otziAv = document.querySelector('.battle-avatar-otzi');
+    if (lucyAv) lucyAv.classList.toggle('reveal-first', !!playerFirst);
+    if (otziAv) otziAv.classList.toggle('reveal-first', !playerFirst);
+  }
+
+  function hideRevealFirstHighlight() {
+    document.querySelectorAll('.battle-avatar.reveal-first').forEach(function (el) {
+      el.classList.remove('reveal-first');
+    });
   }
 
   function buildRevealSequence() {
@@ -1548,6 +1603,7 @@
 
   function revealNext(seq, i) {
     if (i >= seq.length) {
+      hideRevealFirstHighlight();
       evaluateContinuous();
       refreshSlotIPDisplays();
       refreshHandIPDisplays();
@@ -1588,10 +1644,23 @@
 
     // type === 'play'
     var slotEl = findSlotEl(item.owner, item.cardId);
-    if (slotEl && slotEl.classList.contains('face-down')) {
+    var rLocId = slotEl ? getCardLocId(item.owner, item.cardId) : null;
+    var rSlots = item.owner === 'player' ? G.playerSlots : G.aiSlots;
+    var rSi    = rLocId !== null
+      ? rSlots[rLocId].findIndex(function (s) { return s && s.cardId === item.cardId; })
+      : -1;
+    var rSd    = rSi !== -1 ? rSlots[rLocId][rSi] : null;
+    // Use data state (sd.revealed) rather than DOM class — syncPlayerSlots called during a
+    // preceding move's applyMove can reset an unrevealed card back to face-up unplayed,
+    // causing the DOM class check to miss the card and skip its reveal entirely.
+    if (slotEl && rSd && !rSd.revealed) {
+      if (!slotEl.classList.contains('face-down')) {
+        slotEl.classList.remove('face-up', 'unplayed');
+        slotEl.classList.add('face-down');
+        slotEl.innerHTML = '';
+      }
       flipSlot(slotEl);
-      var locId = getCardLocId(item.owner, item.cardId);
-      fireAtOnce(item.owner, item.cardId, locId, proceed);
+      fireAtOnce(item.owner, item.cardId, rLocId, proceed);
     } else {
       proceed();
     }
@@ -2711,12 +2780,15 @@
     endTurnBtn.textContent  = 'END TURN';
     endTurnBtn.disabled     = false;
     resetTurnBtn.disabled   = false;
+
+    if (typeof Analytics !== 'undefined') Analytics.turnStarted();
   }
 
   function endGame() {
     G.phase = 'over';
     refreshMoveableCards();
     var result = tallyResult();
+    if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);
     showResult(result);
     headerPhaseEl.textContent = 'GAME OVER';
     endTurnBtn.disabled       = true;
@@ -3236,5 +3308,6 @@
   /* ── Export ──────────────────────────────────────────────────── */
   window.initGame          = initGame;
   window.openBattlePopup   = openBattlePopup;
+  window.showResult        = showResult;
 
 })();

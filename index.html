@@ -17,6 +17,10 @@
   <!-- Third-party libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <!-- Firebase v9 compat (no npm / no bundler required) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -25,13 +29,15 @@
   ════════════════════════════════════════════════════════════════ -->
   <div id="screen-home" class="screen active">
     <div class="home-content">
-      <div class="home-player-label">Player 1</div>
+      <h1 id="home-title" class="home-title">Shoulders of Giants</h1>
       <div class="home-question">Are you ready to make history?</div>
       <nav class="home-nav">
         <button class="btn-snes btn-home-ready" id="btn-ready">I'm Ready</button>
-        <button class="btn-snes btn-home-learn" id="btn-learn">I'm Ready to Learn How</button>
+        <button class="btn-home-learn" id="btn-learn">I'm Ready To Learn</button>
       </nav>
     </div>
+
+    <p class="home-byline">By Mr. Shutler-Ojeda</p>
 
     <!-- Coming Soon popup -->
     <div id="coming-soon-backdrop" class="popup-backdrop">
@@ -55,6 +61,9 @@
 
   <!-- Radial wipe overlay (covers all screens during transition) -->
   <div id="radial-wipe"></div>
+
+  <!-- Test mode badge — visible only when test mode is active -->
+  <div id="test-mode-indicator" style="display:none">TEST MODE</div>
 
   <!-- ═══════════════════════════════════════════════════════════════
        DECK BUILDER SCREEN
@@ -128,17 +137,26 @@
   ════════════════════════════════════════════════════════════════ -->
   <div id="screen-battle" class="screen">
 
-    <!-- Header bar: turn · phase · capital -->
-    <div class="battle-header" id="battle-header">
-      <div class="battle-header-left">
-        <button class="btn-back-results" id="btn-back-results" style="display:none">&#8592; Back to Results</button>
-        <div class="battle-turn-info" id="battle-turn-info"></div>
-      </div>
-      <div class="battle-phase-info"   id="battle-phase-info"></div>
-      <div class="battle-header-right">
-        <div class="battle-capital-info" id="battle-capital-info"></div>
-        <button class="btn-reset-turn" id="battle-reset-turn" disabled>RESET TURN</button>
-        <button class="btn-end-turn"   id="battle-end-turn"   disabled>END TURN</button>
+    <!-- Turn number + Capital counter — top-left, parchment box -->
+    <div class="battle-hud-topleft">
+      <div class="battle-turn-info"    id="battle-turn-info"></div>
+      <div class="battle-capital-info" id="battle-capital-info"></div>
+    </div>
+
+    <!-- Phase label — hidden, still referenced by JS -->
+    <div id="battle-phase-info" style="display:none"></div>
+
+    <!-- Reset + End Turn + Results buttons — bottom-right, above music player -->
+    <div class="battle-hud-bottomright">
+      <button class="btn-back-results" id="btn-back-results" style="display:none">&#8592; Results</button>
+      <button class="btn-reset-turn"   id="battle-reset-turn"   disabled>RESET</button>
+      <button class="btn-end-turn"     id="battle-end-turn"     disabled>END TURN</button>
+    </div>
+
+    <!-- Ötzi portrait circle (top-right, absolute) -->
+    <div class="battle-avatar battle-avatar-otzi">
+      <div class="battle-avatar-frame">
+        <img src="images/Otzi.jpg" alt="&#214;tzi" onerror="this.style.display='none'">
       </div>
     </div>
 
@@ -150,6 +168,13 @@
 
     <!-- Player's face-up hand (injected by ui.js) -->
     <div class="battle-player-hand" id="battle-player-hand"></div>
+
+    <!-- Lucy portrait circle (bottom-left, absolute) -->
+    <div class="battle-avatar battle-avatar-lucy">
+      <div class="battle-avatar-frame">
+        <img src="images/Lucy.png" alt="Lucy" onerror="this.style.display='none'">
+      </div>
+    </div>
 
     <!-- ── Music player ───────────────────────────────────────── -->
     <div id="battle-music-ctrl" class="battle-music-ctrl">
@@ -228,7 +253,13 @@
   <!-- Skip button — always visible while tutorial is active -->
   <button id="tut-skip" style="display:none">SKIP TUTORIAL</button>
 
-  <!-- Lucy dialogue box -->
+  <!-- Lucy comic speech bubble (battle tutorial only — shown to the right of her avatar) -->
+  <div id="tut-lucy-bubble" style="display:none">
+    <div id="tut-lucy-text" class="tut-bubble-text"></div>
+    <div id="tut-lucy-hint" class="tut-bubble-hint">&#9654; Click to continue</div>
+  </div>
+
+  <!-- Lucy dialogue box (home screen intro only) -->
   <div id="tut-box" style="display:none">
     <div class="tut-portrait">
       <img src="images/Lucy.png" alt="Lucy" class="tut-lucy-img">
@@ -314,7 +345,7 @@
       </svg>
     </div>
     <div class="tut-right">
-      <div class="tut-speaker">Lucy</div>
+      <div class="tut-speaker">Lucy<br><span class="tut-speaker-sub">The Ancient One</span></div>
       <div id="tut-text" class="tut-text"></div>
       <div id="tut-hint" class="tut-hint">&#9654; Click to continue</div>
     </div>
@@ -345,6 +376,9 @@
       document.getElementById(id).classList.add('active');
     }
   </script>
+
+  <!-- ── Analytics (Firebase must be loaded above in <head>) ───── -->
+  <script src="js/analytics.js"></script>
 
   <!-- ── Data files ─────────────────────────────────────────────── -->
   <script src="js/cards.js"></script>

@@ -349,45 +349,49 @@
 
   /* ── Home screen buttons ─────────────────────────────────────── */
 
-  // "I'm Ready" — radial wipe → video → deck builder + music
+  // "I'm Ready" — first-time: Lucy intro → video → tutorial
+  //               returning:  straight to deck builder
   document.getElementById('btn-ready').addEventListener('click', function () {
-    var wipe  = document.getElementById('radial-wipe');
-    var video = document.getElementById('intro-video');
-
-    // Start loading + playing the video NOW, while the wipe covers the screen.
-    // This ensures the first frame is ready the instant the wipe finishes.
-    video.currentTime = 0;
-    video.play().catch(function () {});
-
-    wipe.classList.add('animating');
-
-    setTimeout(function () {
-      // Wipe has fully covered the screen — reveal the video screen.
-      showScreen('screen-video');
-
-      // Reset wipe instantly (no animation) so it's ready for next use.
-      wipe.classList.remove('animating');
-      wipe.style.clipPath = 'circle(0% at 50% 50%)';
-      requestAnimationFrame(function () {
-        wipe.style.clipPath = '';
+    if (localStorage.getItem('sog_tutorial_complete')) {
+      showScreen('screen-deckbuilder');
+      initDeckBuilder();
+      playDeckMusic();
+      return;
+    }
+    // First-time player: Lucy 3-line home intro, then video
+    if (typeof window.startHomeIntro === 'function') {
+      window.startHomeIntro(function () {
+        var video = document.getElementById('intro-video');
+        video.currentTime = 0;
+        video.play().catch(function () {});
+        showScreen('screen-video');
       });
-    }, 650); // matches radial-wipe-expand duration
+    }
   });
 
-  // Video ended → deck builder; music starts with zero delay
-  document.getElementById('intro-video').addEventListener('ended', function () {
-    localStorage.setItem('sog_intro_seen', 'true');
-    showScreen('screen-deckbuilder');
-    initDeckBuilder();
-    playDeckMusic();
-  });
-
-  // "I'm Ready to Learn How" — show Coming Soon popup
+  // "I'm Ready To Learn" — always replays the full intro → video → tutorial flow
   document.getElementById('btn-learn').addEventListener('click', function () {
-    if (typeof window.startTutorial === 'function') {
-      window.startTutorial();
+    localStorage.removeItem('sog_tutorial_complete');
+    if (typeof window.startHomeIntro === 'function') {
+      window.startHomeIntro(function () {
+        var video = document.getElementById('intro-video');
+        video.currentTime = 0;
+        video.play().catch(function () {});
+        showScreen('screen-video');
+      });
+    }
+  });
+
+  // Video ended → matchup screen → battle + tutorial
+  document.getElementById('intro-video').addEventListener('ended', function () {
+    if (typeof window.showMatchupScreen === 'function') {
+      window.showMatchupScreen(function () {
+        showScreen('screen-battle');
+        if (typeof window.startTutorial === 'function') window.startTutorial();
+      });
     } else {
-      document.getElementById('coming-soon-backdrop').classList.add('visible');
+      showScreen('screen-battle');
+      if (typeof window.startTutorial === 'function') window.startTutorial();
     }
   });
 
@@ -399,22 +403,18 @@
     if (e.target === this) this.classList.remove('visible');
   });
 
-  // "Watch Intro" button in the deck builder header — returns to home screen
+  // "Watch Intro" button in the deck builder header — plays the intro video
   document.getElementById('db-watch-intro').addEventListener('click', function () {
-    var wipe = document.getElementById('radial-wipe');
     stopDeckMusic();
-    wipe.classList.add('animating');
-    setTimeout(function () {
-      showScreen('screen-home');
-      wipe.classList.remove('animating');
-      wipe.style.clipPath = 'circle(0% at 50% 50%)';
-      requestAnimationFrame(function () { wipe.style.clipPath = ''; });
-    }, 650);
+    var video = document.getElementById('intro-video');
+    video.currentTime = 0;
+    video.play().catch(function () {});
+    showScreen('screen-video');
   });
 
   /* ── Returning-visitor skip ──────────────────────────────────── */
-  // If the player has already seen the intro, go straight to deck builder.
-  if (localStorage.getItem('sog_intro_seen')) {
+  // Tutorial complete → skip Lucy + video, go straight to deck builder.
+  if (localStorage.getItem('sog_tutorial_complete')) {
     showScreen('screen-deckbuilder');
     initDeckBuilder();
     playDeckMusic();

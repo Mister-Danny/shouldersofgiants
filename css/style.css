@@ -255,7 +255,7 @@ img    { display: block; }
 /* "Are you ready to make history?" */
 .home-question {
   font-family: var(--font);
-  font-size: 34px;
+  font-size: 44px;
   color: #ffffff;
   line-height: 1.45;
   text-align: center;
@@ -273,37 +273,49 @@ img    { display: block; }
   gap: 18px;
 }
 
-/* "I'm Ready" — warm gold SNES button */
+/* "I'm Ready" — purple SNES button */
 .btn-home-ready {
   font-size: 38px;
   padding: 14px 64px;
-  background: #c49a28;
+  background: #7a3aab;
   border: 3px solid #000;
   color: #fff;
-  box-shadow: 0 5px 0 #7a5c00, 0 6px 0 #000;
+  box-shadow: 0 5px 0 #3e1a60, 0 6px 0 #000;
   letter-spacing: 0.06em;
 }
 .btn-home-ready:hover {
-  background: #d4aa38;
+  background: #8e4abf;
   border-color: #000;
   color: #fff;
 }
 .btn-home-ready:active {
   transform: translateY(5px);
-  box-shadow: 0 0 0 #7a5c00, 0 1px 0 #000;
+  box-shadow: 0 0 0 #3e1a60, 0 1px 0 #000;
 }
 
-/* "I'm Ready to Learn How" — subtler secondary button */
+/* "I'm Ready To Learn" — secondary tutorial button */
 .btn-home-learn {
-  font-size: 20px;
-  padding: 10px 32px;
-  color: var(--text-dim);
-  border-color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 18px;
+  padding: 8px 40px;
+  color: #a89cbc;
+  background: #2e1a48;
+  border: 2px solid #4a3265;
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  text-shadow: 1px 1px 0 #000;
+  box-shadow: 0 3px 0 #180e28, 0 4px 0 #000;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 .btn-home-learn:hover {
-  color: var(--text-white);
-  border-color: var(--text-dim);
-  background: var(--bg-btn-hover);
+  color: #c8bcd8;
+  border-color: #6a4a88;
+  background: #3c2460;
+}
+.btn-home-learn:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 #2a1a40, 0 1px 0 #000;
 }
 
 /* ── Video intro screen ────────────────────────────────────────── */
@@ -351,13 +363,19 @@ img    { display: block; }
 #screen-deckbuilder.active {
   display: flex;
   flex-direction: column;
-  background: var(--bg-base);
-  /* Faint scanlines on the whole screen */
-  background-image: repeating-linear-gradient(
-    0deg,
-    rgba(0,0,0,0) 0px, rgba(0,0,0,0) 3px,
-    rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px
-  );
+  /* Warm dark wood — same texture as the battle screen outer area */
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(80, 40, 0, 0.07) 0px, rgba(80, 40, 0, 0.07) 1px,
+      transparent           1px, transparent           9px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.06)  0px, rgba(0, 0, 0, 0.06)  1px,
+      transparent           1px, transparent           13px
+    ),
+    linear-gradient(168deg, #2c1a08 0%, #1e1106 35%, #261608 65%, #1a0e04 100%);
 }
 
 
@@ -369,10 +387,9 @@ img    { display: block; }
   align-items: center;
   padding: 0 20px;
   gap: 14px;
-  background: var(--bg-header);
-  /* Bottom border as a bright SNES line */
-  border-bottom: 2px solid var(--border-bright);
-  box-shadow: 0 2px 0 var(--border-dark), 0 4px 0 var(--border-mid);
+  background: rgba(12, 6, 2, 0.94);
+  border-bottom: 2px solid rgba(200, 160, 32, 0.55);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 3px 12px rgba(0,0,0,0.5);
   position: relative;
   z-index: 10;
 }
@@ -386,37 +403,50 @@ img    { display: block; }
 
 .btn-back {
   flex-shrink: 0;
-  padding: 7px 14px;
+  padding: 7px 16px;
   font-size: 12px;
+  font-family: var(--font);
+  background: rgba(22, 12, 4, 0.85);
+  border: 2px solid rgba(200, 160, 32, 0.55);
+  border-radius: 2px;
+  color: var(--snes-yellow);
+  letter-spacing: 0.08em;
+  text-shadow: 1px 1px 0 #000;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.6);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.btn-back:hover {
+  background: rgba(40, 22, 6, 0.95);
+  border-color: rgba(200, 160, 32, 0.88);
 }
 
 .btn-watch-intro {
-  flex-shrink:     0;
-  padding:         5px 10px;
-  font-family:     'CTGalbite', monospace;
-  font-size:       10px;
-  color:           var(--text-dim);
-  background:      transparent;
-  border:          1px solid rgba(136, 136, 184, 0.30);
-  border-radius:   3px;
-  cursor:          pointer;
-  letter-spacing:  0.05em;
-  transition:      color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  padding: 5px 12px;
+  font-family: var(--font);
+  font-size: 10px;
+  color: rgba(200, 160, 80, 0.72);
+  background: transparent;
+  border: 1px solid rgba(200, 160, 32, 0.28);
+  border-radius: 2px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: color 0.15s, border-color 0.15s;
 }
-
 .btn-watch-intro:hover {
-  color:        var(--snes-cyan);
-  border-color: rgba(64, 224, 224, 0.55);
+  color: var(--snes-yellow);
+  border-color: rgba(200, 160, 32, 0.65);
 }
 
 .db-title {
   flex: 1;
   font-family: var(--font);
   font-size: 18px;
-  color: var(--text-white);
+  color: var(--snes-yellow);
   text-transform: uppercase;
   letter-spacing: 0.10em;
-  text-shadow: 2px 2px 0 #000;
+  text-shadow: 1px 1px 0 #000, 0 0 12px rgba(200, 160, 0, 0.30);
 }
 
 .db-controls {
@@ -428,17 +458,22 @@ img    { display: block; }
 
 .db-counter {
   font-family: var(--font);
-  font-size: 22px;
+  font-size: 20px;
   color: var(--snes-yellow);
-  min-width: 72px;
-  text-align: right;
-  text-shadow: 1px 1px 0 #000;
-  transition: color 0.15s;
+  min-width: 90px;
+  text-align: center;
+  background: rgba(22, 12, 4, 0.86);
+  border: 2px solid rgba(200, 160, 32, 0.55);
+  border-radius: 4px;
+  padding: 4px 14px;
+  text-shadow: 0 0 10px rgba(200, 160, 0, 0.40), 1px 1px 0 #000;
+  transition: color 0.15s, border-color 0.15s;
 }
 
 .db-counter.complete {
   color: var(--snes-green);
-  text-shadow: 0 0 8px var(--snes-green), 1px 1px 0 #000;
+  border-color: rgba(72, 216, 72, 0.55);
+  text-shadow: 0 0 10px rgba(72, 216, 72, 0.55), 1px 1px 0 #000;
 }
 
 .db-counter.flash {
@@ -450,41 +485,53 @@ img    { display: block; }
   25%, 75%  { color: var(--snes-red);   }
 }
 
-/* Save button: larger SNES-style */
+/* Let's Play button */
 .btn-save {
   padding: 9px 22px;
   font-size: 13px;
-  border-color: var(--snes-yellow);
+  font-family: var(--font);
+  background: rgba(22, 12, 4, 0.85);
+  border: 2px solid rgba(200, 160, 32, 0.60);
+  border-radius: 2px;
   color: var(--snes-yellow);
+  letter-spacing: 0.08em;
+  text-shadow: 1px 1px 0 #000;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.6);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
 }
-
 .btn-save:not(:disabled):hover {
-  background: #1e1000;
-  border-color: var(--snes-yellow);
+  background: rgba(40, 22, 6, 0.95);
+  border-color: rgba(200, 160, 32, 0.90);
   color: var(--snes-yellow);
 }
-
 .btn-save:disabled {
-  background: #0a0020;
-  border-color: #333358;
-  color: var(--text-muted);
-  box-shadow: 0 2px 0 #111, 0 3px 0 #000;
+  background: rgba(12, 6, 2, 0.70);
+  border-color: rgba(100, 70, 10, 0.30);
+  color: rgba(140, 100, 30, 0.42);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.4);
   cursor: not-allowed;
 }
 
-
-/* Deselect All button — dim red, sits left of the counter */
+/* Deselect All button — warm muted red accent */
 .btn-deselect-all {
   padding: 7px 14px;
   font-size: 11px;
   letter-spacing: 0.07em;
-  border-color: var(--snes-red);
-  color: var(--snes-red);
+  font-family: var(--font);
+  background: rgba(22, 12, 4, 0.85);
+  border: 2px solid rgba(180, 60, 40, 0.55);
+  border-radius: 2px;
+  color: rgba(220, 110, 80, 0.85);
+  text-shadow: 1px 1px 0 #000;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.5);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .btn-deselect-all:hover {
-  background: #200000;
-  border-color: var(--snes-red);
-  color: var(--snes-red);
+  background: rgba(40, 8, 4, 0.95);
+  border-color: rgba(210, 80, 55, 0.80);
+  color: rgba(240, 140, 100, 1);
 }
 
 
@@ -493,15 +540,21 @@ img    { display: block; }
   flex: 1;
   overflow-y: auto;
   padding: 22px 24px 48px;
+  /* Aged parchment / map surface — same as the battle board */
+  background:
+    radial-gradient(ellipse at 94% 92%, rgba(100, 65, 10, 0.40) 0%, transparent 52%),
+    radial-gradient(ellipse at 8%  10%, rgba(140, 100, 30, 0.20) 0%, transparent 40%),
+    linear-gradient(158deg, #c9a96e 0%, #b89458 18%, #c5a464 48%, #b08a42 78%, #a27832 100%);
+  box-shadow: inset 0 0 36px rgba(60, 30, 0, 0.38);
 }
 
 .db-main::-webkit-scrollbar       { width: 8px; }
-.db-main::-webkit-scrollbar-track { background: #000010; }
+.db-main::-webkit-scrollbar-track { background: rgba(20, 10, 2, 0.80); }
 .db-main::-webkit-scrollbar-thumb {
-  background: var(--border-mid);
-  border: 1px solid var(--border-dark);
+  background: rgba(160, 110, 30, 0.60);
+  border: 1px solid rgba(100, 65, 10, 0.40);
 }
-.db-main::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
+.db-main::-webkit-scrollbar-thumb:hover { background: rgba(200, 150, 40, 0.80); }
 
 
 /* ── Type group section ─────────────────────────────────────────── */
@@ -512,47 +565,58 @@ img    { display: block; }
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
-  padding: 5px 10px;
-  background: #080022;
-  border-left: 4px solid;          /* color set per type below */
-  border-bottom: 1px solid #1a1a40;
+  padding: 6px 14px;
+  /* Warm scroll/banner — dark centre fading to transparent at edges */
+  background: linear-gradient(
+    to right,
+    rgba(20, 10, 2, 0.88) 0%,
+    rgba(40, 22, 6, 0.75) 40%,
+    rgba(40, 22, 6, 0.75) 60%,
+    rgba(20, 10, 2, 0.88) 100%
+  );
+  border-left: 4px solid;         /* type color accent — set per type below */
+  border-top: 1px solid rgba(180, 130, 40, 0.28);
+  border-bottom: 1px solid rgba(180, 130, 40, 0.28);
+  border-right: none;
+  box-shadow: inset 0 1px 0 rgba(220, 170, 60, 0.08);
 }
 
-/* Colour the left-border and label per type */
-.type-political  .db-type-header { border-color: var(--c-political);   }
-.type-religious  .db-type-header { border-color: var(--c-religious);   }
-.type-military   .db-type-header { border-color: var(--c-military);    }
-.type-cultural   .db-type-header { border-color: var(--c-cultural);    }
-.type-exploration .db-type-header{ border-color: var(--c-exploration); }
+/* Type color as left-border accent */
+.type-political  .db-type-header { border-left-color: var(--c-political);   }
+.type-religious  .db-type-header { border-left-color: var(--c-religious);   }
+.type-military   .db-type-header { border-left-color: var(--c-military);    }
+.type-cultural   .db-type-header { border-left-color: var(--c-cultural);    }
+.type-exploration .db-type-header{ border-left-color: var(--c-exploration); }
 
 .db-type-pip {
   width: 8px;
   height: 8px;
   flex-shrink: 0;
-  /* Pixel-square instead of circle — more SNES */
   border-radius: 0;
 }
 
+/* Pip keeps type color as filled square */
+.type-political  .db-type-pip { background: var(--c-political);   }
+.type-religious  .db-type-pip { background: var(--c-religious);   }
+.type-military   .db-type-pip { background: var(--c-military);    }
+.type-cultural   .db-type-pip { background: var(--c-cultural);    }
+.type-exploration .db-type-pip{ background: var(--c-exploration); }
+
+/* Label: warm gold, consistent across all types */
 .db-type-label {
   font-family: var(--font);
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+  color: #d4aa50;
+  background: transparent;
+  text-shadow: 1px 1px 0 #000;
 }
 
 .db-type-count {
   font-size: 12px;
-  color: var(--text-muted);
+  color: rgba(180, 140, 60, 0.60);
 }
-
-.type-political  .db-type-pip, .type-political  .db-type-label { color: var(--c-political);   background: var(--c-political);   }
-.type-religious  .db-type-pip, .type-religious  .db-type-label { color: var(--c-religious);   background: var(--c-religious);   }
-.type-military   .db-type-pip, .type-military   .db-type-label { color: var(--c-military);    background: var(--c-military);    }
-.type-cultural   .db-type-pip, .type-cultural   .db-type-label { color: var(--c-cultural);    background: var(--c-cultural);    }
-.type-exploration .db-type-pip, .type-exploration .db-type-label{ color: var(--c-exploration); background: var(--c-exploration); }
-
-/* Label is text, not background — reset the background from above */
-.db-type-label { background: transparent; }
 
 /* Five-column card grid */
 .db-card-row {
@@ -603,7 +667,7 @@ img    { display: block; }
 .db-card-img-wrap {
   position: absolute;
   inset: 0;
-  background: #040010;
+  background: #100a02;
 }
 
 .db-card-img {
@@ -933,69 +997,117 @@ img    { display: block; }
   width: 1280px;
   height: 800px;
   overflow: hidden;
+  position: relative;
+  /* Warm dark wood-grain table */
   background:
     repeating-linear-gradient(
-      0deg,
-      rgba(0,0,0,0)    0px, rgba(0,0,0,0)    3px,
-      rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px
+      90deg,
+      rgba(80, 40, 0, 0.07) 0px, rgba(80, 40, 0, 0.07) 1px,
+      transparent           1px, transparent           9px
     ),
-    var(--bg-base);
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.06)  0px, rgba(0, 0, 0, 0.06)  1px,
+      transparent           1px, transparent           13px
+    ),
+    linear-gradient(168deg, #2c1a08 0%, #1e1106 35%, #261608 65%, #1a0e04 100%);
 }
 
 
-/* ── Battle Header ─────────────────────────────────────────────── */
+/* ── Battle HUD — Top Left (Turn + Capital, parchment box) ─────── */
 
-.battle-header {
+.battle-hud-topleft {
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  z-index: 20;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 46px;
-  flex-shrink: 0;
-  padding: 0 20px;
-  background: var(--bg-header);
-  border-bottom: 2px solid var(--border-mid);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  /* Deep aged-parchment interior — clearly distinct from the dark wood behind it */
+  background:
+    radial-gradient(ellipse at 60% 20%, rgba(180, 130, 40, 0.18) 0%, transparent 65%),
+    linear-gradient(160deg, #3a2208 0%, #2a1804 55%, #321e06 100%);
+  border: 2px solid rgba(200, 160, 32, 0.72);
+  box-shadow:
+    inset 0 0 0 1px rgba(248, 208, 0, 0.12),
+    inset 0 1px 8px rgba(200, 140, 20, 0.14),
+    0 4px 14px rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  padding: 10px 24px 12px;
+  min-width: 210px;
+}
+
+/* ── Battle HUD — Bottom Right (Reset + End Turn buttons) ────────── */
+
+.battle-hud-bottomright {
+  position: fixed;
+  bottom: 80px;
+  right: 24px;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+  min-width: 205px;
+}
+
+.battle-hud-bottomright .btn-reset-turn,
+.battle-hud-bottomright .btn-end-turn,
+.battle-hud-bottomright .btn-back-results {
+  padding: 18px 25px;
+  font-size: 16px;
+  width: 100%;
+  text-align: center;
+  letter-spacing: 0.10em;
 }
 
 .battle-turn-info {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--snes-yellow);
   letter-spacing: 0.10em;
   text-transform: uppercase;
+  text-align: center;
+  text-shadow: 1px 1px 0 #000, 0 0 12px rgba(200, 160, 0, 0.35);
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(200, 160, 32, 0.32);
 }
 
 .battle-phase-info {
   font-size: 13px;
   color: var(--text-dim);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.10em;
   text-transform: uppercase;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.85);
 }
 
 .battle-capital-info {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 1px;
+  gap: 2px;
+  padding: 0;
+  border: none;
 }
 
 .battle-capital-label {
   font-family: var(--font);
-  font-size: 9px;
+  font-size: 11px;
   color: var(--text-dim);
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   line-height: 1;
 }
 
 .battle-capital-num {
   font-family: var(--font);
-  font-size: 28px;
+  font-size: 34px;
   color: var(--snes-cyan);
   line-height: 1;
   letter-spacing: 0.04em;
   text-shadow:
-    0 0 14px rgba(64,224,224,0.55),
+    0 0 14px rgba(64, 224, 224, 0.60),
     1px 1px 0 #000;
 }
 
@@ -1007,11 +1119,11 @@ img    { display: block; }
   align-items: center;
   justify-content: center;
   gap: 5px;
-  height: 98px;
+  height: 160px;
   flex-shrink: 0;
   padding: 0 20px;
-  background: rgba(0,0,0,0.40);
-  border-bottom: 1px solid var(--border-dark);
+  background: rgba(28, 14, 4, 0.68);
+  border-bottom: 1px solid rgba(100, 65, 10, 0.50);
 }
 
 /* Face-down card back */
@@ -1036,16 +1148,38 @@ img    { display: block; }
   min-height: 0;
   gap: 28px;
   padding: 4px 16px;
+  position: relative;
+  /* Aged parchment / map surface */
+  background:
+    radial-gradient(ellipse at 94% 92%, rgba(100, 65, 10, 0.40) 0%, transparent 52%),
+    radial-gradient(ellipse at 8%  10%, rgba(140, 100, 30, 0.20) 0%, transparent 40%),
+    linear-gradient(158deg, #c9a96e 0%, #b89458 18%, #c5a464 48%, #b08a42 78%, #a27832 100%);
+  box-shadow: inset 0 0 36px rgba(60, 30, 0, 0.38);
+}
+
+/* Compass-rose watermark in bottom-right of the board */
+.battle-board::after {
+  content: '✦';
+  position: absolute;
+  bottom: 18px;
+  right: 26px;
+  font-size: 72px;
+  color: rgba(80, 48, 8, 0.18);
+  pointer-events: none;
+  line-height: 1;
+  font-family: serif;
 }
 
 .battle-col {
-  position: relative;   /* anchor for the inter-column divider and Kente glow */
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
   gap: 6px;
   border-radius: 4px;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 /* Vertical divider line between location columns */
@@ -1085,9 +1219,9 @@ img    { display: block; }
   flex: 1;
   aspect-ratio: 2 / 3;
   max-height: 100%;
-  border: 2px dashed rgba(136,152,255,0.22);
+  border: 2px dashed rgba(200, 155, 45, 0.65);
   border-radius: 2px;
-  background: rgba(0,0,0,0.28);
+  background: rgba(100, 65, 10, 0.08);
   position: relative;
   overflow: hidden;
 }
@@ -1106,7 +1240,9 @@ img    { display: block; }
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  background: var(--bg-dialog);
+  position: relative;
+  overflow: hidden;
+  background: transparent;
   /* SNES double-border */
   border: 3px solid var(--border-bright);
   box-shadow:
@@ -1114,15 +1250,67 @@ img    { display: block; }
     0 0 0 6px var(--border-mid);
 }
 
+/* ── Column background images — full vertical strip per location ─── */
+
+.battle-col[data-loc-id="1"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/scandinavia.jpg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+
+.battle-col[data-loc-id="2"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/greatriftvalley.jpg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+
+.battle-col[data-loc-id="3"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/capeofgoodhope.jpg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+
+.battle-col[data-loc-id="4"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/levant.jpg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+
+.battle-col[data-loc-id="5"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/timbuktu.jpg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+
 .battle-loc-score-opp,
 .battle-loc-score-player {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
+  width: 44px;
   flex-shrink: 0;
-  font-size: 20px;
+  font-size: 28px;
+  font-weight: bold;
   line-height: 1;
+  text-shadow:
+    1px 1px 4px rgba(0, 0, 0, 0.95),
+    0 0 10px rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.30);
 }
 
 .battle-loc-score-opp    { color: var(--snes-red);  }
@@ -1135,8 +1323,9 @@ img    { display: block; }
   flex-direction: column;
   justify-content: center;
   padding: 4px 8px;
-  gap: 2px;
+  gap: 5px;
   overflow: hidden;
+  background: rgba(0, 0, 0, 0.68);
 }
 
 .battle-loc-name {
@@ -1147,38 +1336,33 @@ img    { display: block; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.battle-loc-region {
-  font-size: 10px;
-  color: var(--text-muted);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.8);
 }
 
 .battle-loc-ability {
-  font-size: 10px;
-  color: var(--text-dim);
+  font-size: 13px;
+  color: #e8e0d0;
   line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   overflow: hidden;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.8);
 }
 
 
 /* ── Player Hand ───────────────────────────────────────────────── */
 
 .battle-player-hand {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 0;
   height: 280px;
   flex-shrink: 0;
   padding: 0 20px;
-  background: rgba(0,0,0,0.40);
-  border-top: 2px solid var(--border-mid);
+  background: rgba(28, 14, 4, 0.62);
+  border-top: 2px solid rgba(100, 65, 10, 0.45);
+  box-shadow: inset 0 10px 20px rgba(8, 4, 0, 0.52);
+  overflow: visible;
 }
 
 
@@ -1186,37 +1370,47 @@ img    { display: block; }
 
 .battle-hand-card {
   position: relative;
-  width: 164px;
-  height: 246px;
+  width: 123px;
+  height: 184px;
   flex-shrink: 0;
   cursor: pointer;
   border: 2px solid transparent;
   border-radius: 2px;
   overflow: hidden;
-  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  /* Fan layout: overlap each card (first card has no margin — see rule below) */
+  margin-left: -48px;
+  z-index: 1;
+  transform-origin: bottom center;
+  /* Only border/shadow transition — GSAP owns scale/translate */
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
+/* First hand card has no overlap offset */
+.battle-player-hand .battle-hand-card:first-child {
+  margin-left: 0;
+}
+
+/* GSAP hover applied in JS; show border glow on hover */
 .battle-hand-card:hover {
-  transform: translateY(-10px);
   border-color: var(--snes-yellow);
   box-shadow: 0 0 0 1px #000, 0 0 0 3px var(--snes-yellow);
 }
 
 .battle-hand-card.selected {
-  transform: translateY(-16px);
   border-color: var(--snes-green);
   box-shadow: 0 0 0 1px #000, 0 0 0 3px var(--snes-green);
 }
 
-/* Scaled CC / IP overlays for doubled hand cards */
+/* Card name — hidden at rest, fades in on hover */
+/* CC / IP overlays scaled for reduced-size hand cards */
 .battle-hand-card .db-overlay-cc,
 .battle-hand-card .db-overlay-ip {
-  font-size: 36px;
-  top: 5px;
+  font-size: 26px;
+  top: 4px;
 }
 
-.battle-hand-card .db-overlay-cc { left: 6px;  }
-.battle-hand-card .db-overlay-ip { right: 6px; }
+.battle-hand-card .db-overlay-cc { left: 4px;  }
+.battle-hand-card .db-overlay-ip { right: 4px; }
 
 
 /* ── Deck Pile ─────────────────────────────────────────────────── */
@@ -1290,6 +1484,26 @@ img    { display: block; }
   flex-shrink: 0;
   background: rgba(136,152,255,0.25);
   align-self: center;
+  margin-left: 14px;
+  margin-right: 4px;
+}
+
+/* Ghost element mirrors right-side (sep + pile) width so the fan cards
+   center independently of the pile. ::before is not a DOM node, so
+   .battle-hand-card:first-child still correctly targets the first card. */
+.battle-player-hand::before {
+  content: '';
+  flex-shrink: 0;
+  /* sep: 1px + 14px margin-left + 4px margin-right = 19px
+     pile: 82px + 14px margin-left              = 96px
+     total                                       = 115px */
+  width: 115px;
+  pointer-events: none;
+}
+
+/* Deck pile sits inline, directly to the right of the last hand card */
+.battle-player-hand .battle-deck-pile {
+  margin-left: 14px;
 }
 
 
@@ -1630,117 +1844,204 @@ img    { display: block; }
    ══════════════════════════════════════════════════════════════════ */
 
 #screen-result.active {
-  display: flex;
-  align-items: center;
+  display:         flex;
+  align-items:     center;
   justify-content: center;
-  background: var(--bg-base);
+  position:        absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+}
+
+/* Dark wood background — identical to battle screen outer area */
+#screen-result::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(80, 40, 0, 0.07) 0px, rgba(80, 40, 0, 0.07) 1px,
+      transparent            1px, transparent            9px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.06)  0px, rgba(0, 0, 0, 0.06)  1px,
+      transparent           1px, transparent           13px
+    ),
+    linear-gradient(168deg, #2c1a08 0%, #1e1106 35%, #261608 65%, #1a0e04 100%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .result-wrap {
+  position:       relative;
+  z-index:        1;
   display:        flex;
   flex-direction: column;
   align-items:    center;
-  gap:            22px;
-  width:          600px;
-  padding:        40px 48px;
-  background:     var(--bg-surface);
-  border:         3px solid var(--border-mid);
+  gap:            18px;
+  width:          620px;
+  padding:        44px 52px 40px;
+  /* Aged parchment map surface — same as battle board */
+  background:
+    radial-gradient(ellipse at 92% 94%, rgba(100, 65, 10, 0.42) 0%, transparent 50%),
+    radial-gradient(ellipse at 8%  8%,  rgba(140, 100, 30, 0.22) 0%, transparent 42%),
+    linear-gradient(158deg, #c9a96e 0%, #b89458 18%, #c5a464 48%, #b08a42 78%, #a27832 100%);
   box-shadow:
-    0 0 0 1px var(--border-dark),
-    inset 0 0 0 1px var(--border-bright);
+    inset 0 0 52px rgba(60, 30, 0, 0.38),
+    /* SNES double-border: dark gap → gold ring → bronze shadow → dark rim */
+    0 0 0 2px #1a0e04,
+    0 0 0 5px #c8a020,
+    0 0 0 7px #7a5800,
+    0 0 0 10px #2e1800,
+    0 16px 56px rgba(0, 0, 0, 0.75);
+}
+
+/* Inner accent hairline — completes the SNES double-border look */
+.result-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border: 1px solid rgba(248, 208, 0, 0.28);
+  pointer-events: none;
 }
 
 /* ── Headline ─────────────────────────────────────────────────── */
 
-.result-headline {
-  font-family:    'CTGalbite', monospace;
-  font-size:      2.8rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+@keyframes result-victory-glow {
+  0%, 100% { text-shadow: 0 0 10px rgba(248,208,0,0.55), 2px 3px 0 rgba(60,30,0,0.85); }
+  50%      { text-shadow: 0 0 24px rgba(248,208,0,0.90), 0 0 48px rgba(248,208,0,0.35), 2px 3px 0 rgba(60,30,0,0.85); }
 }
 
-.result-headline.result-player { color: var(--snes-yellow); }
-.result-headline.result-ai     { color: var(--snes-red);    }
-.result-headline.result-draw   { color: var(--snes-cyan);   }
+@keyframes result-defeat-glow {
+  0%, 100% { text-shadow: 0 0 10px rgba(160,0,10,0.55), 2px 3px 0 rgba(50,0,0,0.85); }
+  50%      { text-shadow: 0 0 26px rgba(210,0,16,0.85), 0 0 52px rgba(160,0,10,0.40), 2px 3px 0 rgba(50,0,0,0.85); }
+}
+
+.result-headline {
+  font-family:    'CTGalbite', monospace;
+  font-size:      4rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height:    1;
+}
+
+.result-headline.result-player {
+  color:     #f8d000;
+  animation: result-victory-glow 2.2s ease-in-out infinite;
+  text-shadow: 3px 4px 0 rgba(60,30,0,0.9), 0 0 10px rgba(248,208,0,0.55);
+}
+.result-headline.result-ai {
+  color:     #b01020;
+  animation: result-defeat-glow 2.2s ease-in-out infinite;
+  text-shadow: 3px 4px 0 rgba(50,0,0,0.9), 0 0 10px rgba(160,0,10,0.55);
+}
+.result-headline.result-draw {
+  color:       var(--snes-cyan);
+  text-shadow: 3px 4px 0 rgba(0,40,40,0.85), 0 0 12px rgba(64,224,224,0.55);
+}
+
+/* Gold rule beneath headline */
+.result-headline::after {
+  content:    '';
+  display:    block;
+  width:      80%;
+  height:     2px;
+  margin:     10px auto 0;
+  background: linear-gradient(90deg,
+    transparent, rgba(200,160,32,0.5) 20%,
+    #f0c840 50%, rgba(200,160,32,0.5) 80%, transparent
+  );
+}
 
 .result-subline {
-  font-family: 'CTGalbite', monospace;
-  font-size:   0.85rem;
-  color:       var(--text-dim);
-  text-align:  center;
+  font-family:    'CTGalbite', monospace;
+  font-size:      1.05rem;
+  color:          #c89830;
+  text-align:     center;
+  letter-spacing: 0.07em;
+  text-shadow:    1px 1px 0 rgba(0,0,0,0.5);
+  margin-top:     -4px;
 }
 
 /* ── Location breakdown ───────────────────────────────────────── */
 
 .result-locs {
-  width:         100%;
-  display:       flex;
+  width:          100%;
+  display:        flex;
   flex-direction: column;
-  gap:           6px;
+  gap:            6px;
 }
 
 .result-loc-row {
-  display:         flex;
-  align-items:     center;
-  gap:             10px;
-  padding:         8px 12px;
-  background:      var(--bg-dialog);
-  border:          1px solid var(--border-mid);
-  font-family:     'CTGalbite', monospace;
-  font-size:       0.78rem;
+  display:     flex;
+  align-items: center;
+  gap:         12px;
+  padding:     11px 14px;
+  background:  rgba(30, 14, 2, 0.45);
+  border-top:  1px solid rgba(210, 168, 48, 0.35);
+  border-bottom: 1px solid rgba(20, 8, 0, 0.6);
+  font-family: 'CTGalbite', monospace;
+  font-size:   0.78rem;
 }
+.result-loc-row:first-child { border-top: 2px solid rgba(210,168,48,0.5); border-radius: 2px 2px 0 0; }
+.result-loc-row:last-child  { border-bottom: 2px solid rgba(20,8,0,0.7); border-radius: 0 0 2px 2px; }
 
 .result-loc-name {
-  flex:       1;
-  color:      var(--text-white);
+  flex:        1;
+  font-size:   0.9rem;
+  color:       #f0e0b0;
   white-space: nowrap;
-  overflow:   hidden;
+  overflow:    hidden;
   text-overflow: ellipsis;
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.7);
 }
 
 .result-loc-scores {
   display:     flex;
   align-items: center;
   gap:         10px;
-  font-size:   0.8rem;
+  font-size:   1.0rem;
 }
 
-.result-loc-you  { color: var(--text-dim); }
-.result-loc-opp  { color: var(--text-dim); }
-.result-loc-vs   { color: var(--text-dim); }
+.result-loc-you { color: #c8a060; }
+.result-loc-opp { color: #c8a060; }
+.result-loc-vs  { color: #806040; font-size: 0.65rem; }
 
-/* Winning side gets brighter text */
-.result-loc-you.result-loc-winner  { color: var(--snes-yellow); }
-.result-loc-opp.result-loc-winner  { color: var(--snes-red);    }
+/* Winning side — bright accent */
+.result-loc-you.result-loc-winner { color: #40d8d8; font-size: 1.1rem; }  /* cyan — player   */
+.result-loc-opp.result-loc-winner { color: #e83040; font-size: 1.1rem; }  /* red  — opponent */
 
 .result-loc-badge {
-  min-width:    36px;
-  padding:      2px 6px;
+  min-width:    50px;
+  padding:      4px 10px;
   text-align:   center;
-  font-size:    0.7rem;
+  font-size:    0.78rem;
   font-family:  'CTGalbite', monospace;
-  border:       1px solid currentColor;
+  font-weight:  bold;
+  border:       2px solid currentColor;
+  border-radius: 1px;
 }
 
-.result-loc-badge-player { color: var(--snes-yellow); }
-.result-loc-badge-ai     { color: var(--snes-red);    }
-.result-loc-badge-tie    { color: var(--text-dim);    }
+.result-loc-badge-player { color: #40d8d8; background: rgba(64,216,216,0.14); }
+.result-loc-badge-ai     { color: #e83040; background: rgba(232,48,64,0.14);  }
+.result-loc-badge-tie    { color: #b08040; background: rgba(176,128,64,0.12); }
 
 /* ── Tiebreaker panel ─────────────────────────────────────────── */
 
 .result-tiebreaker {
-  width:       100%;
-  padding:     16px 20px;
-  background:  var(--bg-dialog);
-  border:      2px solid var(--snes-yellow);
-  box-shadow:  inset 0 0 0 1px rgba(248, 208, 0, 0.2);
-  text-align:  center;
+  width:        100%;
+  padding:      16px 20px;
+  background:   rgba(50, 24, 4, 0.26);
+  border:       2px solid rgba(200, 160, 32, 0.58);
+  box-shadow:   inset 0 0 0 1px rgba(248, 208, 0, 0.14);
+  text-align:   center;
+  border-radius: 2px;
 }
 
 .result-tb-label {
   font-family:    'CTGalbite', monospace;
   font-size:      0.75rem;
-  color:          var(--snes-yellow);
+  color:          #9a6e20;
   letter-spacing: 0.1em;
   margin-bottom:  12px;
 }
@@ -1762,27 +2063,56 @@ img    { display: block; }
 .result-tb-who {
   font-family: 'CTGalbite', monospace;
   font-size:   0.7rem;
-  color:       var(--text-dim);
+  color:       #8a6030;
 }
 
 .result-tb-num {
   font-family: 'CTGalbite', monospace;
   font-size:   2rem;
-  color:       var(--snes-white);
+  color:       #2a1200;
 }
 
 .result-tb-vs {
   font-family: 'CTGalbite', monospace;
   font-size:   0.9rem;
-  color:       var(--text-dim);
+  color:       #8a6030;
 }
 
 /* ── Action buttons ───────────────────────────────────────────── */
 
 .result-actions {
-  display: flex;
-  gap:     16px;
-  margin-top: 4px;
+  display:    flex;
+  gap:        12px;
+  margin-top: 6px;
+}
+
+/* Override btn-primary inside result screen with warm SNES style */
+.result-actions .btn-primary {
+  font-family:    'CTGalbite', monospace;
+  font-size:      13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding:        11px 22px;
+  cursor:         pointer;
+  background:     rgba(20, 10, 2, 0.88);
+  border:         2px solid rgba(200, 160, 32, 0.72);
+  color:          #e8c060;
+  text-shadow:    1px 1px 0 #000;
+  box-shadow:     0 4px 0 rgba(80, 40, 0, 0.68), 0 5px 0 rgba(0,0,0,0.5);
+  transition:     background 0.08s, border-color 0.08s, color 0.08s,
+                  transform 0.06s, box-shadow 0.06s;
+  outline:        none;
+  border-radius:  2px;
+}
+.result-actions .btn-primary:hover {
+  background:   rgba(38, 18, 4, 0.96);
+  border-color: #f0c840;
+  color:        #f8d000;
+  text-shadow:  0 0 8px rgba(248,208,0,0.38), 1px 1px 0 #000;
+}
+.result-actions .btn-primary:active {
+  transform:  translateY(4px);
+  box-shadow: 0 0 0 rgba(80,40,0,0.68), 0 1px 0 rgba(0,0,0,0.5);
 }
 
 
@@ -1956,7 +2286,7 @@ img    { display: block; }
 .battle-music-ctrl {
   position: fixed;
   bottom: 14px;
-  left: 16px;
+  right: 16px;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -2049,6 +2379,74 @@ button,
 /* Volume slider: only allow horizontal panning (no accidental scroll) */
 .music-volume-slider { touch-action: pan-x; }
 
+/* ── Battle avatar portraits ───────────────────────────────────── */
+
+.battle-avatar {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+}
+
+.battle-avatar-lucy {
+  bottom: 80px;
+  left: 54px;
+}
+
+.battle-avatar-otzi {
+  top: 20px;
+  right: 54px;
+}
+
+.battle-avatar-frame {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #c8a020;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 0 5px #7a5a0a,
+    0 4px 20px rgba(0, 0, 0, 0.85);
+  background: #1a1206;
+}
+
+.battle-avatar-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+/* Reveal-first highlight — pulses gold on whichever avatar reveals first */
+@keyframes reveal-first-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--snes-yellow), 0 0 14px 4px rgba(248,208,0,0.5); }
+  50%       { box-shadow: 0 0 0 4px var(--snes-yellow), 0 0 26px 10px rgba(248,208,0,0.8); }
+}
+.battle-avatar.reveal-first .battle-avatar-frame {
+  animation: reveal-first-pulse 0.7s ease-in-out infinite;
+}
+
+/* Lucy speaking glow — added/removed by tutorial.js during typeText */
+.battle-avatar-lucy.tut-speaking .battle-avatar-frame {
+  animation: lucy-speak-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes lucy-speak-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px #000,
+      0 0 0 5px #7a5a0a,
+      0 4px 20px rgba(0, 0, 0, 0.85);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px #000,
+      0 0 16px 6px rgba(200, 160, 32, 0.68),
+      0 4px 20px rgba(0, 0, 0, 0.85);
+  }
+}
+
+
 /* Draggable battle elements — JS owns all touch events */
 .battle-hand-card,
 .battle-card-slot.face-down[data-owner="player"],
@@ -2104,26 +2502,33 @@ button,
   z-index: 900;
 }
 
-/* ── Skip button ──────────────────────────────────────────────── */
+/* ── Skip button — bottom-right corner, SNES style ───────────── */
 #tut-skip {
   position: fixed;
-  top: 12px;
+  bottom: 14px;
   right: 16px;
+  top: auto;
   z-index: 1100;
   font-family: var(--font);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--text-dim);
-  background: none;
-  border: 1px solid var(--border-mid);
+  background: var(--bg-surface);
+  border: 2px solid var(--border-mid);
+  border-radius: 4px;
   padding: 5px 12px;
   cursor: pointer;
   opacity: 0.7;
-  transition: opacity 0.15s, color 0.15s;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
   touch-action: manipulation;
 }
-#tut-skip:hover { opacity: 1; color: var(--snes-yellow); }
+#tut-skip:hover {
+  opacity: 1;
+  color: var(--snes-yellow);
+  border-color: var(--snes-yellow);
+}
 
 /* ── Dialogue box ─────────────────────────────────────────────── */
 #tut-box {
@@ -2137,7 +2542,7 @@ button,
   align-items: stretch;
   gap: 0;
 
-  width: min(740px, calc(100vw - 32px));
+  width: min(985px, calc(100vw - 32px));
 
   background: var(--bg-dialog);
   border: 3px solid var(--border-bright);
@@ -2156,7 +2561,7 @@ button,
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  width: 110px;
+  width: 146px;
   padding: 0;
   background: rgba(0,0,0,0.25);
   border-right: 2px solid var(--border-mid);
@@ -2185,31 +2590,40 @@ button,
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 14px 18px 12px;
+  padding: 19px 24px 16px;
   min-height: 100px;
 }
 
 .tut-speaker {
   font-family: var(--font);
-  font-size: 13px;
+  font-size: 23px;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--snes-yellow);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.tut-speaker-sub {
+  display: block;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  opacity: 0.8;
+  margin-top: 1px;
 }
 
 .tut-text {
   font-family: var(--font);
-  font-size: 14px;
+  font-size: 24px;
   line-height: 1.55;
   color: var(--text-white);
   flex: 1;
-  min-height: 48px;
+  min-height: 60px;
 }
 
 .tut-hint {
   font-family: var(--font);
-  font-size: 11px;
+  font-size: 15px;
   color: var(--text-dim);
   margin-top: 10px;
   letter-spacing: 0.06em;
@@ -2340,6 +2754,440 @@ body.tut-locked #battle-reset-turn {
   flex-wrap: wrap;
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   ANALYTICS  — home title + test-mode badge
+══════════════════════════════════════════════════════════════════ */
+
+/* "Shoulders of Giants" — main title on the home screen.
+   Large and prominent; also the triple-click target for the bypass menu. */
+.home-title {
+  font-family: var(--font);
+  font-size: 72px;
+  font-weight: normal;
+  color: var(--snes-yellow);
+  letter-spacing: 0.06em;
+  text-align: center;
+  margin: 0;
+  line-height: 1.1;
+  cursor: default;
+  user-select: none;
+  text-shadow:
+    3px  3px 0 #000,
+   -2px -2px 0 #000,
+    3px -2px 0 #000,
+   -2px  3px 0 #000,
+    5px  5px 0 rgba(0,0,0,0.45);
+}
+
+.home-byline {
+  position: absolute;
+  bottom: 18px;
+  left: 24px;
+  font-family: var(--font);
+  font-size: 18px;
+  color: #b48ad4;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* Fixed badge shown whenever test mode is active */
+#test-mode-indicator {
+  position: fixed;
+  top: 10px;
+  right: 14px;
+  z-index: 9999;
+  background: #d4260a;
+  color: #fff;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 2px solid #000;
+  box-shadow: 0 2px 0 #000;
+  pointer-events: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   MATCHUP SCREEN  — cinematic character intro between video + battle
+   Built dynamically by tutorial.js → showMatchupScreen().
+   Earth-toned, ancient stone / crumbling parchment aesthetic.
+══════════════════════════════════════════════════════════════════ */
+
+#matchup-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  overflow: hidden;
+}
+
+/* Ancient stone / worn map texture + scanline overlay */
+#matchup-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    /* horizontal scanlines */
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px, transparent 2px,
+      rgba(0,0,0,0.20) 2px, rgba(0,0,0,0.20) 3px
+    ),
+    /* diagonal stone grain veins */
+    repeating-linear-gradient(
+      152deg,
+      transparent 0px,  transparent 55px,
+      rgba(0,0,0,0.07)  55px, rgba(0,0,0,0.07) 57px,
+      transparent 57px, transparent 120px,
+      rgba(255,255,255,0.025) 120px, rgba(255,255,255,0.025) 121px
+    ),
+    /* warm deep-earth stone base */
+    linear-gradient(
+      158deg,
+      #1c0e05 0%,
+      #3a2010 18%,
+      #2c1a08 38%,
+      #3e2812 58%,
+      #2a1808 76%,
+      #1a0c04 100%
+    );
+  pointer-events: none;
+}
+
+/* Lucy group — upper-left pulled inward */
+.matchup-lucy-group {
+  position: absolute;
+  top: 80px;
+  left: 160px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 44px;
+  z-index: 1;
+}
+
+/* Ötzi group — lower-right, mirrors Lucy's inset */
+.matchup-otzi-group {
+  position: absolute;
+  bottom: 160px;
+  right: 160px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 44px;
+  z-index: 1;
+}
+
+
+/* Portrait column — fixed to portrait circle height only;
+   name card is absolute so it doesn't inflate the flex height.
+   This lets align-items:center on the group land the dialogue box
+   exactly on the vertical midpoint of the portrait circle. */
+.matchup-portrait-col {
+  position: relative;
+  width: 210px;
+  height: 210px;
+  flex-shrink: 0;
+}
+
+/* Circular portrait with layered aged-gold / bronze trim */
+.matchup-portrait-frame {
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #2a1808;
+  flex-shrink: 0;
+  box-shadow:
+    0 0 0 4px  #c8a040,    /* inner gold ring    */
+    0 0 0 6px  #000,       /* black gap          */
+    0 0 0 10px #8a6018,    /* bronze ring        */
+    0 0 0 12px #000,       /* black gap          */
+    0 0 0 16px #c8a040,    /* outer gold ring    */
+    0 0 0 18px #000,       /* outer black edge   */
+    0 4px 24px rgba(0,0,0,0.7);
+}
+
+.matchup-portrait-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+
+/* Ancient scroll / stone-tablet name label —
+   absolutely positioned below the portrait circle so it doesn't
+   inflate the portrait-col's flex height */
+.matchup-name-card {
+  position: absolute;
+  top: 226px;    /* 210px portrait + 16px gap */
+  left: 0;
+  right: 0;
+  background: #120a04;
+  border: 2px solid #8a6018;
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 0 3px #c8a040,
+    0 0 0 4px #000,
+    inset 0 0 14px rgba(0,0,0,0.55);
+  padding: 9px 18px;
+  text-align: center;
+  letter-spacing: 0.07em;
+}
+
+.matchup-name-text {
+  font-family: var(--font);
+  font-size: 24px;
+  color: #f0d080;
+  line-height: 1.35;
+}
+
+.matchup-name-sub {
+  display: block;
+  font-size: 16px;
+  font-weight: 400;
+  color: #c8a040;
+  opacity: 0.9;
+  margin-top: 2px;
+}
+
+/* VS graphic — centered absolutely in the screen */
+.matchup-vs-wrap {
+  position: absolute;
+  top: 36%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+  /* GSAP controls opacity / scale; no CSS transform here */
+}
+
+.matchup-vs-text {
+  font-family: var(--font);
+  font-size: 130px;
+  line-height: 1;
+  color: #c8a040;
+  letter-spacing: 0.1em;
+  text-shadow:
+    5px  5px 0 #7a4808,
+    -3px -3px 0 #3a1e00,
+    8px  8px 0 rgba(0,0,0,0.55),
+    0 0 40px  rgba(200,160,64,0.55),
+    0 0 90px  rgba(180,100,20,0.28);
+}
+
+/* Dialogue box — SNES style, inline beside portrait */
+.matchup-dialogue {
+  width: 480px;
+
+  background: #050015;
+  border: 3px solid #8898ff;
+  box-shadow:
+    0 0 0 3px #000,
+    0 0 0 6px #3848c0,
+    0 0 0 7px #000;
+
+  padding: 18px 28px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.matchup-dialogue-speaker {
+  font-family: var(--font);
+  font-size: 23px;
+  color: #f8d000;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.matchup-dialogue-text {
+  font-family: var(--font);
+  font-size: 24px;
+  line-height: 1.55;
+  color: #ffffff;
+  min-height: 58px;
+}
+
+.matchup-dialogue-hint {
+  font-family: var(--font);
+  font-size: 13px;
+  color: #8888b8;
+  margin-top: 10px;
+  letter-spacing: 0.06em;
+  animation: tut-hint-blink 1.4s ease-in-out infinite;
+}
+
+/* White-flash overlay for lightning transition */
+.matchup-flash {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Responsive — iPad and smaller */
+@media (max-width: 1024px) {
+  .matchup-portrait-frame { width: 160px; height: 160px; }
+  .matchup-portrait-col   { gap: 12px; }
+  .matchup-vs-text        { font-size: 88px; }
+  .matchup-name-text      { font-size: 21px; }
+  .matchup-dialogue       { width: 340px; padding: 14px 20px 12px; }
+  .matchup-dialogue-text  { font-size: 20px; }
+  .matchup-lucy-group     { top: 40px; left: 60px; gap: 32px; }
+  .matchup-otzi-group     { bottom: 80px; right: 60px; gap: 32px; }
+}
+
+/* ── Comic speech bubbles (tutorial battle) ──────────────────── */
+
+/* Lucy's bubble — to the right of her avatar (bottom-left)       */
+#tut-click-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  pointer-events: none; /* JS toggles to 'auto' during dialogue-wait */
+  background: transparent;
+  cursor: pointer;
+}
+
+#tut-lucy-bubble {
+  position: fixed;
+  bottom: 80px;  /* level with Lucy avatar (bottom: 80px)         */
+  left: 190px;   /* 54px avatar-left + 120px frame + 16px gap     */
+  max-width: 200px; /* constrained to dead-space left of hand cards */
+  background: #fffef5;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 14px 16px 10px;
+  box-shadow: 4px 4px 0 #111;
+  z-index: 200;
+  cursor: pointer;
+}
+/* Tail pointing left toward Lucy avatar */
+#tut-lucy-bubble::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-right-color: #111;
+}
+#tut-lucy-bubble::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-right-color: #fffef5;
+}
+
+/* Ötzi's bubble — to the left of his avatar (top-right)          */
+#tut-otzi-box {
+  position: fixed;
+  top: 26px;
+  right: 190px;  /* 54px avatar-right + 120px frame + 16px gap    */
+  max-width: 330px;
+  background: #f0ebe0;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 14px 16px 10px;
+  box-shadow: -4px 4px 0 #111;
+  z-index: 200;
+  cursor: pointer;
+}
+/* Tail pointing right toward Ötzi */
+#tut-otzi-box::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-left-color: #111;
+}
+#tut-otzi-box::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-left-color: #f0ebe0;
+}
+
+.tut-bubble-text {
+  font-family: var(--font);
+  font-size: 18px;
+  line-height: 1.45;
+  color: #111;
+  min-height: 32px;
+}
+
+.tut-bubble-hint {
+  font-family: var(--font);
+  font-size: 11px;
+  color: #888;
+  margin-top: 8px;
+  text-align: right;
+  letter-spacing: 0.05em;
+  animation: tut-hint-blink 1.4s ease-in-out infinite;
+}
+.tut-bubble-hint.tut-hint-action {
+  color: #1a6a3a;
+  animation: none;
+  text-align: left;
+}
+
+.tut-otzi-speaker {
+  display: block;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  color: #3a2200;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+}
+#tut-otzi-text { min-height: 32px; }
+
+/* ── Location ability text: hidden during turns 1-2 ──────────── */
+.tut-ability-hidden { visibility: hidden; }
+
+/* ── T3 ability card glow ─────────────────────────────────────── */
+@keyframes tut-ability-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(200,160,32,0.4), 4px 4px 0 #111; }
+  50%       { box-shadow: 0 0 16px 8px rgba(200,160,32,0.7), 4px 4px 0 #111; }
+}
+.tut-ability-glow { animation: tut-ability-pulse 1.2s ease-in-out infinite; }
+
+/* ── White pulsing glow (Rift Valley tile + capital counter) ──── */
+@keyframes tut-white-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 0 10px 3px rgba(255,255,255,0.3); }
+  50%       { box-shadow: 0 0 0 3px rgba(255,255,255,0.9), 0 0 22px 8px rgba(255,255,255,0.55); }
+}
+.tut-white-glow {
+  position: relative;
+  z-index: 950 !important;
+  border-radius: 4px;
+  animation: tut-white-pulse 1.0s ease-in-out infinite;
+}
+
+/* ── T4 location nameplate glow ───────────────────────────────── */
+@keyframes tut-loc-nameplate-glow {
+  0%, 100% { color: var(--snes-yellow); }
+  50%       { color: #fff; text-shadow: 0 0 12px rgba(200,160,32,0.9); }
+}
+.tut-loc-glow { animation: tut-loc-nameplate-glow 0.7s ease-in-out 3; }
+
+/* ── Magellan moveable board slot ─────────────────────────────── */
+.tut-moveable { cursor: grab; }
+.tut-moveable:active { cursor: grabbing; }
+
 /* ── Responsive adjustments ───────────────────────────────────── */
 @media (max-width: 767px) {
   #tut-box {
@@ -2347,7 +3195,7 @@ body.tut-locked #battle-reset-turn {
     width: calc(100vw - 16px);
   }
 
-  .tut-portrait { width: 72px; }
-  .tut-lucy-svg { width: 56px; }
-  .tut-text { font-size: 13px; }
+  .tut-portrait { width: 96px; }
+  .tut-lucy-svg { width: 72px; }
+  .tut-text { font-size: 20px; }
 }
