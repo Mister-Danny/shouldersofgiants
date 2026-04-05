@@ -160,8 +160,7 @@
       if (count >= 3) {
         clearTimeout(timer);
         count = 0;
-        // Bypass menu placeholder — will open a secret menu in a future update
-        console.log('bypass menu');
+        if (window.BypassAuth) window.BypassAuth.prompt();
       }
     });
   }

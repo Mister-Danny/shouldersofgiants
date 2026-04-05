@@ -377,6 +377,181 @@
     }
   </script>
 
+  <!-- ═══════════════════════════════════════════════════════════════
+       LEGEND SCREEN — 5-win milestone victory sequence
+       Fixed overlay — sits above all game screens (z-index 8000).
+       Entirely managed by legend.js + GSAP.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="screen-legend" style="display:none">
+
+    <!-- Solid black fill — fades in first -->
+    <div id="legend-blackout"></div>
+
+    <!-- "YOU HAVE MADE HISTORY" opening title -->
+    <div id="legend-title-wrap">
+      <span id="legend-opening-title">YOU HAVE MADE<br>HISTORY</span>
+    </div>
+
+    <!-- Full-screen montage image (background-image swapped by JS) -->
+    <div id="legend-slide"></div>
+
+    <!-- "LEGEND" burst + particle origin point -->
+    <div id="legend-word-wrap">
+      <span id="legend-word">LEGEND</span>
+    </div>
+    <div id="legend-particles"></div>
+
+    <!-- Click-to-continue subtitle -->
+    <div id="legend-subtitle">Click to claim your victory</div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       BYPASS PASSWORD PROMPT
+       Fixed overlay — appears on triple-click before the bypass menu.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="bypass-pw-backdrop" style="display:none">
+    <div id="bypass-pw-box">
+      <div class="bypass-pw-title">RESTRICTED ZONE</div>
+      <div class="bypass-pw-divider"></div>
+      <div class="bypass-pw-body">
+        <input
+          id="bypass-pw-input"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="32"
+          placeholder="&#9632;&#9632;&#9632;&#9632;&#9632;&#9632;&#9632;&#9632;"
+          aria-label="Password"
+        >
+        <button id="bypass-pw-submit" class="btn-snes">ENTER</button>
+      </div>
+      <div id="bypass-pw-msg" class="bypass-pw-msg"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       TEACHER BYPASS MENU
+       Opens on triple-click of the "Shoulders of Giants" title.
+       Fixed overlay — sits above all screens.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="bypass-backdrop" class="bypass-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Teacher Controls">
+    <div class="bypass-dialog">
+
+      <!-- Header -->
+      <div class="bypass-header">
+        <span class="bypass-title">&#9654; TEACHER CONTROLS</span>
+        <button class="btn-snes btn-snes-close bypass-close-btn" id="bypass-close">&#10005; CLOSE</button>
+      </div>
+
+      <div class="bypass-body">
+
+        <!-- ── TUTORIAL CONTROLS ─────────────────────────────── -->
+        <section class="bypass-section">
+          <h3 class="bypass-section-title">Tutorial Controls</h3>
+          <div class="bypass-btn-row">
+            <button class="btn-snes bypass-btn-action" id="bypass-skip-tut">Skip Tutorial</button>
+            <span class="bypass-btn-desc">Marks tutorial complete and goes to Deck Builder</span>
+          </div>
+          <div class="bypass-btn-row">
+            <button class="btn-snes btn-snes-close bypass-btn-action" id="bypass-reset-tut">Reset Tutorial</button>
+            <span class="bypass-btn-desc">Clears flag so tutorial plays again on next visit</span>
+          </div>
+        </section>
+
+        <!-- ── SESSION CONTROLS ──────────────────────────────── -->
+        <section class="bypass-section">
+          <h3 class="bypass-section-title">Session Controls</h3>
+          <div class="bypass-btn-row">
+            <button class="btn-snes bypass-btn-action bypass-test-off" id="bypass-test-toggle">TEST MODE: OFF</button>
+            <span class="bypass-btn-desc">Tags Firebase sessions as test data — badge shown in-game</span>
+          </div>
+          <div class="bypass-btn-row">
+            <button class="btn-snes btn-snes-remove bypass-btn-action" id="bypass-reset-all">&#9888; Reset All Data</button>
+            <span class="bypass-btn-desc">Clears saved deck, tutorial state, and test flag — reloads page</span>
+          </div>
+          <div class="bypass-btn-row">
+            <button class="btn-snes bypass-btn-action" id="bypass-play-legend">&#9654; Play Victory Montage</button>
+            <span class="bypass-btn-desc">Preview the 3-win legend screen sequence</span>
+          </div>
+        </section>
+
+        <!-- ── CLASSROOM CONTROLS ────────────────────────────── -->
+        <section class="bypass-section">
+          <h3 class="bypass-section-title">Classroom Controls — Force Locations</h3>
+          <p class="bypass-section-hint">Check exactly 3 locations to lock them for every game. Leave all unchecked to randomize normally.</p>
+          <div class="bypass-loc-grid">
+            <label class="bypass-loc-item">
+              <input type="checkbox" class="bypass-loc-check" value="1">
+              <span class="bypass-loc-name">Scandinavia</span>
+              <span class="bypass-loc-ability">Military cards move away free</span>
+            </label>
+            <label class="bypass-loc-item">
+              <input type="checkbox" class="bypass-loc-check" value="2">
+              <span class="bypass-loc-name">The Great Rift Valley</span>
+              <span class="bypass-loc-ability">First card of game must go here</span>
+            </label>
+            <label class="bypass-loc-item">
+              <input type="checkbox" class="bypass-loc-check" value="3">
+              <span class="bypass-loc-name">The Cape of Good Hope</span>
+              <span class="bypass-loc-ability">Moving here grants +1 IP</span>
+            </label>
+            <label class="bypass-loc-item">
+              <input type="checkbox" class="bypass-loc-check" value="4">
+              <span class="bypass-loc-name">The Levant</span>
+              <span class="bypass-loc-ability">Religious cards cost -1 CC here</span>
+            </label>
+            <label class="bypass-loc-item">
+              <input type="checkbox" class="bypass-loc-check" value="5">
+              <span class="bypass-loc-name">Timbuktu</span>
+              <span class="bypass-loc-ability">Cultural cards move here free</span>
+            </label>
+          </div>
+          <div class="bypass-loc-footer">
+            <span id="bypass-loc-status" class="bypass-loc-status bypass-loc-random">Random each game</span>
+            <button class="btn-snes btn-snes-close bypass-btn-sm" id="bypass-loc-clear">Clear (Randomize)</button>
+          </div>
+        </section>
+
+        <!-- ── DATA REVIEW ───────────────────────────────────── -->
+        <section class="bypass-section">
+          <h3 class="bypass-section-title">Data Review</h3>
+
+          <!-- Date filter -->
+          <div class="bypass-date-row">
+            <button class="btn-snes bypass-date-btn bypass-btn-sm active" data-filter="today">Today</button>
+            <button class="btn-snes bypass-date-btn bypass-btn-sm" data-filter="week">This Week</button>
+            <button class="btn-snes bypass-date-btn bypass-btn-sm" data-filter="all">All Time</button>
+          </div>
+
+          <!-- Live stats -->
+          <div id="bypass-stats" class="bypass-stats-box">
+            <span class="bypass-loading">Loading&#8230;</span>
+          </div>
+
+          <!-- Action row -->
+          <div class="bypass-data-actions">
+            <button class="btn-snes bypass-btn-sm" id="bypass-view-log">VIEW FULL LOG</button>
+            <button class="btn-snes bypass-btn-sm" id="bypass-export">EXPORT CSV</button>
+          </div>
+
+          <!-- Expandable log panel -->
+          <div id="bypass-log-panel" class="bypass-log-panel" style="display:none">
+            <div class="bypass-log-header">
+              <span>Last 20 Sessions</span>
+              <button class="btn-snes btn-snes-close bypass-btn-sm" id="bypass-log-close">&#10005;</button>
+            </div>
+            <div id="bypass-log-list" class="bypass-log-list"></div>
+          </div>
+        </section>
+
+      </div><!-- /.bypass-body -->
+    </div><!-- /.bypass-dialog -->
+
+    <!-- Toast notification -->
+    <div id="bypass-toast" class="bypass-toast"></div>
+  </div>
+
   <!-- ── Analytics (Firebase must be loaded above in <head>) ───── -->
   <script src="js/analytics.js"></script>
 
@@ -391,7 +566,9 @@
   <script src="js/ui.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/tutorial.js"></script>
+  <script src="js/legend.js"></script>
   <script src="js/game.js"></script>
+  <script src="js/bypass.js"></script>
 
 </body>
 </html>

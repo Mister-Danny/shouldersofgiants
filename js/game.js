@@ -168,6 +168,7 @@
     G.capital           = CAPITAL;
     G.turnStartCapital  = CAPITAL;
     G.playerFirst       = Math.random() < 0.5;
+    showRevealFirstHighlight(G.playerFirst);
     G.playerRevealQueue = [];
     G.aiRevealQueue     = [];
 
@@ -218,6 +219,16 @@
   }
 
   function pickLocations() {
+    // Bypass menu: teacher may force a specific set of 3 locations
+    try {
+      var forced = JSON.parse(localStorage.getItem('sog_forced_locations'));
+      if (Array.isArray(forced) && forced.length === 3) {
+        var result = forced.map(function (id) {
+          return LOCATIONS.find(function (l) { return l.id === id; });
+        }).filter(Boolean);
+        if (result.length === 3) return result;
+      }
+    } catch (e) {}
     var pool = LOCATIONS.slice();
     pool.sort(function () { return Math.random() - 0.5; });
     return pool.slice(0, 3);
@@ -991,34 +1002,49 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     AI SELECTION  (placeholder — Step 7 replaces)
+     AI SELECTION
   ═══════════════════════════════════════════════════════════════ */
 
   function runAiSelection() {
     G.aiRevealQueue = [];
     var budget = CAPITAL + G.aiBonusCapitalNextTurn;
     G.aiBonusCapitalNextTurn = 0;
-    var isHard = window.aiDifficulty === 'hard';
 
-    // Both modes shuffle randomly. Easy additionally skips ~1 in 3 cards.
-    var hand = shuffle(G.aiHand.slice());
+    // Shared helper: write a decided play to the board and reveal queue.
+    function commitPlay(cardId, locId) {
+      var card = CARDS.find(function (c) { return c.id === cardId; });
+      if (!card) return;
+      var slotIndex = G.aiSlots[locId].indexOf(null);
+      if (slotIndex === -1) return;
+      var baseIP = card.ip + (G.aiCardIPBonus[cardId] || 0);
+      G.aiSlots[locId][slotIndex] = { cardId: cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [] };
+      G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
+      G.aiRevealQueue.push(cardId);
+      var slotEl = getSlotEl('opp', locId, slotIndex);
+      if (slotEl) { slotEl.dataset.cardId = cardId; setSlotFaceDown(slotEl); }
+    }
 
-    // FIRST_CARD_HERE: on Turn 1, force AI's first card to the Great Rift Valley
+    /* ── Giant / Hard mode: strategic AI ────────────────────────── */
+    if (window.aiDifficulty === 'hard') {
+      aiGiantStrategy(budget).forEach(function (play) {
+        commitPlay(play.cardId, play.locId);
+      });
+      return;
+    }
+
+    /* ── Easy / Serf mode: random with ~33% carelessness ─────────── */
+    var hand    = shuffle(G.aiHand.slice());
     var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
     var aiFirstPlayed = false;
-
-    // Hard mode late-game: identify the 2 locations the AI is best positioned to win
-    var hardWinLocs = (isHard && G.turn >= 4) ? _aiWinLocs(2) : null;
 
     hand.forEach(function (cardId) {
       if (budget <= 0) return;
       var card = CARDS.find(function (c) { return c.id === cardId; });
       if (!card || card.cc > budget) return;
 
-      // Easy: randomly skip ~1 in 3 affordable cards to simulate carelessness
-      if (!isHard && Math.random() < 0.33) return;
+      // Randomly skip ~1 in 3 affordable cards to simulate carelessness
+      if (Math.random() < 0.33) return;
 
-      // Build list of locations with an available slot
       var empties = [];
       G.locations.forEach(function (loc) {
         var fi = G.aiSlots[loc.id].indexOf(null);
@@ -1028,47 +1054,14 @@
 
       var t;
       if (riftLoc && G.turn === 1 && !aiFirstPlayed) {
-        // Turn 1 rule: first card must go to the Rift Valley
         var riftFi = G.aiSlots[riftLoc.id].indexOf(null);
         if (riftFi === -1) return;
         t = { locId: riftLoc.id, slotIndex: riftFi };
-        aiFirstPlayed = true;
       } else {
-        aiFirstPlayed = true;
-
-        if (!isHard) {
-          shuffle(empties);
-          t = empties[0];
-        } else if (G.turn <= 3) {
-          // Turns 1–3: contest — play to the location where AI is furthest behind.
-          // Tiebreak by picking the location with the fewest AI cards already (spread coverage).
-          empties.sort(function (a, b) {
-            var gapDiff = _aiLocGap(b.locId) - _aiLocGap(a.locId);
-            if (gapDiff !== 0) return gapDiff;
-            var aiCountA = G.aiSlots[a.locId].filter(Boolean).length;
-            var aiCountB = G.aiSlots[b.locId].filter(Boolean).length;
-            return aiCountA - aiCountB; // fewer AI cards = more urgent
-          });
-          t = empties[0];
-        } else {
-          // Turns 4–5: consolidate — maximize IP at the 2 locations most likely to win.
-          // Among those, prefer the one with the slimmest lead (needs more cushion).
-          var preferred = empties.filter(function (e) {
-            return hardWinLocs.indexOf(e.locId) !== -1;
-          });
-          if (preferred.length > 0) {
-            preferred.sort(function (a, b) {
-              // Smallest gap (or largest deficit) = higher priority within win-target locs
-              return _aiLocGap(b.locId) - _aiLocGap(a.locId);
-            });
-            t = preferred[0];
-          } else {
-            // Win-target locations are full — use any remaining slot
-            shuffle(empties);
-            t = empties[0];
-          }
-        }
+        shuffle(empties);
+        t = empties[0];
       }
+      aiFirstPlayed = true;
 
       var baseIP = card.ip + (G.aiCardIPBonus[cardId] || 0);
       G.aiSlots[t.locId][t.slotIndex] = { cardId: cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [] };
@@ -1102,6 +1095,258 @@
       .sort(function (a, b) { return _aiLocGap(a.id) - _aiLocGap(b.id); })
       .slice(0, n)
       .map(function (l) { return l.id; });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     GIANT MODE AI STRATEGY  (hard difficulty only)
+  ═══════════════════════════════════════════════════════════════ */
+
+  /**
+   * Per-location snapshot of board state from the AI's perspective.
+   * Called once at the start of aiGiantStrategy().
+   */
+  function _giantBoardAnalysis() {
+    var result = {};
+    G.locations.forEach(function (loc) {
+      var pIP = G.playerSlots[loc.id].reduce(function (s, x) { return s + (x ? effectiveIP(x) : 0); }, 0);
+      var aIP = G.aiSlots[loc.id].reduce(   function (s, x) { return s + (x ? effectiveIP(x) : 0); }, 0);
+      var gap = pIP - aIP;   // positive = player leads (AI losing)
+
+      var playerHighCCCards = G.playerSlots[loc.id].reduce(function (n, s) {
+        if (!s) return n;
+        var c = CARDS.find(function (x) { return x.id === s.cardId; });
+        return n + (c && c.cc >= 4 ? 1 : 0);
+      }, 0);
+
+      var playerCards = G.playerSlots[loc.id].filter(Boolean);
+
+      result[loc.id] = {
+        gap:                    gap,
+        status:                 gap > 0 ? 'losing' : (gap < 0 ? 'winning' : 'tied'),
+        playerHighCCCards:      playerHighCCCards,
+        playerHasKente:         G.playerSlots[loc.id].some(function (s) { return s && s.cardId === 17; }),
+        aiHasKente:             G.aiSlots[loc.id].some(   function (s) { return s && s.cardId === 17; }),
+        playerHasVoltaireAlone: playerCards.length === 1 && playerCards[0].cardId === 20,
+        aiRevealedCards:        G.aiSlots[loc.id].filter(function (s) { return s && s.revealed; }),
+        aiAllCards:             G.aiSlots[loc.id].filter(Boolean),
+        availableSlots:         G.aiSlots[loc.id].filter(function (s) { return s === null; }).length
+      };
+    });
+    return result;
+  }
+
+  /**
+   * Effective capital cost for an AI card at a location, accounting for
+   * already-revealed discount cards (Henry at location, Cosimo anywhere, Levant).
+   */
+  function _giantEffectiveCC(cardId, locId) {
+    var card = CARDS.find(function (c) { return c.id === cardId; });
+    if (!card) return 99;
+    var cc = card.cc;
+
+    // Henry the Navigator (id=22): reduces Exploration cc at his location
+    if (card.type === 'Exploration' && cardId !== 22) {
+      var henryHere = G.aiSlots[locId].some(function (s) { return s && s.revealed && s.cardId === 22; });
+      if (henryHere) cc = Math.max(1, cc - 1);
+    }
+    // Cosimo de'Medici (id=19): reduces Cultural cc from anywhere
+    if (card.type === 'Cultural' && cardId !== 19) {
+      var cosimoAny = G.locations.some(function (l) {
+        return G.aiSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 19; });
+      });
+      if (cosimoAny) cc = Math.max(1, cc - 1);
+    }
+    // Levant (RELIGIOUS_DISCOUNT)
+    var loc = G.locations.find(function (l) { return l.id === locId; });
+    if (loc && loc.abilityKey === 'RELIGIOUS_DISCOUNT' && card.type === 'Religious') {
+      cc = Math.max(1, cc - 1);
+    }
+    return cc;
+  }
+
+  /**
+   * Score a single (cardId, locId) candidate play.
+   * Returns null if inadvisable; otherwise a numeric score (higher = better).
+   * tentativePlays: already-selected plays this turn (for Voltaire/Scholar synergy checks).
+   */
+  function _giantScorePlay(cardId, locId, boardAnalysis, tentativePlays) {
+    var card = CARDS.find(function (c) { return c.id === cardId; });
+    if (!card) return null;
+    var an = boardAnalysis[locId];
+
+    var tentativeHere = tentativePlays.filter(function (p) { return p.locId === locId; }).length;
+    if (an.availableSlots - tentativeHere <= 0) return null;
+
+    var baseIP = card.ip + (G.aiCardIPBonus[cardId] || 0);
+    var score  = baseIP;
+
+    /* ── Per-card synergy bonuses ─────────────────────────────── */
+
+    // Juvenal (id=18): each high-CC player card here triggers -2 IP penalty
+    if (cardId === 18) {
+      score += an.playerHighCCCards * 2;
+    }
+
+    // Voltaire (id=20): +4 IP if alone at location; wasted otherwise
+    if (cardId === 20) {
+      var aiHereTotal = an.aiAllCards.length + tentativeHere;
+      score += (aiHereTotal === 0) ? 4 : -2;
+    }
+
+    // Cortes (id=13): destroys own revealed cards, gains +1 IP per card destroyed
+    if (cardId === 13) {
+      if (isKenteProtected(locId)) return null;
+      var victims    = an.aiRevealedCards.filter(function (s) { return s.cardId !== 13; });
+      var vCount     = victims.length;
+      if (vCount < 2) return null;   // per spec: needs multiple victims to be worthwhile
+      var vTotIP     = victims.reduce(function (s, x) { return s + effectiveIP(x); }, 0);
+      var netChange  = (3 + vCount) - vTotIP;   // net IP change at this location
+      if (netChange < 0) return null;
+      score = netChange;
+      // William synergy: destroyed IP also accumulates on William
+      var aiHasWilliam = G.locations.some(function (l) {
+        return G.aiSlots[l.id].some(function (s) { return s && s.cardId === 15; });
+      });
+      if (aiHasWilliam) score += vTotIP;
+    }
+
+    // Kente (id=17): extra value protecting high-IP AI cards at location
+    if (cardId === 17) {
+      var valCards = an.aiRevealedCards.filter(function (s) { return effectiveIP(s) >= 3; }).length;
+      score += valCards * 0.5;
+    }
+
+    // Scholar-Officials (id=2): bonus capital next turn per other card here
+    if (cardId === 2) {
+      var othersHere = an.aiAllCards.length + tentativeHere;
+      if (othersHere >= 1) score += Math.min(othersHere, 3) * 0.5;
+    }
+
+    // Pacal the Great (id=5): triggers At Once abilities of all cards at location
+    if (cardId === 5) {
+      var atOnceHere = an.aiAllCards.filter(function (s) {
+        var c = CARDS.find(function (x) { return x.id === s.cardId; });
+        return c && c.ability && c.ability.indexOf('At Once') !== -1;
+      }).length;
+      score += atOnceHere * 2;
+    }
+
+    // Henry the Navigator (id=22): extra value if we have Exploration cards to play
+    if (cardId === 22) {
+      var expHand = G.aiHand.filter(function (id) {
+        if (id === 22) return false;
+        var c = CARDS.find(function (x) { return x.id === id; });
+        return c && c.type === 'Exploration';
+      }).length;
+      if (expHand > 0) score += 1;
+    }
+
+    // Cosimo de'Medici (id=19): extra value if we have Cultural cards to play
+    if (cardId === 19) {
+      var cultHand = G.aiHand.filter(function (id) {
+        if (id === 19) return false;
+        var c = CARDS.find(function (x) { return x.id === id; });
+        return c && c.type === 'Cultural';
+      }).length;
+      if (cultHand > 0) score += 1;
+    }
+
+    /* ── Location priority ───────────────────────────────────── */
+    score += an.status === 'losing' ? 3 : (an.status === 'tied' ? 2 : 0);
+
+    /* ── Adaptive responses ──────────────────────────────────── */
+    // Counter opponent Voltaire alone: playing here breaks the +4 bonus
+    if (an.playerHasVoltaireAlone) score += 4;
+
+    return score;
+  }
+
+  /**
+   * Reveal-queue ordering for selected plays (lower = revealed earlier).
+   * Ensures discounters (Henry/Cosimo) go first; Pacal goes last.
+   */
+  function _giantPlayOrder(cardId) {
+    if (cardId === 22 || cardId === 19) return 1;   // Henry / Cosimo: first
+    if (cardId === 2)                   return 7;   // Scholar-Officials: after others
+    if (cardId === 13)                  return 8;   // Cortes: after own cards established
+    if (cardId === 5)                   return 9;   // Pacal: last (triggers all At Once)
+    var c = CARDS.find(function (x) { return x.id === cardId; });
+    if (c && c.ability && c.ability.indexOf('At Once') !== -1) return 5;
+    return 3;
+  }
+
+  /**
+   * Giant mode card selection.
+   * Returns an ordered array of {cardId, locId, cc} plays to commit this turn.
+   */
+  function aiGiantStrategy(budget) {
+    var boardAnalysis = _giantBoardAnalysis();
+    var riftLoc       = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
+
+    var selected   = [];
+    var remaining  = budget;
+    var usedCards  = {};
+    var slotsUsed  = {};
+    G.locations.forEach(function (l) { slotsUsed[l.id] = 0; });
+
+    // Build a scored, sorted candidate list from current state.
+    function buildCandidates(locFilter) {
+      var cands = [];
+      G.aiHand.forEach(function (cardId) {
+        if (usedCards[cardId]) return;
+        G.locations.forEach(function (loc) {
+          if (locFilter && loc.id !== locFilter) return;
+          var avail = boardAnalysis[loc.id].availableSlots - (slotsUsed[loc.id] || 0);
+          if (avail <= 0) return;
+          var cc    = _giantEffectiveCC(cardId, loc.id);
+          if (cc > remaining) return;
+          var score = _giantScorePlay(cardId, loc.id, boardAnalysis, selected);
+          if (score === null) return;
+          cands.push({ cardId: cardId, locId: loc.id, cc: cc, score: score });
+        });
+      });
+      cands.sort(function (a, b) { return b.score - a.score; });
+      return cands;
+    }
+
+    // Commit a play if still valid; returns true on success.
+    function tryCommit(play) {
+      if (usedCards[play.cardId]) return false;
+      if (play.cc > remaining)    return false;
+      var avail = boardAnalysis[play.locId].availableSlots - (slotsUsed[play.locId] || 0);
+      if (avail <= 0) return false;
+      // Re-score with updated tentative list (Voltaire, Pacal synergies may shift)
+      if (_giantScorePlay(play.cardId, play.locId, boardAnalysis, selected) === null) return false;
+      selected.push({ cardId: play.cardId, locId: play.locId, cc: play.cc });
+      usedCards[play.cardId]  = true;
+      slotsUsed[play.locId]   = (slotsUsed[play.locId] || 0) + 1;
+      remaining              -= play.cc;
+      return true;
+    }
+
+    // Turn 1: first card MUST go to the Rift Valley (FIRST_CARD_HERE rule).
+    if (riftLoc && G.turn === 1) {
+      var riftCands = buildCandidates(riftLoc.id);
+      if (riftCands.length > 0) tryCommit(riftCands[0]);
+    }
+
+    // Main pass: greedy selection with 15% random skip for unpredictability.
+    buildCandidates(null).forEach(function (play) {
+      if (Math.random() < 0.15) return;
+      tryCommit(play);
+    });
+
+    // Fill pass: if >1 capital unspent, add remaining cards without random skip.
+    if (remaining > 1) {
+      buildCandidates(null).forEach(function (play) { tryCommit(play); });
+    }
+
+    // Sequence: Henry/Cosimo first → vanilla cards → At Once → Scholar/Cortes → Pacal last.
+    selected.sort(function (a, b) {
+      return _giantPlayOrder(a.cardId) - _giantPlayOrder(b.cardId);
+    });
+
+    return selected;
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -1275,26 +1520,36 @@
     updateScores();
   }
 
-  /** AI auto-movement: Magellan moves toward highest-IP player location; Columbus toward Cultural. */
+  /**
+   * AI auto-movement (both modes).
+   * Giant mode also repositions Military from Scandinavia and Cultural toward Timbuktu.
+   */
   function runAiMovements() {
+    var isHard = window.aiDifficulty === 'hard';
+
     G.locations.forEach(function (loc) {
       G.aiSlots[loc.id].forEach(function (s, si) {
         if (!s || !s.revealed) return;
 
-        if (s.cardId === 24 && !G.aiMovedThisTurn[24]) {          // AI Magellan
-          var best = null, bestScore = -Infinity;
+        // ── Magellan (id=24) ──────────────────────────────────────
+        if (s.cardId === 24 && !G.aiMovedThisTurn[24]) {
+          var magBest = null, magBestScore = -Infinity;
           G.locations.forEach(function (l) {
             if (l.id === loc.id || G.aiSlots[l.id].indexOf(null) === -1) return;
-            var score = G.playerSlots[l.id].reduce(function (sum, ps) {
-              return sum + (ps && ps.revealed ? effectiveIP(ps) : 0);
-            }, 0);
-            if (score > bestScore) { bestScore = score; best = l.id; }
+            // Giant: move toward most contested (highest gap = AI losing there)
+            // Easy: move toward highest player IP
+            var magScore = isHard ? _aiLocGap(l.id)
+              : G.playerSlots[l.id].reduce(function (sum, ps) {
+                return sum + (ps && ps.revealed ? effectiveIP(ps) : 0);
+              }, 0);
+            if (magScore > magBestScore) { magBestScore = magScore; magBest = l.id; }
           });
-          if (best !== null) executeMove('opp', loc.id, si, best);
+          if (magBest !== null) executeMove('opp', loc.id, si, magBest);
         }
 
-        if (s.cardId === 25 && !G.aiColumbusMoved) {              // AI Columbus
-          var best = null, bestCount = 0;
+        // ── Columbus (id=25) ─────────────────────────────────────
+        if (s.cardId === 25 && !G.aiColumbusMoved) {
+          var colBest = null, colBestCount = 0;
           G.locations.forEach(function (l) {
             if (l.id === loc.id || G.aiSlots[l.id].indexOf(null) === -1) return;
             var cnt = G.playerSlots[l.id].filter(function (ps) {
@@ -1302,12 +1557,55 @@
               var c = CARDS.find(function (x) { return x.id === ps.cardId; });
               return c && c.type === 'Cultural';
             }).length;
-            if (cnt > bestCount) { bestCount = cnt; best = l.id; }
+            if (cnt > colBestCount) { colBestCount = cnt; colBest = l.id; }
           });
-          if (best !== null) executeMove('opp', loc.id, si, best);
+          if (colBest !== null) executeMove('opp', loc.id, si, colBest);
+        }
+
+        // ── Giant: Scandinavia military repositioning ─────────────
+        if (isHard) {
+          var scandLoc = G.locations.find(function (l) { return l.abilityKey === 'MILITARY_FREE_MOVE_AWAY'; });
+          var cardInfo = CARDS.find(function (c) { return c.id === s.cardId; });
+          if (scandLoc && loc.id === scandLoc.id &&
+              cardInfo && cardInfo.type === 'Military' &&
+              s.cardId !== 24 && s.cardId !== 25 &&
+              !G.aiMovedThisTurn[s.cardId]) {
+            var scandBest = null, scandBestGap = -Infinity;
+            G.locations.forEach(function (l) {
+              if (l.id === loc.id || G.aiSlots[l.id].indexOf(null) === -1) return;
+              var gap = _aiLocGap(l.id);
+              if (gap > scandBestGap) { scandBestGap = gap; scandBest = l.id; }
+            });
+            // Only reposition if AI is losing or tied at the destination
+            if (scandBest !== null && scandBestGap >= 0) {
+              executeMove('opp', loc.id, si, scandBest);
+              G.aiMovedThisTurn[s.cardId] = true;
+            }
+          }
         }
       });
     });
+
+    // ── Giant: Timbuktu Cultural repositioning ───────────────────
+    if (isHard) {
+      var timbuktuLoc = G.locations.find(function (l) { return l.abilityKey === 'CULTURAL_FREE_MOVE_HERE'; });
+      if (timbuktuLoc && _aiLocGap(timbuktuLoc.id) >= 0) {
+        G.locations.forEach(function (srcLoc) {
+          if (srcLoc.id === timbuktuLoc.id) return;
+          G.aiSlots[srcLoc.id].forEach(function (s, si) {
+            if (!s || !s.revealed) return;
+            if (G.aiMovedThisTurn[s.cardId]) return;
+            if (G.aiSlots[timbuktuLoc.id].indexOf(null) === -1) return; // Timbuktu full
+            var crd = CARDS.find(function (c) { return c.id === s.cardId; });
+            if (!crd || crd.type !== 'Cultural') return;
+            // Only pull from a location where AI is comfortably ahead (safe to spare the card)
+            if (_aiLocGap(srcLoc.id) > -2) return;
+            executeMove('opp', srcLoc.id, si, timbuktuLoc.id);
+            G.aiMovedThisTurn[s.cardId] = true;
+          });
+        });
+      }
+    }
   }
 
   /**
@@ -1502,6 +1800,7 @@
 
   function startReveal() {
     G.phase = 'reveal';
+    hideRevealFirstHighlight();  // glow shown during selection — clear it now
     snapBack();            // Restore all queued cards to true origin slots
     refreshMoveableCards();
     updateHeader();
@@ -1511,7 +1810,6 @@
       boardEl.querySelectorAll('.battle-card-slot.unplayed[data-owner="player"]')
     );
     var afterFlip = function () {
-      showRevealFirstHighlight(G.playerFirst);
       setTimeout(function () { revealNext(buildRevealSequence(), 0); }, 700);
     };
 
@@ -1542,13 +1840,13 @@
   function showRevealFirstHighlight(playerFirst) {
     var lucyAv = document.querySelector('.battle-avatar-lucy');
     var otziAv = document.querySelector('.battle-avatar-otzi');
-    if (lucyAv) lucyAv.classList.toggle('reveal-first', !!playerFirst);
-    if (otziAv) otziAv.classList.toggle('reveal-first', !playerFirst);
+    if (lucyAv) lucyAv.classList.toggle('turn-first', !!playerFirst);
+    if (otziAv) otziAv.classList.toggle('turn-first', !playerFirst);
   }
 
   function hideRevealFirstHighlight() {
-    document.querySelectorAll('.battle-avatar.reveal-first').forEach(function (el) {
-      el.classList.remove('reveal-first');
+    document.querySelectorAll('.battle-avatar.turn-first').forEach(function (el) {
+      el.classList.remove('turn-first');
     });
   }
 
@@ -1603,7 +1901,6 @@
 
   function revealNext(seq, i) {
     if (i >= seq.length) {
-      hideRevealFirstHighlight();
       evaluateContinuous();
       refreshSlotIPDisplays();
       refreshHandIPDisplays();
@@ -2256,6 +2553,7 @@
         slots[locId][v.slotIdx] = null;
         clearSlotDOM(owner, locId, v.slotIdx);
         ipGainedFB++;
+        if (v.cardId === 7)                        afterFnsFB.push(function () { triggerJanHus(owner, null, function () {}); });
         if (v.cardId === 12)                       afterFnsFB.push(function () { triggerSamurai(owner, locId); });
         if (v.cardId === 14 && owner === 'player') afterFnsFB.push(function () { triggerJoanOfArc(locId); });
         if (v.cardId === 14 && owner === 'opp')    afterFnsFB.push(function () { triggerJoanOfArcAI(locId); });
@@ -2374,6 +2672,8 @@
         var c = CARDS.find(function (x) { return x.id === id; });
         return c && c.type === 'Religious';
       });
+      // Jan Hus ghost captured now (before the fade tween runs) so triggerJanHus has an element
+      var janHusGhost = (v.cardId === 7 && v.el) ? makeBoardGhost(v.el, 500) : null;
 
       // Slide Cortes to victim position (maintain rise elevation)
       tl.to(cortesEl, { x: dx, y: RISE_Y, duration: 0.22, ease: 'power2.inOut' });
@@ -2388,7 +2688,7 @@
       }
 
       // Update game state once victim has faded (or Cortes passes over Joan)
-      tl.call((function (victim, isJoanSpecial) {
+      tl.call((function (victim, isJoanSpecial, jhGhost) {
         return function () {
           var sIdx = slots[locId].findIndex(function (s) { return s && s.cardId === victim.cardId; });
           if (sIdx === -1) return;
@@ -2412,8 +2712,12 @@
             joanAfterFn    = function (cb) { triggerJoanOfArc(locId, joanGhost, cb); };
           if (victim.cardId === 14 && owner === 'opp')
             otherAfterFns.push(function () { triggerJoanOfArcAI(locId); });
+          if (victim.cardId === 7)
+            otherAfterFns.push((function (ghost) {
+              return function () { triggerJanHus(owner, ghost, function () { if (ghost) removeEl(ghost); }); };
+            })(jhGhost));
         };
-      })(v, joanSpecial));
+      })(v, joanSpecial, janHusGhost));
     });
 
     // Glide to slot 0 position and settle down
@@ -2758,6 +3062,7 @@
     G.playerRevealQueue = [];
     G.aiRevealQueue     = [];
     G.playerFirst       = !G.playerFirst;
+    showRevealFirstHighlight(G.playerFirst);
     G.movedThisTurn          = {};
     G.aiMovedThisTurn        = {};
     G.moveLog                = [];
@@ -2807,21 +3112,38 @@
     // Stop background music before game-over sounds play
     stopBgMusic();
 
-    // Game outcome sound + results screen headline animation
-    if (typeof SFX !== 'undefined') {
-      if      (result.outcome === 'player') SFX.gameWon();
-      else if (result.outcome === 'ai')     SFX.gameLost();
-      else                                  SFX.locationWon();  // draw — gentler sound
-    }
-
-    setTimeout(function () {
+    /* Shared helper — shows result screen + headline animation */
+    var _showResultScreen = function () {
       showScreen('screen-result');
-      // Animate the result headline after screen transition
       if (typeof Anim !== 'undefined') {
         if      (result.outcome === 'player') Anim.celebration();
         else if (result.outcome === 'ai')     Anim.sadResult();
       }
-    }, 1000);
+    };
+
+    /* 5-win milestone: hand off to LegendScreen instead of normal flow */
+    var _isLegendMilestone = result.outcome === 'player' &&
+                             typeof LegendScreen !== 'undefined' &&
+                             LegendScreen.recordWin();
+
+    if (_isLegendMilestone) {
+      /* Brief pause so board location-win animations are visible, then cut to legend */
+      setTimeout(function () {
+        LegendScreen.show(function () {
+          /* Legend clicked through — play win sound then show result screen */
+          if (typeof SFX !== 'undefined') SFX.gameWon();
+          _showResultScreen();
+        });
+      }, 800);
+    } else {
+      /* Normal path */
+      if (typeof SFX !== 'undefined') {
+        if      (result.outcome === 'player') SFX.gameWon();
+        else if (result.outcome === 'ai')     SFX.gameLost();
+        else                                  SFX.locationWon();
+      }
+      setTimeout(_showResultScreen, 1000);
+    }
   }
 
   function tallyResult() {
@@ -2852,8 +3174,12 @@
     var locsEl = document.getElementById('result-locs');
     var tbEl   = document.getElementById('result-tiebreaker');
 
-    hEl.className = 'result-headline result-' + r.outcome;
-    hEl.textContent = r.outcome === 'player' ? 'VICTORY' : r.outcome === 'ai' ? 'DEFEAT' : 'DRAW';
+    var isGiantWin = r.outcome === 'player' && window.aiDifficulty === 'hard';
+    hEl.className   = 'result-headline ' + (isGiantWin ? 'result-giant' : 'result-' + r.outcome);
+    hEl.textContent = isGiantWin         ? 'GIANT VICTORY!'
+                    : r.outcome === 'player' ? 'VICTORY'
+                    : r.outcome === 'ai'     ? 'DEFEAT'
+                    : 'DRAW';
 
     if (r.tiebreaker) {
       subEl.textContent = r.outcome === 'draw'

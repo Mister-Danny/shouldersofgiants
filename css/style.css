@@ -1916,6 +1916,10 @@ img    { display: block; }
   0%, 100% { text-shadow: 0 0 10px rgba(160,0,10,0.55), 2px 3px 0 rgba(50,0,0,0.85); }
   50%      { text-shadow: 0 0 26px rgba(210,0,16,0.85), 0 0 52px rgba(160,0,10,0.40), 2px 3px 0 rgba(50,0,0,0.85); }
 }
+@keyframes result-giant-glow {
+  0%, 100% { text-shadow: 3px 4px 0 rgba(60,30,0,0.9), 0 0 18px rgba(248,208,0,0.75), 0 0 36px rgba(248,160,0,0.35); }
+  50%      { text-shadow: 3px 4px 0 rgba(60,30,0,0.9), 0 0 32px rgba(248,208,0,1.00), 0 0 64px rgba(248,160,0,0.65), 0 0 90px rgba(255,200,0,0.30); }
+}
 
 .result-headline {
   font-family:    'CTGalbite', monospace;
@@ -1929,6 +1933,14 @@ img    { display: block; }
   color:     #f8d000;
   animation: result-victory-glow 2.2s ease-in-out infinite;
   text-shadow: 3px 4px 0 rgba(60,30,0,0.9), 0 0 10px rgba(248,208,0,0.55);
+}
+.result-headline.result-giant {
+  color:       #f8d000;
+  font-size:   5rem;
+  animation:   result-giant-glow 1.8s ease-in-out infinite;
+  text-shadow: 3px 4px 0 rgba(60,30,0,0.9),
+               0 0 18px rgba(248,208,0,0.85),
+               0 0 36px rgba(248,160,0,0.5);
 }
 .result-headline.result-ai {
   color:     #b01020;
@@ -1956,10 +1968,10 @@ img    { display: block; }
 .result-subline {
   font-family:    'CTGalbite', monospace;
   font-size:      1.05rem;
-  color:          #c89830;
+  color:          #ffffff;
   text-align:     center;
   letter-spacing: 0.07em;
-  text-shadow:    1px 1px 0 rgba(0,0,0,0.5);
+  text-shadow:    1px 1px 3px rgba(0,0,0,0.85), 0 2px 6px rgba(0,0,0,0.7);
   margin-top:     -4px;
 }
 
@@ -2031,9 +2043,9 @@ img    { display: block; }
 .result-tiebreaker {
   width:        100%;
   padding:      16px 20px;
-  background:   rgba(50, 24, 4, 0.26);
+  background:   rgba(10, 4, 0, 0.78);
   border:       2px solid rgba(200, 160, 32, 0.58);
-  box-shadow:   inset 0 0 0 1px rgba(248, 208, 0, 0.14);
+  box-shadow:   inset 0 0 0 1px rgba(248, 208, 0, 0.18);
   text-align:   center;
   border-radius: 2px;
 }
@@ -2041,8 +2053,10 @@ img    { display: block; }
 .result-tb-label {
   font-family:    'CTGalbite', monospace;
   font-size:      0.75rem;
-  color:          #9a6e20;
+  font-weight:    bold;
+  color:          #ffffff;
   letter-spacing: 0.1em;
+  text-shadow:    0 1px 4px rgba(0,0,0,0.9);
   margin-bottom:  12px;
 }
 
@@ -2063,19 +2077,22 @@ img    { display: block; }
 .result-tb-who {
   font-family: 'CTGalbite', monospace;
   font-size:   0.7rem;
-  color:       #8a6030;
+  color:       #ffffff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
 }
 
 .result-tb-num {
   font-family: 'CTGalbite', monospace;
-  font-size:   2rem;
-  color:       #2a1200;
+  font-size:   2.4rem;
+  color:       #f8d000;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.9), 0 0 10px rgba(248,208,0,0.4);
 }
 
 .result-tb-vs {
   font-family: 'CTGalbite', monospace;
   font-size:   0.9rem;
-  color:       #8a6030;
+  color:       #ffffff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
 }
 
 /* ── Action buttons ───────────────────────────────────────────── */
@@ -2417,13 +2434,13 @@ button,
   object-position: center top;
 }
 
-/* Reveal-first highlight — pulses gold on whichever avatar reveals first */
-@keyframes reveal-first-pulse {
+/* Turn-first highlight — pulses gold on the avatar that plays first this turn (selection phase only) */
+@keyframes turn-first-pulse {
   0%, 100% { box-shadow: 0 0 0 3px var(--snes-yellow), 0 0 14px 4px rgba(248,208,0,0.5); }
   50%       { box-shadow: 0 0 0 4px var(--snes-yellow), 0 0 26px 10px rgba(248,208,0,0.8); }
 }
-.battle-avatar.reveal-first .battle-avatar-frame {
-  animation: reveal-first-pulse 0.7s ease-in-out infinite;
+.battle-avatar.turn-first .battle-avatar-frame {
+  animation: turn-first-pulse 0.7s ease-in-out infinite;
 }
 
 /* Lucy speaking glow — added/removed by tutorial.js during typeText */
@@ -3198,4 +3215,740 @@ body.tut-locked #battle-reset-turn {
   .tut-portrait { width: 96px; }
   .tut-lucy-svg { width: 72px; }
   .tut-text { font-size: 20px; }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   BYPASS PASSWORD PROMPT
+   Fixed overlay — appears on triple-click before the bypass menu.
+   Matches the SNES double-border of .card-popup exactly.
+══════════════════════════════════════════════════════════════════ */
+
+#bypass-pw-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;    /* above bypass menu (9000) so it sits on top if needed */
+  background: rgba(0, 0, 14, 0.82);
+  display: none;    /* shown by JS */
+  align-items: center;
+  justify-content: center;
+}
+
+/* The prompt box — mirrors .card-popup border technique exactly */
+#bypass-pw-box {
+  width: 380px;
+  padding: 28px 30px 26px;
+  background: var(--bg-dialog);
+
+  border: 3px solid var(--border-bright);
+  box-shadow:
+    0 0 0 3px var(--border-dark),
+    0 0 0 6px var(--border-mid),
+    0 0 0 7px var(--border-dark);
+
+  /* Pop-in — same cubic as .card-popup */
+  animation: bypass-pw-popin 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes bypass-pw-popin {
+  from { transform: scale(0.88); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+/* "RESTRICTED ZONE" header — same style as .popup-card-name */
+.bypass-pw-title {
+  font-family: var(--font);
+  font-size: 26px;
+  color: var(--snes-yellow);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  text-shadow: 1px 1px 0 #000;
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+/* Divider — same as .popup-divider */
+.bypass-pw-divider {
+  height: 2px;
+  background: var(--border-bright);
+  box-shadow: 0 0 4px var(--border-bright);
+  margin-bottom: 20px;
+}
+
+/* Input + button row */
+.bypass-pw-body {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+/* Password field */
+#bypass-pw-input {
+  flex: 1 1 auto;
+  background: var(--bg-surface);
+  border: 2px solid var(--border-mid);
+  color: var(--text-white);
+  font-family: var(--font);
+  font-size: 18px;
+  letter-spacing: 0.18em;   /* spreads the dots for readability */
+  padding: 9px 12px;
+  outline: none;
+  caret-color: var(--snes-yellow);
+  transition: border-color 0.10s;
+}
+
+#bypass-pw-input::placeholder {
+  color: var(--text-muted);
+  letter-spacing: 0.10em;
+}
+
+#bypass-pw-input:focus {
+  border-color: var(--border-bright);
+  box-shadow: 0 0 0 1px var(--border-bright);
+}
+
+/* Shake animation on wrong password */
+#bypass-pw-input.bypass-pw-shake {
+  animation: bypass-pw-shake 0.38s ease both;
+  border-color: var(--snes-red);
+}
+
+@keyframes bypass-pw-shake {
+  0%   { transform: translateX(0);    }
+  18%  { transform: translateX(-7px); }
+  36%  { transform: translateX(6px);  }
+  54%  { transform: translateX(-5px); }
+  72%  { transform: translateX(4px);  }
+  88%  { transform: translateX(-2px); }
+  100% { transform: translateX(0);    }
+}
+
+/* Confirm button — inherits .btn-snes, fixed width */
+#bypass-pw-submit {
+  flex-shrink: 0;
+  font-size: 13px;
+  padding: 9px 18px;
+}
+
+/* Status message line */
+.bypass-pw-msg {
+  font-family: var(--font);
+  font-size: 13px;
+  text-align: center;
+  min-height: 22px;
+  margin-top: 14px;
+  letter-spacing: 0.06em;
+  transition: color 0.12s;
+}
+
+.bypass-pw-denied {
+  color: var(--snes-red);
+  text-shadow: 0 0 6px rgba(240, 64, 48, 0.55);
+  animation: bypass-pw-msg-in 0.18s ease both;
+}
+
+@keyframes bypass-pw-msg-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   TEACHER BYPASS MENU
+   Fixed overlay — same SNES double-border as .card-popup
+   Triggered by triple-click on #home-title
+══════════════════════════════════════════════════════════════════ */
+
+/* Full-screen dim backdrop */
+.bypass-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* ── Dialog container ──────────────────────────────────────────── */
+.bypass-dialog {
+  width: min(860px, 96vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-dialog);
+
+  /* Same SNES double-border as .card-popup */
+  border: 3px solid var(--border-bright);
+  box-shadow:
+    0 0 0 3px var(--border-dark),
+    0 0 0 6px var(--border-mid),
+    0 0 0 7px var(--border-dark),
+    0 32px 80px rgba(0, 0, 0, 0.95);
+
+  animation: bypass-pop-in 0.14s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes bypass-pop-in {
+  from { transform: scale(0.88); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+/* ── Fixed header bar ──────────────────────────────────────────── */
+.bypass-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px 12px;
+  background: var(--bg-header);
+  border-bottom: 2px solid var(--border-bright);
+  flex-shrink: 0;
+}
+
+.bypass-title {
+  font-family: var(--font);
+  font-size: 20px;
+  color: var(--snes-yellow);
+  text-shadow: 1px 1px 0 #000;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+
+.bypass-close-btn {
+  font-size: 12px;
+  padding: 6px 16px;
+}
+
+/* ── Scrollable body ───────────────────────────────────────────── */
+.bypass-body {
+  overflow-y: auto;
+  padding: 0 24px 24px;
+  flex: 1 1 auto;
+  /* Custom thin scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-mid) var(--bg-dialog);
+}
+
+.bypass-body::-webkit-scrollbar       { width: 6px; }
+.bypass-body::-webkit-scrollbar-track { background: var(--bg-dialog); }
+.bypass-body::-webkit-scrollbar-thumb { background: var(--border-mid); }
+
+/* ── Sections ──────────────────────────────────────────────────── */
+.bypass-section {
+  margin-top: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-mid);
+}
+
+.bypass-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.bypass-section-title {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--snes-cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 12px;
+  text-shadow: 0 0 8px rgba(64, 224, 224, 0.4);
+}
+
+.bypass-section-hint {
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+/* ── Button rows ───────────────────────────────────────────────── */
+.bypass-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.bypass-btn-row:last-child { margin-bottom: 0; }
+
+.bypass-btn-action {
+  flex-shrink: 0;
+  min-width: 200px;
+  font-size: 13px;
+  padding: 8px 18px;
+}
+
+.bypass-btn-sm {
+  font-size: 11px;
+  padding: 6px 14px;
+}
+
+.bypass-btn-desc {
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* Test mode button colour states */
+.bypass-test-on {
+  border-color: var(--snes-red) !important;
+  color: var(--snes-red) !important;
+  text-shadow: 0 0 6px rgba(240, 64, 48, 0.5);
+}
+
+.bypass-test-off {
+  border-color: var(--snes-green);
+  color: var(--snes-green);
+}
+
+/* ── Force Locations grid ──────────────────────────────────────── */
+.bypass-loc-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.bypass-loc-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-mid);
+  cursor: pointer;
+  transition: background 0.08s, border-color 0.08s;
+}
+
+.bypass-loc-item:hover {
+  background: var(--bg-btn);
+  border-color: var(--border-bright);
+}
+
+.bypass-loc-check {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--snes-yellow);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.bypass-loc-name {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--snes-yellow);
+  min-width: 190px;
+  flex-shrink: 0;
+}
+
+.bypass-loc-ability {
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.bypass-loc-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.bypass-loc-status {
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border: 1px solid;
+}
+
+.bypass-loc-random  { color: var(--text-dim);   border-color: var(--text-muted); }
+.bypass-loc-locked  { color: var(--snes-red);   border-color: var(--snes-red);   text-shadow: 0 0 6px rgba(240,64,48,0.5); }
+.bypass-loc-partial { color: var(--snes-yellow); border-color: var(--snes-yellow); }
+
+/* ── Date filter row ───────────────────────────────────────────── */
+.bypass-date-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.bypass-date-btn {
+  border-color: var(--text-dim);
+  color: var(--text-dim);
+}
+
+.bypass-date-btn.active,
+.bypass-date-btn:hover {
+  border-color: var(--snes-cyan);
+  color: var(--snes-cyan);
+  background: var(--bg-btn-hover);
+}
+
+/* ── Stats box ─────────────────────────────────────────────────── */
+.bypass-stats-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-mid);
+  padding: 14px 18px;
+  margin-bottom: 14px;
+}
+
+.bypass-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  font-family: var(--font);
+  font-size: 13px;
+}
+
+.bypass-stat-label { color: var(--text-dim); }
+.bypass-stat-val   { color: var(--text-white); text-align: right; }
+
+.bypass-stat-divider {
+  height: 1px;
+  background: var(--border-mid);
+  margin: 6px 0;
+}
+
+/* Outcome colours (reused in stats + log) */
+.bypass-win      { color: var(--snes-green); }
+.bypass-loss     { color: var(--snes-red); }
+.bypass-draw     { color: var(--snes-cyan); }
+.bypass-abandoned { color: var(--text-dim); }
+
+/* ── Data action row ───────────────────────────────────────────── */
+.bypass-data-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+/* ── Log panel ─────────────────────────────────────────────────── */
+.bypass-log-panel {
+  margin-top: 16px;
+  border: 2px solid var(--border-mid);
+  background: var(--bg-surface);
+}
+
+.bypass-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-mid);
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--snes-yellow);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bypass-log-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-mid) var(--bg-surface);
+}
+
+.bypass-log-list::-webkit-scrollbar       { width: 5px; }
+.bypass-log-list::-webkit-scrollbar-track { background: var(--bg-surface); }
+.bypass-log-list::-webkit-scrollbar-thumb { background: var(--border-mid); }
+
+.bypass-log-entry {
+  background: var(--bg-dialog);
+  border: 1px solid var(--border-mid);
+  padding: 8px 12px;
+  font-family: var(--font);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.bypass-log-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.bypass-log-ts      { color: var(--text-dim); flex: 1 1 auto; }
+.bypass-log-outcome { font-size: 12px; font-weight: bold; letter-spacing: 0.06em; }
+.bypass-log-diff    { color: var(--text-dim); font-size: 10px; text-transform: uppercase; }
+
+.bypass-log-detail {
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.bypass-log-locs {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.bypass-loc-line { display: block; }
+
+.bypass-test-badge {
+  font-family: var(--font);
+  font-size: 9px;
+  background: var(--snes-red);
+  color: #fff;
+  padding: 2px 5px;
+  letter-spacing: 0.06em;
+}
+
+.bypass-log-empty {
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 20px;
+}
+
+/* ── Misc ──────────────────────────────────────────────────────── */
+.bypass-loading {
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.bypass-err {
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--snes-red);
+}
+
+/* ── Toast notification ────────────────────────────────────────── */
+.bypass-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg-header);
+  border: 2px solid var(--border-bright);
+  box-shadow: 0 0 0 2px var(--border-dark), 0 0 0 4px var(--border-mid);
+  color: var(--snes-yellow);
+  font-family: var(--font);
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  padding: 10px 22px;
+  z-index: 9100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.bypass-toast.bypass-toast-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   LEGEND SCREEN — 5-win milestone victory sequence
+   All children use position:absolute so GSAP can translate them freely.
+   The screen itself is position:fixed so it floats above all game screens.
+══════════════════════════════════════════════════════════════════ */
+
+#screen-legend {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  background: #000;
+  overflow: hidden;
+  /* Layout used by the portrait area flex children */
+  display: none;          /* shown by legend.js: style.display = 'flex' */
+}
+
+/* ── Solid black base ──────────────────────────────────────────── */
+#legend-blackout {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  z-index: 0;
+}
+
+/* ── Full-screen montage slide ─────────────────────────────────── */
+/* Background-image is swapped by JS; GSAP translates the whole div. */
+#legend-slide {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 1;
+}
+
+/* ── "YOU HAVE MADE HISTORY" opening title ─────────────────────── */
+/* Wrapper fills the screen and centers the text via flex.
+   GSAP only animates the span's y-translation — no transform on wrapper. */
+#legend-title-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#legend-opening-title {
+  font-family: var(--font);
+  font-size: 4.4rem;
+  color: #f8d000;
+  text-align: center;
+  line-height: 1.35;
+  letter-spacing: 0.07em;
+  text-shadow:
+    0 0 22px rgba(248, 208, 0, 0.95),
+    0 0 70px rgba(248, 208, 0, 0.50),
+    3px 3px 0 #000;
+  /* No transform here — GSAP controls y on this element */
+  max-width: 84vw;
+}
+
+/* ── Portrait area ─────────────────────────────────────────────── */
+#legend-portrait-area {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 50px 7%;
+  z-index: 3;
+}
+
+#legend-lucy-portrait,
+#legend-otzi-portrait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  max-width: 360px;
+  /* No transform — GSAP animates x on these elements */
+}
+
+.legend-portrait-img {
+  width: 230px;
+  height: 230px;
+  object-fit: cover;
+  object-position: top center;
+  border: 4px solid var(--snes-yellow);
+  box-shadow:
+    0 0 0 3px #000,
+    0 0 0 5px var(--border-mid),
+    0 0 35px rgba(248, 208, 0, 0.45);
+  display: block;
+}
+
+/* SNES dialogue-box speech bubbles */
+.legend-speech-bubble {
+  background: var(--bg-dialog);
+  border: 2px solid var(--border-bright);
+  box-shadow:
+    0 0 0 2px var(--border-dark),
+    0 0 0 4px var(--border-mid),
+    0 0 0 5px var(--border-dark);
+  padding: 14px 18px;
+  font-family: var(--font);
+  font-size: 15px;
+  color: var(--text-white);
+  text-align: center;
+  line-height: 1.65;
+  max-width: 300px;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* ── "LEGEND" burst ────────────────────────────────────────────── */
+/* Wrapper fills screen, centers text via flex.
+   GSAP scales the span with no CSS transform conflicts. */
+#legend-word-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#legend-word {
+  font-family: var(--font);
+  font-size: 10rem;
+  color: #f8d000;
+  letter-spacing: 0.12em;
+  text-shadow:
+    0 0 28px rgba(248, 208, 0, 1.0),
+    0 0 80px rgba(248, 208, 0, 0.70),
+    0 0 140px rgba(248, 208, 0, 0.40),
+    5px 5px 0 #000;
+  /* No transform — GSAP controls scale on this element */
+  white-space: nowrap;
+}
+
+/* ── Gold particles ────────────────────────────────────────────── */
+/* Container is a zero-size point at screen center; particles
+   radiate outward from it via GSAP x/y translation. */
+#legend-particles {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  z-index: 6;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.legend-particle {
+  position: absolute;
+  border-radius: 50%;
+  /* top/left set in JS to center on origin; width/height also set in JS */
+}
+
+/* ── "Click to claim your victory" subtitle ────────────────────── */
+#legend-subtitle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 16%;
+  text-align: center;
+  font-family: var(--font);
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.88);
+  letter-spacing: 0.09em;
+  text-shadow: 1px 1px 0 #000, 0 0 10px rgba(255,255,255,0.2);
+  z-index: 5;
+  pointer-events: none;
+  /* No transform — GSAP controls autoAlpha only */
+}
+
+/* ── Responsive tweaks for smaller screens ─────────────────────── */
+@media (max-width: 900px) {
+  #legend-opening-title { font-size: 3rem; }
+  #legend-word          { font-size: 7rem; }
+  .legend-portrait-img  { width: 160px; height: 160px; }
+  .legend-speech-bubble { font-size: 13px; max-width: 220px; }
+  #legend-subtitle      { font-size: 1.2rem; }
+}
+
+@media (max-width: 600px) {
+  #legend-opening-title { font-size: 2.2rem; }
+  #legend-word          { font-size: 5rem; letter-spacing: 0.08em; }
+  #legend-portrait-area { flex-direction: column; gap: 20px; padding: 20px 5%; }
+  .legend-portrait-img  { width: 120px; height: 120px; }
+  .legend-speech-bubble { font-size: 11px; max-width: 200px; padding: 10px 12px; }
+  #legend-subtitle      { font-size: 1rem; bottom: 10%; }
 }
