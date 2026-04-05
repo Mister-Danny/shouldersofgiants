@@ -515,6 +515,14 @@
     var resetAllBtn = document.getElementById('bypass-reset-all');
     if (resetAllBtn) resetAllBtn.addEventListener('click', resetAllData);
 
+    var openLobbyBtn = document.getElementById('bypass-open-lobby');
+    if (openLobbyBtn) openLobbyBtn.addEventListener('click', function () {
+      close();
+      if (window.Multiplayer && typeof window.Multiplayer.showTeacherLobby === 'function') {
+        window.Multiplayer.showTeacherLobby();
+      }
+    });
+
     var legendBtn = document.getElementById('bypass-play-legend');
     if (legendBtn) legendBtn.addEventListener('click', function () {
       if (window.LegendScreen) {

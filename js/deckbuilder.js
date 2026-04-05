@@ -225,7 +225,8 @@
     var count = selectedIds.size;
     counterEl.textContent = count + ' / ' + DECK_SIZE;
     counterEl.classList.toggle('complete', count === DECK_SIZE);
-    saveBtn.disabled = count !== DECK_SIZE;
+    saveBtn.disabled    = count !== DECK_SIZE;
+    saveBtn.textContent = window.multiplayerMode ? 'Enter Lobby' : "Let's Play";
   }
 
   function flashCounter() {
@@ -299,6 +300,14 @@
 
   function openDifficultyModal() {
     if (selectedIds.size !== DECK_SIZE) return;
+    if (window.multiplayerMode) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(selectedIds)));
+      stopDeckMusic();
+      if (window.Multiplayer && typeof window.Multiplayer.showLobbyEntry === 'function') {
+        window.Multiplayer.showLobbyEntry();
+      }
+      return;
+    }
     diffBackdropEl.classList.add('visible');
   }
 
@@ -349,9 +358,18 @@
 
   /* ── Home screen buttons ─────────────────────────────────────── */
 
+  // "Versus Mode" — always goes straight to deck builder in multiplayer mode
+  document.getElementById('btn-versus').addEventListener('click', function () {
+    window.multiplayerMode = true;
+    showScreen('screen-deckbuilder');
+    initDeckBuilder();
+    playDeckMusic();
+  });
+
   // "I'm Ready" — first-time: Lucy intro → video → tutorial
   //               returning:  straight to deck builder
   document.getElementById('btn-ready').addEventListener('click', function () {
+    window.multiplayerMode = false;
     if (localStorage.getItem('sog_tutorial_complete')) {
       showScreen('screen-deckbuilder');
       initDeckBuilder();
@@ -371,6 +389,7 @@
 
   // "I'm Ready To Learn" — always replays the full intro → video → tutorial flow
   document.getElementById('btn-learn').addEventListener('click', function () {
+    window.multiplayerMode = false;
     localStorage.removeItem('sog_tutorial_complete');
     if (typeof window.startHomeIntro === 'function') {
       window.startHomeIntro(function () {

@@ -3952,3 +3952,1350 @@ body.tut-locked #battle-reset-turn {
   .legend-speech-bubble { font-size: 11px; max-width: 200px; padding: 10px 12px; }
   #legend-subtitle      { font-size: 1rem; bottom: 10%; }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   HOME SCREEN — Versus Mode button
+   ══════════════════════════════════════════════════════════════════ */
+
+.btn-home-versus {
+  font-size: 28px;
+  padding: 12px 52px;
+  background: #0a2c34;
+  border: 3px solid #1e7a8a;
+  color: #3acce0;
+  box-shadow: 0 4px 0 #052028, 0 5px 0 #000;
+  letter-spacing: 0.06em;
+}
+.btn-home-versus:hover {
+  background: #0f3c4a;
+  border-color: #3acce0;
+  color: #80eeff;
+}
+.btn-home-versus:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #052028, 0 1px 0 #000;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   LOBBY SCREEN — multiplayer tournament entry + waiting room
+   ══════════════════════════════════════════════════════════════════ */
+
+#screen-lobby.active {
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  position:        absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+}
+
+/* Same dark wood grain as result screen */
+#screen-lobby::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(80,40,0,0.07) 0px, rgba(80,40,0,0.07) 1px,
+      transparent        1px, transparent        9px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0.06)  0px, rgba(0,0,0,0.06)  1px,
+      transparent        1px, transparent        13px
+    ),
+    linear-gradient(168deg, #2c1a08 0%, #1e1106 35%, #261608 65%, #1a0e04 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Panel box (shared by both entry + waiting states) ─── */
+.lobby-panel {
+  position:        relative;
+  z-index:         1;
+  display:         flex;
+  flex-direction:  column;
+  align-items:     center;
+  width:           520px;
+  padding:         36px 44px 32px;
+  gap:             16px;
+  background:      var(--bg-dialog);
+  border:          3px solid var(--border-bright);
+  box-shadow:
+    0 0 0 3px var(--border-dark),
+    0 0 0 6px var(--border-mid),
+    0 0 0 7px var(--border-dark);
+}
+
+.lobby-panel-title {
+  font-family:    'Cinzel', serif;
+  font-size:      26px;
+  font-weight:    700;
+  color:          var(--snes-yellow);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-shadow:    1px 1px 0 #000, 0 0 16px rgba(248,208,0,0.35);
+}
+
+.lobby-panel-divider {
+  width:      100%;
+  height:     2px;
+  background: var(--border-bright);
+  box-shadow: 0 0 4px var(--border-bright);
+}
+
+/* ── Form labels ─── */
+.lobby-label {
+  font-family:    var(--font);
+  font-size:      15px;
+  color:          var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  align-self:     flex-start;
+  margin-bottom:  -6px;
+}
+
+.lobby-label-hint {
+  font-size:      11px;
+  color:          #404068;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── Text inputs ─── */
+.lobby-input {
+  width:           100%;
+  box-sizing:      border-box;
+  background:      #08041a;
+  border:          2px solid var(--border-mid);
+  color:           var(--text-white);
+  font-family:     var(--font);
+  font-size:       28px;
+  letter-spacing:  0.3em;
+  text-align:      center;
+  text-transform:  uppercase;
+  padding:         10px 16px;
+  outline:         none;
+  transition:      border-color 0.15s;
+}
+.lobby-input:focus {
+  border-color: var(--snes-yellow);
+}
+.lobby-input::placeholder {
+  color:          #2a2850;
+  letter-spacing: 0.2em;
+}
+
+/* Narrower ID input (3 chars) */
+.lobby-input-id {
+  width:          150px;
+  font-size:      32px;
+  letter-spacing: 0.45em;
+  flex:           0 0 auto;
+}
+
+/* Row that holds ID input + shuffle button */
+.lobby-id-row {
+  display:    flex;
+  align-items: center;
+  gap:        12px;
+  align-self: flex-start;
+}
+
+.lobby-shuffle-btn {
+  font-size: 22px;
+  padding:   9px 14px;
+  line-height: 1;
+}
+
+/* ── Error message ─── */
+.lobby-error {
+  font-family:    var(--font);
+  font-size:      15px;
+  color:          var(--snes-red);
+  text-align:     center;
+  letter-spacing: 0.04em;
+  min-height:     20px;
+}
+
+/* ── Action buttons row ─── */
+.lobby-btn-row {
+  display:         flex;
+  gap:             14px;
+  width:           100%;
+  justify-content: space-between;
+  margin-top:      4px;
+}
+
+.lobby-btn-join {
+  font-size:  22px;
+  padding:    11px 32px;
+  flex:       1;
+  border-color: var(--snes-yellow);
+  color:        var(--snes-yellow);
+}
+.lobby-btn-join:hover   { background: #1a1000; }
+.lobby-btn-join:disabled {
+  border-color: #333358;
+  color:        var(--text-muted);
+  cursor:       default;
+  transform:    none;
+  box-shadow:   0 4px 0 var(--border-mid), 0 5px 0 #000;
+}
+
+/* ── Waiting room — your info box ─── */
+.lobby-your-info {
+  display:         grid;
+  grid-template-columns: auto 1fr;
+  gap:             6px 20px;
+  align-items:     center;
+  width:           100%;
+  box-sizing:      border-box;
+  background:      rgba(0,0,0,0.35);
+  padding:         14px 20px;
+  border:          1px solid #252548;
+}
+
+.lobby-info-label {
+  font-family:    var(--font);
+  font-size:      14px;
+  color:          var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.lobby-info-val {
+  font-family:    var(--font);
+  font-size:      24px;
+  color:          var(--text-white);
+  letter-spacing: 0.15em;
+}
+
+.lobby-info-id {
+  color:     var(--snes-yellow);
+  font-size: 28px;
+}
+
+/* ── "Waiting…" message with spinner ─── */
+.lobby-waiting-msg {
+  display:     flex;
+  align-items: center;
+  gap:         14px;
+  font-family:    var(--font);
+  font-size:      17px;
+  color:          var(--text-dim);
+  letter-spacing: 0.06em;
+}
+
+@keyframes lobby-spin {
+  to { transform: rotate(360deg); }
+}
+.lobby-spinner {
+  width:         16px;
+  height:        16px;
+  border:        3px solid #252548;
+  border-top-color: var(--snes-yellow);
+  border-radius: 50%;
+  animation:     lobby-spin 0.75s linear infinite;
+  flex-shrink:   0;
+}
+
+/* ── Student count row ─── */
+.lobby-student-list-wrap {
+  display:     flex;
+  align-items: baseline;
+  gap:         12px;
+}
+
+.lobby-student-count {
+  font-family: var(--font);
+  font-size:   28px;
+  color:       var(--snes-yellow);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   TEACHER TOURNAMENT LOBBY OVERLAY
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Full-screen dim backdrop ─── */
+.teacher-lobby-backdrop {
+  position:        fixed;
+  inset:           0;
+  z-index:         9100;
+  background:      rgba(0, 0, 0, 0.82);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         20px;
+}
+
+/* ── Dialog container ─── */
+.teacher-lobby-dialog {
+  width:        min(820px, 96vw);
+  max-height:   90vh;
+  display:      flex;
+  flex-direction: column;
+  background:   var(--bg-dialog);
+  border:       3px solid var(--border-bright);
+  box-shadow:
+    0 0 0 3px var(--border-dark),
+    0 0 0 6px var(--border-mid),
+    0 0 0 7px var(--border-dark),
+    0 32px 80px rgba(0,0,0,0.95);
+  animation: bypass-pop-in 0.14s cubic-bezier(0.22, 1, 0.36, 1) both;
+  position: relative;   /* for toast positioning */
+}
+
+/* ── Header bar ─── */
+.teacher-lobby-header {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  padding:         14px 20px 12px;
+  border-bottom:   2px solid var(--border-mid);
+  flex-shrink:     0;
+}
+
+.teacher-lobby-title {
+  font-family:    var(--font);
+  font-size:      20px;
+  color:          var(--snes-yellow);
+  letter-spacing: 0.08em;
+  text-shadow:    0 0 10px rgba(248,208,0,0.3);
+}
+
+/* ── Scrollable body ─── */
+.teacher-lobby-body {
+  overflow-y:    auto;
+  padding:       20px 24px 24px;
+  flex:          1 1 auto;
+  display:       flex;
+  flex-direction: column;
+  gap:           20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-mid) var(--bg-dialog);
+}
+.teacher-lobby-body::-webkit-scrollbar       { width: 6px; }
+.teacher-lobby-body::-webkit-scrollbar-track { background: var(--bg-dialog); }
+.teacher-lobby-body::-webkit-scrollbar-thumb { background: var(--border-mid); }
+
+/* ── Large code display ─── */
+.tlob-code-section {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  gap:            8px;
+}
+
+.tlob-code-label {
+  font-family:    var(--font);
+  font-size:      13px;
+  color:          var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.tlob-code-display {
+  font-family:    var(--font);
+  font-size:      88px;
+  letter-spacing: 0.35em;
+  color:          var(--snes-yellow);
+  text-shadow:
+    3px 3px 0 rgba(0,0,0,0.85),
+    0 0 28px rgba(248,208,0,0.38);
+  background:     rgba(0,0,0,0.45);
+  border:         2px solid rgba(248,208,0,0.28);
+  padding:        10px 36px 10px 48px;  /* extra left to compensate letter-spacing */
+  text-align:     center;
+  min-width:      360px;
+  line-height:    1;
+}
+
+.tlob-code-hint {
+  font-family:    var(--font);
+  font-size:      13px;
+  color:          #505070;
+  letter-spacing: 0.06em;
+}
+
+/* ── Student list section ─── */
+.tlob-list-section {
+  display:        flex;
+  flex-direction: column;
+  gap:            8px;
+}
+
+.tlob-list-header {
+  font-family:    var(--font);
+  font-size:      15px;
+  color:          var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.tlob-student-count {
+  color:     var(--snes-yellow);
+  font-size: 17px;
+}
+
+.tlob-student-list {
+  background:  rgba(0,0,0,0.28);
+  border:      1px solid #252548;
+  min-height:  60px;
+  max-height:  260px;
+  overflow-y:  auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-mid) transparent;
+}
+.tlob-student-list::-webkit-scrollbar       { width: 5px; }
+.tlob-student-list::-webkit-scrollbar-thumb { background: var(--border-mid); }
+
+/* Empty state */
+.tlob-empty {
+  font-family:    var(--font);
+  font-size:      15px;
+  color:          #404060;
+  text-align:     center;
+  padding:        18px;
+  letter-spacing: 0.06em;
+}
+
+/* Column header row */
+.tlob-row-header {
+  background:     rgba(30,20,60,0.6);
+  border-bottom:  1px solid #252548;
+}
+.tlob-row-header .tlob-col-id,
+.tlob-row-header .tlob-col-time {
+  font-size:   11px;
+  color:       var(--text-muted);
+  letter-spacing: 0.14em;
+}
+
+/* Data row */
+.tlob-row {
+  display:     flex;
+  align-items: center;
+  padding:     8px 12px;
+  border-bottom: 1px solid rgba(37,37,72,0.5);
+  gap:         0;
+}
+.tlob-row:last-child { border-bottom: none; }
+.tlob-row:hover      { background: rgba(255,255,255,0.03); }
+
+.tlob-col-id {
+  width:          80px;
+  font-family:    var(--font);
+  font-size:      20px;
+  color:          var(--snes-yellow);
+  letter-spacing: 0.15em;
+  flex-shrink:    0;
+}
+
+.tlob-col-time {
+  flex:           1;
+  font-family:    var(--font);
+  font-size:      14px;
+  color:          var(--text-dim);
+  letter-spacing: 0.06em;
+}
+
+.tlob-col-action {
+  flex-shrink:  0;
+}
+
+/* Boot button */
+.tlob-boot-btn {
+  font-size:  13px;
+  padding:    5px 14px;
+  border-color: var(--snes-red);
+  color:        var(--snes-red);
+}
+.tlob-boot-btn:hover { background: #200000; }
+.tlob-boot-btn:disabled {
+  border-color: #333358;
+  color:        var(--text-muted);
+  cursor:       default;
+  transform:    none;
+  box-shadow:   0 4px 0 var(--border-mid), 0 5px 0 #000;
+}
+
+/* ── Action buttons row ─── */
+.tlob-actions {
+  display:     flex;
+  gap:         10px;
+  flex-wrap:   wrap;
+  align-items: center;
+}
+
+.tlob-start-btn {
+  margin-left:  auto;
+  border-color: var(--snes-green);
+  color:        var(--snes-green);
+}
+.tlob-start-btn:not(:disabled):hover { background: #001800; }
+.tlob-start-btn:disabled {
+  border-color: #333358;
+  color:        var(--text-muted);
+}
+
+/* ── Load code modal (inner overlay) ─── */
+.tlob-modal {
+  position:        absolute;
+  inset:           0;
+  background:      rgba(0,0,0,0.72);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  z-index:         10;
+}
+
+.tlob-modal-box {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  gap:            14px;
+  width:          400px;
+  padding:        28px 32px 26px;
+  background:     var(--bg-dialog);
+  border:         3px solid var(--border-bright);
+  box-shadow:
+    0 0 0 3px var(--border-dark),
+    0 0 0 6px var(--border-mid),
+    0 0 0 7px var(--border-dark);
+}
+
+.tlob-modal-title {
+  font-family:    var(--font);
+  font-size:      22px;
+  color:          var(--snes-yellow);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.tlob-modal-btns {
+  display: flex;
+  gap:     12px;
+  width:   100%;
+  justify-content: space-between;
+}
+
+.tlob-modal-confirm {
+  flex:        1;
+  border-color: var(--snes-yellow);
+  color:        var(--snes-yellow);
+}
+.tlob-modal-confirm:hover { background: #1a1000; }
+
+/* ── Toast notification ─── */
+.tlob-toast {
+  position:       absolute;
+  bottom:         16px;
+  left:           50%;
+  transform:      translateX(-50%);
+  font-family:    var(--font);
+  font-size:      14px;
+  color:          var(--snes-yellow);
+  background:     rgba(0,0,0,0.88);
+  border:         1px solid rgba(248,208,0,0.4);
+  padding:        8px 20px;
+  white-space:    nowrap;
+  letter-spacing: 0.06em;
+  opacity:        0;
+  pointer-events: none;
+  transition:     opacity 0.25s;
+  z-index:        20;
+}
+.tlob-toast.visible { opacity: 1; }
+.tlob-toast.tlob-toast-error {
+  color:       var(--snes-red);
+  border-color: rgba(240,64,48,0.4);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   GROUP ASSIGNMENT PANEL (inside teacher lobby)
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Panel replaces .teacher-lobby-body — same flex+overflow context */
+.tlob-groups-panel {
+  flex-direction: column;
+  flex:           1 1 auto;
+  overflow:       hidden;
+  gap:            14px;
+  padding:        16px 24px 20px;
+}
+
+/* Sub-header row: back button | title | spacer */
+.tlob-groups-header {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  padding-bottom:  12px;
+  border-bottom:   1px solid var(--border-mid);
+  flex-shrink:     0;
+}
+
+/* Config strip */
+.tlob-groups-config {
+  display:     flex;
+  align-items: center;
+  flex-wrap:   wrap;
+  gap:         14px;
+  background:  rgba(0,0,0,0.28);
+  border:      1px solid #252548;
+  padding:     10px 16px;
+  flex-shrink: 0;
+}
+
+.tlob-cfg-item {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+}
+
+.tlob-cfg-label {
+  font-family:    var(--font);
+  font-size:      11px;
+  color:          var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.tlob-cfg-val {
+  font-family: var(--font);
+  font-size:   20px;
+  color:       var(--text-white);
+  min-width:   22px;
+  text-align:  center;
+}
+
+.tlob-cfg-bots { color: #505070; }
+
+.tlob-cfg-sep {
+  font-family: var(--font);
+  font-size:   14px;
+  color:       #303050;
+}
+
+/* +/- spinner buttons */
+.tlob-cfg-spin {
+  font-size:   17px;
+  padding:     3px 10px;
+  line-height: 1;
+}
+
+/* ── Scrollable group card grid ─── */
+.tlob-groups-grid {
+  display:               grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap:                   8px;
+  overflow-y:            auto;
+  flex:                  1 1 auto;
+  padding-right:         4px;
+  scrollbar-width:       thin;
+  scrollbar-color:       var(--border-mid) transparent;
+  min-height:            0;   /* prevents grid from overflowing flex container */
+}
+.tlob-groups-grid::-webkit-scrollbar       { width: 5px; }
+.tlob-groups-grid::-webkit-scrollbar-thumb { background: var(--border-mid); }
+
+/* Individual group card */
+.tlob-group-card {
+  background:     rgba(0,0,0,0.32);
+  border:         1px solid #252548;
+  padding:        8px 10px;
+  display:        flex;
+  flex-direction: column;
+  gap:            4px;
+}
+
+.tlob-group-label {
+  font-family:    var(--font);
+  font-size:      11px;
+  color:          var(--snes-cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  border-bottom:  1px solid #252548;
+  padding-bottom: 4px;
+  margin-bottom:  2px;
+}
+
+.tlob-group-member {
+  font-family:    var(--font);
+  font-size:      16px;
+  color:          var(--snes-yellow);
+  letter-spacing: 0.12em;
+}
+
+.tlob-group-member.is-bot {
+  font-size:   13px;
+  color:       #3e3e5e;
+  letter-spacing: 0.05em;
+}
+
+/* ── Bottom action bar ─── */
+.tlob-groups-actions {
+  display:      flex;
+  gap:          10px;
+  justify-content: space-between;
+  flex-shrink:  0;
+  padding-top:  10px;
+  border-top:   1px solid var(--border-mid);
+}
+
+.tlob-confirm-start-btn {
+  border-color: var(--snes-green);
+  color:        var(--snes-green);
+  font-size:    16px;
+  padding:      10px 28px;
+}
+.tlob-confirm-start-btn:hover    { background: #001800; }
+.tlob-confirm-start-btn:disabled {
+  border-color: #333358;
+  color:        var(--text-muted);
+  cursor:       default;
+  transform:    none;
+  box-shadow:   0 4px 0 var(--border-mid), 0 5px 0 #000;
+}
+
+/* ── Mode selection panel ─── */
+.tlob-mode-options {
+  display:        flex;
+  gap:            24px;
+  padding:        20px;
+  justify-content: center;
+  align-items:    flex-start;
+  flex:           1;
+  overflow-y:     auto;
+}
+
+.tlob-mode-card {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  background:     var(--bg-surface);
+  border:         2px solid var(--border-mid);
+  border-radius:  4px;
+  padding:        20px 18px 16px;
+  width:          220px;
+  gap:            10px;
+  transition:     border-color 0.15s, box-shadow 0.15s;
+}
+
+.tlob-mode-card:hover {
+  border-color: var(--border-bright);
+  box-shadow:   0 0 12px rgba(136,152,255,0.25);
+}
+
+.tlob-mode-icon {
+  font-size: 42px;
+  line-height: 1;
+}
+
+.tlob-mode-name {
+  font-family:    var(--font);
+  font-size:      20px;
+  color:          var(--snes-yellow);
+  letter-spacing: 0.1em;
+}
+
+.tlob-mode-features {
+  list-style:  none;
+  padding:     0;
+  margin:      0;
+  width:       100%;
+  display:     flex;
+  flex-direction: column;
+  gap:         6px;
+}
+
+.tlob-mode-features li {
+  font-family: var(--font-ui, sans-serif);
+  font-size:   13px;
+  color:       var(--text-dim);
+  padding-left: 14px;
+  position:    relative;
+}
+
+.tlob-mode-features li::before {
+  content:  '▸';
+  position: absolute;
+  left:     0;
+  color:    var(--snes-cyan);
+}
+
+.tlob-mode-select-btn {
+  margin-top:   8px;
+  width:        100%;
+  font-size:    16px;
+  padding:      10px 0;
+  border-color: var(--snes-cyan);
+  color:        var(--snes-cyan);
+}
+
+.tlob-mode-select-btn:hover { background: #001820; }
+
+/* ── Quick Match panel content ─── */
+.tlob-qm-content {
+  flex:       1;
+  overflow-y: auto;
+  padding:    16px 20px;
+  display:    flex;
+  flex-direction: column;
+  gap:        14px;
+}
+
+.tlob-qm-section-label {
+  font-family:    var(--font);
+  font-size:      15px;
+  color:          var(--text-dim);
+  letter-spacing: 0.05em;
+}
+
+.tlob-qm-available {
+  display:    flex;
+  flex-wrap:  wrap;
+  gap:        8px;
+  min-height: 44px;
+}
+
+.tlob-qm-chip {
+  font-family:    var(--font);
+  font-size:      17px;
+  letter-spacing: 0.12em;
+  color:          var(--snes-yellow);
+  background:     var(--bg-surface);
+  border:         2px solid var(--border-mid);
+  border-radius:  3px;
+  padding:        6px 14px;
+  cursor:         pointer;
+  transition:     border-color 0.12s, background 0.12s;
+  user-select:    none;
+}
+
+.tlob-qm-chip:hover {
+  border-color: var(--border-bright);
+  background:   #0e0040;
+}
+
+.tlob-qm-chip.selected {
+  border-color: var(--snes-cyan);
+  color:        var(--snes-cyan);
+  background:   #001820;
+}
+
+.tlob-qm-chip.in-match {
+  color:        var(--text-muted);
+  border-color: #222244;
+  cursor:       default;
+  opacity:      0.5;
+}
+
+.tlob-qm-pair-display {
+  display:     flex;
+  align-items: center;
+  gap:         16px;
+  justify-content: center;
+  padding:     10px 0;
+}
+
+.tlob-qm-player {
+  font-family:    var(--font);
+  font-size:      26px;
+  letter-spacing: 0.15em;
+  color:          var(--snes-cyan);
+  min-width:      70px;
+  text-align:     center;
+  background:     var(--bg-surface);
+  border:         2px solid var(--border-mid);
+  border-radius:  3px;
+  padding:        8px 14px;
+}
+
+.tlob-qm-player.tlob-qm-empty {
+  color:        #333358;
+  border-color: #1a1a38;
+}
+
+.tlob-qm-vs {
+  font-family:    var(--font);
+  font-size:      22px;
+  color:          var(--snes-red);
+  letter-spacing: 0.1em;
+}
+
+.tlob-qm-active-section {
+  display:        flex;
+  flex-direction: column;
+  gap:            8px;
+  border-top:     1px solid var(--border-mid);
+  padding-top:    12px;
+}
+
+.tlob-qm-active-list {
+  display:        flex;
+  flex-direction: column;
+  gap:            6px;
+}
+
+.tlob-qm-match-row {
+  display:         flex;
+  align-items:     center;
+  gap:             10px;
+  font-family:     var(--font);
+  font-size:       15px;
+  color:           var(--text-dim);
+  background:      var(--bg-surface);
+  border:          1px solid var(--border-mid);
+  border-radius:   3px;
+  padding:         6px 12px;
+}
+
+.tlob-qm-match-row .match-players {
+  flex:   1;
+  color:  var(--snes-yellow);
+}
+
+.tlob-qm-match-row .match-status {
+  font-size:   13px;
+  color:       var(--snes-green);
+}
+
+/* ── Result screen — lobby return button ─── */
+.result-lobby-btn {
+  display:      block;
+  margin:       8px auto 0;
+  font-family:  var(--font);
+  font-size:    16px;
+  background:   #001018;
+  color:        var(--snes-cyan);
+  border:       2px solid var(--snes-cyan);
+  border-radius: 3px;
+  padding:      10px 28px;
+  cursor:       pointer;
+  letter-spacing: 0.08em;
+  transition:   background 0.12s;
+}
+
+.result-lobby-btn:hover { background: #002030; }
+
+/* ═══════════════════════════════════════════════════════════
+   PART 5 — Selection Phase Timer
+═══════════════════════════════════════════════════════════ */
+
+.battle-timer {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  background:     var(--bg-surface);
+  border:         2px solid var(--border-mid);
+  border-radius:  3px;
+  padding:        4px 10px;
+  min-width:      52px;
+  line-height:    1;
+  gap:            2px;
+}
+
+.battle-timer-label {
+  font-family:    var(--font);
+  font-size:      11px;
+  color:          var(--text-dim);
+  letter-spacing: 0.12em;
+}
+
+.battle-timer-val {
+  font-family:    var(--font);
+  font-size:      28px;
+  color:          var(--snes-cyan);
+  letter-spacing: 0.05em;
+  transition:     color 0.2s;
+}
+
+.battle-timer.warning .battle-timer-val {
+  color: var(--snes-yellow);
+}
+
+.battle-timer.urgent .battle-timer-val {
+  color:     var(--snes-red);
+  animation: timer-pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes timer-pulse {
+  from { opacity: 1;    }
+  to   { opacity: 0.55; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PART 5 — Group Stage Lobby Panel
+═══════════════════════════════════════════════════════════ */
+
+.lobby-group-panel {
+  max-width:  520px;
+  gap:        14px;
+}
+
+.lobby-group-standings-wrap {
+  width:       100%;
+  overflow-x:  auto;
+}
+
+.lobby-group-standings {
+  width:           100%;
+  border-collapse: collapse;
+  font-family:     var(--font);
+  font-size:       15px;
+}
+
+.lobby-group-standings th {
+  color:           var(--text-dim);
+  font-size:       12px;
+  letter-spacing:  0.1em;
+  text-align:      left;
+  padding:         4px 10px;
+  border-bottom:   1px solid var(--border-mid);
+}
+
+.lobby-group-standings td {
+  padding:         7px 10px;
+  color:           var(--snes-yellow);
+  border-bottom:   1px solid #111130;
+}
+
+.lobby-group-standings td.gs-col-wdl {
+  color:   var(--text-dim);
+  font-size: 13px;
+}
+
+.lobby-group-standings td.gs-col-pts {
+  color:       var(--snes-cyan);
+  font-weight: bold;
+}
+
+.lobby-group-standings tr.gs-me td {
+  color: #ffffff;
+}
+
+.lobby-group-standings tr.gs-me td.gs-col-id {
+  color: var(--snes-green);
+}
+
+.lobby-group-standings td.gs-col-bot {
+  color: #3e3e5e;
+}
+
+/* ── Round schedule ─── */
+.lobby-round-list {
+  display:        flex;
+  flex-direction: column;
+  gap:            8px;
+  width:          100%;
+}
+
+.lobby-round-row {
+  display:         grid;
+  grid-template-columns: 70px 1fr auto;
+  align-items:     center;
+  gap:             10px;
+  background:      var(--bg-surface);
+  border:          1px solid var(--border-mid);
+  border-radius:   3px;
+  padding:         10px 14px;
+}
+
+.lobby-round-label {
+  font-family:    var(--font);
+  font-size:      14px;
+  color:          var(--text-dim);
+  letter-spacing: 0.08em;
+}
+
+.lobby-round-opp {
+  font-family:    var(--font);
+  font-size:      18px;
+  color:          var(--snes-yellow);
+  letter-spacing: 0.12em;
+}
+
+.lobby-round-opp.is-bot {
+  color:     #3e3e5e;
+  font-size: 15px;
+}
+
+.lobby-round-btn {
+  font-family:    var(--font);
+  font-size:      14px;
+  padding:        7px 18px;
+  cursor:         pointer;
+  border:         2px solid var(--snes-green);
+  color:          var(--snes-green);
+  background:     var(--bg-btn);
+  border-radius:  2px;
+  transition:     background 0.12s;
+  white-space:    nowrap;
+}
+
+.lobby-round-btn:hover:not(:disabled) { background: #001800; }
+
+.lobby-round-btn:disabled {
+  border-color: #222244;
+  color:        var(--text-muted);
+  cursor:       default;
+}
+
+.lobby-round-result {
+  font-family:    var(--font);
+  font-size:      15px;
+  letter-spacing: 0.08em;
+  text-align:     right;
+  white-space:    nowrap;
+}
+
+.lobby-round-result.win  { color: var(--snes-green); }
+.lobby-round-result.draw { color: var(--snes-yellow); }
+.lobby-round-result.loss { color: var(--snes-red); }
+
+/* ═══════════════════════════════════════════════════════════
+   PART 6 — Knockout Panel (student)
+═══════════════════════════════════════════════════════════ */
+
+.lobby-knockout-panel {
+  max-width: 440px;
+  gap:       14px;
+}
+
+.lobby-ko-banner {
+  width:       100%;
+  text-align:  center;
+  font-family: var(--font);
+  font-size:   20px;
+  padding:     10px 0;
+  border-radius: 3px;
+}
+
+.lobby-ko-banner.advanced {
+  color:      var(--snes-green);
+  background: #001800;
+  border:     1px solid var(--snes-green);
+}
+
+.lobby-ko-banner.eliminated {
+  color:      var(--snes-red);
+  background: #180000;
+  border:     1px solid var(--snes-red);
+}
+
+.lobby-ko-banner.champion {
+  color:      var(--snes-yellow);
+  background: #1a1200;
+  border:     2px solid var(--snes-yellow);
+  font-size:  24px;
+  animation:  champion-glow 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes champion-glow {
+  from { box-shadow: 0 0 8px rgba(248,208,0,0.3); }
+  to   { box-shadow: 0 0 24px rgba(248,208,0,0.7); }
+}
+
+/* Knockout ladder — one row per round */
+.lobby-ko-ladder {
+  display:        flex;
+  flex-direction: column;
+  gap:            6px;
+  width:          100%;
+}
+
+.lobby-ko-row {
+  display:     grid;
+  grid-template-columns: 80px 1fr auto;
+  align-items: center;
+  gap:         10px;
+  background:  var(--bg-surface);
+  border:      1px solid var(--border-mid);
+  border-radius: 3px;
+  padding:     9px 14px;
+}
+
+.lobby-ko-row.active {
+  border-color: var(--snes-cyan);
+  background:   #000e18;
+}
+
+.lobby-ko-row-label {
+  font-family:    var(--font);
+  font-size:      13px;
+  color:          var(--text-dim);
+  letter-spacing: 0.08em;
+}
+
+.lobby-ko-row-label.active-lbl { color: var(--snes-cyan); }
+
+.lobby-ko-row-info {
+  font-family: var(--font);
+  font-size:   16px;
+  color:       var(--text-dim);
+}
+
+.lobby-ko-row-info.eligible { color: var(--snes-yellow); }
+.lobby-ko-row-info.locked   { color: #222244; }
+
+.lobby-ko-play-wrap {
+  display:         flex;
+  justify-content: center;
+  width:           100%;
+  padding-top:     4px;
+}
+
+/* ── Teacher knockout panel ─── */
+.tlob-ko-content {
+  flex:       1;
+  overflow-y: auto;
+  padding:    16px 20px;
+  display:    flex;
+  flex-direction: column;
+  gap:        16px;
+}
+
+.tlob-ko-section-title {
+  font-family:    var(--font);
+  font-size:      16px;
+  color:          var(--snes-yellow);
+  letter-spacing: 0.1em;
+  padding-bottom: 6px;
+  border-bottom:  1px solid var(--border-mid);
+}
+
+.tlob-ko-groups-grid {
+  display:               grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap:                   10px;
+}
+
+.tlob-ko-group-block {
+  background:   var(--bg-surface);
+  border:       1px solid var(--border-mid);
+  border-radius: 3px;
+  padding:      8px 10px;
+  display:      flex;
+  flex-direction: column;
+  gap:          4px;
+}
+
+.tlob-ko-group-name {
+  font-family:    var(--font);
+  font-size:      12px;
+  color:          var(--text-dim);
+  letter-spacing: 0.08em;
+}
+
+.tlob-ko-advancer {
+  font-family: var(--font);
+  font-size:   15px;
+  color:       var(--snes-green);
+  letter-spacing: 0.1em;
+}
+
+.tlob-ko-advancer.rank2 { color: var(--snes-cyan); }
+.tlob-ko-advancer.bot   { color: #3e3e5e; font-size: 12px; }
+
+.tlob-ko-status-msg {
+  font-family: var(--font);
+  font-size:   14px;
+  color:       var(--text-dim);
+  flex:        1;
+}
+
+/* Bracket round table */
+.tlob-ko-bracket {
+  width:           100%;
+  border-collapse: collapse;
+}
+
+.tlob-ko-bracket th {
+  font-family:    var(--font);
+  font-size:      13px;
+  color:          var(--text-dim);
+  letter-spacing: 0.08em;
+  text-align:     left;
+  padding:        4px 10px;
+  border-bottom:  1px solid var(--border-mid);
+}
+
+.tlob-ko-bracket td {
+  font-family: var(--font);
+  font-size:   15px;
+  padding:     6px 10px;
+  border-bottom: 1px solid #111130;
+}
+
+.tlob-ko-bracket td.ko-id        { color: var(--snes-yellow); }
+.tlob-ko-bracket td.ko-round     { color: var(--text-dim); font-size: 13px; }
+.tlob-ko-bracket td.ko-win       { color: var(--snes-green); }
+.tlob-ko-bracket td.ko-loss      { color: var(--snes-red); }
+.tlob-ko-bracket td.ko-pending   { color: #333358; }
+
+/* Phase 2 actions strip */
+.tlob-actions-phase2 {
+  border-top:  1px solid var(--border-mid);
+  padding-top: 8px;
+}
+
+/* ── 2P blind-submit waiting overlay ────────────────────────── */
+.match-wait-overlay {
+  position:        absolute;
+  inset:           0;
+  z-index:         300;
+  background:      rgba(0, 0, 14, 0.82);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+}
+
+.match-wait-box {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  gap:            18px;
+}
+
+.match-wait-text {
+  color:       var(--snes-cyan);
+  font-family: var(--font-heading);
+  font-size:   20px;
+  letter-spacing: 1px;
+}
+
+.match-wait-spinner {
+  width:  44px;
+  height: 44px;
+  border: 4px solid rgba(0, 255, 255, 0.18);
+  border-top-color: var(--snes-cyan);
+  border-radius: 50%;
+  animation: match-spin 0.8s linear infinite;
+}
+
+@keyframes match-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Group round waiting-for-opponent row state ──────────────── */
+.lobby-round-waiting {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+}
+
+.lobby-round-wait-msg {
+  color:     var(--snes-cyan);
+  font-size: 13px;
+}
+
+.lobby-round-spinner {
+  width:  16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 2px solid rgba(0, 255, 255, 0.2);
+  border-top-color: var(--snes-cyan);
+  border-radius: 50%;
+  animation: match-spin 0.8s linear infinite;
+}

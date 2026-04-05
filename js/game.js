@@ -122,6 +122,12 @@
     _musicUpdateUI();
   }
 
+  /* ── Selection timer state ──────────────────────────────────── */
+  var _timerEl         = null;
+  var _timerValEl      = null;
+  var _timerInterval   = null;
+  var _timerSecs       = 0;
+
   /* ── DOM refs ────────────────────────────────────────────────── */
   var headerTurnEl     = document.getElementById('battle-turn-info');
   var headerPhaseEl    = document.getElementById('battle-phase-info');
@@ -147,7 +153,12 @@
     // Default to easy if no difficulty was chosen (e.g. launched from tutorial)
     if (!window.aiDifficulty) window.aiDifficulty = 'easy';
 
-    G.locations = pickLocations();
+    /* ── 2P mode: use Match-resolved locations + opponent deck ─── */
+    var _2pCfg = (window.matchId && typeof Match !== 'undefined') ? Match.get2PConfig() : null;
+
+    G.locations = (_2pCfg && _2pCfg.locations && _2pCfg.locations.length)
+      ? _2pCfg.locations
+      : pickLocations();
     window.initBattleUI(G.locations);
 
     var saved   = localStorage.getItem(STORAGE_KEY);
@@ -155,7 +166,9 @@
     G.playerDeck = shuffle(deckIds.slice());
     G.playerHand = G.playerDeck.splice(0, HAND_START);
 
-    G.aiDeck = buildAiDeck();
+    G.aiDeck = (_2pCfg && _2pCfg.oppDeckIds && _2pCfg.oppDeckIds.length)
+      ? shuffle(_2pCfg.oppDeckIds.slice())
+      : buildAiDeck();
     G.aiHand = G.aiDeck.splice(0, HAND_START);
 
     G.locations.forEach(function (loc) {
@@ -202,6 +215,7 @@
     bindHandEvents();
     refreshMoveableCards();
     startBgMusic();
+    _startSelectionTimer();
 
     if (typeof Analytics !== 'undefined') {
       Analytics.gameStarted(window.aiDifficulty);
@@ -216,6 +230,121 @@
       var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
     }
     return arr;
+  }
+
+  /* ═══════════════════════════════════════════════════��══════════
+     SELECTION PHASE TIMER
+     Active only when window.tournamentMatch === true.
+     Turn 1: 60s, each subsequent turn adds 15s.
+  ══════════════════════════════════════════════════════════════ */
+
+  function _timerRefs() {
+    if (!_timerEl) {
+      _timerEl    = document.getElementById('battle-timer');
+      _timerValEl = document.getElementById('battle-timer-val');
+    }
+  }
+
+  function _startSelectionTimer() {
+    if (!window.tournamentMatch || window.tournamentMatch === false) return;
+    _timerRefs();
+    _stopSelectionTimer();
+
+    _timerSecs = 60 + (G.turn - 1) * 15;
+    _timerEl.style.display = '';
+    _timerEl.className     = 'battle-timer';
+    _timerValEl.textContent = _timerSecs;
+
+    _timerInterval = setInterval(function () {
+      _timerSecs--;
+      if (_timerValEl) _timerValEl.textContent = _timerSecs;
+
+      _timerEl.className = 'battle-timer' +
+        (_timerSecs <= 10 ? ' urgent' : _timerSecs <= 20 ? ' warning' : '');
+
+      if (_timerSecs <= 0) {
+        _stopSelectionTimer();
+        /* Auto-submit: click END TURN if still in select phase */
+        if (G.phase === 'select' && !window.tutorialActive) {
+          if (typeof SFX !== 'undefined') SFX.endTurn();
+          onEndTurn();
+        }
+      }
+    }, 1000);
+  }
+
+  function _stopSelectionTimer() {
+    if (_timerInterval) {
+      clearInterval(_timerInterval);
+      _timerInterval = null;
+    }
+    _timerRefs();
+    if (_timerEl) _timerEl.style.display = 'none';
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     2P MATCH HELPERS
+  ═══════════════════════════════════════════════════════════════ */
+
+  function _showMatchWaitOverlay(show) {
+    var el = document.getElementById('match-wait-overlay');
+    if (el) el.style.display = show ? 'flex' : 'none';
+  }
+
+  /**
+   * Apply serialised opponent actions to G.aiSlots / G.aiRevealQueue.
+   * Called in 2P mode after both players have submitted their turn.
+   * Moves are applied first (already-revealed cards), then plays (new cards face-down).
+   */
+  function applyOpponentActions(actions) {
+    if (!actions) actions = [];
+    G.aiRevealQueue = [];
+
+    /* ── Moves: shift already-revealed cards between locations ── */
+    actions.filter(function (a) { return a.type === 'move'; }).forEach(function (a) {
+      var fromSlots = G.aiSlots[a.fromLocId];
+      if (!fromSlots) return;
+      var fromIdx = -1;
+      fromSlots.forEach(function (s, i) { if (s && s.cardId === a.cardId) fromIdx = i; });
+      if (fromIdx === -1) return;
+      var sd = fromSlots[fromIdx];
+      fromSlots[fromIdx] = null;
+
+      var toSlots = G.aiSlots[a.toLocId];
+      if (!toSlots) return;
+      var toIdx = toSlots.indexOf(null);
+      if (toIdx === -1) return;
+      toSlots[toIdx] = sd;
+
+      /* Sync DOM */
+      var fromEl = getSlotEl('opp', a.fromLocId, fromIdx);
+      if (fromEl) {
+        fromEl.dataset.cardId = '';
+        fromEl.className      = 'battle-card-slot';
+        fromEl.innerHTML      = '';
+        fromEl.removeAttribute('draggable');
+      }
+      var toEl = getSlotEl('opp', a.toLocId, toIdx);
+      if (toEl && sd) { toEl.dataset.cardId = String(sd.cardId); setSlotFaceDown(toEl); }
+    });
+
+    /* ── Plays: place new cards face-down ───────────────────── */
+    actions.filter(function (a) { return a.type === 'play'; }).forEach(function (a) {
+      var card = CARDS.find(function (c) { return c.id === a.cardId; });
+      if (!card) return;
+      var locId = a.toLocId;
+      if (locId == null || !G.aiSlots[locId]) return;
+      var slotIndex = G.aiSlots[locId].indexOf(null);
+      if (slotIndex === -1) return;
+      var baseIP = card.ip + (G.aiCardIPBonus[a.cardId] || 0);
+      G.aiSlots[locId][slotIndex] = { cardId: a.cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [] };
+      G.aiHand = G.aiHand.filter(function (id) { return id !== a.cardId; });
+      G.aiRevealQueue.push(a.cardId);
+      var slotEl = getSlotEl('opp', locId, slotIndex);
+      if (slotEl) { slotEl.dataset.cardId = String(a.cardId); setSlotFaceDown(slotEl); }
+    });
+
+    updateOppHand();
   }
 
   function pickLocations() {
@@ -444,7 +573,7 @@
     G.capital -= cost;
     if (typeof SFX !== 'undefined') SFX.capitalSpent();
     G.playerRevealQueue.push(cardId);
-    G.playerActionLog.push({ type: 'play', cardId: cardId });
+    G.playerActionLog.push({ type: 'play', cardId: cardId, toLocId: locId });
 
     G.playerHand = G.playerHand.filter(function (id) { return id !== cardId; });
     var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"]');
@@ -992,9 +1121,23 @@
   });
 
   function onEndTurn() {
+    _stopSelectionTimer();
     if (typeof Analytics !== 'undefined') Analytics.turnEnded(G.turn);
     endTurnBtn.disabled   = true;
     resetTurnBtn.disabled = true;
+
+    /* ── 2P mode: blind-submit then wait for opponent ─────────── */
+    if (window.matchId && typeof Match !== 'undefined') {
+      _showMatchWaitOverlay(true);
+      Match.submitTurn(G.turn, G.playerActionLog.slice(), function (oppActions) {
+        _showMatchWaitOverlay(false);
+        applyOpponentActions(oppActions);
+        setTimeout(startReveal, 600);
+      });
+      return;
+    }
+
+    /* ── Normal AI path ──────────────────────────────────────── */
     runAiMovements();
     runAiSelection();
     updateOppHand();  // reflect cards AI committed to board
@@ -3085,16 +3228,29 @@
     endTurnBtn.textContent  = 'END TURN';
     endTurnBtn.disabled     = false;
     resetTurnBtn.disabled   = false;
+    _startSelectionTimer();
 
     if (typeof Analytics !== 'undefined') Analytics.turnStarted();
   }
 
   function endGame() {
+    _stopSelectionTimer();
     G.phase = 'over';
     refreshMoveableCards();
     var result = tallyResult();
     if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);
     showResult(result);
+
+    /* 2P mode: P1 writes match result; both players clear Match state */
+    if (window.matchId && typeof Match !== 'undefined') {
+      if (window.p1OrP2 === 'p1') {
+        Match.reportResult(result.outcome, result.playerTotal, result.aiTotal);
+      }
+      Match.reset();
+      window.matchId  = null;
+      window.p1OrP2   = null;
+    }
+
     headerPhaseEl.textContent = 'GAME OVER';
     endTurnBtn.disabled       = true;
     resetTurnBtn.disabled     = true;
@@ -3121,15 +3277,28 @@
       }
     };
 
-    /* 5-win milestone: hand off to LegendScreen instead of normal flow */
-    var _isLegendMilestone = result.outcome === 'player' &&
-                             typeof LegendScreen !== 'undefined' &&
-                             LegendScreen.recordWin();
+    /* Tournament champion: Final knockout win always triggers the legend screen */
+    var _isTournamentChampion = result.outcome === 'player' &&
+                                window.tournamentMatch === 'knockout' &&
+                                window.currentKORound  === 'final' &&
+                                typeof LegendScreen !== 'undefined';
+
+    /* 5-win session milestone (single-player) */
+    var _isSessionMilestone = !_isTournamentChampion &&
+                              result.outcome === 'player' &&
+                              typeof LegendScreen !== 'undefined' &&
+                              LegendScreen.recordWin();
+
+    var _isLegendMilestone = _isTournamentChampion || _isSessionMilestone;
 
     if (_isLegendMilestone) {
       /* Brief pause so board location-win animations are visible, then cut to legend */
       setTimeout(function () {
-        LegendScreen.show(function () {
+        var showFn = (_isTournamentChampion && LegendScreen.showChampion)
+          ? function (cb) { LegendScreen.showChampion(window.currentLobbyId || '', cb); }
+          : function (cb) { LegendScreen.show(cb); };
+
+        showFn(function () {
           /* Legend clicked through — play win sound then show result screen */
           if (typeof SFX !== 'undefined') SFX.gameWon();
           _showResultScreen();
@@ -3216,6 +3385,28 @@
       tbEl.style.display = '';
     } else {
       tbEl.style.display = 'none';
+    }
+
+    /* Show/hide lobby return button */
+    var lobbyBtn = document.getElementById('result-return-lobby');
+    if (lobbyBtn) {
+      lobbyBtn.style.display = window.currentLobbyCode ? '' : 'none';
+    }
+
+    /* Tournament match: record result */
+    if (window.tournamentMatch && window.currentLobbyCode) {
+      var outcome = r.outcome === 'player' ? 'win'
+                  : r.outcome === 'ai'     ? 'loss'
+                  :                          'draw';
+      if (window.tournamentMatch === 'knockout') {
+        if (window.Multiplayer && typeof window.Multiplayer.recordKnockoutResult === 'function') {
+          window.Multiplayer.recordKnockoutResult(outcome);
+        }
+      } else {
+        if (window.Multiplayer && typeof window.Multiplayer.recordGroupResult === 'function') {
+          window.Multiplayer.recordGroupResult(outcome);
+        }
+      }
     }
   }
 
@@ -3368,6 +3559,13 @@
   document.getElementById('result-home').addEventListener('click', function () {
     stopBgMusic();
     showScreen('screen-home');
+  });
+
+  document.getElementById('result-return-lobby').addEventListener('click', function () {
+    stopBgMusic();
+    if (window.Multiplayer && typeof window.Multiplayer.returnToLobby === 'function') {
+      window.Multiplayer.returnToLobby();
+    }
   });
 
   document.getElementById('result-gameboard').addEventListener('click', function () {

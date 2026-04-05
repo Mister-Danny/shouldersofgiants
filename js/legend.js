@@ -367,6 +367,29 @@
      */
     show: function (onComplete) {
       playSequence(onComplete);
+    },
+
+    /**
+     * Tournament champion variant — overrides title/subtitle text for
+     * the duration of the sequence, then restores original values.
+     * @param {string}   playerId    The winning player's ID (shown in subtitle)
+     * @param {Function} onComplete  Called when clicked through
+     */
+    showChampion: function (playerId, onComplete) {
+      var titleEl    = document.getElementById('legend-opening-title');
+      var subtitleEl = document.getElementById('legend-subtitle');
+      var origTitle  = titleEl    ? titleEl.innerHTML        : '';
+      var origSub    = subtitleEl ? subtitleEl.textContent   : '';
+
+      if (titleEl)    titleEl.innerHTML   = 'TOURNAMENT<br>CHAMPION';
+      if (subtitleEl) subtitleEl.textContent =
+        (playerId ? playerId + ' \u2014 ' : '') + 'Click to claim your crown';
+
+      playSequence(function () {
+        if (titleEl)    titleEl.innerHTML        = origTitle;
+        if (subtitleEl) subtitleEl.textContent   = origSub;
+        if (onComplete) onComplete();
+      });
     }
   };
 

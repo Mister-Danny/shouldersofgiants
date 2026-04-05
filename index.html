@@ -21,6 +21,7 @@
   <!-- Firebase v9 compat (no npm / no bundler required) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -32,8 +33,9 @@
       <h1 id="home-title" class="home-title">Shoulders of Giants</h1>
       <div class="home-question">Are you ready to make history?</div>
       <nav class="home-nav">
-        <button class="btn-snes btn-home-ready" id="btn-ready">I'm Ready</button>
-        <button class="btn-home-learn" id="btn-learn">I'm Ready To Learn</button>
+        <button class="btn-snes btn-home-ready"  id="btn-ready">I'm Ready</button>
+        <button class="btn-snes btn-home-versus" id="btn-versus">&#9876; Versus Mode</button>
+        <button class="btn-home-learn"           id="btn-learn">I'm Ready To Learn</button>
       </nav>
     </div>
 
@@ -148,6 +150,10 @@
 
     <!-- Reset + End Turn + Results buttons — bottom-right, above music player -->
     <div class="battle-hud-bottomright">
+      <div id="battle-timer" class="battle-timer" style="display:none">
+        <span class="battle-timer-label">TIME</span>
+        <span id="battle-timer-val" class="battle-timer-val">60</span>
+      </div>
       <button class="btn-back-results" id="btn-back-results" style="display:none">&#8592; Results</button>
       <button class="btn-reset-turn"   id="battle-reset-turn"   disabled>RESET</button>
       <button class="btn-end-turn"     id="battle-end-turn"     disabled>END TURN</button>
@@ -202,6 +208,14 @@
       </div>
     </div>
 
+    <!-- 2P blind-submit waiting overlay -->
+    <div id="match-wait-overlay" class="match-wait-overlay" style="display:none">
+      <div class="match-wait-box">
+        <div class="match-wait-spinner"></div>
+        <div class="match-wait-text">Waiting for opponent…</div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -238,6 +252,7 @@
         <button class="btn-primary" id="result-play-again">Play Again</button>
         <button class="btn-primary" id="result-home">Home</button>
         <button class="btn-primary" id="result-gameboard">Gameboard</button>
+        <button class="btn-primary result-lobby-btn" id="result-return-lobby" style="display:none">&#8592; Lobby</button>
       </div>
 
     </div>
@@ -407,6 +422,326 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
+       LOBBY SCREEN — multiplayer tournament entry + waiting room
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="screen-lobby" class="screen">
+
+    <!-- ── Entry panel: student enters code + picks ID ──────────── -->
+    <div id="lobby-entry-panel" class="lobby-panel">
+
+      <div class="lobby-panel-title">Join Tournament</div>
+      <div class="lobby-panel-divider"></div>
+
+      <label class="lobby-label" for="lobby-code-input">Tournament Code</label>
+      <input id="lobby-code-input" class="lobby-input" type="text" maxlength="5"
+             inputmode="numeric" pattern="\d*" placeholder="_ _ _ _ _"
+             autocomplete="off" spellcheck="false">
+
+      <label class="lobby-label" for="lobby-id-input">
+        Your ID &nbsp;<span class="lobby-label-hint">(3 letters — pick something you'll remember)</span>
+      </label>
+      <div class="lobby-id-row">
+        <input id="lobby-id-input" class="lobby-input lobby-input-id" type="text"
+               maxlength="3" placeholder="A B C"
+               autocomplete="off" spellcheck="false">
+        <button id="lobby-id-shuffle" class="btn-snes lobby-shuffle-btn" title="Suggest a random ID">&#8635;</button>
+      </div>
+
+      <div id="lobby-error" class="lobby-error" aria-live="polite"></div>
+
+      <div class="lobby-btn-row">
+        <button id="lobby-back-btn" class="btn-snes btn-snes-close">&#8592; Back</button>
+        <button id="lobby-join-btn" class="btn-snes lobby-btn-join">JOIN</button>
+      </div>
+
+    </div><!-- /#lobby-entry-panel -->
+
+    <!-- ── Waiting panel: shown after successful join ────────────── -->
+    <div id="lobby-waiting-panel" class="lobby-panel" style="display:none">
+
+      <div class="lobby-panel-title">Tournament Lobby</div>
+      <div class="lobby-panel-divider"></div>
+
+      <div class="lobby-your-info">
+        <span class="lobby-info-label">Code</span>
+        <span id="lobby-disp-code" class="lobby-info-val"></span>
+        <span class="lobby-info-label">Your ID</span>
+        <span id="lobby-disp-id" class="lobby-info-val lobby-info-id"></span>
+      </div>
+
+      <div class="lobby-waiting-msg">
+        <div class="lobby-spinner"></div>
+        Waiting for teacher to start&hellip;
+      </div>
+
+      <div class="lobby-student-list-wrap">
+        <span class="lobby-label">Students in lobby:</span>
+        <span id="lobby-student-count" class="lobby-student-count">0</span>
+      </div>
+
+      <button id="lobby-leave-btn" class="btn-snes btn-snes-close">&#8592; Leave Lobby</button>
+
+    </div><!-- /#lobby-waiting-panel -->
+
+    <!-- ── Group stage panel: shown once tournament starts ──────── -->
+    <div id="lobby-group-panel" class="lobby-panel lobby-group-panel" style="display:none">
+
+      <div class="lobby-panel-title" id="lobby-group-title">Group 1</div>
+      <div class="lobby-panel-divider"></div>
+
+      <!-- Standings table -->
+      <div class="lobby-group-standings-wrap">
+        <table class="lobby-group-standings" id="lobby-group-standings">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>W&ndash;D&ndash;L</th>
+              <th>Pts</th>
+            </tr>
+          </thead>
+          <tbody id="lobby-group-standings-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Match schedule: rounds 1–3 -->
+      <div class="lobby-round-list" id="lobby-round-list"></div>
+
+      <button id="lobby-group-leave" class="btn-snes btn-snes-close">&#8592; Leave Tournament</button>
+
+    </div><!-- /#lobby-group-panel -->
+
+    <!-- ── Knockout panel: shown when status === 'knockout' ─────── -->
+    <div id="lobby-knockout-panel" class="lobby-panel lobby-knockout-panel" style="display:none">
+
+      <div class="lobby-panel-title" id="lobby-ko-title">Knockout Stage</div>
+      <div class="lobby-panel-divider"></div>
+
+      <!-- Elimination / champion status banner -->
+      <div id="lobby-ko-banner" class="lobby-ko-banner" style="display:none"></div>
+
+      <!-- Ladder: one row per round, built by JS -->
+      <div id="lobby-ko-ladder" class="lobby-ko-ladder"></div>
+
+      <!-- Play match button (shown when player has an active round) -->
+      <div id="lobby-ko-play-wrap" style="display:none">
+        <button id="lobby-ko-play-btn" class="btn-snes lobby-round-btn">&#9654; Play Match</button>
+      </div>
+
+      <button id="lobby-ko-leave" class="btn-snes btn-snes-close">&#8592; Leave Tournament</button>
+
+    </div><!-- /#lobby-knockout-panel -->
+
+  </div><!-- /#screen-lobby -->
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       TEACHER TOURNAMENT LOBBY
+       Fixed overlay — opened from Tournament Controls in bypass menu.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="teacher-lobby-backdrop" class="teacher-lobby-backdrop" style="display:none"
+       role="dialog" aria-modal="true" aria-label="Teacher Tournament Lobby">
+    <div class="teacher-lobby-dialog">
+
+      <!-- Header -->
+      <div class="teacher-lobby-header">
+        <span class="teacher-lobby-title">&#9876; TOURNAMENT LOBBY</span>
+        <button class="btn-snes btn-snes-close" id="tlob-close">&#10005; CLOSE</button>
+      </div>
+
+      <div class="teacher-lobby-body">
+
+        <!-- ── Large code display ─── -->
+        <div class="tlob-code-section">
+          <div class="tlob-code-label">TOURNAMENT CODE</div>
+          <div id="tlob-code-display" class="tlob-code-display">&#8212;</div>
+          <div class="tlob-code-hint">Share this code with your students</div>
+        </div>
+
+        <!-- ── Student list ─── -->
+        <div class="tlob-list-section">
+          <div class="tlob-list-header">
+            Students in lobby:&nbsp;<span id="tlob-student-count" class="tlob-student-count">0</span>
+          </div>
+          <div id="tlob-student-list" class="tlob-student-list">
+            <div class="tlob-empty">No students yet &#8212; share the code above</div>
+          </div>
+        </div>
+
+        <!-- ── Action buttons ─── -->
+        <div class="tlob-actions">
+          <button class="btn-snes" id="tlob-new">+ New</button>
+          <button class="btn-snes" id="tlob-save">&#128190; Save</button>
+          <button class="btn-snes" id="tlob-load">&#128193; Load Code</button>
+          <button class="btn-snes tlob-start-btn" id="tlob-start" disabled>Start &#8594;</button>
+        </div>
+        <!-- Phase 2 actions — shown after group stage starts -->
+        <div class="tlob-actions tlob-actions-phase2" id="tlob-phase2-actions" style="display:none">
+          <button class="btn-snes tlob-start-btn" id="tlob-advance-ko">&#127942; Advance to Knockout &#8594;</button>
+        </div>
+
+      </div><!-- /.teacher-lobby-body -->
+
+      <!-- ── Knockout setup panel ─── -->
+      <div id="tlob-ko-panel" class="tlob-groups-panel" style="display:none">
+
+        <div class="tlob-groups-header">
+          <button class="btn-snes btn-snes-close" id="tlob-ko-back">&#8592; Lobby</button>
+          <span class="teacher-lobby-title">Knockout Bracket</span>
+          <div></div>
+        </div>
+
+        <!-- Advancers list + bracket overview (populated by JS) -->
+        <div id="tlob-ko-content" class="tlob-ko-content"></div>
+
+        <div class="tlob-groups-actions">
+          <div id="tlob-ko-status-msg" class="tlob-ko-status-msg"></div>
+          <button class="btn-snes tlob-confirm-start-btn" id="tlob-ko-confirm" disabled>&#9654; Start Knockout</button>
+        </div>
+
+      </div><!-- /#tlob-ko-panel -->
+
+      <!-- ── Group assignment panel (shown instead of body when configuring groups) ─── -->
+      <div id="tlob-groups-panel" class="tlob-groups-panel" style="display:none">
+
+        <!-- Sub-header -->
+        <div class="tlob-groups-header">
+          <button class="btn-snes btn-snes-close" id="tlob-groups-back">&#8592; Lobby</button>
+          <span class="teacher-lobby-title">Assign Groups</span>
+          <div></div><!-- spacer for flex justify -->
+        </div>
+
+        <!-- Config row -->
+        <div class="tlob-groups-config">
+          <span class="tlob-cfg-item">
+            <span class="tlob-cfg-label">Students</span>
+            <span id="tlob-cfg-students" class="tlob-cfg-val">0</span>
+          </span>
+          <span class="tlob-cfg-sep">|</span>
+          <span class="tlob-cfg-item">
+            <span class="tlob-cfg-label">Groups</span>
+            <button class="btn-snes tlob-cfg-spin" id="tlob-groups-minus">&#8722;</button>
+            <span id="tlob-cfg-groups" class="tlob-cfg-val">8</span>
+            <button class="btn-snes tlob-cfg-spin" id="tlob-groups-plus">+</button>
+          </span>
+          <span class="tlob-cfg-sep">|</span>
+          <span class="tlob-cfg-item">
+            <span class="tlob-cfg-label">Per&nbsp;Group</span>
+            <span class="tlob-cfg-val">4</span>
+          </span>
+          <span class="tlob-cfg-sep">|</span>
+          <span class="tlob-cfg-item">
+            <span class="tlob-cfg-label">Bots</span>
+            <span id="tlob-cfg-bots" class="tlob-cfg-val tlob-cfg-bots">0</span>
+          </span>
+        </div>
+
+        <!-- Scrollable group card grid (populated by JS) -->
+        <div id="tlob-groups-grid" class="tlob-groups-grid"></div>
+
+        <!-- Bottom actions -->
+        <div class="tlob-groups-actions">
+          <button class="btn-snes" id="tlob-groups-shuffle">&#8635; Shuffle</button>
+          <button class="btn-snes tlob-confirm-start-btn" id="tlob-confirm-start">&#10003; Confirm &amp; Start</button>
+        </div>
+
+      </div><!-- /#tlob-groups-panel -->
+
+      <!-- ── Mode selection panel ─── -->
+      <div id="tlob-mode-panel" class="tlob-groups-panel" style="display:none">
+
+        <div class="tlob-groups-header">
+          <button class="btn-snes btn-snes-close" id="tlob-mode-back">&#8592; Lobby</button>
+          <span class="teacher-lobby-title">Choose Mode</span>
+          <div></div>
+        </div>
+
+        <div class="tlob-mode-options">
+
+          <div class="tlob-mode-card" id="tlob-mode-card-tournament">
+            <div class="tlob-mode-icon">&#127942;</div>
+            <div class="tlob-mode-name">TOURNAMENT</div>
+            <ul class="tlob-mode-features">
+              <li>Full group stage — 3-game round robin</li>
+              <li>Knockout bracket</li>
+              <li>Points system (3 / 1 / 0)</li>
+              <li>Champion triggers legend screen</li>
+            </ul>
+            <button class="btn-snes tlob-mode-select-btn" id="tlob-select-tournament">SELECT</button>
+          </div>
+
+          <div class="tlob-mode-card" id="tlob-mode-card-quickmatch">
+            <div class="tlob-mode-icon">&#9889;</div>
+            <div class="tlob-mode-name">QUICK MATCH</div>
+            <ul class="tlob-mode-features">
+              <li>Pair any two students instantly</li>
+              <li>Multiple matches run simultaneously</li>
+              <li>No standings or bracket</li>
+              <li>Students return to lobby after each match</li>
+            </ul>
+            <button class="btn-snes tlob-mode-select-btn" id="tlob-select-quickmatch">SELECT</button>
+          </div>
+
+        </div>
+
+      </div><!-- /#tlob-mode-panel -->
+
+      <!-- ── Quick Match panel ─── -->
+      <div id="tlob-qm-panel" class="tlob-groups-panel" style="display:none">
+
+        <div class="tlob-groups-header">
+          <button class="btn-snes btn-snes-close" id="tlob-qm-back">&#8592; Mode</button>
+          <span class="teacher-lobby-title">Quick Match</span>
+          <div></div>
+        </div>
+
+        <div class="tlob-qm-content">
+          <div class="tlob-qm-section-label">Select two students for the next match:</div>
+          <div id="tlob-qm-available" class="tlob-qm-available">
+            <div class="tlob-empty">No students in lobby yet</div>
+          </div>
+
+          <div class="tlob-qm-pair-display">
+            <span id="tlob-qm-p1" class="tlob-qm-player tlob-qm-empty">?</span>
+            <span class="tlob-qm-vs">VS</span>
+            <span id="tlob-qm-p2" class="tlob-qm-player tlob-qm-empty">?</span>
+          </div>
+
+          <div id="tlob-qm-active-section" class="tlob-qm-active-section" style="display:none">
+            <div class="tlob-qm-section-label">Active matches:</div>
+            <div id="tlob-qm-active-list" class="tlob-qm-active-list"></div>
+          </div>
+        </div>
+
+        <div class="tlob-groups-actions">
+          <button class="btn-snes btn-snes-close" id="tlob-qm-clear">Clear</button>
+          <button class="btn-snes tlob-confirm-start-btn" id="tlob-qm-start" disabled>&#9654; Start Match</button>
+        </div>
+
+      </div><!-- /#tlob-qm-panel -->
+
+      <!-- ── Load code modal (inner overlay) ─── -->
+      <div id="tlob-load-modal" class="tlob-modal" style="display:none">
+        <div class="tlob-modal-box">
+          <div class="tlob-modal-title">Load Tournament</div>
+          <div class="lobby-panel-divider"></div>
+          <label class="lobby-label" for="tlob-load-input">Enter Tournament Code</label>
+          <input id="tlob-load-input" class="lobby-input" type="text" maxlength="5"
+                 inputmode="numeric" placeholder="_ _ _ _ _"
+                 autocomplete="off" spellcheck="false">
+          <div id="tlob-load-error" class="lobby-error"></div>
+          <div class="tlob-modal-btns">
+            <button class="btn-snes btn-snes-close" id="tlob-load-cancel">Cancel</button>
+            <button class="btn-snes tlob-modal-confirm" id="tlob-load-confirm">Load</button>
+          </div>
+        </div>
+      </div><!-- /#tlob-load-modal -->
+
+      <!-- Toast notification -->
+      <div id="tlob-toast" class="tlob-toast"></div>
+
+    </div><!-- /.teacher-lobby-dialog -->
+  </div><!-- /#teacher-lobby-backdrop -->
+
+  <!-- ═══════════════════════════════════════════════════════════════
        BYPASS PASSWORD PROMPT
        Fixed overlay — appears on triple-click before the bypass menu.
   ════════════════════════════════════════════════════════════════ -->
@@ -456,6 +791,15 @@
           <div class="bypass-btn-row">
             <button class="btn-snes btn-snes-close bypass-btn-action" id="bypass-reset-tut">Reset Tutorial</button>
             <span class="bypass-btn-desc">Clears flag so tutorial plays again on next visit</span>
+          </div>
+        </section>
+
+        <!-- ── TOURNAMENT CONTROLS ──────────────��──────────── -->
+        <section class="bypass-section">
+          <h3 class="bypass-section-title">Tournament Controls</h3>
+          <div class="bypass-btn-row">
+            <button class="btn-snes bypass-btn-action" id="bypass-open-lobby">&#9876; Open Tournament Lobby</button>
+            <span class="bypass-btn-desc">Create or resume a multiplayer tournament for your class</span>
           </div>
         </section>
 
@@ -554,6 +898,8 @@
 
   <!-- ── Analytics (Firebase must be loaded above in <head>) ───── -->
   <script src="js/analytics.js"></script>
+  <script src="js/multiplayer.js"></script>
+  <script src="js/match.js"></script>
 
   <!-- ── Data files ─────────────────────────────────────────────── -->
   <script src="js/cards.js"></script>
