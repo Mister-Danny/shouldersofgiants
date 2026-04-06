@@ -1043,7 +1043,7 @@ img    { display: block; }
 
 .battle-hud-bottomright {
   position: fixed;
-  bottom: 80px;
+  bottom: max(80px, calc(100vh - 720px));
   right: 24px;
   z-index: 55;
   display: flex;
@@ -1055,12 +1055,20 @@ img    { display: block; }
 
 .battle-hud-bottomright .btn-reset-turn,
 .battle-hud-bottomright .btn-end-turn,
-.battle-hud-bottomright .btn-back-results {
+.battle-hud-bottomright .btn-back-results,
+.battle-hud-bottomright .btn-undo-endturn {
   padding: 18px 25px;
   font-size: 16px;
   width: 100%;
   text-align: center;
   letter-spacing: 0.10em;
+}
+
+.btn-undo-endturn {
+  background:   var(--snes-yellow);
+  color:        #000;
+  border-color: #a07800;
+  font-family:  var(--font);
 }
 
 .battle-turn-info {
@@ -2522,7 +2530,7 @@ button,
 /* ── Skip button — bottom-right corner, SNES style ───────────── */
 #tut-skip {
   position: fixed;
-  bottom: 14px;
+  bottom: max(14px, calc(100vh - 786px));
   right: 16px;
   top: auto;
   z-index: 1100;
@@ -2550,8 +2558,8 @@ button,
 /* ── Dialogue box ─────────────────────────────────────────────── */
 #tut-box {
   position: fixed;
-  bottom: 24px;
-  left: 50%;
+  bottom: max(24px, calc(100vh - 776px));
+  left: min(50%, 640px);
   transform: translateX(-50%);
   z-index: 1000;
 
@@ -3073,7 +3081,7 @@ body.tut-locked #battle-reset-turn {
 
 #tut-lucy-bubble {
   position: fixed;
-  bottom: 80px;  /* level with Lucy avatar (bottom: 80px)         */
+  bottom: max(80px, calc(100vh - 720px));  /* tracks battle-screen bottom */
   left: 190px;   /* 54px avatar-left + 120px frame + 16px gap     */
   max-width: 200px; /* constrained to dead-space left of hand cards */
   background: #fffef5;
@@ -3105,10 +3113,16 @@ body.tut-locked #battle-reset-turn {
 }
 
 /* Ötzi's bubble — to the left of his avatar (top-right)          */
+/* right tracks the 1280px battle container edge regardless of viewport width.
+   Battle container is left-aligned; Ötzi avatar is at right:54px within it,
+   so its left edge is always at viewport-left + (1280-54-120) = 1106px.
+   We want the bubble right edge 16px left of that = 1090px from left
+   = (100vw - 1090px) from viewport right. Use max() so it never clips
+   on small viewports where the formula undershoots 190px.           */
 #tut-otzi-box {
   position: fixed;
   top: 26px;
-  right: 190px;  /* 54px avatar-right + 120px frame + 16px gap    */
+  right: max(190px, calc(100vw - 1090px));
   max-width: 330px;
   background: #f0ebe0;
   border: 3px solid #111;
@@ -4883,46 +4897,41 @@ body.tut-locked #battle-reset-turn {
    PART 5 — Selection Phase Timer
 ═══════════════════════════════════════════════════════════ */
 
-.battle-timer {
-  display:        flex;
-  flex-direction: column;
-  align-items:    center;
-  background:     var(--bg-surface);
-  border:         2px solid var(--border-mid);
-  border-radius:  3px;
-  padding:        4px 10px;
-  min-width:      52px;
-  line-height:    1;
-  gap:            2px;
+/* Legacy timer box — kept in DOM for JS compat but never shown */
+.battle-timer { display: none !important; }
+
+/* ── Selection phase timer bar (under Lucy avatar) ───────────── */
+.battle-timer-bar-wrap {
+  width:         120px;   /* matches avatar frame width */
+  height:        7px;
+  margin-top:    7px;
+  border-radius: 4px;
+  background:    rgba(0, 0, 0, 0.45);
+  overflow:      hidden;
+  border:        1px solid rgba(200, 160, 32, 0.25);
 }
 
-.battle-timer-label {
-  font-family:    var(--font);
-  font-size:      11px;
-  color:          var(--text-dim);
-  letter-spacing: 0.12em;
+.battle-timer-bar {
+  height:           100%;
+  width:            100%;
+  border-radius:    4px;
+  background:       var(--snes-cyan);
+  transition:       width 1s linear, background-color 0.4s ease;
+  transform-origin: left center;
 }
 
-.battle-timer-val {
-  font-family:    var(--font);
-  font-size:      28px;
-  color:          var(--snes-cyan);
-  letter-spacing: 0.05em;
-  transition:     color 0.2s;
+.battle-timer-bar.warning {
+  background: var(--snes-yellow);
 }
 
-.battle-timer.warning .battle-timer-val {
-  color: var(--snes-yellow);
-}
-
-.battle-timer.urgent .battle-timer-val {
-  color:     var(--snes-red);
-  animation: timer-pulse 0.5s ease-in-out infinite alternate;
+.battle-timer-bar.urgent {
+  background: var(--snes-red);
+  animation:  timer-pulse 0.5s ease-in-out infinite alternate;
 }
 
 @keyframes timer-pulse {
   from { opacity: 1;    }
-  to   { opacity: 0.55; }
+  to   { opacity: 0.45; }
 }
 
 /* ═══════════════════════════════════════════════════════════

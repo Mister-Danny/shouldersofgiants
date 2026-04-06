@@ -157,6 +157,7 @@
       <button class="btn-back-results" id="btn-back-results" style="display:none">&#8592; Results</button>
       <button class="btn-reset-turn"   id="battle-reset-turn"   disabled>RESET</button>
       <button class="btn-end-turn"     id="battle-end-turn"     disabled>END TURN</button>
+      <button class="btn-undo-endturn" id="battle-undo-endturn" style="display:none">UNDO (4)</button>
     </div>
 
     <!-- Ötzi portrait circle (top-right, absolute) -->
@@ -179,6 +180,9 @@
     <div class="battle-avatar battle-avatar-lucy">
       <div class="battle-avatar-frame">
         <img src="images/Lucy.png" alt="Lucy" onerror="this.style.display='none'">
+      </div>
+      <div id="battle-timer-bar-wrap" class="battle-timer-bar-wrap" style="display:none">
+        <div id="battle-timer-bar" class="battle-timer-bar"></div>
       </div>
     </div>
 

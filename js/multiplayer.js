@@ -337,6 +337,7 @@
   var _tlobLastData    = null;  // most recent full tournament snapshot
   var _tlobQuickMatches = {};   // matchId → { p1, p2, status }
   var _qmSelected      = [];   // up to 2 IDs picked for next QM
+  var _tlobRefreshTimer = null; // 30-second forced re-fetch for classroom WiFi resilience
 
   /**
    * Boot a student from the tournament.
@@ -626,36 +627,50 @@
     }
   }
 
+  function _tlobApplySnapshot(data) {
+    if (!data) return;
+    _tlobLastData = data;
+    _tlobSetStudents(data.students || {});
+
+    _tlobQuickMatches = data.quickMatches || {};
+    if (_tlobMode === 'quickmatch') _renderQMPanel();
+
+    var phase2 = document.getElementById('tlob-phase2-actions');
+    if (phase2) {
+      phase2.style.display = (data.status === 'group_stage') ? '' : 'none';
+    }
+
+    var koPanel = document.getElementById('tlob-ko-panel');
+    if (koPanel && koPanel.style.display !== 'none') {
+      if (data.status === 'knockout' || data.status === 'complete') {
+        _renderKOBracket(data);
+        var statusMsg = document.getElementById('tlob-ko-status-msg');
+        if (statusMsg) statusMsg.textContent =
+          data.status === 'complete'
+            ? '\u2605 Champion: ' + ((data.bracket && data.bracket.champion) || '?')
+            : 'Knockout in progress';
+      }
+    }
+  }
+
+  function _tlobStopRefresh() {
+    if (_tlobRefreshTimer) { clearInterval(_tlobRefreshTimer); _tlobRefreshTimer = null; }
+  }
+
   function _tlobStartListener() {
     if (!_tlobCode) return;
-    onTournament(_tlobCode, function (data) {
-      if (!data) return;
-      _tlobLastData = data;
-      _tlobSetStudents(data.students || {});
 
-      /* Track quick matches for the QM panel */
-      _tlobQuickMatches = data.quickMatches || {};
-      if (_tlobMode === 'quickmatch') _renderQMPanel();
+    /* Live listener — fires on every Firebase change */
+    onTournament(_tlobCode, _tlobApplySnapshot);
 
-      /* Show/hide "Advance to Knockout" button */
-      var phase2 = document.getElementById('tlob-phase2-actions');
-      if (phase2) {
-        phase2.style.display = (data.status === 'group_stage') ? '' : 'none';
-      }
-
-      /* If KO panel is open, refresh it */
-      var koPanel = document.getElementById('tlob-ko-panel');
-      if (koPanel && koPanel.style.display !== 'none') {
-        if (data.status === 'knockout' || data.status === 'complete') {
-          _renderKOBracket(data);
-          var statusMsg = document.getElementById('tlob-ko-status-msg');
-          if (statusMsg) statusMsg.textContent =
-            data.status === 'complete'
-              ? '\u2605 Champion: ' + ((data.bracket && data.bracket.champion) || '?')
-              : 'Knockout in progress';
-        }
-      }
-    });
+    /* 30-second forced re-fetch — resilience for spotty classroom WiFi */
+    _tlobStopRefresh();
+    _tlobRefreshTimer = setInterval(function () {
+      if (!_tlobCode || !_db) return;
+      _db.ref(TOURNAMENTS_REF + '/' + _tlobCode).once('value').then(function (snap) {
+        _tlobApplySnapshot(snap.val());
+      }).catch(function () {});
+    }, 30000);
   }
 
   /* ── Mode selection panel ────────────────────────────────────── */
@@ -892,6 +907,7 @@
     /* Close button */
     document.getElementById('tlob-close').addEventListener('click', function () {
       offTournament(_tlobCode);
+      _tlobStopRefresh();
       backdrop.style.display = 'none';
     });
 
@@ -899,6 +915,7 @@
     backdrop.addEventListener('click', function (e) {
       if (e.target === backdrop) {
         offTournament(_tlobCode);
+        _tlobStopRefresh();
         backdrop.style.display = 'none';
       }
     });

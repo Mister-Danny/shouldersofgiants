@@ -54,7 +54,8 @@
     abilityCardsToTap:  [],
     abilityCardsTapped: {},
     needMagellanMove:      false,
-    bonusCapitalNextTurn:  0
+    bonusCapitalNextTurn:  0,
+    destroyedIPTotal:      0    // IP accumulated by William the Conqueror
   };
 
   /* ── DOM refs (assigned in init) ─────────────────────────────── */
@@ -540,6 +541,7 @@
     TS.abilityCardsTapped = {};
     TS.needMagellanMove      = false;
     TS.bonusCapitalNextTurn  = 0;
+    TS.destroyedIPTotal      = 0;
     TS.playerFirst           = Math.random() < 0.5;
 
     showEl(skipEl);
@@ -805,8 +807,15 @@
     placeAICards(1);
     runReveal(1, function () {
       var ps = scoreAt('player', 2), as = scoreAt('opp', 2);
-      if (ps > as) {
+      if (ps === as) {
         showOtziLine("A tie? How exciting\u2026", function () {
+          showEl(lucyBubbleEl);
+          queueDialogues(["You want to see excitement?"], function () {
+            revealNewLocations(function () { startTurn(2); });
+          });
+        });
+      } else if (ps > as) {
+        showOtziLine("Hmm\u2026 a lucky start.", function () {
           showEl(lucyBubbleEl);
           queueDialogues(["You want to see excitement?"], function () {
             revealNewLocations(function () { startTurn(2); });
@@ -850,7 +859,12 @@
         var ps = scoreAt('player', loc.id), as = scoreAt('opp', loc.id);
         if (ps > as) pw++; else if (as > ps) ow++;
       });
-      if (pw > ow) {
+      if (pw === ow) {
+        showOtziLine("A tie? How exciting\u2026", function () {
+          showEl(lucyBubbleEl);
+          queueDialogues(["And it bends to me."], function () { startTurn(3); });
+        });
+      } else if (pw > ow) {
         showOtziLine("History has a long arc.", function () {
           showEl(lucyBubbleEl);
           queueDialogues(["And it bends to me."], function () { startTurn(3); });
@@ -920,7 +934,12 @@
         var ps = scoreAt('player', loc.id), as = scoreAt('opp', loc.id);
         if (ps > as) pw++; else if (as > ps) ow++;
       });
-      if (pw > ow) {
+      if (pw === ow) {
+        showOtziLine("A tie? How exciting\u2026", function () {
+          showEl(lucyBubbleEl);
+          queueDialogues(["Australopithecus got your tongue?"], function () { startTurn(4); });
+        });
+      } else if (pw > ow) {
         showOtziLine("Grrr\u2026", function () {
           showEl(lucyBubbleEl);
           queueDialogues(["Australopithecus got your tongue?"], function () { startTurn(4); });
@@ -1006,7 +1025,12 @@
         var ps = scoreAt('player', loc.id), as = scoreAt('opp', loc.id);
         if (ps > as) pw++; else if (as > ps) ow++;
       });
-      if (pw > ow) {
+      if (pw === ow) {
+        showOtziLine("A tie? How exciting\u2026", function () {
+          showEl(lucyBubbleEl);
+          startTurn(5);
+        });
+      } else if (pw > ow) {
         showOtziLine("I don\u2019t like where this is headed.", function () {
           showEl(lucyBubbleEl);
           startTurn(5);
@@ -1058,7 +1082,14 @@
   }
 
   function showPostGameDialogue(won) {
-    if (won === 'player') {
+    if (won === 'draw') {
+      showOtziLine("A tie? How exciting\u2026", function () {
+        showEl(lucyBubbleEl);
+        queueDialogues(["As always, history has been written by the victors."], function () {
+          showTutorialResults(won);
+        });
+      });
+    } else if (won === 'player') {
       showOtziLine("No! Not again.", function () {
         showEl(lucyBubbleEl);
         queueDialogues(["As always, history has been written by the victors."], function () {
@@ -1145,6 +1176,10 @@
       else if (outcome === 'ai')     Anim.sadResult();
     }
 
+    // Hide Play Again during tutorial results
+    var playAgainBtn = document.getElementById('result-play-again');
+    if (playAgainBtn) playAgainBtn.style.display = 'none';
+
     // After 4 seconds Lucy's full dialogue box appears with final line
     setTimeout(function () {
       TS.active     = true;
@@ -1160,6 +1195,8 @@
         hideEl(boxEl);
         TS.active = false;
         localStorage.setItem('sog_tutorial_complete', 'true');
+        // Disable click overlay so result screen buttons are clickable
+        if (clickOverlayEl) clickOverlayEl.style.pointerEvents = 'none';
       });
     }, 4000);
   }
@@ -1556,6 +1593,12 @@
           if (count === 1) s.contMod = (s.contMod || 0) + 4;
         });
       });
+
+      // William the Conqueror (15): +destroyedIPTotal (player only; AI doesn't play William)
+      TS.playerSlots[loc.id].forEach(function (s) {
+        if (s && s.revealed && s.cardId === 15 && TS.destroyedIPTotal > 0)
+          s.contMod = (s.contMod || 0) + TS.destroyedIPTotal;
+      });
     });
 
     // Refresh all revealed-slot IP displays with updated contMods
@@ -1654,28 +1697,72 @@
   function tAb_HernanCortes(owner, locId, done) {
     if (typeof SFX !== 'undefined') SFX.atOnce();
     var sl = owner === 'player' ? TS.playerSlots : TS.aiSlots;
-    var destroyed = 0;
+
+    // Collect victims with their current IP values before destruction
+    var victims = [];
     for (var i = 0; i < sl[locId].length; i++) {
       var s = sl[locId][i];
       if (!s || !s.revealed || s.cardId === 13) continue;
-      sl[locId][i] = null;
-      var deadEl = getTutSlotEl(owner, locId, i);
-      if (deadEl) { deadEl.className = 'battle-card-slot'; deadEl.innerHTML = ''; }
-      destroyed++;
+      victims.push({ idx: i, ip: tEffectiveIP(s) });
     }
-    // Give Cortes +1 IP for each card destroyed
-    for (var j = 0; j < sl[locId].length; j++) {
-      var sd = sl[locId][j];
-      if (!sd || sd.cardId !== 13) continue;
-      sd.ip += destroyed;
-      var cortesEl = getTutSlotEl(owner, locId, j);
-      if (cortesEl) {
-        var ipEl = cortesEl.querySelector('.db-overlay-ip');
-        if (ipEl) ipEl.textContent = tEffectiveIP(sd);
+    if (victims.length === 0) { done(); return; }
+
+    // Find Cortes element and slot data for the animation
+    var cortesIdx = -1;
+    for (var ci = 0; ci < sl[locId].length; ci++) {
+      if (sl[locId][ci] && sl[locId][ci].cardId === 13) { cortesIdx = ci; break; }
+    }
+    var cortesEl = cortesIdx !== -1 ? getTutSlotEl(owner, locId, cortesIdx) : null;
+
+    // Animate with GSAP if available, else instant
+    if (cortesEl && typeof gsap !== 'undefined') {
+      var RISE_Y = -14;
+      var tl = gsap.timeline({ onComplete: afterDestroy });
+      tl.to(cortesEl, { scale: 1.25, y: RISE_Y, duration: 0.25, ease: 'back.out(1.5)' });
+      victims.forEach(function (v) {
+        var el = getTutSlotEl(owner, locId, v.idx);
+        if (el) tl.to(el, { opacity: 0, scale: 0.7, duration: 0.18, ease: 'power2.in' }, '<0.05');
+      });
+      tl.to(cortesEl, { scale: 1.0, y: 0, duration: 0.22, ease: 'power2.out' });
+    } else {
+      afterDestroy();
+    }
+
+    function afterDestroy() {
+      if (cortesEl && typeof gsap !== 'undefined') gsap.set(cortesEl, { clearProps: 'scale,y' });
+      var ipGained = 0;
+      victims.forEach(function (v) {
+        // Track destroyed IP for William the Conqueror
+        if (owner === 'player') TS.destroyedIPTotal += v.ip;
+        sl[locId][v.idx] = null;
+        var deadEl = getTutSlotEl(owner, locId, v.idx);
+        if (deadEl) { deadEl.className = 'battle-card-slot'; deadEl.innerHTML = ''; }
+        ipGained++;
+      });
+      // Give Cortes +1 IP for each card destroyed
+      if (cortesIdx !== -1 && sl[locId][cortesIdx]) {
+        var cortesSd = sl[locId][cortesIdx];
+        cortesSd.ip += ipGained;
+        var cEl = getTutSlotEl(owner, locId, cortesIdx);
+        if (cEl) {
+          var ipEl = cEl.querySelector('.db-overlay-ip');
+          if (ipEl) ipEl.textContent = tEffectiveIP(cortesSd);
+        }
       }
-      break;
+      // Update William's hand display if in hand
+      if (owner === 'player') tUpdateWilliamHand();
+      done();
     }
-    done();
+  }
+
+  /* Update William's IP overlay in the player's hand (if present). */
+  function tUpdateWilliamHand() {
+    var wEl = playerHandEl ? playerHandEl.querySelector('.battle-hand-card[data-id="15"]') : null;
+    if (!wEl) return;
+    var ipEl = wEl.querySelector('.db-overlay-ip');
+    if (!ipEl) return;
+    var card = CARDS.find(function (c) { return c.id === 15; });
+    if (card) ipEl.textContent = card.ip + TS.destroyedIPTotal;
   }
 
   /* Empress Wu: push (or destroy) the highest-IP revealed Political/Military card here. */
@@ -1735,9 +1822,11 @@
 
     if (!pushed) {
       // No room elsewhere — destroy the card
+      if (bestOwn === 'player') TS.destroyedIPTotal += bestIP;
       ownerSl[locId][bestIdx] = null;
       var deadEl2 = getTutSlotEl(bestOwn, locId, bestIdx);
       if (deadEl2) { deadEl2.className = 'battle-card-slot'; deadEl2.innerHTML = ''; }
+      if (bestOwn === 'player') tUpdateWilliamHand();
     }
     done();
   }
@@ -1763,7 +1852,8 @@
     cardIds.forEach(function (id) {
       var card = CARDS.find(function (c) { return c.id === id; });
       if (!card) return;
-      var el = buildHandCard(card, 0);
+      var ipBonus = (id === 15) ? TS.destroyedIPTotal : 0;
+      var el = buildHandCard(card, ipBonus);
       // Pulsing glow only on T3 ability-discovery cards, not on cards added in later turns
       if (TS.abilityCardsToTap.indexOf(id) !== -1 && !TS.abilityCardsTapped[id]) {
         el.classList.add('tut-ability-glow');

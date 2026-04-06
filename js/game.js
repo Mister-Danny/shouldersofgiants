@@ -123,10 +123,17 @@
   }
 
   /* ── Selection timer state ──────────────────────────────────── */
-  var _timerEl         = null;
+  var _timerEl         = null;   /* kept for compat — legacy HUD box, never shown */
   var _timerValEl      = null;
+  var _timerBarWrapEl  = null;
+  var _timerBarEl      = null;
   var _timerInterval   = null;
   var _timerSecs       = 0;
+  var _timerTotal      = 0;
+
+  /* ── Undo-end-turn state ─────────────────────────────────────── */
+  var _undoEndTurnTimer    = null;
+  var _undoEndTurnCountdown = 0;
 
   /* ── DOM refs ────────────────────────────────────────────────── */
   var headerTurnEl     = document.getElementById('battle-turn-info');
@@ -239,10 +246,20 @@
   ══════════════════════════════════════════════════════════════ */
 
   function _timerRefs() {
-    if (!_timerEl) {
-      _timerEl    = document.getElementById('battle-timer');
-      _timerValEl = document.getElementById('battle-timer-val');
+    if (!_timerBarWrapEl) {
+      _timerEl       = document.getElementById('battle-timer');      /* legacy */
+      _timerValEl    = document.getElementById('battle-timer-val');  /* legacy */
+      _timerBarWrapEl = document.getElementById('battle-timer-bar-wrap');
+      _timerBarEl     = document.getElementById('battle-timer-bar');
     }
+  }
+
+  function _timerBarUpdate() {
+    if (!_timerBarEl) return;
+    var pct   = _timerTotal > 0 ? Math.max(0, _timerSecs / _timerTotal) * 100 : 0;
+    _timerBarEl.style.width = pct + '%';
+    _timerBarEl.className   = 'battle-timer-bar' +
+      (_timerSecs <= 10 ? ' urgent' : _timerSecs <= 20 ? ' warning' : '');
   }
 
   function _startSelectionTimer() {
@@ -250,21 +267,27 @@
     _timerRefs();
     _stopSelectionTimer();
 
-    _timerSecs = 60 + (G.turn - 1) * 15;
-    _timerEl.style.display = '';
-    _timerEl.className     = 'battle-timer';
-    _timerValEl.textContent = _timerSecs;
+    _timerTotal = 60 + (G.turn - 1) * 15;
+    _timerSecs  = _timerTotal;
+
+    if (_timerBarWrapEl) {
+      /* Set to 100% instantly (no transition), then let each tick drain smoothly */
+      _timerBarEl.style.transition = 'none';
+      _timerBarEl.style.width      = '100%';
+      _timerBarEl.className        = 'battle-timer-bar';
+      _timerBarWrapEl.style.display = '';
+      /* Re-enable transition on next frame so the first tick animates */
+      requestAnimationFrame(function () {
+        if (_timerBarEl) _timerBarEl.style.transition = '';
+      });
+    }
 
     _timerInterval = setInterval(function () {
       _timerSecs--;
-      if (_timerValEl) _timerValEl.textContent = _timerSecs;
-
-      _timerEl.className = 'battle-timer' +
-        (_timerSecs <= 10 ? ' urgent' : _timerSecs <= 20 ? ' warning' : '');
+      _timerBarUpdate();
 
       if (_timerSecs <= 0) {
         _stopSelectionTimer();
-        /* Auto-submit: click END TURN if still in select phase */
         if (G.phase === 'select' && !window.tutorialActive) {
           if (typeof SFX !== 'undefined') SFX.endTurn();
           onEndTurn();
@@ -279,7 +302,7 @@
       _timerInterval = null;
     }
     _timerRefs();
-    if (_timerEl) _timerEl.style.display = 'none';
+    if (_timerBarWrapEl) _timerBarWrapEl.style.display = 'none';
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -300,32 +323,16 @@
     if (!actions) actions = [];
     G.aiRevealQueue = [];
 
-    /* ── Moves: shift already-revealed cards between locations ── */
+    /* ── Moves: delegate to executeMove so face-up render, IP mods
+          (Cape +1, Magellan +1, Columbus), and slot compaction all
+          run correctly for every movement card.                    ── */
     actions.filter(function (a) { return a.type === 'move'; }).forEach(function (a) {
       var fromSlots = G.aiSlots[a.fromLocId];
       if (!fromSlots) return;
       var fromIdx = -1;
       fromSlots.forEach(function (s, i) { if (s && s.cardId === a.cardId) fromIdx = i; });
       if (fromIdx === -1) return;
-      var sd = fromSlots[fromIdx];
-      fromSlots[fromIdx] = null;
-
-      var toSlots = G.aiSlots[a.toLocId];
-      if (!toSlots) return;
-      var toIdx = toSlots.indexOf(null);
-      if (toIdx === -1) return;
-      toSlots[toIdx] = sd;
-
-      /* Sync DOM */
-      var fromEl = getSlotEl('opp', a.fromLocId, fromIdx);
-      if (fromEl) {
-        fromEl.dataset.cardId = '';
-        fromEl.className      = 'battle-card-slot';
-        fromEl.innerHTML      = '';
-        fromEl.removeAttribute('draggable');
-      }
-      var toEl = getSlotEl('opp', a.toLocId, toIdx);
-      if (toEl && sd) { toEl.dataset.cardId = String(sd.cardId); setSlotFaceDown(toEl); }
+      executeMove('opp', a.fromLocId, fromIdx, a.toLocId);
     });
 
     /* ── Plays: place new cards face-down ───────────────────── */
@@ -1126,6 +1133,39 @@
     endTurnBtn.disabled   = true;
     resetTurnBtn.disabled = true;
 
+    /* ── 4-second undo window ─────────────────────────────────── */
+    var undoBtn = document.getElementById('battle-undo-endturn');
+    if (!undoBtn) { _proceedEndTurn(); return; }
+
+    _undoEndTurnCountdown = 4;
+    undoBtn.textContent   = 'UNDO (' + _undoEndTurnCountdown + ')';
+    undoBtn.style.display = '';
+
+    _undoEndTurnTimer = setInterval(function () {
+      _undoEndTurnCountdown--;
+      if (_undoEndTurnCountdown > 0) {
+        undoBtn.textContent = 'UNDO (' + _undoEndTurnCountdown + ')';
+      } else {
+        _cancelUndoEndTurn();
+        _proceedEndTurn();
+      }
+    }, 1000);
+
+    undoBtn.onclick = function () {
+      _cancelUndoEndTurn();
+      endTurnBtn.disabled   = false;
+      resetTurnBtn.disabled = false;
+      _startSelectionTimer();   /* restart turn timer (tournament mode) */
+    };
+  }
+
+  function _cancelUndoEndTurn() {
+    if (_undoEndTurnTimer) { clearInterval(_undoEndTurnTimer); _undoEndTurnTimer = null; }
+    var undoBtn = document.getElementById('battle-undo-endturn');
+    if (undoBtn) { undoBtn.style.display = 'none'; undoBtn.onclick = null; }
+  }
+
+  function _proceedEndTurn() {
     /* ── 2P mode: blind-submit then wait for opponent ─────────── */
     if (window.matchId && typeof Match !== 'undefined') {
       _showMatchWaitOverlay(true);
@@ -1140,7 +1180,7 @@
     /* ── Normal AI path ──────────────────────────────────────── */
     runAiMovements();
     runAiSelection();
-    updateOppHand();  // reflect cards AI committed to board
+    updateOppHand();
     setTimeout(startReveal, 600);
   }
 
@@ -3235,6 +3275,7 @@
 
   function endGame() {
     _stopSelectionTimer();
+    _cancelUndoEndTurn();
     G.phase = 'over';
     refreshMoveableCards();
     var result = tallyResult();

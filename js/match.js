@@ -174,7 +174,9 @@
     var myRole  = _state.myRole;
     var oppRole = _state.oppRole;
 
-    turnRef.child(myRole + '/actions').set(actions || []).then(function () {
+    /* Wrap in {ok, actions} so Firebase never drops an empty-array turn
+       (RTDB silently converts [] to null, breaking the opponent's listener). */
+    turnRef.child(myRole).set({ ok: true, actions: actions || [] }).then(function () {
       var done    = false;
 
       var timeout = setTimeout(function () {
@@ -187,11 +189,11 @@
       function listener(snap) {
         if (done) return;
         var data = snap.val();
-        if (!data || !data[oppRole] || !data[oppRole].actions) return;
+        if (!data || !data[oppRole] || !data[oppRole].ok) return;
         done = true;
         clearTimeout(timeout);
         turnRef.off('value', listener);
-        onBothSubmitted(data[oppRole].actions);
+        onBothSubmitted(data[oppRole].actions || []);
       }
 
       turnRef.on('value', listener);
