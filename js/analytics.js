@@ -160,7 +160,8 @@
       if (count >= 3) {
         clearTimeout(timer);
         count = 0;
-        if (window.BypassAuth) window.BypassAuth.prompt();
+        if (window.BattleLobby) window.BattleLobby.prompt();
+        else if (window.BypassAuth) window.BypassAuth.prompt();
       }
     });
   }

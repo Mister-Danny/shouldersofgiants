@@ -3443,11 +3443,31 @@
         if (window.Multiplayer && typeof window.Multiplayer.recordKnockoutResult === 'function') {
           window.Multiplayer.recordKnockoutResult(outcome);
         }
-      } else {
+      } else if (window.tournamentMatch !== 'versus') {
         if (window.Multiplayer && typeof window.Multiplayer.recordGroupResult === 'function') {
           window.Multiplayer.recordGroupResult(outcome);
         }
       }
+    }
+
+    /* Versus mode: 35-second auto-return to lobby */
+    if (window.tournamentMatch === 'versus') {
+      var vsWrap = document.getElementById('vs-result-return-wrap');
+      var vsNum  = document.getElementById('vs-result-return-num');
+      if (vsWrap) vsWrap.classList.add('visible');
+      var vsLeft = 35;
+      if (vsNum) vsNum.textContent = vsLeft;
+      var vsTimer = setInterval(function () {
+        vsLeft--;
+        if (vsNum) vsNum.textContent = vsLeft;
+        if (vsLeft <= 0) {
+          clearInterval(vsTimer);
+          if (vsWrap) vsWrap.classList.remove('visible');
+          if (window.BattleLobby && typeof window.BattleLobby.returnToLobby === 'function') {
+            window.BattleLobby.returnToLobby();
+          }
+        }
+      }, 1000);
     }
   }
 

@@ -259,6 +259,159 @@
         <button class="btn-primary result-lobby-btn" id="result-return-lobby" style="display:none">&#8592; Lobby</button>
       </div>
 
+      <!-- Versus mode: auto-return countdown -->
+      <div id="vs-result-return-wrap" class="vs-result-return-wrap">
+        Returning to lobby in <span id="vs-result-return-num">35</span>s&hellip;
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       BATTLE LOBBY OVERLAYS
+  ════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Password Prompt ─────────────────────────────────────── -->
+  <div id="bl-pw-backdrop" class="bl-backdrop">
+    <div class="bl-dialog bl-pw-dialog">
+      <div class="bl-dialog-title">Battle Lobby Access</div>
+      <form id="bl-pw-form" autocomplete="off">
+        <div class="bl-field">
+          <label class="bl-label" for="bl-pw-input">Password</label>
+          <input type="password" id="bl-pw-input" class="bl-input" placeholder="Enter password">
+        </div>
+        <div class="bl-error" id="bl-pw-error"></div>
+        <div class="bl-actions">
+          <button type="submit" class="btn-snes">ENTER</button>
+          <button type="button" class="btn-snes btn-snes-close" id="bl-pw-cancel">CANCEL</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Mode Select ─────────────────────────────────────────── -->
+  <div id="bl-mode-backdrop" class="bl-backdrop">
+    <div class="bl-dialog bl-mode-dialog">
+      <div class="bl-dialog-title">Battle Lobby</div>
+      <div class="bl-mode-options">
+        <button class="btn-snes bl-mode-btn" id="bl-mode-versus">
+          <span class="bl-mode-label">&#9876; VERSUS MODE</span>
+          <span class="bl-mode-desc">Create a real-time class match session</span>
+        </button>
+        <button class="btn-snes bl-mode-btn" id="bl-mode-tournament">
+          <span class="bl-mode-label">&#127942; TOURNAMENT MODE</span>
+          <span class="bl-mode-desc">Run a group stage or knockout bracket</span>
+        </button>
+      </div>
+      <div class="bl-actions">
+        <button type="button" class="btn-snes btn-snes-close" id="bl-mode-cancel">CANCEL</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tournament Menu ─────────────────────────────────────── -->
+  <div id="bl-tournament-backdrop" class="bl-backdrop">
+    <div class="bl-dialog">
+      <div class="bl-dialog-title">Tournament Mode</div>
+      <div class="bl-tournament-options">
+        <button class="btn-snes bl-tourn-btn" id="bl-tourn-new">START NEW TOURNAMENT</button>
+        <div class="bl-load-row">
+          <input type="text" id="bl-load-code-input" class="bl-input" placeholder="Enter saved code&hellip;" maxlength="12">
+          <button class="btn-snes" id="bl-tourn-load-btn">LOAD SAVED</button>
+        </div>
+      </div>
+      <div class="bl-error" id="bl-tournament-error"></div>
+      <div class="bl-actions">
+        <button type="button" class="btn-snes btn-snes-close" id="bl-tourn-cancel">BACK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Teacher Versus Lobby ────────────────────────────────── -->
+  <div id="vt-backdrop" class="bl-backdrop vt-backdrop">
+    <div class="vt-dialog">
+      <div class="vt-header">
+        <span class="vt-title">VERSUS LOBBY</span>
+        <span class="vt-code-wrap">Code:&ensp;<strong id="vt-code-display">&mdash;</strong></span>
+        <span id="vt-student-count" class="vt-student-count">0 students connected</span>
+        <button class="btn-snes btn-snes-close vt-close-hdr" id="vt-close-btn">CLOSE</button>
+      </div>
+
+      <div class="vt-panels">
+        <!-- Left: Waiting Room -->
+        <div class="vt-panel">
+          <div class="vt-panel-title">WAITING ROOM</div>
+          <div id="vt-waiting-list" class="vt-list"></div>
+        </div>
+        <!-- Right: Matchups -->
+        <div class="vt-panel">
+          <div class="vt-panel-title">MATCHUPS</div>
+          <div id="vt-matchups-list" class="vt-list"></div>
+        </div>
+      </div>
+
+      <div class="vt-controls">
+        <button class="btn-snes" id="vt-randomize-btn">RANDOMIZE</button>
+        <button class="btn-snes" id="vt-addbot-btn">ADD BOT</button>
+        <button class="btn-snes vt-ready-btn" id="vt-ready-btn" disabled>READY</button>
+      </div>
+
+      <!-- Countdown shown after READY pressed -->
+      <div id="vt-countdown-wrap" class="vt-countdown-wrap">
+        <div class="vt-countdown-label">Match starting in</div>
+        <div class="vt-countdown-num" id="vt-countdown-num">30</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Teacher: Session Active ─────────────────────────────── -->
+  <div id="vt-active-overlay" class="bl-backdrop">
+    <div class="bl-dialog">
+      <div class="bl-dialog-title">Session Active</div>
+      <div class="bl-body-text">Students are currently playing.<br>Wait for matches to finish before starting a new round.</div>
+      <div class="bl-actions">
+        <button class="btn-snes btn-snes-close" id="vt-active-close">DISMISS</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Student: Join Overlay ──────────────────────────────── -->
+  <div id="vs-join-backdrop" class="bl-backdrop">
+    <div class="bl-dialog">
+      <div class="bl-dialog-title">Versus Mode</div>
+      <form id="vs-join-form" autocomplete="off">
+        <div class="bl-field">
+          <label class="bl-label" for="vs-code-input">Lobby Code</label>
+          <input type="text" id="vs-code-input" class="bl-input bl-input-mono" maxlength="5" placeholder="12345">
+        </div>
+        <div class="bl-field">
+          <label class="bl-label" for="vs-id-input">Your 3-Letter ID</label>
+          <input type="text" id="vs-id-input" class="bl-input bl-input-mono" maxlength="3" placeholder="ABC">
+        </div>
+        <div class="bl-error" id="vs-join-error"></div>
+        <div class="bl-actions">
+          <button type="submit" class="btn-snes">JOIN LOBBY</button>
+          <button type="button" class="btn-snes btn-snes-close" id="vs-join-cancel">CANCEL</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Student: Waiting overlay ───────────────────────────── -->
+  <div id="vs-wait-backdrop" class="bl-fullscreen-overlay">
+    <div class="bl-fullscreen-box">
+      <div class="bl-fullscreen-title">Deck Locked In!</div>
+      <div class="bl-fullscreen-body">Waiting for your teacher to start&hellip;</div>
+      <div class="bl-wait-spinner"></div>
+    </div>
+  </div>
+
+  <!-- ── Student: Countdown overlay ────────────────────────── -->
+  <div id="vs-countdown-overlay" class="bl-fullscreen-overlay">
+    <div class="bl-fullscreen-box">
+      <div class="bl-fullscreen-title">Match Starting!</div>
+      <div class="bl-countdown-label">Get ready in</div>
+      <div class="bl-countdown-num" id="vs-countdown-num">30</div>
     </div>
   </div>
 
@@ -904,6 +1057,7 @@
   <script src="js/analytics.js"></script>
   <script src="js/multiplayer.js"></script>
   <script src="js/match.js"></script>
+  <script src="js/battlelobby.js"></script>
 
   <!-- ── Data files ─────────────────────────────────────────────── -->
   <script src="js/cards.js"></script>

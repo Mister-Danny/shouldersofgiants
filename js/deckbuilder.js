@@ -226,7 +226,9 @@
     counterEl.textContent = count + ' / ' + DECK_SIZE;
     counterEl.classList.toggle('complete', count === DECK_SIZE);
     saveBtn.disabled    = count !== DECK_SIZE;
-    saveBtn.textContent = window.multiplayerMode ? 'Enter Lobby' : "Let's Play";
+    saveBtn.textContent = window.versusStudentMode ? 'Lock In Deck'
+                        : window.multiplayerMode    ? 'Enter Lobby'
+                        : "Let's Play";
   }
 
   function flashCounter() {
@@ -300,6 +302,15 @@
 
   function openDifficultyModal() {
     if (selectedIds.size !== DECK_SIZE) return;
+    if (window.versusStudentMode) {
+      var ids = Array.from(selectedIds);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+      stopDeckMusic();
+      if (window.BattleLobby && typeof window.BattleLobby.onLockInDeck === 'function') {
+        window.BattleLobby.onLockInDeck(ids);
+      }
+      return;
+    }
     if (window.multiplayerMode) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(selectedIds)));
       stopDeckMusic();
@@ -358,8 +369,12 @@
 
   /* ── Home screen buttons ─────────────────────────────────────── */
 
-  // "Versus Mode" — always goes straight to deck builder in multiplayer mode
+  // "Versus Mode" — routes to BattleLobby student join if available
   document.getElementById('btn-versus').addEventListener('click', function () {
+    if (window.BattleLobby && typeof window.BattleLobby.showStudentJoin === 'function') {
+      window.BattleLobby.showStudentJoin();
+      return;
+    }
     window.multiplayerMode = true;
     showScreen('screen-deckbuilder');
     initDeckBuilder();
