@@ -1053,6 +1053,18 @@
     <div id="bypass-toast" class="bypass-toast"></div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════════
+       UNLOCK CUTSCENE — plays once when Religious or Exploration
+       cards are unlocked. Managed entirely by unlock.js + GSAP.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="unlock-cutscene" style="display:none">
+    <div id="unlock-curtain"></div>
+    <div id="unlock-stage">
+      <div id="unlock-text"></div>
+      <div id="unlock-cards"></div>
+    </div>
+  </div>
+
   <!-- ── Analytics (Firebase must be loaded above in <head>) ───── -->
   <script src="js/analytics.js"></script>
   <script src="js/multiplayer.js"></script>
@@ -1064,6 +1076,7 @@
   <script src="js/locations.js"></script>
 
   <!-- ── Feature modules (load order matters) ──────────────────── -->
+  <script src="js/unlock.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/animations.js"></script>
   <script src="js/deckbuilder.js"></script>
