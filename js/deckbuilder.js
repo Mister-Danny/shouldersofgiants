@@ -28,7 +28,10 @@
 
   /* ── State ───────────────────────────────────────────────────── */
   const _stored   = localStorage.getItem(STORAGE_KEY);
-  let selectedIds = _stored ? new Set(JSON.parse(_stored)) : new Set();
+  let selectedIds = _stored ? new Set(JSON.parse(_stored).filter(function (id) {
+    var card = CARDS.find(function (c) { return c.id === id; });
+    return card && (typeof Unlock === 'undefined' || Unlock.isTypeUnlocked(card.type));
+  })) : new Set();
   let popupCardId = null; // ID of card currently shown in popup
 
   /* ── DOM refs ────────────────────────────────────────────────── */
@@ -88,9 +91,12 @@
    * Double click → toggleCard + flashCard
    */
   function buildCardEl(card) {
+    var isLocked = typeof Unlock !== 'undefined' && !Unlock.isTypeUnlocked(card.type);
+
     var el = document.createElement('div');
     el.className = 'db-card type-' + card.type.toLowerCase() +
-                   (selectedIds.has(card.id) ? ' selected' : '');
+                   (selectedIds.has(card.id) ? ' selected' : '') +
+                   (isLocked ? ' locked' : '');
     el.dataset.id = card.id;
 
     // ── Full-bleed image ──
@@ -133,6 +139,19 @@
     el.appendChild(ipEl);
     el.appendChild(badge);
 
+    // ── Lock overlay for locked cards ──
+    if (isLocked) {
+      var lockIcon = document.createElement('div');
+      lockIcon.className = 'db-card-lock-icon';
+      lockIcon.innerHTML = '&#x1F512;';
+      el.appendChild(lockIcon);
+
+      var lockMsg = document.createElement('div');
+      lockMsg.className = 'db-card-lock-msg';
+      lockMsg.textContent = Unlock.getUnlockHint(card.type);
+      el.appendChild(lockMsg);
+    }
+
     // ── Click handler — distinguishes single vs double click ─────
     //
     // Using native click + manual timer instead of the click/dblclick
@@ -151,6 +170,12 @@
     var DBLCLICK_MS = 350;
 
     el.addEventListener('click', function () {
+      if (isLocked) {
+        // Locked cards: single click opens grayscale popup, no double-click
+        openPopup(card, true);
+        return;
+      }
+
       if (clickTimer) {
         // ── Second click arrived within the window → double-click ──
         clearTimeout(clickTimer);
@@ -184,6 +209,10 @@
    * Returns false (and does nothing) when trying to add beyond DECK_SIZE.
    */
   function toggleCard(id) {
+    // Block locked card types
+    var card = CARDS.find(function (c) { return c.id === id; });
+    if (card && typeof Unlock !== 'undefined' && !Unlock.isTypeUnlocked(card.type)) return false;
+
     if (selectedIds.has(id)) {
       selectedIds.delete(id);
       setCardSelected(id, false);
@@ -245,7 +274,7 @@
    * Shows the SNES dialogue box with the card's ability name + text.
    * No selection buttons — this is a read-only reference view.
    */
-  function openPopup(card) {
+  function openPopup(card, grayscale) {
     popupCardId = card.id;
 
     popupNameEl.textContent = card.name;
@@ -261,11 +290,12 @@
       popupAbilTextEl.className     = 'popup-ability-text vanilla';
     }
 
+    backdropEl.classList.toggle('grayscale', !!grayscale);
     backdropEl.classList.add('visible');
   }
 
   function closePopup() {
-    backdropEl.classList.remove('visible');
+    backdropEl.classList.remove('visible', 'grayscale');
     popupCardId = null;
   }
 

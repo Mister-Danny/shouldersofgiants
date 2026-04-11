@@ -3282,6 +3282,14 @@
     refreshMoveableCards();
     var result = tallyResult();
     if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);
+
+    // Track wins for card unlock progression (single-player only)
+    if (result.outcome === 'player' && !window.matchId && typeof Unlock !== 'undefined') {
+      var unlockResult = Unlock.incrementWins(window.aiDifficulty || 'easy');
+      if (unlockResult.newUnlock) {
+        window._pendingUnlock = unlockResult.newUnlock;
+      }
+    }
     showResult(result);
 
     /* 2P mode: P1 writes match result; both players clear Match state */
@@ -3621,6 +3629,18 @@
 
   document.getElementById('result-home').addEventListener('click', function () {
     stopBgMusic();
+
+    // Check for pending unlock cutscene
+    if (window._pendingUnlock && typeof Unlock !== 'undefined' &&
+        !Unlock.isCutsceneSeen(window._pendingUnlock)) {
+      var unlockType = window._pendingUnlock;
+      window._pendingUnlock = null;
+      Unlock.playCutscene(unlockType, function () {
+        showScreen('screen-home');
+      });
+      return;
+    }
+    window._pendingUnlock = null;
     showScreen('screen-home');
   });
 
