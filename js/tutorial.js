@@ -15,19 +15,17 @@
   /* ── Fixed tutorial locations ─────────────────────────────────
      Left = Timbuktu          (id 5)
      Mid  = Great Rift Valley (id 2)
-     Right= Scandinavia       (id 1)                           */
-  var LOC_TIMB = LOCATIONS.find(function (l) { return l.id === 5; }); // Timbuktu   — left
-  var LOC_RIFT = LOCATIONS.find(function (l) { return l.id === 2; }); // Great Rift — center
-  var LOC_SCAN = LOCATIONS.find(function (l) { return l.id === 1; }); // Scandinavia — right
-  var T_LOCS   = [LOC_TIMB, LOC_RIFT, LOC_SCAN];
+     Right= The Sahara         (id 6)                           */
+  var LOC_TIMB   = LOCATIONS.find(function (l) { return l.id === 5; }); // Timbuktu   — left
+  var LOC_RIFT   = LOCATIONS.find(function (l) { return l.id === 2; }); // Great Rift — center
+  var LOC_SAHARA = LOCATIONS.find(function (l) { return l.id === 6; }); // The Sahara — right
+  var T_LOCS     = [LOC_TIMB, LOC_RIFT, LOC_SAHARA];
 
   /* ── Scripted draws ───────────────────────────────────────────
      Turn 1 opening hand; Turn 2 additions                       */
   var PLAYER_T1_HAND = [1, 12, 3, 19, 25]; // Citizens, Samurai, Justinian, Cosimo, Columbus
-  var PLAYER_T2_ADD  = [4, 2];              // Empress Wu, Scholar-Officials
-  var PLAYER_T3_ADD  = [6, 24];             // Priests, Magellan
-  var PLAYER_T4_ADD  = [13, 18];            // Hernan Cortes, Juvenal
-  var PLAYER_T5_ADD  = [15, 20];            // William the Conqueror, Voltaire
+  // Ordered draw queue for tutorial (draw-what-you-played, max 7 hand size)
+  var TUT_DRAW_QUEUE = [4, 2, 24, 6, 13, 18, 15, 20]; // Empress Wu, Scholar-Officials, Magellan, Priests, Cortes, Juvenal, William, Voltaire
 
   /* ── Tutorial state ─────────────────────────────────────────── */
   var TS = {
@@ -54,8 +52,11 @@
     abilityCardsToTap:  [],
     abilityCardsTapped: {},
     needMagellanMove:      false,
+    pendingMove:           null,
+    playerActionLog:       [],   // ordered list of {type:'play',cardId,locId} and {type:'move',cardId,...}
     bonusCapitalNextTurn:  0,
-    destroyedIPTotal:      0    // IP accumulated by William the Conqueror
+    destroyedIPTotal:      0,   // IP accumulated by William the Conqueror
+    tutTotalDrawn:         0    // total cards drawn from deck (for deck pile display)
   };
 
   /* ── DOM refs (assigned in init) ─────────────────────────────── */
@@ -543,6 +544,9 @@
     TS.bonusCapitalNextTurn  = 0;
     TS.destroyedIPTotal      = 0;
     TS.playerFirst           = Math.random() < 0.5;
+    TS.tutDrawQueueIdx       = 0;
+    TS.cardsPlayedThisTurn   = 0;
+    TS.tutTotalDrawn         = 0;
 
     showEl(skipEl);
     setupBattle();
@@ -588,7 +592,11 @@
     boxEl.addEventListener('click', function () { advanceDialogue(); });
     document.addEventListener('keydown', function (e) {
       if (!TS.active) return;
-      if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); advanceDialogue(); }
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        if (otziBoxEl && otziBoxEl.style.display !== 'none') { advanceOtzi(); }
+        else { advanceDialogue(); }
+      }
     });
 
     // Tutorial End Turn button
@@ -644,11 +652,11 @@
     resetBtn.style.display = 'none';
     document.getElementById('btn-back-results').style.display = 'none';
 
-    // Turn 1: only Rift Valley visible; Timbuktu and Scandinavia hidden
-    var timbCol = boardEl.querySelector('.battle-col[data-loc-id="5"]');
-    var scanCol = boardEl.querySelector('.battle-col[data-loc-id="1"]');
-    if (timbCol) { timbCol.style.opacity = '0'; timbCol.style.pointerEvents = 'none'; }
-    if (scanCol) { scanCol.style.opacity = '0'; scanCol.style.pointerEvents = 'none'; }
+    // Turn 1: only Rift Valley visible; Timbuktu and Sahara hidden
+    var timbCol   = boardEl.querySelector('.battle-col[data-loc-id="5"]');
+    var saharaCol = boardEl.querySelector('.battle-col[data-loc-id="6"]');
+    if (timbCol)   { timbCol.style.opacity = '0';   timbCol.style.pointerEvents = 'none'; }
+    if (saharaCol) { saharaCol.style.opacity = '0'; saharaCol.style.pointerEvents = 'none'; }
 
     // Hide all location ability text
     boardEl.querySelectorAll('.battle-loc-ability').forEach(function (el) {
@@ -792,6 +800,33 @@
     TS.capital     = 5 + (TS.bonusCapitalNextTurn || 0);
     TS.bonusCapitalNextTurn = 0;
     TS.playerFirst = !TS.playerFirst;   // alternate from previous turn
+
+    // Draw-what-you-played: draw as many cards as were played last turn
+    if (n > 1) {
+      var played  = TS.cardsPlayedThisTurn;
+      var canDraw = Math.max(0, 7 - TS.playerHand.length);
+      var count   = Math.min(played, canDraw);
+      for (var i = 0; i < count && TS.tutDrawQueueIdx < TUT_DRAW_QUEUE.length; i++) {
+        var drawId = TUT_DRAW_QUEUE[TS.tutDrawQueueIdx++];
+        if (TS.playerHand.indexOf(drawId) === -1) TS.playerHand.push(drawId);
+        TS.tutTotalDrawn++;
+      }
+      // Safety: Magellan (24) must be in hand by T3 for the tutorial's scripted steps
+      if (n === 3 && TS.playerHand.indexOf(24) === -1) {
+        while (TS.tutDrawQueueIdx < TUT_DRAW_QUEUE.length && TUT_DRAW_QUEUE[TS.tutDrawQueueIdx] !== 24) {
+          TS.tutDrawQueueIdx++;
+        }
+        if (TS.tutDrawQueueIdx < TUT_DRAW_QUEUE.length) {
+          TS.playerHand.push(24);
+          TS.tutDrawQueueIdx++;
+          TS.tutTotalDrawn++;
+        }
+      }
+    }
+    TS.cardsPlayedThisTurn = 0;
+    TS.pendingMove           = null;
+    TS.playerActionLog       = [];
+
     if (n === 2) { startTurn2(); return; }
     if (n === 3) { startTurn3(); return; }
     if (n === 4) { startTurn4(); return; }
@@ -835,11 +870,8 @@
   /* ── Turn 2 ──────────────────────────────────────────────────── */
 
   function startTurn2() {
-    PLAYER_T2_ADD.forEach(function (id) {
-      if (TS.playerHand.indexOf(id) === -1) TS.playerHand.push(id);
-    });
     renderHand(TS.playerHand);
-    setHeader(2, 'SELECT CARDS', 5);
+    setHeader(2, 'SELECT CARDS', TS.capital);
     // Lucy is visible from onT1EndTurn callback
     queueDialogues([
       "The world is a big place.",
@@ -862,7 +894,7 @@
       if (pw === ow) {
         showOtziLine("A tie? How exciting\u2026", function () {
           showEl(lucyBubbleEl);
-          queueDialogues(["And it bends to me."], function () { startTurn(3); });
+          startTurn(3);
         });
       } else if (pw > ow) {
         showOtziLine("History has a long arc.", function () {
@@ -882,9 +914,6 @@
 
   function startTurn3() {
     TS.abilitiesActive = true;
-    PLAYER_T3_ADD.forEach(function (id) {
-      if (TS.playerHand.indexOf(id) === -1) TS.playerHand.push(id);
-    });
     // Build ability tap list before renderHand so glow class is applied correctly
     TS.abilityCardsToTap = TS.playerHand.filter(function (id) {
       var card = CARDS.find(function (c) { return c.id === id; });
@@ -892,7 +921,7 @@
     });
     TS.abilityCardsTapped = {};
     renderHand(TS.playerHand);
-    setHeader(3, 'SELECT CARDS', 5);
+    setHeader(3, 'SELECT CARDS', TS.capital);
 
     if (typeof SFX !== 'undefined' && typeof SFX.atOnce === 'function') SFX.atOnce();
 
@@ -907,6 +936,18 @@
         updateHint();
       });
     });
+  }
+
+  function waitForPopupClose(cb) {
+    var popupEl = document.getElementById('battle-popup-backdrop');
+    if (!popupEl || !popupEl.classList.contains('visible')) { cb(); return; }
+    var observer = new MutationObserver(function () {
+      if (!popupEl.classList.contains('visible')) {
+        observer.disconnect();
+        cb();
+      }
+    });
+    observer.observe(popupEl, { attributes: true, attributeFilter: ['class'] });
   }
 
   function checkAllAbilitiesClicked() {
@@ -937,7 +978,7 @@
       if (pw === ow) {
         showOtziLine("A tie? How exciting\u2026", function () {
           showEl(lucyBubbleEl);
-          queueDialogues(["Australopithecus got your tongue?"], function () { startTurn(4); });
+          startTurn(4);
         });
       } else if (pw > ow) {
         showOtziLine("Grrr\u2026", function () {
@@ -956,11 +997,8 @@
   /* ── Turn 4 — location abilities + Magellan move ─────────────── */
 
   function startTurn4() {
-    PLAYER_T4_ADD.forEach(function (id) {
-      if (TS.playerHand.indexOf(id) === -1) TS.playerHand.push(id);
-    });
     renderHand(TS.playerHand);
-    setHeader(4, 'SELECT CARDS', 5);
+    setHeader(4, 'SELECT CARDS', TS.capital);
 
     if (typeof SFX !== 'undefined' && typeof SFX.atOnce === 'function') SFX.atOnce();
 
@@ -1047,11 +1085,8 @@
   /* ── Turn 5 — final turn ─────────────────────────────────────── */
 
   function startTurn5() {
-    PLAYER_T5_ADD.forEach(function (id) {
-      if (TS.playerHand.indexOf(id) === -1) TS.playerHand.push(id);
-    });
     renderHand(TS.playerHand);
-    setHeader(5, 'SELECT CARDS', 5);
+    setHeader(5, 'SELECT CARDS', TS.capital);
     // Lucy is visible from onT4EndTurn callback
     queueDialogues([
       "I\u2019m all out of surprises.",
@@ -1273,10 +1308,10 @@
   function placeAICards(turn) {
     var plays = [];
     if (turn === 1) plays = [{ l: 2, c: 21 }, { l: 2, c: 14 }]; // Nomad+JoA → Rift
-    if (turn === 2) plays = [{ l: 1, c: 10 }];                   // Jesus Christ → Scandinavia
+    if (turn === 2) plays = [{ l: 6, c: 10 }];                   // Jesus Christ → Sahara
     if (turn === 3) plays = [{ l: 5, c: 18 }, { l: 5, c: 2  }]; // Juvenal+Scholar-Officials → Timbuktu
     if (turn === 4) plays = [{ l: 2, c: 3  }, { l: 5, c: 23 }]; // Justinian→Rift, ZhengHe→Timbuktu
-    if (turn === 5) plays = [{ l: 1, c: 4  }, { l: 5, c: 11 }]; // EmpressWu→Scandinavia, Knight→Timbuktu
+    if (turn === 5) plays = [{ l: 6, c: 4  }, { l: 5, c: 11 }]; // EmpressWu→Sahara, Knight→Timbuktu
     plays.forEach(function (item) {
       var slots = TS.aiSlots[item.l]; if (!slots) return;
       var si = slots.indexOf(null); if (si === -1) return;
@@ -1290,23 +1325,23 @@
   /* ── Location reveal (T1 → T2 transition) ───────────────────── */
 
   function revealNewLocations(onDone) {
-    var timbCol = boardEl.querySelector('.battle-col[data-loc-id="5"]');
-    var scanCol = boardEl.querySelector('.battle-col[data-loc-id="1"]');
+    var timbCol   = boardEl.querySelector('.battle-col[data-loc-id="5"]');
+    var saharaCol = boardEl.querySelector('.battle-col[data-loc-id="6"]');
 
     if (typeof gsap !== 'undefined') {
       if (timbCol) gsap.fromTo(timbCol, { x: -300, opacity: 0 }, {
         x: 0, opacity: 1, duration: 0.7, ease: 'power3.out',
         onStart: function () { timbCol.style.pointerEvents = ''; }
       });
-      if (scanCol) gsap.fromTo(scanCol, { x: 300, opacity: 0 }, {
+      if (saharaCol) gsap.fromTo(saharaCol, { x: 300, opacity: 0 }, {
         x: 0, opacity: 1, duration: 0.7, ease: 'power3.out',
-        onStart: function () { scanCol.style.pointerEvents = ''; },
+        onStart: function () { saharaCol.style.pointerEvents = ''; },
         onComplete: onDone
       });
-      if (!scanCol && onDone) setTimeout(onDone, 700);
+      if (!saharaCol && onDone) setTimeout(onDone, 700);
     } else {
-      if (timbCol) { timbCol.style.opacity = ''; timbCol.style.pointerEvents = ''; }
-      if (scanCol) { scanCol.style.opacity = ''; scanCol.style.pointerEvents = ''; }
+      if (timbCol)   { timbCol.style.opacity = '';   timbCol.style.pointerEvents = ''; }
+      if (saharaCol) { saharaCol.style.opacity = ''; saharaCol.style.pointerEvents = ''; }
       if (onDone) onDone();
     }
   }
@@ -1315,17 +1350,35 @@
      CARD PLACEMENT
   ═══════════════════════════════════════════════════════════════ */
 
+  /* Tutorial-aware effective cost (Henry + Levant discounts). */
+  function tEffectiveCost(card, locId) {
+    var cost = card.cc;
+    var loc = T_LOCS.find(function (l) { return l.id === locId; });
+    if (loc && loc.abilityKey === 'RELIGIOUS_DISCOUNT' && card.type === 'Religious')
+      cost = Math.max(0, cost - 1);
+    if (card.type === 'Exploration' && TS.abilitiesActive) {
+      var henryOnBoard = T_LOCS.some(function (l) {
+        return TS.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 22; });
+      });
+      if (henryOnBoard) cost = Math.max(0, cost - 1);
+    }
+    return cost;
+  }
+
   function playCard(cardId, locId) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return false;
     var slots = TS.playerSlots[locId];
     if (!slots) return false;
     var si = slots.indexOf(null);
-    if (si === -1 || card.cc > TS.capital) return false;
+    var cost = tEffectiveCost(card, locId);
+    if (si === -1 || cost > TS.capital) return false;
 
     slots[si] = { cardId: cardId, ip: card.ip, revealed: false, contMod: 0 };
-    TS.capital -= card.cc;
+    TS.capital -= cost;
     TS.playerHand = TS.playerHand.filter(function (id) { return id !== cardId; });
+    TS.cardsPlayedThisTurn++;
+    TS.playerActionLog.push({ type: 'play', cardId: cardId, locId: locId });
 
     var slotEl = getTutSlotEl('player', locId, si);
     if (slotEl) {
@@ -1373,6 +1426,46 @@
   }
 
   /* Move a player board card to a new location (Magellan gains +1 IP per move) */
+  /* Compact slots so all cards shift down to fill any null gaps */
+  function compactTutSlotsAt(owner, locId) {
+    var sl = owner === 'player' ? TS.playerSlots : TS.aiSlots;
+    var slots = sl[locId];
+    // Build a packed array of non-null entries
+    var packed = slots.filter(function (s) { return s !== null; });
+    while (packed.length < slots.length) packed.push(null);
+    for (var i = 0; i < slots.length; i++) {
+      slots[i] = packed[i];
+      var slotEl = getTutSlotEl(owner, locId, i);
+      if (!slotEl) continue;
+      if (!packed[i]) {
+        slotEl.className = 'battle-card-slot';
+        slotEl.innerHTML = '';
+        slotEl.removeAttribute('draggable');
+        delete slotEl.dataset.cardId;
+      } else if (!packed[i].revealed) {
+        // Unrevealed card — show as face-down (no content visible)
+        slotEl.dataset.cardId = packed[i].cardId;
+        slotEl.className = 'battle-card-slot occupied face-down';
+        slotEl.innerHTML = '';
+      } else {
+        var card = CARDS.find(function (c) { return c.id === packed[i].cardId; });
+        if (!card) continue;
+        slotEl.dataset.cardId = card.id;
+        slotEl.className = 'battle-card-slot occupied face-up';
+        slotEl.innerHTML = '';
+        var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
+        var ph2  = document.createElement('div'); ph2.className = 'db-card-img-placeholder'; ph2.textContent = card.name.charAt(0);
+        var img2 = document.createElement('img'); img2.className = 'db-card-img';
+        img2.src = 'images/cards/' + card.name + '.jpg';
+        img2.onerror = function () { this.style.display = 'none'; };
+        wrap.appendChild(ph2); wrap.appendChild(img2);
+        var cc2 = document.createElement('div'); cc2.className = 'db-overlay-cc'; cc2.textContent = card.cc;
+        var ip2 = document.createElement('div'); ip2.className = 'db-overlay-ip'; ip2.textContent = tEffectiveIP(packed[i]);
+        slotEl.appendChild(wrap); slotEl.appendChild(cc2); slotEl.appendChild(ip2);
+      }
+    }
+  }
+
   function moveBoardCard(fromLocId, fromSi, toLocId) {
     var fromSlots = TS.playerSlots[fromLocId];
     var toSlots   = TS.playerSlots[toLocId];
@@ -1382,22 +1475,31 @@
     var toSi = toSlots.indexOf(null);
     if (toSi === -1) return false;
 
-    sd.ip += 1;
+    // Queue the move — don't apply IP bonus yet; that happens during reveal
+    TS.pendingMove = {
+      cardId: sd.cardId, sd: sd,
+      fromLocId: fromLocId, fromSi: fromSi,
+      toLocId: toLocId
+    };
+    TS.playerActionLog.push({ type: 'move', cardId: sd.cardId, fromLocId: fromLocId, fromSi: fromSi, toLocId: toLocId });
+
+    // Visually move the card to the destination during selection
     toSlots[toSi]     = sd;
     fromSlots[fromSi] = null;
 
-    // Vacate old slot
+    // Compact source location so remaining cards slide up
+    compactTutSlotsAt('player', fromLocId);
+
+    // Clear drag attributes from the old slot (now compacted)
     var fromEl = getTutSlotEl('player', fromLocId, fromSi);
     if (fromEl) {
-      fromEl.className = 'battle-card-slot';
-      fromEl.innerHTML = '';
       fromEl.removeAttribute('draggable');
       fromEl.classList.remove('tut-moveable');
       delete fromEl.dataset.boardDragLocId;
       delete fromEl.dataset.boardDragSi;
     }
 
-    // Build new face-up slot
+    // Build new face-up slot at destination (visual preview)
     var toEl = getTutSlotEl('player', toLocId, toSi);
     if (toEl) {
       var card = CARDS.find(function (c) { return c.id === sd.cardId; });
@@ -1426,26 +1528,199 @@
     return true;
   }
 
+  /* Snap a pending board move back to origin (called at reveal start).
+     Only touches the two affected slots — leaves other cards untouched
+     so unrevealed cards keep their face-up unplayed state for the
+     flip-to-face-down animation that follows. */
+  function tutSnapBack() {
+    var mv = TS.pendingMove;
+    if (!mv) return;
+
+    // Find the card at its current (destination) slot
+    var destSlots = TS.playerSlots[mv.toLocId];
+    var destIdx = -1;
+    for (var i = 0; i < destSlots.length; i++) {
+      if (destSlots[i] && destSlots[i].cardId === mv.cardId) { destIdx = i; break; }
+    }
+    if (destIdx === -1) { TS.pendingMove = null; return; }
+
+    // Move it back to origin in state
+    var origSlots = TS.playerSlots[mv.fromLocId];
+    var origSi = origSlots.indexOf(null);
+    if (origSi === -1) origSi = mv.fromSi; // fallback
+    origSlots[origSi] = mv.sd;
+    destSlots[destIdx] = null;
+
+    // Clear the destination slot DOM (where Magellan was previewed)
+    var destEl = getTutSlotEl('player', mv.toLocId, destIdx);
+    if (destEl) {
+      destEl.className = 'battle-card-slot';
+      destEl.innerHTML = '';
+      delete destEl.dataset.cardId;
+    }
+
+    // Rebuild Magellan at his origin slot
+    var origEl = getTutSlotEl('player', mv.fromLocId, origSi);
+    if (origEl) {
+      var card = CARDS.find(function (c) { return c.id === mv.cardId; });
+      origEl.dataset.cardId = mv.cardId;
+      origEl.className = 'battle-card-slot occupied face-up';
+      origEl.innerHTML = '';
+      if (card) {
+        var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
+        var ph = document.createElement('div'); ph.className = 'db-card-img-placeholder'; ph.textContent = card.name.charAt(0);
+        var img = document.createElement('img'); img.className = 'db-card-img';
+        img.src = 'images/cards/' + card.name + '.jpg';
+        img.onerror = function () { this.style.display = 'none'; };
+        wrap.appendChild(ph); wrap.appendChild(img);
+        var ccEl = document.createElement('div'); ccEl.className = 'db-overlay-cc'; ccEl.textContent = card.cc;
+        var ipEl = document.createElement('div'); ipEl.className = 'db-overlay-ip'; ipEl.textContent = mv.sd.ip;
+        origEl.appendChild(wrap); origEl.appendChild(ccEl); origEl.appendChild(ipEl);
+      }
+    }
+  }
+
+  /* Execute the pending move with animation + SFX during reveal. */
+  function tutExecutePendingMove(done) {
+    var mv = TS.pendingMove;
+    TS.pendingMove = null;
+    if (!mv) { done(); return; }
+
+    // Find card at origin (where snapBack placed it)
+    var origSlots = TS.playerSlots[mv.fromLocId];
+    var fromSi = -1;
+    for (var i = 0; i < origSlots.length; i++) {
+      if (origSlots[i] && origSlots[i].cardId === mv.cardId) { fromSi = i; break; }
+    }
+    if (fromSi === -1) { done(); return; }
+    var sd = origSlots[fromSi];
+
+    // Find destination slot
+    var destSlots = TS.playerSlots[mv.toLocId];
+    var toSi = destSlots.indexOf(null);
+    if (toSi === -1) { done(); return; }
+
+    var card = CARDS.find(function (c) { return c.id === mv.cardId; });
+    var fromEl = getTutSlotEl('player', mv.fromLocId, fromSi);
+    var toEl   = getTutSlotEl('player', mv.toLocId, toSi);
+
+    // Play sailing SFX
+    if (typeof SFX !== 'undefined') SFX.sailingSound();
+
+    // Animate slide from origin to destination
+    if (fromEl && toEl && typeof gsap !== 'undefined') {
+      var fromRect = fromEl.getBoundingClientRect();
+      var toRect   = toEl.getBoundingClientRect();
+      var dx = toRect.left - fromRect.left;
+      var dy = toRect.top  - fromRect.top;
+
+      gsap.to(fromEl, {
+        x: dx, y: dy, duration: 0.45, ease: 'power2.inOut',
+        onComplete: function () {
+          gsap.set(fromEl, { clearProps: 'x,y' });
+          // Apply the actual move in state
+          sd.ip += 1;
+          destSlots[toSi] = sd;
+          origSlots[fromSi] = null;
+
+          // Clear the origin slot (where Magellan was)
+          fromEl.className = 'battle-card-slot';
+          fromEl.innerHTML = '';
+          delete fromEl.dataset.cardId;
+
+          // Build Magellan at destination
+          var destCardEl = getTutSlotEl('player', mv.toLocId, toSi);
+          if (destCardEl && card) {
+            destCardEl.dataset.cardId = mv.cardId;
+            destCardEl.className = 'battle-card-slot occupied face-up';
+            destCardEl.innerHTML = '';
+            var _w = document.createElement('div'); _w.className = 'db-card-img-wrap';
+            var _p = document.createElement('div'); _p.className = 'db-card-img-placeholder'; _p.textContent = card.name.charAt(0);
+            var _i = document.createElement('img'); _i.className = 'db-card-img';
+            _i.src = 'images/cards/' + card.name + '.jpg'; _i.onerror = function () { this.style.display = 'none'; };
+            _w.appendChild(_p); _w.appendChild(_i);
+            var _cc = document.createElement('div'); _cc.className = 'db-overlay-cc'; _cc.textContent = card.cc;
+            var _ip = document.createElement('div'); _ip.className = 'db-overlay-ip'; _ip.textContent = tEffectiveIP(sd);
+            destCardEl.appendChild(_w); destCardEl.appendChild(_cc); destCardEl.appendChild(_ip);
+            if (typeof Anim !== 'undefined') Anim.floatNumber(destCardEl, 1);
+          }
+
+          updateScores();
+          evalContinuous_tut();
+          setTimeout(done, 600);
+        }
+      });
+    } else {
+      // No GSAP fallback — instant move
+      sd.ip += 1;
+      destSlots[toSi] = sd;
+      origSlots[fromSi] = null;
+
+      // Clear origin slot
+      if (fromEl) {
+        fromEl.className = 'battle-card-slot';
+        fromEl.innerHTML = '';
+        delete fromEl.dataset.cardId;
+      }
+      // Build at destination
+      if (toEl && card) {
+        toEl.dataset.cardId = mv.cardId;
+        toEl.className = 'battle-card-slot occupied face-up';
+        toEl.innerHTML = '';
+        var _w2 = document.createElement('div'); _w2.className = 'db-card-img-wrap';
+        var _p2 = document.createElement('div'); _p2.className = 'db-card-img-placeholder'; _p2.textContent = card.name.charAt(0);
+        var _i2 = document.createElement('img'); _i2.className = 'db-card-img';
+        _i2.src = 'images/cards/' + card.name + '.jpg'; _i2.onerror = function () { this.style.display = 'none'; };
+        _w2.appendChild(_p2); _w2.appendChild(_i2);
+        var _cc2 = document.createElement('div'); _cc2.className = 'db-overlay-cc'; _cc2.textContent = card.cc;
+        var _ip2 = document.createElement('div'); _ip2.className = 'db-overlay-ip'; _ip2.textContent = tEffectiveIP(sd);
+        toEl.appendChild(_w2); toEl.appendChild(_cc2); toEl.appendChild(_ip2);
+      }
+
+      updateScores();
+      evalContinuous_tut();
+      done();
+    }
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      REVEAL SEQUENCE
   ═══════════════════════════════════════════════════════════════ */
 
   function runReveal(turn, onDone) {
+    // Snap any pending board move back to origin before reveal begins
+    tutSnapBack();
+
     // Flip all face-up unplayed player cards face-down before reveal begins
     var unplayedEls = Array.prototype.slice.call(
       document.querySelectorAll('.battle-card-slot.unplayed[data-owner="player"]')
     );
     function doReveal() {
-      var pQ = [], aQ = [];
+      // Build player sequence from actionLog (preserves play/move order)
+      var pQ = TS.playerActionLog.map(function (action) {
+        if (action.type === 'move') {
+          return { type: 'move', owner: 'player', cardId: action.cardId,
+                   fromLocId: action.fromLocId, toLocId: action.toLocId };
+        }
+        // type === 'play': find the unrevealed slot data for this card
+        var sl = TS.playerSlots[action.locId];
+        for (var i = 0; i < sl.length; i++) {
+          if (sl[i] && !sl[i].revealed && sl[i].cardId === action.cardId) {
+            return { type: 'play', owner: 'player', locId: action.locId, si: i, sd: sl[i] };
+          }
+        }
+        return null;
+      }).filter(Boolean);
+
+      // AI plays (no ordering needed)
+      var aQ = [];
       T_LOCS.forEach(function (loc) {
-        TS.playerSlots[loc.id].forEach(function (sd, i) {
-          if (sd && !sd.revealed) pQ.push({ owner: 'player', locId: loc.id, si: i, sd: sd });
-        });
         TS.aiSlots[loc.id].forEach(function (sd, i) {
-          if (sd && !sd.revealed) aQ.push({ owner: 'opp', locId: loc.id, si: i, sd: sd });
+          if (sd && !sd.revealed) aQ.push({ type: 'play', owner: 'opp', locId: loc.id, si: i, sd: sd });
         });
       });
 
+      // Interleave based on who goes first
       var fQ = TS.playerFirst ? pQ : aQ;
       var sQ = TS.playerFirst ? aQ : pQ;
       var combined = [];
@@ -1465,10 +1740,17 @@
           return;
         }
         var item = combined[idx++];
-        flipCard(item, function () {
-          updateScores();
-          setTimeout(next, 1000);
-        });
+        if (item.type === 'move') {
+          tutExecutePendingMove(function () {
+            updateScores();
+            setTimeout(next, 1000);
+          });
+        } else {
+          flipCard(item, function () {
+            updateScores();
+            setTimeout(next, 1000);
+          });
+        }
       }
       setTimeout(next, 700);
     } // end doReveal
@@ -1535,7 +1817,56 @@
 
     if (typeof Anim !== 'undefined') Anim.cardReveal(slotEl);
 
+    // ── Per-card reveal SFX + animations (mirrors game.js flipSlot) ──
+    var cardId = item.sd.cardId;
+    var locId  = item.locId;
     setTimeout(function () {
+      // Kente Cloth (17): shield chime + orange location glow
+      if (cardId === 17) {
+        if (typeof SFX  !== 'undefined') SFX.kenteSound();
+        var locTileEl = boardEl.querySelector('.battle-col[data-loc-id="' + locId + '"]');
+        if (typeof Anim !== 'undefined') Anim.setKenteGlow(locTileEl, true);
+      }
+
+      // Juvenal (18): laughter + orange flash on penalised cards (CC >= 4)
+      if (cardId === 18) {
+        var jTargets = [];
+        ['player', 'opp'].forEach(function (own) {
+          var sl = own === 'player' ? TS.playerSlots : TS.aiSlots;
+          (sl[locId] || []).forEach(function (s, si) {
+            if (!s || !s.revealed || s.cardId === 18) return;
+            var c = CARDS.find(function (x) { return x.id === s.cardId; });
+            if (c && c.cc >= 4) jTargets.push(getTutSlotEl(own, locId, si));
+          });
+        });
+        if (jTargets.length > 0) {
+          if (typeof SFX  !== 'undefined') SFX.juvenalSound();
+          if (typeof Anim !== 'undefined') jTargets.forEach(function (el) { if (el) Anim.juvenalFlash(el); });
+        }
+      }
+
+      // Any card revealed where Juvenal is already active
+      if (cardId !== 18 && card.cc >= 4) {
+        var jPresent = ['player', 'opp'].some(function (own) {
+          var sl = own === 'player' ? TS.playerSlots : TS.aiSlots;
+          return (sl[locId] || []).some(function (s) { return s && s.revealed && s.cardId === 18; });
+        });
+        if (jPresent) {
+          if (typeof SFX  !== 'undefined') SFX.juvenalSound();
+          if (typeof Anim !== 'undefined') Anim.juvenalFlash(slotEl);
+        }
+      }
+
+      // Cosimo de'Medici (19): money-bags chime
+      if (cardId === 19) {
+        if (typeof SFX !== 'undefined') SFX.cosimoSound();
+      }
+
+      // Henry the Navigator (22): patronage chime
+      if (cardId === 22) {
+        if (typeof SFX !== 'undefined') SFX.henrySound();
+      }
+
       fireAtOnce_tut(item.owner, item.sd.cardId, item.locId, function () {
         evalContinuous_tut();
         if (proceed) proceed();
@@ -1554,6 +1885,18 @@
   /* Re-evaluate all Continuous abilities and update slot IP displays. */
   function evalContinuous_tut() {
     if (!TS.abilitiesActive) return;
+
+    // Snapshot Voltaire's current contMod so we can detect 0 → +4 activation
+    var voltairePrev = {};
+    T_LOCS.forEach(function (loc) {
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? TS.playerSlots : TS.aiSlots;
+        sl[loc.id].forEach(function (s) {
+          if (s && s.revealed && s.cardId === 20)
+            voltairePrev[own + ':' + loc.id] = s.contMod || 0;
+        });
+      });
+    });
 
     // Reset contMods
     T_LOCS.forEach(function (loc) {
@@ -1599,7 +1942,58 @@
         if (s && s.revealed && s.cardId === 15 && TS.destroyedIPTotal > 0)
           s.contMod = (s.contMod || 0) + TS.destroyedIPTotal;
       });
+
+      // The Sahara (ALL_MINUS_ONE_IP): -1 IP to ALL revealed cards here (both sides)
+      if (loc.abilityKey === 'ALL_MINUS_ONE_IP') {
+        sides.forEach(function (side) {
+          side.sl[loc.id].forEach(function (s) {
+            if (s && s.revealed) s.contMod = (s.contMod || 0) - 1;
+          });
+        });
+      }
     });
+
+    // Fire Voltaire animation + sound when his bonus transitions 0 → +4
+    T_LOCS.forEach(function (loc) {
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? TS.playerSlots : TS.aiSlots;
+        sl[loc.id].forEach(function (s, si) {
+          if (!s || !s.revealed || s.cardId !== 20) return;
+          var prev = voltairePrev[own + ':' + loc.id] || 0;
+          var next = s.contMod || 0;
+          if (next > 0 && prev === 0) {
+            var slotEl = getTutSlotEl(own, loc.id, si);
+            if (typeof SFX  !== 'undefined') SFX.voltaireSound();
+            if (typeof Anim !== 'undefined' && slotEl) {
+              Anim.voltaireRock(slotEl);
+              Anim.floatNumber(slotEl, 4);
+            }
+          }
+        });
+      });
+    });
+
+    // Update continuous glow on all revealed slots + Kente location glows
+    if (typeof Anim !== 'undefined') {
+      T_LOCS.forEach(function (loc) {
+        // Card glows
+        ['player', 'opp'].forEach(function (own) {
+          var sl = own === 'player' ? TS.playerSlots : TS.aiSlots;
+          sl[loc.id].forEach(function (s, si) {
+            if (!s || !s.revealed) return;
+            var slotEl = getTutSlotEl(own, loc.id, si);
+            Anim.setGlow(slotEl, (s.contMod || 0) !== 0);
+          });
+        });
+        // Kente location glow
+        var hasKente = ['player', 'opp'].some(function (own) {
+          var sl = own === 'player' ? TS.playerSlots : TS.aiSlots;
+          return sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 17; });
+        });
+        var locTileEl = boardEl.querySelector('.battle-col[data-loc-id="' + loc.id + '"]');
+        if (locTileEl) Anim.setKenteGlow(locTileEl, hasKente);
+      });
+    }
 
     // Refresh all revealed-slot IP displays with updated contMods
     T_LOCS.forEach(function (loc) {
@@ -1620,6 +2014,13 @@
   /* Fire the At Once ability for a just-revealed card (no-op before T3). */
   function fireAtOnce_tut(owner, cardId, locId, done) {
     if (!TS.abilitiesActive) { done(); return; }
+    // Generic At Once pulse for cards that use the standard chime (mirrors game.js)
+    var genericPulse = [4, 23].indexOf(cardId) !== -1;
+    if (genericPulse) {
+      if (typeof SFX !== 'undefined') SFX.atOnce();
+      var atEl = tFindSlotEl(owner, cardId);
+      if (atEl && typeof Anim !== 'undefined') Anim.pulseYellow(atEl);
+    }
     switch (cardId) {
       case 2:  tAb_ScholarOfficials(owner, locId, done); break;
       case 3:  tAb_Justinian(owner, locId, done);        break;
@@ -1635,46 +2036,108 @@
   function tAb_ScholarOfficials(owner, locId, done) {
     if (owner !== 'player') { done(); return; }   // AI capital not tracked
     var sl = TS.playerSlots[locId];
+    // Count revealed player cards here except Scholar-Officials itself
     var others = sl.filter(function (s) { return s && s.revealed && s.cardId !== 2; }).length;
-    if (others > 0) {
-      TS.bonusCapitalNextTurn += others;
-      if (typeof SFX !== 'undefined') SFX.atOnce();
+    if (others === 0) { done(); return; }
+
+    TS.bonusCapitalNextTurn += others;
+
+    // Find Scholar-Officials' slot element
+    var soIdx = -1;
+    for (var i = 0; i < sl.length; i++) {
+      if (sl[i] && sl[i].cardId === 2) { soIdx = i; break; }
     }
-    done();
+    var soEl = soIdx !== -1 ? getTutSlotEl(owner, locId, soIdx) : null;
+
+    if (typeof SFX  !== 'undefined') SFX.coinSound();
+    if (typeof Anim !== 'undefined' && soEl) {
+      Anim.scholarPulse(soEl);
+      Anim.floatCapital(soEl, others);
+      // Pulse each contributing card
+      sl.forEach(function (s, si) {
+        if (!s || !s.revealed || s.cardId === 2) return;
+        var contEl = getTutSlotEl(owner, locId, si);
+        if (contEl) Anim.scholarPulse(contEl);
+      });
+    }
+    setTimeout(done, 1050);
   }
 
-  /* Justinian: reset all revealed cards at this location to their original IP. */
+  /* Justinian: reset all cards at this location to their original IP. */
   function tAb_Justinian(owner, locId, done) {
-    if (typeof SFX !== 'undefined') SFX.atOnce();
+    if (typeof SFX !== 'undefined') SFX.justinianShing();
+
+    // Flash Justinian's own card
+    var justSl = owner === 'player' ? TS.playerSlots : TS.aiSlots;
+    var justEl = null;
+    for (var ji = 0; ji < justSl[locId].length; ji++) {
+      if (justSl[locId][ji] && justSl[locId][ji].cardId === 3) {
+        justEl = getTutSlotEl(owner, locId, ji); break;
+      }
+    }
+    if (justEl && typeof Anim !== 'undefined') Anim.justinianFlash(justEl);
+
+    // Reset IP for all revealed cards at this location and flash affected cards
+    var anyAffected = false;
     ['player', 'opp'].forEach(function (own) {
       var sl = own === 'player' ? TS.playerSlots : TS.aiSlots;
-      sl[locId].forEach(function (s) {
+      sl[locId].forEach(function (s, i) {
         if (!s || !s.revealed) return;
         var card = CARDS.find(function (c) { return c.id === s.cardId; });
-        if (card) s.ip = card.ip;
+        if (!card) return;
+        var oldIP = s.ip;
+        s.ip = card.ip;
+        var slotEl = getTutSlotEl(own, locId, i);
+        if (slotEl) {
+          var ipEl = slotEl.querySelector('.db-overlay-ip');
+          if (ipEl) ipEl.textContent = tEffectiveIP(s);
+          if (oldIP !== card.ip) {
+            anyAffected = true;
+            if (typeof Anim !== 'undefined') {
+              Anim.justinianFlash(slotEl);
+              Anim.floatNumber(slotEl, card.ip - oldIP);
+            }
+          }
+        }
       });
     });
-    done();
+
+    setTimeout(done, anyAffected ? 800 : 650);
   }
 
   /* Pacal: trigger At Once abilities of all your other revealed cards here. */
   function tAb_Pacal(owner, locId, done) {
     var sl = owner === 'player' ? TS.playerSlots : TS.aiSlots;
-    var others = sl[locId].filter(function (s) {
-      return s && s.revealed && s.cardId !== 5;
+    // Collect other At Once cards at this location (exclude Pacal himself)
+    var cards = [];
+    sl[locId].forEach(function (s) {
+      if (!s || !s.revealed || s.cardId === 5) return;
+      var c = CARDS.find(function (x) { return x.id === s.cardId; });
+      if (c && c.ability && c.ability.indexOf('At Once') !== -1) cards.push(s.cardId);
     });
-    var i = 0;
-    function next() {
-      if (i >= others.length) { done(); return; }
-      var s = others[i++];
-      fireAtOnce_tut(owner, s.cardId, locId, next);
+
+    if (typeof SFX !== 'undefined') SFX.pacalSound();
+
+    function runCards() {
+      var idx = 0;
+      function next() {
+        if (idx >= cards.length) { done(); return; }
+        fireAtOnce_tut(owner, cards[idx++], locId, next);
+      }
+      next();
     }
-    next();
+
+    // Clock-wipe over Pacal's card, then trigger the chain
+    var pacalEl = tFindSlotEl(owner, 5);
+    if (pacalEl && typeof Anim !== 'undefined') {
+      Anim.pacalWipe(pacalEl, runCards);
+    } else {
+      runCards();
+    }
   }
 
   /* Zheng He: +2 IP to the first revealed card on your side at each adjacent location. */
   function tAb_ZhengHe(owner, locId, done) {
-    if (typeof SFX !== 'undefined') SFX.atOnce();
     var locIdx = -1;
     for (var li = 0; li < T_LOCS.length; li++) {
       if (T_LOCS[li].id === locId) { locIdx = li; break; }
@@ -1683,27 +2146,43 @@
     if (locIdx > 0)               adjIds.push(T_LOCS[locIdx - 1].id);
     if (locIdx < T_LOCS.length - 1) adjIds.push(T_LOCS[locIdx + 1].id);
 
+    // Bounce Zheng He's card
+    var zhengEl = tFindSlotEl(owner, 23);
+    if (zhengEl && typeof Anim !== 'undefined') Anim.zhengheBounce(zhengEl);
+
     var sl = owner === 'player' ? TS.playerSlots : TS.aiSlots;
     adjIds.forEach(function (adjId) {
       for (var i = 0; i < 4; i++) {
         var s = sl[adjId] && sl[adjId][i];
-        if (s && s.revealed) { s.ip += 2; break; }
+        if (s && s.revealed) {
+          s.ip += 2;
+          // Float +2 on the boosted card and update display
+          var boostedEl = getTutSlotEl(owner, adjId, i);
+          if (boostedEl) {
+            if (typeof Anim !== 'undefined') Anim.floatNumber(boostedEl, 2);
+            var ipEl = boostedEl.querySelector('.db-overlay-ip');
+            if (ipEl) ipEl.textContent = tEffectiveIP(s);
+          }
+          break;
+        }
       }
     });
-    done();
+    setTimeout(done, 900);
   }
 
   /* Hernan Cortes: destroy all of your other revealed cards here, +1 IP each. */
   function tAb_HernanCortes(owner, locId, done) {
-    if (typeof SFX !== 'undefined') SFX.atOnce();
+    if (typeof SFX !== 'undefined') SFX.cortesCharge();
     var sl = owner === 'player' ? TS.playerSlots : TS.aiSlots;
 
     // Collect victims with their current IP values before destruction
+    // Include all cards at this location (revealed or not) — Cortes fires on reveal so
+    // other cards placed this turn may not be revealed yet when the ability triggers.
     var victims = [];
     for (var i = 0; i < sl[locId].length; i++) {
       var s = sl[locId][i];
-      if (!s || !s.revealed || s.cardId === 13) continue;
-      victims.push({ idx: i, ip: tEffectiveIP(s) });
+      if (!s || s.cardId === 13) continue;
+      victims.push({ idx: i, ip: tEffectiveIP(s), cardId: s.cardId });
     }
     if (victims.length === 0) { done(); return; }
 
@@ -1731,33 +2210,87 @@
     function afterDestroy() {
       if (cortesEl && typeof gsap !== 'undefined') gsap.set(cortesEl, { clearProps: 'scale,y' });
       var ipGained = 0;
+      var samuraiResurrectAt = null; // locId where Samurai should return
       victims.forEach(function (v) {
         // Track destroyed IP for William the Conqueror
         if (owner === 'player') TS.destroyedIPTotal += v.ip;
         sl[locId][v.idx] = null;
         var deadEl = getTutSlotEl(owner, locId, v.idx);
-        if (deadEl) { deadEl.className = 'battle-card-slot'; deadEl.innerHTML = ''; }
+        if (deadEl) {
+          if (typeof gsap !== 'undefined') gsap.set(deadEl, { clearProps: 'all' });
+          deadEl.className = 'battle-card-slot';
+          deadEl.innerHTML = '';
+        }
         ipGained++;
+        // Samurai Bushido Code: flag for resurrection at this location
+        if (v.cardId === 12) samuraiResurrectAt = locId;
       });
       // Give Cortes +1 IP for each card destroyed
       if (cortesIdx !== -1 && sl[locId][cortesIdx]) {
         var cortesSd = sl[locId][cortesIdx];
         cortesSd.ip += ipGained;
-        var cEl = getTutSlotEl(owner, locId, cortesIdx);
+        // Compact slots so any gaps fill in after destruction
+        compactTutSlotsAt(owner, locId);
+        var cEl = getTutSlotEl(owner, locId, sl[locId].indexOf(cortesSd));
         if (cEl) {
           var ipEl = cEl.querySelector('.db-overlay-ip');
           if (ipEl) ipEl.textContent = tEffectiveIP(cortesSd);
+          if (typeof Anim !== 'undefined') Anim.floatNumber(cEl, ipGained);
         }
       }
-      // Update William's hand display if in hand
-      if (owner === 'player') tUpdateWilliamHand();
-      done();
+      // William pulse + hand display update
+      if (owner === 'player') {
+        tUpdateWilliamHand();
+        tPulseWilliam();
+      }
+      // Handle Samurai Bushido Code resurrection
+      if (samuraiResurrectAt !== null) {
+        tAb_SamuraiResurrect(owner, samuraiResurrectAt, done);
+      } else {
+        done();
+      }
     }
+  }
+
+  /* Samurai Bushido Code: resurrect Samurai at the given location with +2 IP. */
+  function tAb_SamuraiResurrect(owner, locId, done) {
+    var sl = owner === 'player' ? TS.playerSlots : TS.aiSlots;
+    var samCard = CARDS.find(function (c) { return c.id === 12; });
+    if (!samCard) { done(); return; }
+    var si = sl[locId].indexOf(null);
+    if (si === -1) { done(); return; } // no room
+    sl[locId][si] = { cardId: 12, ip: samCard.ip + 2, revealed: true, contMod: 0 };
+    if (typeof SFX !== 'undefined') SFX.samuraiReturn();
+    var slotEl = getTutSlotEl(owner, locId, si);
+    if (slotEl) {
+      slotEl.className = 'battle-card-slot occupied face-up';
+      slotEl.innerHTML = '';
+      var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
+      var ph2  = document.createElement('div'); ph2.className = 'db-card-img-placeholder'; ph2.textContent = samCard.name.charAt(0);
+      var img2 = document.createElement('img'); img2.className = 'db-card-img';
+      img2.src = 'images/cards/' + samCard.name + '.jpg';
+      img2.onerror = function () { this.style.display = 'none'; };
+      wrap.appendChild(ph2); wrap.appendChild(img2);
+      var cc2 = document.createElement('div'); cc2.className = 'db-overlay-cc'; cc2.textContent = samCard.cc;
+      var ip2 = document.createElement('div'); ip2.className = 'db-overlay-ip'; ip2.textContent = samCard.ip + 2;
+      slotEl.appendChild(wrap); slotEl.appendChild(cc2); slotEl.appendChild(ip2);
+      if (typeof gsap !== 'undefined') {
+        gsap.from(slotEl, { scale: 0, opacity: 0, duration: 0.35, ease: 'back.out(2)',
+          onComplete: function () { updateScores(); done(); } });
+        return;
+      }
+    }
+    updateScores();
+    done();
   }
 
   /* Update William's IP overlay in the player's hand (if present). */
   function tUpdateWilliamHand() {
     var wEl = playerHandEl ? playerHandEl.querySelector('.battle-hand-card[data-id="15"]') : null;
+    if (!wEl) {
+      // Also check board slots
+      wEl = tFindSlotEl('player', 15);
+    }
     if (!wEl) return;
     var ipEl = wEl.querySelector('.db-overlay-ip');
     if (!ipEl) return;
@@ -1765,70 +2298,119 @@
     if (card) ipEl.textContent = card.ip + TS.destroyedIPTotal;
   }
 
-  /* Empress Wu: push (or destroy) the highest-IP revealed Political/Military card here. */
-  function tAb_EmpressWu(owner, locId, done) {
-    if (typeof SFX !== 'undefined') SFX.atOnce();
+  function tPulseWilliam() {
+    var wEl = playerHandEl ? playerHandEl.querySelector('.battle-hand-card[data-id="15"]') : null;
+    if (!wEl) wEl = tFindSlotEl('player', 15);
+    if (!wEl) return;
+    if (typeof SFX  !== 'undefined') SFX.williamGain();
+    if (typeof Anim !== 'undefined') Anim.williamPulse(wEl);
+  }
 
-    // Find highest-IP revealed Pol/Mil card at this location on either side (excluding Wu herself)
-    var best = null, bestIP = -Infinity, bestOwn = null, bestIdx = -1;
-    ['player', 'opp'].forEach(function (own) {
-      var sl = own === 'player' ? TS.playerSlots : TS.aiSlots;
-      sl[locId].forEach(function (s, i) {
-        if (!s || !s.revealed || s.cardId === 4) return;
-        var c = CARDS.find(function (c_) { return c_.id === s.cardId; });
-        if (!c || (c.type !== 'Political' && c.type !== 'Military')) return;
-        var ip = tEffectiveIP(s);
-        if (ip > bestIP) { bestIP = ip; best = s; bestOwn = own; bestIdx = i; }
-      });
+  /* Empress Wu: push (or destroy) the highest-IP Political/Military card here. */
+  function tAb_EmpressWu(owner, locId, done) {
+
+    // Find highest-IP Pol/Mil card on the OPPONENT's side at this location (excluding Wu)
+    var oppSide = owner === 'player' ? 'opp' : 'player';
+    var oppSlots = oppSide === 'player' ? TS.playerSlots : TS.aiSlots;
+    var best = null, bestIP = -Infinity, bestOwn = oppSide, bestIdx = -1;
+    oppSlots[locId].forEach(function (s, i) {
+      if (!s || s.cardId === 4) return;
+      var c = CARDS.find(function (c_) { return c_.id === s.cardId; });
+      if (!c || (c.type !== 'Political' && c.type !== 'Military')) return;
+      var ip = tEffectiveIP(s);
+      if (ip > bestIP) { bestIP = ip; best = s; bestIdx = i; }
     });
-    if (!best) { done(); return; }
+
+    // Find Wu's slot element for the "rise" animation
+    var wuSl = owner === 'player' ? TS.playerSlots : TS.aiSlots;
+    var wuEl = null;
+    for (var wi = 0; wi < wuSl[locId].length; wi++) {
+      if (wuSl[locId][wi] && wuSl[locId][wi].cardId === 4) {
+        wuEl = getTutSlotEl(owner, locId, wi); break;
+      }
+    }
+
+    if (!best) {
+      if (wuEl && typeof gsap !== 'undefined') {
+        gsap.timeline({ onComplete: done })
+          .to(wuEl, { scale: 1.2, duration: 0.2, ease: 'back.out(2)' })
+          .to(wuEl, { scale: 1.0, duration: 0.18, ease: 'power2.out' });
+      } else { done(); }
+      return;
+    }
 
     var ownerSl = bestOwn === 'player' ? TS.playerSlots : TS.aiSlots;
     var pushed = false;
+    var destLocId = null, destFi = -1;
 
-    // Try to push to any adjacent location with a free slot
+    // Find an adjacent location with a free slot
     for (var li = 0; li < T_LOCS.length; li++) {
       if (T_LOCS[li].id === locId) continue;
       var destSl = ownerSl[T_LOCS[li].id];
       var fi = destSl.indexOf(null);
       if (fi === -1) continue;
-
-      // Move card to destination
-      destSl[fi] = best;
-      ownerSl[locId][bestIdx] = null;
-
-      var fromEl = getTutSlotEl(bestOwn, locId, bestIdx);
-      if (fromEl) { fromEl.className = 'battle-card-slot'; fromEl.innerHTML = ''; }
-
-      var toEl = getTutSlotEl(bestOwn, T_LOCS[li].id, fi);
-      if (toEl) {
-        var movedCard = CARDS.find(function (c_) { return c_.id === best.cardId; });
-        toEl.className = 'battle-card-slot occupied face-up';
-        if (movedCard) {
-          var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
-          var ph = document.createElement('div'); ph.className = 'db-card-img-placeholder'; ph.textContent = movedCard.name.charAt(0);
-          var img = document.createElement('img'); img.className = 'db-card-img';
-          img.src = 'images/cards/' + movedCard.name + '.jpg';
-          img.onerror = function () { this.style.display = 'none'; };
-          wrap.appendChild(ph); wrap.appendChild(img);
-          var ccEl = document.createElement('div'); ccEl.className = 'db-overlay-cc'; ccEl.textContent = movedCard.cc;
-          var ipEl2 = document.createElement('div'); ipEl2.className = 'db-overlay-ip'; ipEl2.textContent = tEffectiveIP(best);
-          toEl.appendChild(wrap); toEl.appendChild(ccEl); toEl.appendChild(ipEl2);
-        }
-      }
-      pushed = true;
+      destLocId = T_LOCS[li].id;
+      destFi    = fi;
+      pushed    = true;
       break;
     }
 
-    if (!pushed) {
-      // No room elsewhere — destroy the card
-      if (bestOwn === 'player') TS.destroyedIPTotal += bestIP;
-      ownerSl[locId][bestIdx] = null;
-      var deadEl2 = getTutSlotEl(bestOwn, locId, bestIdx);
-      if (deadEl2) { deadEl2.className = 'battle-card-slot'; deadEl2.innerHTML = ''; }
-      if (bestOwn === 'player') tUpdateWilliamHand();
+    function executeMove() {
+      if (typeof SFX !== 'undefined') SFX.wuPunch();
+      if (pushed) {
+        ownerSl[destLocId][destFi] = best;
+        ownerSl[locId][bestIdx]    = null;
+        // Compact source location
+        compactTutSlotsAt(bestOwn, locId);
+        // Render card at destination
+        var toEl = getTutSlotEl(bestOwn, destLocId, destFi);
+        if (toEl) {
+          var movedCard = CARDS.find(function (c_) { return c_.id === best.cardId; });
+          toEl.className = 'battle-card-slot occupied face-up';
+          if (movedCard) {
+            var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
+            var ph = document.createElement('div'); ph.className = 'db-card-img-placeholder'; ph.textContent = movedCard.name.charAt(0);
+            var img = document.createElement('img'); img.className = 'db-card-img';
+            img.src = 'images/cards/' + movedCard.name + '.jpg';
+            img.onerror = function () { this.style.display = 'none'; };
+            wrap.appendChild(ph); wrap.appendChild(img);
+            var ccEl = document.createElement('div'); ccEl.className = 'db-overlay-cc'; ccEl.textContent = movedCard.cc;
+            var ipEl2 = document.createElement('div'); ipEl2.className = 'db-overlay-ip'; ipEl2.textContent = tEffectiveIP(best);
+            toEl.appendChild(wrap); toEl.appendChild(ccEl); toEl.appendChild(ipEl2);
+          }
+        }
+        updateScores();
+        done();
+      } else {
+        // No room elsewhere — destroy the card
+        if (typeof SFX !== 'undefined') SFX.cardDestroyed();
+        var isSamurai = (best.cardId === 12);
+        if (bestOwn === 'player') TS.destroyedIPTotal += bestIP;
+        ownerSl[locId][bestIdx] = null;
+        var deadEl2 = getTutSlotEl(bestOwn, locId, bestIdx);
+        if (deadEl2) {
+          if (typeof gsap !== 'undefined') gsap.set(deadEl2, { clearProps: 'all' });
+          deadEl2.className = 'battle-card-slot'; deadEl2.innerHTML = '';
+        }
+        compactTutSlotsAt(bestOwn, locId);
+        if (bestOwn === 'player') { tUpdateWilliamHand(); tPulseWilliam(); }
+        if (isSamurai) {
+          tAb_SamuraiResurrect(bestOwn, locId, done);
+        } else {
+          updateScores();
+          done();
+        }
+      }
     }
-    done();
+
+    // Wu rise animation → then execute the push/destroy
+    if (wuEl && typeof gsap !== 'undefined') {
+      gsap.timeline({ onComplete: executeMove })
+        .to(wuEl, { scale: 1.2, y: -10, duration: 0.22, ease: 'back.out(2)' })
+        .to(wuEl, { scale: 1.0, y: 0,   duration: 0.2,  ease: 'power2.out' });
+    } else {
+      executeMove();
+    }
   }
 
   function updateScores() {
@@ -1864,7 +2446,7 @@
     var sep = document.createElement('div');
     sep.className = 'battle-hand-sep';
     playerHandEl.appendChild(sep);
-    var pileCount = Math.max(0, 12 - TS.turn * 2);
+    var pileCount = Math.max(0, TUT_DRAW_QUEUE.length - TS.tutTotalDrawn);
     playerHandEl.appendChild(buildDeckPile(pileCount));
   }
 
@@ -1979,7 +2561,8 @@
         }
         var sd2 = { cardId: cardId, ip: card.ip, ipMod: 0, ipModSources: [], contMod: 0, revealed: true };
         window.openBattlePopup(card, sd2, 'player', false);
-        checkAllAbilitiesClicked();
+        // Wait until popup is closed before checking if all abilities are viewed
+        waitForPopupClose(function () { checkAllAbilitiesClicked(); });
         return;
       }
 
@@ -2376,6 +2959,19 @@
 
   function getHandCardEl(cardId) {
     return playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"]');
+  }
+
+  /* Find a slot element by owner and cardId (scans all locations). */
+  function tFindSlotEl(owner, cardId) {
+    var sl = owner === 'player' ? TS.playerSlots : TS.aiSlots;
+    for (var li = 0; li < T_LOCS.length; li++) {
+      var locId = T_LOCS[li].id;
+      for (var i = 0; i < (sl[locId] || []).length; i++) {
+        if (sl[locId][i] && sl[locId][i].cardId === cardId)
+          return getTutSlotEl(owner, locId, i);
+      }
+    }
+    return null;
   }
 
   function getTutSlotEl(owner, locId, si) {

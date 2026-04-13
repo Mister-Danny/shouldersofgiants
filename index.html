@@ -554,6 +554,16 @@
        Fixed overlay — sits above all game screens (z-index 8000).
        Entirely managed by legend.js + GSAP.
   ════════════════════════════════════════════════════════════════ -->
+  <!-- ══ Unlock Cutscene ══════════════════════════════════════ -->
+  <div id="screen-unlock" style="display:none">
+    <div id="unlock-curtain-left" class="unlock-curtain"></div>
+    <div id="unlock-curtain-right" class="unlock-curtain"></div>
+    <div id="unlock-stage"></div>
+    <div id="unlock-title-wrap">
+      <span id="unlock-title"></span>
+    </div>
+  </div>
+
   <div id="screen-legend" style="display:none">
 
     <!-- Solid black fill — fades in first -->
@@ -977,6 +987,27 @@
           </div>
         </section>
 
+        <!-- ── PROGRESSION CONTROLS ────────────────────────────── -->
+        <section class="bypass-section">
+          <h3 class="bypass-section-title">Progression Controls</h3>
+          <div class="bypass-btn-row">
+            <button class="btn-snes bypass-btn-action" id="bypass-play-religious">&#9654; Play Religious Unlock Cutscene</button>
+            <span class="bypass-btn-desc">Preview the Religious card unlock cinematic</span>
+          </div>
+          <div class="bypass-btn-row">
+            <button class="btn-snes bypass-btn-action" id="bypass-play-exploration">&#9654; Play Exploration Unlock Cutscene</button>
+            <span class="bypass-btn-desc">Preview the Exploration card unlock cinematic</span>
+          </div>
+          <div class="bypass-btn-row">
+            <button class="btn-snes bypass-btn-action" id="bypass-play-montage">&#9654; Play Victory Montage</button>
+            <span class="bypass-btn-desc">Preview the 10-win victory montage placeholder</span>
+          </div>
+          <div class="bypass-btn-row">
+            <button class="btn-snes btn-snes-remove bypass-btn-action" id="bypass-reset-progress">&#9888; Reset All Progress</button>
+            <span class="bypass-btn-desc">Clears all win counts, unlock flags, and cutscene-seen flags</span>
+          </div>
+        </section>
+
         <!-- ── CLASSROOM CONTROLS ────────────────────────────── -->
         <section class="bypass-section">
           <h3 class="bypass-section-title">Classroom Controls — Force Locations</h3>
@@ -1066,6 +1097,7 @@
   <!-- ── Feature modules (load order matters) ──────────────────── -->
   <script src="js/audio.js"></script>
   <script src="js/animations.js"></script>
+  <script src="js/progression.js"></script>
   <script src="js/deckbuilder.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/ai.js"></script>

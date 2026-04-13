@@ -24,7 +24,7 @@
   /* ── Constants ───────────────────────────────────────────────── */
   const DECK_SIZE   = 15;
   const STORAGE_KEY = 'sog_saved_deck';
-  const TYPE_ORDER  = ['Political', 'Religious', 'Military', 'Cultural', 'Exploration'];
+  const TYPE_ORDER  = ['Political', 'Religious', 'Military', 'Cultural', 'Exploration', 'Scientific'];
 
   /* ── State ───────────────────────────────────────────────────── */
   const _stored   = localStorage.getItem(STORAGE_KEY);
@@ -47,6 +47,14 @@
 
   /* ── Entry point ─────────────────────────────────────────────── */
   function initDeckBuilder() {
+    // Filter out any saved cards that belong to locked types
+    if (typeof Progression !== 'undefined') {
+      var unlocked = Progression.getUnlockedTypes();
+      selectedIds.forEach(function (id) {
+        var card = CARDS.find(function (c) { return c.id === id; });
+        if (card && unlocked.indexOf(card.type) === -1) selectedIds.delete(id);
+      });
+    }
     renderAllGroups();
     updateUI();
     mainEl.scrollTop = 0;
@@ -57,22 +65,38 @@
   function renderAllGroups() {
     mainEl.innerHTML = '';
     TYPE_ORDER.forEach(function (type) {
-      var cards = CARDS.filter(function (c) { return c.type === type; });
+      var cards = CARDS.filter(function (c) { return c.type === type && !c.locked; });
       if (!cards.length) return;
 
+      var locked = typeof Progression !== 'undefined' && !Progression.isTypeUnlocked(type);
+
       var section = document.createElement('section');
-      section.className = 'db-type-group type-' + type.toLowerCase();
+      section.className = 'db-type-group type-' + type.toLowerCase() + (locked ? ' locked' : '');
 
       var header = document.createElement('div');
       header.className = 'db-type-header';
-      header.innerHTML =
+      var headerHTML =
         '<div class="db-type-pip"></div>' +
         '<span class="db-type-label">' + type + '</span>' +
         '<span class="db-type-count">(' + cards.length + ')</span>';
+      if (locked) {
+        var hint = '';
+        if (type === 'Religious') {
+          var sw = typeof Progression !== 'undefined' ? Progression.getSerfWins() : 0;
+          var remaining = 3 - sw;
+          hint = '\uD83D\uDD12 Unlocks with ' + remaining + ' More Win' + (remaining !== 1 ? 's' : '') + ' Against the Serf';
+        } else if (type === 'Exploration') {
+          var gw = typeof Progression !== 'undefined' ? Progression.getGiantWins() : 0;
+          var remaining2 = 3 - gw;
+          hint = '\uD83D\uDD12 Unlocks with ' + remaining2 + ' More Win' + (remaining2 !== 1 ? 's' : '') + ' Against the Giant';
+        }
+        headerHTML += '<span class="db-type-lock-badge">' + hint + '</span>';
+      }
+      header.innerHTML = headerHTML;
 
       var row = document.createElement('div');
       row.className = 'db-card-row';
-      cards.forEach(function (card) { row.appendChild(buildCardEl(card)); });
+      cards.forEach(function (card) { row.appendChild(buildCardEl(card, locked)); });
 
       section.appendChild(header);
       section.appendChild(row);
@@ -87,10 +111,11 @@
    * Single click → openPopup (read-only ability view)
    * Double click → toggleCard + flashCard
    */
-  function buildCardEl(card) {
+  function buildCardEl(card, locked) {
     var el = document.createElement('div');
     el.className = 'db-card type-' + card.type.toLowerCase() +
-                   (selectedIds.has(card.id) ? ' selected' : '');
+                   (selectedIds.has(card.id) ? ' selected' : '') +
+                   (locked ? ' db-card-locked' : '');
     el.dataset.id = card.id;
 
     // ── Full-bleed image ──
@@ -125,32 +150,33 @@
     badge.className = 'db-card-in-deck';
     badge.textContent = 'IN DECK';
 
-    // imgWrap is out of normal flow (position:absolute); overlays are direct
-    // children of el (.db-card, position:relative, z-index:0) so they sit in
-    // the card's own stacking context and cannot escape it.
     el.appendChild(imgWrap);
     el.appendChild(ccEl);
     el.appendChild(ipEl);
     el.appendChild(badge);
 
+    // ── Lock overlay for locked cards ──
+    if (locked) {
+      var lockOverlay = document.createElement('div');
+      lockOverlay.className = 'db-card-lock-overlay';
+      var lockIcon = document.createElement('span');
+      lockIcon.className = 'lock-icon';
+      lockIcon.textContent = '\uD83D\uDD12';
+      lockOverlay.appendChild(lockIcon);
+      el.appendChild(lockOverlay);
+    }
+
     // ── Click handler — distinguishes single vs double click ─────
-    //
-    // Using native click + manual timer instead of the click/dblclick
-    // pair, because the browser fires click BEFORE dblclick, which
-    // causes the popup to open on every double-click attempt and makes
-    // double-click detection unreliable.
-    //
-    // How it works:
-    //   First click  → start a 350 ms timer.
-    //   Second click within 350 ms → cancel timer, treat as double-click.
-    //   Timer expires without a second click → treat as single click.
-    //
-    // 350 ms is intentionally more forgiving than the OS default
-    // (~200–300 ms) so the interaction feels easy to trigger.
     var clickTimer = null;
     var DBLCLICK_MS = 350;
 
     el.addEventListener('click', function () {
+      if (locked) {
+        // Locked cards: single click opens grayscale popup, no double-click
+        openPopup(card, true);
+        return;
+      }
+
       if (clickTimer) {
         // ── Second click arrived within the window → double-click ──
         clearTimeout(clickTimer);
@@ -184,6 +210,11 @@
    * Returns false (and does nothing) when trying to add beyond DECK_SIZE.
    */
   function toggleCard(id) {
+    // Block locked card types
+    if (typeof Progression !== 'undefined') {
+      var card = CARDS.find(function (c) { return c.id === id; });
+      if (card && !Progression.isTypeUnlocked(card.type)) return false;
+    }
     if (selectedIds.has(id)) {
       selectedIds.delete(id);
       setCardSelected(id, false);
@@ -245,7 +276,7 @@
    * Shows the SNES dialogue box with the card's ability name + text.
    * No selection buttons — this is a read-only reference view.
    */
-  function openPopup(card) {
+  function openPopup(card, isLocked) {
     popupCardId = card.id;
 
     popupNameEl.textContent = card.name;
@@ -261,6 +292,7 @@
       popupAbilTextEl.className     = 'popup-ability-text vanilla';
     }
 
+    backdropEl.classList.toggle('popup-locked', !!isLocked);
     backdropEl.classList.add('visible');
   }
 
@@ -356,7 +388,7 @@
   });
 
   saveBtn.addEventListener('click', openDifficultyModal);
-  backBtn.addEventListener('click', function () { showScreen('screen-home'); });
+  backBtn.addEventListener('click', function () { stopDeckMusic(); showScreen('screen-home'); });
 
   // Export so tutorial.js can re-enter the deck builder after tutorial ends
   window.initDeckBuilder = initDeckBuilder;

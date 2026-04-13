@@ -28,7 +28,10 @@
  *   "CULTURAL_FREE_MOVE_HERE"
  *       Timbuktu — Cultural cards may move TO this location at no capital cost.
  *
- * Three of these five locations are randomly selected at the start of each game.
+ *   "ALL_MINUS_ONE_IP"
+ *       The Sahara — All cards at this location receive -1 IP (continuous debuff).
+ *
+ * Three of these six locations are randomly selected at the start of each game.
  * Selection logic lives in game.js.
  */
 
@@ -67,5 +70,12 @@ const LOCATIONS = [
     region: "Beacon of Culture",
     abilityText: "Cultural cards can freely move here.",
     abilityKey: "CULTURAL_FREE_MOVE_HERE"
+  },
+  {
+    id: 6,
+    name: "The Sahara",
+    region: "Endless Sands",
+    abilityText: "-1 IP to all cards here.",
+    abilityKey: "ALL_MINUS_ONE_IP"
   }
 ];

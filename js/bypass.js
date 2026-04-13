@@ -531,6 +531,52 @@
       }
     });
 
+    /* Progression controls */
+    var relBtn = document.getElementById('bypass-play-religious');
+    if (relBtn) relBtn.addEventListener('click', function () {
+      if (typeof Progression !== 'undefined') {
+        close();
+        Progression.playCutscene('Religious', function () {
+          showScreen('screen-home');
+        }, { preview: true });
+      }
+    });
+
+    var expBtn = document.getElementById('bypass-play-exploration');
+    if (expBtn) expBtn.addEventListener('click', function () {
+      if (typeof Progression !== 'undefined') {
+        close();
+        Progression.playCutscene('Exploration', function () {
+          showScreen('screen-home');
+        }, { preview: true });
+      }
+    });
+
+    var montageBtn = document.getElementById('bypass-play-montage');
+    if (montageBtn) montageBtn.addEventListener('click', function () {
+      if (typeof Progression !== 'undefined') {
+        close();
+        Progression.playMontage(function () {
+          showScreen('screen-home');
+        }, { preview: true });
+      }
+    });
+
+    var resetProgBtn = document.getElementById('bypass-reset-progress');
+    if (resetProgBtn) resetProgBtn.addEventListener('click', function () {
+      localStorage.removeItem('sog_serf_wins');
+      localStorage.removeItem('sog_giant_wins');
+      localStorage.removeItem('sog_religious_unlocked');
+      localStorage.removeItem('sog_exploration_unlocked');
+      localStorage.removeItem('sog_religious_cutscene_seen');
+      localStorage.removeItem('sog_exploration_cutscene_seen');
+      localStorage.removeItem('sog_total_wins');
+      localStorage.removeItem('sog_victory_montage_seen');
+      window._pendingUnlock = null;
+      window._pendingMontage = null;
+      showBypassToast('All progression reset — reload to see changes in deck builder');
+    });
+
     /* Location checkboxes */
     document.querySelectorAll('.bypass-loc-check').forEach(function (cb) {
       cb.addEventListener('change', function () {

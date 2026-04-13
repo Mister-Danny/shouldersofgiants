@@ -31,6 +31,7 @@
     { src: 'images/locations/capeofgoodhope.jpg',  pos: 'center'     },
     { src: 'images/locations/levant.jpg',          pos: 'center'     },
     { src: 'images/locations/timbuktu.jpg',        pos: 'center 60%' },
+    { src: 'images/locations/sahara.jpg',          pos: 'center'     },
   ];
 
   var CARD_SLIDES = [

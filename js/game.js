@@ -24,7 +24,7 @@
   const TURNS         = 5;
   const CAPITAL       = 5;
   const HAND_START    = 5;
-  const DRAW_PER_TURN = 2;
+  const MAX_HAND_SIZE = 7;
   const SLOTS_PER_LOC = 4;
   const REVEAL_DELAY  = 800;
   const POST_REVEAL   = 1200;
@@ -69,7 +69,10 @@
     playerActionLog:        [],  // ordered: {type:'play'|'move', cardId, fromLocId?, fromSlotIndex?, toLocId?}
     locationSnapshots:      {},  // locId → slot-array copy taken at first queueMove from that loc
     reservedSlotsPerLoc:    {},  // locId → count of snap-back slots reserved (one per queued move FROM that loc)
-    deferredPlays:          {}   // locId → [slotData] new plays that couldn't fit at snap-back; inserted after queued card moves away
+    deferredPlays:          {},  // locId → [slotData] new plays that couldn't fit at snap-back; inserted after queued card moves away
+
+    // ── Adventure Mode ────────────────────────────────────────
+    prehistoryMode:         false  // when true, all CC costs are overridden to 0
   };
 
   /* ── Drag state ──────────────────────────────────────────────── */
@@ -376,7 +379,7 @@
     types.sort(function () { return Math.random() - 0.5; });
     var deck = [];
     types.slice(0, 3).forEach(function (type) {
-      CARDS.filter(function (c) { return c.type === type; })
+      CARDS.filter(function (c) { return c.type === type && !c.locked; })
            .forEach(function (c) { deck.push(c.id); });
     });
     return shuffle(deck);
@@ -858,14 +861,20 @@
     };
   }
 
-  function flipSlot(slotEl) {
+  /**
+   * flipSlot(slotEl, done)
+   * Reveals a face-down card with SFX + animation, fires per-card reveal
+   * effects (Kente, Juvenal, Cosimo, Henry), then calls done() when all
+   * reveal effects are complete so the next card / ability can begin cleanly.
+   */
+  function flipSlot(slotEl, done) {
     if (typeof SFX !== 'undefined') SFX.cardReveal();
     var cardId    = parseInt(slotEl.dataset.cardId,    10);
     var locId     = parseInt(slotEl.dataset.locId,     10);
     var slotIndex = parseInt(slotEl.dataset.slotIndex, 10);
     var owner     = slotEl.dataset.owner;
     var card      = CARDS.find(function (c) { return c.id === cardId; });
-    if (!card) return;
+    if (!card) { if (done) done(); return; }
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     if (slots[locId] && slots[locId][slotIndex]) slots[locId][slotIndex].revealed = true;
     slotEl.removeAttribute('draggable');
@@ -876,13 +885,17 @@
     if (typeof Anim !== 'undefined') Anim.cardReveal(slotEl);
 
     // ── Per-card reveal SFX + animations ──────────────────────────
-    // Delay slightly so effects fire after the 300 ms reveal animation.
+    // Wait for the 300ms card-reveal scale-in to finish, then fire
+    // per-card effects and signal done when they complete.
     setTimeout(function () {
+      var extraDelay = 0; // ms to wait for per-card effects before calling done
+
       // Kente Cloth (id 17): shield chime + warm orange location glow
       if (cardId === 17) {
         if (typeof SFX !== 'undefined') SFX.kenteSound();
         var locTileEl = boardEl.querySelector('.battle-col[data-loc-id="' + locId + '"]');
         if (typeof Anim !== 'undefined') Anim.setKenteGlow(locTileEl, true);
+        extraDelay = Math.max(extraDelay, 400);
       }
 
       // Juvenal (id 18): laughter + orange flash only when he actually penalises cards
@@ -899,6 +912,7 @@
         if (juvenalTargetEls.length > 0) {
           if (typeof SFX  !== 'undefined') SFX.juvenalSound();
           if (typeof Anim !== 'undefined') juvenalTargetEls.forEach(function (el) { if (el) Anim.juvenalFlash(el); });
+          extraDelay = Math.max(extraDelay, 600);
         }
       }
 
@@ -912,18 +926,24 @@
         if (juvenalPresent) {
           if (typeof SFX !== 'undefined') SFX.juvenalSound();
           if (typeof Anim !== 'undefined') Anim.juvenalFlash(slotEl);
+          extraDelay = Math.max(extraDelay, 600);
         }
       }
 
       // Cosimo de'Medici (id 19): money-bags chime on reveal
       if (cardId === 19) {
         if (typeof SFX !== 'undefined') SFX.cosimoSound();
+        extraDelay = Math.max(extraDelay, 300);
       }
 
       // Henry the Navigator (id 22): patronage chime on reveal
       if (cardId === 22) {
         if (typeof SFX !== 'undefined') SFX.henrySound();
+        extraDelay = Math.max(extraDelay, 300);
       }
+
+      // Signal done after per-card effects have had time to play
+      if (done) setTimeout(done, extraDelay);
     }, 320);
   }
 
@@ -993,6 +1013,7 @@
   ═══════════════════════════════════════════════════════════════ */
 
   function effectiveCost(card, locId) {
+    if (G.prehistoryMode) return 0;
     var loc  = G.locations.find(function (l) { return l.id === locId; });
     var cost = card.cc;
     if (loc && loc.abilityKey === 'RELIGIOUS_DISCOUNT' && card.type === 'Religious')
@@ -1134,30 +1155,8 @@
     endTurnBtn.disabled   = true;
     resetTurnBtn.disabled = true;
 
-    /* ── 4-second undo window ─────────────────────────────────── */
-    var undoBtn = document.getElementById('battle-undo-endturn');
-    if (!undoBtn) { _proceedEndTurn(); return; }
-
-    _undoEndTurnCountdown = 4;
-    undoBtn.textContent   = 'UNDO (' + _undoEndTurnCountdown + ')';
-    undoBtn.style.display = '';
-
-    _undoEndTurnTimer = setInterval(function () {
-      _undoEndTurnCountdown--;
-      if (_undoEndTurnCountdown > 0) {
-        undoBtn.textContent = 'UNDO (' + _undoEndTurnCountdown + ')';
-      } else {
-        _cancelUndoEndTurn();
-        _proceedEndTurn();
-      }
-    }, 1000);
-
-    undoBtn.onclick = function () {
-      _cancelUndoEndTurn();
-      endTurnBtn.disabled   = false;
-      resetTurnBtn.disabled = false;
-      _startSelectionTimer();   /* restart turn timer (tournament mode) */
-    };
+    /* ── Proceed directly (undo window removed for single-player) ── */
+    _proceedEndTurn();
   }
 
   function _cancelUndoEndTurn() {
@@ -1321,17 +1320,19 @@
 
   /**
    * Effective capital cost for an AI card at a location, accounting for
-   * already-revealed discount cards (Henry at location, Cosimo anywhere, Levant).
+   * already-revealed discount cards (Henry anywhere, Cosimo anywhere, Levant).
    */
   function _giantEffectiveCC(cardId, locId) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return 99;
     var cc = card.cc;
 
-    // Henry the Navigator (id=22): reduces Exploration cc at his location
+    // Henry the Navigator (id=22): reduces Exploration cc globally
     if (card.type === 'Exploration' && cardId !== 22) {
-      var henryHere = G.aiSlots[locId].some(function (s) { return s && s.revealed && s.cardId === 22; });
-      if (henryHere) cc = Math.max(1, cc - 1);
+      var henryOnBoard = G.locations.some(function (l) {
+        return G.aiSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 22; });
+      });
+      if (henryOnBoard) cc = Math.max(1, cc - 1);
     }
     // Cosimo de'Medici (id=19): reduces Cultural cc from anywhere
     if (card.type === 'Cultural' && cardId !== 19) {
@@ -1632,7 +1633,7 @@
       G.movedThisTurn[cardId] = true;
     }
 
-    // Columbus: one-time move; -1 IP to opponent's Cultural cards at destination
+    // Columbus: one-time move; -1 IP to opponent's Cultural and Political cards at destination
     if (cardId === 25) {
       var flag = owner === 'player' ? 'columbusMoved' : 'aiColumbusMoved';
       if (!G[flag]) {
@@ -1641,7 +1642,7 @@
         oppSlots[toLocId].forEach(function (s) {
           if (!s) return;
           var c = CARDS.find(function (x) { return x.id === s.cardId; });
-          if (c && c.type === 'Cultural') addIPMod(s, -1, 'Christopher Columbus');
+          if (c && (c.type === 'Cultural' || c.type === 'Political')) addIPMod(s, -1, 'Christopher Columbus');
         });
         refreshSlotIPDisplays();
         updateScores();
@@ -1739,7 +1740,7 @@
             var cnt = G.playerSlots[l.id].filter(function (ps) {
               if (!ps || !ps.revealed) return false;
               var c = CARDS.find(function (x) { return x.id === ps.cardId; });
-              return c && c.type === 'Cultural';
+              return c && (c.type === 'Cultural' || c.type === 'Political');
             }).length;
             if (cnt > colBestCount) { colBestCount = cnt; colBest = l.id; }
           });
@@ -1903,7 +1904,7 @@
         oppSlots[toLocId].forEach(function (s, si) {
           if (!s) return;
           var c = CARDS.find(function (x) { return x.id === s.cardId; });
-          if (c && c.type === 'Cultural') {
+          if (c && (c.type === 'Cultural' || c.type === 'Political')) {
             addIPMod(s, -1, 'Christopher Columbus');
             var affSlotEl = getSlotEl(oppOwner, toLocId, si);
             if (affSlotEl) affectedSlotEls.push(affSlotEl);
@@ -2140,8 +2141,10 @@
         slotEl.classList.add('face-down');
         slotEl.innerHTML = '';
       }
-      flipSlot(slotEl);
-      fireAtOnce(item.owner, item.cardId, rLocId, proceed);
+      // Wait for reveal animation + per-card SFX to finish, then fire ability
+      flipSlot(slotEl, function () {
+        fireAtOnce(item.owner, item.cardId, rLocId, proceed);
+      });
     } else {
       proceed();
     }
@@ -2227,6 +2230,16 @@
         if (s && s.revealed && s.cardId === 15)
           s.contMod = (s.contMod || 0) + G.aiDestroyedIPTotal;
       });
+
+      // The Sahara (ALL_MINUS_ONE_IP): -1 IP to ALL revealed cards here (both sides)
+      if (loc.abilityKey === 'ALL_MINUS_ONE_IP') {
+        ['player', 'opp'].forEach(function (own) {
+          var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+          sl[loc.id].forEach(function (s) {
+            if (s && s.revealed) s.contMod = (s.contMod || 0) - 1;
+          });
+        });
+      }
     });
 
     // Fire Voltaire animation + sound when his bonus transitions 0 → +4
@@ -2368,6 +2381,12 @@
 
     // Ghost Jan Hus before clearing so the split animation has an element to work with
     var janHusGhost = (cardId === 7) ? makeBoardGhost(dSlotEl, 500) : null;
+
+    // Save Samurai's ipMod before destruction so resurrection can restore it
+    if (cardId === 12) {
+      var savedKey = owner === 'player' ? '_samuraiSavedMod' : '_aiSamuraiSavedMod';
+      G[savedKey] = { ipMod: sd.ipMod || 0, ipModSources: (sd.ipModSources || []).slice() };
+    }
 
     if (typeof SFX !== 'undefined') SFX.cardDestroyed();
     if (dSlotEl && typeof Anim !== 'undefined') Anim.shake(dSlotEl);
@@ -2732,6 +2751,12 @@
     if (!cortesEl || typeof gsap === 'undefined') {
       var ipGainedFB = 0, afterFnsFB = [];
       victims.forEach(function (v) {
+        // Save Samurai's ipMod before destruction so resurrection can restore it
+        if (v.cardId === 12) {
+          var _fbKey = owner === 'player' ? '_samuraiSavedMod' : '_aiSamuraiSavedMod';
+          var _fbSd  = slots[locId][v.slotIdx];
+          if (_fbSd) G[_fbKey] = { ipMod: _fbSd.ipMod || 0, ipModSources: (_fbSd.ipModSources || []).slice() };
+        }
         if (owner === 'player') { G.destroyedIPTotal  += v.ip; updateWilliamDisplay(); pulseWilliam(); }
         else                      G.aiDestroyedIPTotal += v.ip;
         slots[locId][v.slotIdx] = null;
@@ -2880,6 +2905,13 @@
           // For Joan-special: ghost her card face before clearing so it persists for summon anim
           var joanGhost = isJoanSpecial ? makeBoardGhost(victim.el, 150) : null;
 
+          // Save Samurai's ipMod before destruction so resurrection can restore it
+          if (victim.cardId === 12) {
+            var _savedKey = owner === 'player' ? '_samuraiSavedMod' : '_aiSamuraiSavedMod';
+            var _sd = slots[locId][sIdx];
+            G[_savedKey] = { ipMod: _sd.ipMod || 0, ipModSources: (_sd.ipModSources || []).slice() };
+          }
+
           // Update William's IP display live as each card falls; queue the sound/anim for after Cortes
           if (owner === 'player') { G.destroyedIPTotal += victim.ip; updateWilliamDisplay(); williamPulseCount++; }
           else                      G.aiDestroyedIPTotal += victim.ip;
@@ -3014,15 +3046,22 @@
   }
 
   function triggerSamurai(owner, locId, done) {
+    console.log('[Samurai] triggerSamurai called — owner:', owner, 'locId:', locId);
     var sBonus   = owner === 'player' ? G.cardIPBonus : G.aiCardIPBonus;
     var prevBonus = sBonus[12] || 0;
     var newBonus  = prevBonus + 2;
 
+    // Retrieve any saved ipMod from the destroyed Samurai (Zheng He, Columbus, etc.)
+    var savedKey = owner === 'player' ? '_samuraiSavedMod' : '_aiSamuraiSavedMod';
+    var savedMod = G[savedKey] || { ipMod: 0, ipModSources: [] };
+    delete G[savedKey];
+
     // Zero out before placeRevealedCard so base IP stays at card.ip (2),
     // then apply the full cumulative as a named ipMod so Justinian can reset it.
     sBonus[12] = 0;
-    placeRevealedCard(owner, locId, 12, 0, { skipLocationAbility: true });
+    var placed = placeRevealedCard(owner, locId, 12, 0, { skipLocationAbility: true });
     sBonus[12] = newBonus;
+    console.log('[Samurai] placeRevealedCard returned:', placed, '| newBonus:', newBonus);
 
     var sSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var sIdx   = sSlots[locId].findIndex(function (s) { return s && s.cardId === 12; });
@@ -3030,8 +3069,17 @@
 
     if (sIdx !== -1) {
       var sd = sSlots[locId][sIdx];
-      sd.ipMod        = newBonus;
-      sd.ipModSources = [{ source: 'Cortes', delta: newBonus }];
+      // newBonus = cumulative resurrection chain (+2 per death).
+      // savedMod may contain external bonuses (Zheng He, Columbus, etc.)
+      // that lived alongside the prior chain bonus in the old slot's ipMod.
+      // Subtract the prior chain (prevBonus) from savedMod to isolate external-only mods.
+      var externalMod     = Math.max(0, (savedMod.ipMod || 0) - prevBonus);
+      var externalSources = savedMod.ipModSources.filter(function (s) { return s.source !== 'Cortes'; });
+      var totalMod = newBonus + externalMod;
+      var sources  = externalSources.slice();
+      sources.push({ source: 'Cortes', delta: newBonus });
+      sd.ipMod        = totalMod;
+      sd.ipModSources = sources;
       if (slotEl) {
         var ipEl = slotEl.querySelector('.db-overlay-ip');
         if (ipEl) ipEl.textContent = effectiveIP(sd);
@@ -3043,8 +3091,14 @@
       if (done) done();
     }
 
-    if (!slotEl || typeof gsap === 'undefined') { finish(); return; }
+    if (!slotEl || typeof gsap === 'undefined') {
+      console.log('[Samurai] triggerSamurai — no slotEl or no GSAP, finishing immediately');
+      if (typeof SFX !== 'undefined') SFX.samuraiReturn();
+      finish();
+      return;
+    }
 
+    console.log('[Samurai] triggerSamurai — playing return SFX + spin animation');
     if (typeof SFX !== 'undefined') SFX.samuraiReturn();
 
     gsap.fromTo(slotEl,
@@ -3243,6 +3297,8 @@
     G.bonusCapitalNextTurn = 0;
     dragInfo   = null;
 
+    var playerDrew = G.playerRevealQueue.length;
+    var aiDrew     = G.aiRevealQueue.length;
     G.playerRevealQueue = [];
     G.aiRevealQueue     = [];
     G.playerFirst       = !G.playerFirst;
@@ -3255,8 +3311,10 @@
     G.reservedSlotsPerLoc    = {};
     G.deferredPlays          = {};
 
-    G.playerDeck.splice(0, DRAW_PER_TURN).forEach(function (id) { G.playerHand.push(id); });
-    G.aiDeck.splice(0, DRAW_PER_TURN).forEach(function (id) { G.aiHand.push(id); });
+    var playerCanDraw = Math.min(playerDrew, Math.max(0, MAX_HAND_SIZE - G.playerHand.length));
+    var aiCanDraw     = Math.min(aiDrew,     Math.max(0, MAX_HAND_SIZE - G.aiHand.length));
+    G.playerDeck.splice(0, playerCanDraw).forEach(function (id) { G.playerHand.push(id); });
+    G.aiDeck.splice(0, aiCanDraw).forEach(function (id) { G.aiHand.push(id); });
 
     window.setPlayerHand(G.playerHand, G.playerDeck.length);
     updateOppHand();
@@ -3283,6 +3341,13 @@
     var result = tallyResult();
     if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);
     showResult(result);
+
+    /* Progression: track wins for card unlocking (single-player only) */
+    if (result.outcome === 'player' &&
+        typeof Progression !== 'undefined' &&
+        !window.matchId && !window.versusStudentMode && !window.tournamentMatch) {
+      Progression.recordWin(window.aiDifficulty);
+    }
 
     /* 2P mode: P1 writes match result; both players clear Match state */
     if (window.matchId && typeof Match !== 'undefined') {
@@ -3326,11 +3391,8 @@
                                 window.currentKORound  === 'final' &&
                                 typeof LegendScreen !== 'undefined';
 
-    /* 5-win session milestone (single-player) */
-    var _isSessionMilestone = !_isTournamentChampion &&
-                              result.outcome === 'player' &&
-                              typeof LegendScreen !== 'undefined' &&
-                              LegendScreen.recordWin();
+    /* 5-win session milestone — disabled; replaced by 10-win victory montage in Progression */
+    var _isSessionMilestone = false;
 
     var _isLegendMilestone = _isTournamentChampion || _isSessionMilestone;
 
@@ -3614,14 +3676,45 @@
      RESULT SCREEN BUTTONS
   ═══════════════════════════════════════════════════════════════ */
 
+  /**
+   * Chain any pending unlock cutscene → victory montage → then call finalCb.
+   * Plays unlock cutscene first (if pending), then montage (if pending), then destination.
+   */
+  function _playPendingCelebrations(finalCb) {
+    if (typeof Progression === 'undefined') { finalCb(); return; }
+
+    // Step 1: unlock cutscene?
+    function step1() {
+      if (Progression.hasPendingCutscene()) {
+        var unlockType = Progression.hasPendingCutscene();
+        Progression.playCutscene(unlockType, step2);
+      } else {
+        step2();
+      }
+    }
+    // Step 2: victory montage?
+    function step2() {
+      if (Progression.hasPendingMontage()) {
+        Progression.playMontage(finalCb);
+      } else {
+        finalCb();
+      }
+    }
+    step1();
+  }
+
   document.getElementById('result-play-again').addEventListener('click', function () {
-    showScreen('screen-battle');
-    initGame();   // startBgMusic() is called inside initGame
+    _playPendingCelebrations(function () {
+      showScreen('screen-battle');
+      initGame();
+    });
   });
 
   document.getElementById('result-home').addEventListener('click', function () {
     stopBgMusic();
-    showScreen('screen-home');
+    _playPendingCelebrations(function () {
+      showScreen('screen-home');
+    });
   });
 
   document.getElementById('result-return-lobby').addEventListener('click', function () {
