@@ -401,43 +401,30 @@
 
   /* ── Home screen buttons ─────────────────────────────────────── */
 
-  // "Versus Mode" — routes to BattleLobby student join if available
-  document.getElementById('btn-versus').addEventListener('click', function () {
-    if (window.BattleLobby && typeof window.BattleLobby.showStudentJoin === 'function') {
-      window.BattleLobby.showStudentJoin();
-      return;
-    }
-    window.multiplayerMode = true;
-    showScreen('screen-deckbuilder');
-    initDeckBuilder();
-    playDeckMusic();
-  });
+  // Home buttons (Ready / Versus / Arcadium / Adventure) are now handled
+  // by HomeFlow in js/home.js. The overworld back button is kept here
+  // because the overworld screen lives alongside the deck builder flow.
+  var advBack = document.getElementById('overworld-back');
+  if (advBack) {
+    advBack.addEventListener('click', function () {
+      showScreen('screen-home');
+      if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') {
+        window.HomeFlow.reset();
+      }
+    });
+  }
 
-  // "I'm Ready" — first-time: Lucy intro → video → tutorial
-  //               returning:  straight to deck builder
-  document.getElementById('btn-ready').addEventListener('click', function () {
-    window.multiplayerMode = false;
-    if (localStorage.getItem('sog_tutorial_complete')) {
-      showScreen('screen-deckbuilder');
-      initDeckBuilder();
-      playDeckMusic();
-      return;
-    }
-    // First-time player: Lucy 3-line home intro, then video
-    if (typeof window.startHomeIntro === 'function') {
-      window.startHomeIntro(function () {
-        var video = document.getElementById('intro-video');
-        video.currentTime = 0;
-        video.play().catch(function () {});
-        showScreen('screen-video');
-      });
-    }
-  });
+  // Expose deck music so HomeFlow can start it when routing to the deck builder
+  window.playDeckMusic = playDeckMusic;
 
   // "I'm Ready To Learn" — always replays the full intro → video → tutorial flow
   document.getElementById('btn-learn').addEventListener('click', function () {
     window.multiplayerMode = false;
     localStorage.removeItem('sog_tutorial_complete');
+    // Silence the home-screen music before the tutorial intro begins
+    if (window.HomeFlow && typeof window.HomeFlow.stopMusic === 'function') {
+      window.HomeFlow.stopMusic(400);
+    }
     if (typeof window.startHomeIntro === 'function') {
       window.startHomeIntro(function () {
         var video = document.getElementById('intro-video');
@@ -449,7 +436,10 @@
   });
 
   // Video ended → matchup screen → battle + tutorial
+  // (Skipped when HomeFlow is playing the video for the Adventure path,
+  //  signaled via window._adventureVideoMode.)
   document.getElementById('intro-video').addEventListener('ended', function () {
+    if (window._adventureVideoMode) return;
     if (typeof window.showMatchupScreen === 'function') {
       window.showMatchupScreen(function () {
         showScreen('screen-battle');
