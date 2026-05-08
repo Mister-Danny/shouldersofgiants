@@ -29,16 +29,42 @@
        HOME SCREEN — Welcome / "Are you ready?" screen
   ════════════════════════════════════════════════════════════════ -->
   <div id="screen-home" class="screen active">
-    <div class="home-content">
+    <!-- ── STATE 1 & 2: Title + subtitle + button stack ───────── -->
+    <div class="home-content" id="home-content">
       <h1 id="home-title" class="home-title">Shoulders of Giants</h1>
-      <div class="home-question">Are you ready to make history?</div>
+
+      <div class="home-subtitle-stack">
+        <div class="home-subtitle home-subtitle-intro"      id="home-subtitle-intro">Are you ready to make history?</div>
+        <div class="home-subtitle home-subtitle-path"       id="home-subtitle-path">Choose your path</div>
+        <div class="home-subtitle home-subtitle-adventurer" id="home-subtitle-adventurer">Choose your adventurer</div>
+      </div>
+
       <nav class="home-nav">
-        <button class="btn-snes btn-home-ready"  id="btn-ready">I'm Ready</button>
-        <button class="btn-home-learn"           id="btn-learn">I'm Ready To Learn</button>
-        <button class="btn-snes btn-home-versus" id="btn-versus">&#9876; Multiplayer</button>
-        <button class="btn-home-about"           id="btn-about">About the Game</button>
-        <button class="btn-home-feedback"        id="btn-home-feedback" style="display:none">Feedback</button>
+        <!-- State 1 buttons -->
+        <button class="btn-snes btn-home-uniform btn-home-ready" id="btn-ready">I'm Ready</button>
+        <button class="btn-home-uniform btn-home-learn" id="btn-learn">I'm Ready To Learn</button>
+        <button class="btn-home-uniform btn-home-about" id="btn-about">About the Game</button>
+
+        <!-- State 2 buttons (hidden initially) -->
+        <button class="btn-snes btn-home-uniform btn-home-arcadium"     id="btn-arcadium">Arcadium</button>
+        <button class="btn-snes btn-home-uniform btn-home-adventure-new" id="btn-adventure-new">Adventure</button>
+        <button class="btn-snes btn-home-uniform btn-home-versus"       id="btn-versus">&#9876; Multiplayer</button>
+
+        <!-- Feedback button — hidden until threshold reached (managed by js/feedback.js) -->
+        <button class="btn-home-feedback" id="btn-home-feedback" style="display:none">Feedback</button>
       </nav>
+    </div>
+
+    <!-- ── STATE 3: Adventurer selection stage ──────────────── -->
+    <div id="home-adventure-stage">
+      <button id="home-adventure-back" class="home-adventure-back" aria-label="Back">&#8592;</button>
+      <img id="home-char-female" class="home-adventurer" draggable="false"
+           src="images/metaworld/character sprites/female/adventurer-female-standing.png">
+      <img id="home-char-male"   class="home-adventurer" draggable="false"
+           src="images/metaworld/character sprites/female/adventurer-female-standing.png">
+      <!-- Secret-door rectangle + iris wipe overlay, used after a character is picked -->
+      <div id="home-secret-door"></div>
+      <div id="home-iris-wipe"></div>
     </div>
 
     <p class="home-byline">By Mr. Shutler-Ojeda</p>
@@ -328,6 +354,37 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       OVERWORLD (Adventure Mode)
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="screen-overworld" class="screen">
+    <img id="overworld-map" src="images/metaworld/maps/eastafrica.jpeg" alt="" draggable="false">
+    <!-- Full-screen fog (active on first visit to Egypt / Mesopotamia) -->
+    <div id="overworld-fog-full"></div>
+    <!-- Overlay layer — nodes, exit zones, and character are injected here by JS -->
+    <div id="overworld-overlay">
+      <img id="overworld-character" src="images/metaworld/character sprites/female/adventurer-female-standing.png" alt="" draggable="false">
+    </div>
+    <!-- Map-to-map transition: black fade with 'Traveling...' text -->
+    <div id="overworld-transition">
+      <span id="overworld-transition-text">Traveling&hellip;</span>
+    </div>
+
+    <!-- Adventure Mode scripted dialogue boxes ─ SNES style -->
+    <div id="adv-dialogue-lucy" class="adv-dialogue adv-dialogue-top">
+      <div class="adv-dialogue-text"></div>
+      <img class="adv-dialogue-portrait" src="images/Lucy.png" alt="">
+      <div class="adv-dialogue-hint">&#9654; Click to continue</div>
+    </div>
+    <div id="adv-dialogue-explorer" class="adv-dialogue adv-dialogue-bottom">
+      <img class="adv-dialogue-portrait" src="images/femaleexplorer portrait.jpeg" alt="">
+      <div class="adv-dialogue-text"></div>
+      <div class="adv-dialogue-hint">&#9654; Click to continue</div>
+    </div>
+
+    <button id="overworld-back" class="btn-snes btn-snes-close">&#8592; Back to Home</button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -1258,6 +1315,8 @@
   <script src="js/ai.js"></script>
   <script src="js/tutorial.js"></script>
   <script src="js/legend.js"></script>
+  <script src="js/overworld.js"></script>
+  <script src="js/home.js"></script>
   <script src="js/game.js"></script>
   <script src="js/bypass.js"></script>
   <script src="js/welcome.js"></script>
