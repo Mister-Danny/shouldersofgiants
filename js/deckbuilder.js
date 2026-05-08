@@ -504,7 +504,7 @@
     localStorage.removeItem('sog_tutorial_complete');
     // Silence the home-screen music before the tutorial intro begins
     if (window.HomeFlow && typeof window.HomeFlow.stopMusic === 'function') {
-      window.HomeFlow.stopMusic(400);
+      window.HomeFlow.stopMusic(500);
     }
     if (typeof window.startHomeIntro === 'function') {
       window.startHomeIntro(function () {

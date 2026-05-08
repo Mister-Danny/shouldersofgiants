@@ -280,11 +280,13 @@ img    { display: block; }
    glow nudge so the eye lands there first without breaking the system.
 ─────────────────────────────────────────────────────────────────── */
 
-/* Shared sizing — identical width + height across all four buttons */
+/* Shared sizing — identical width + height across all home buttons */
 .btn-home-ready,
 .btn-home-versus,
 .btn-home-learn,
-.btn-home-about {
+.btn-home-about,
+.btn-home-arcadium,
+.btn-home-adventure-new {
   width: 360px;
   box-sizing: border-box;
   text-align: center;
@@ -297,13 +299,15 @@ img    { display: block; }
 .btn-home-ready,
 .btn-home-versus,
 .btn-home-learn,
-.btn-home-about {
+.btn-home-about,
+.btn-home-arcadium,
+.btn-home-adventure-new {
   font-family: var(--font);          /* CTGalbite — same as page title */
   font-size: 28px;
   padding: 12px 52px;
   color: #f0cf6c;
   background: #2a1608;               /* fallback / About fill */
-  border: 3px solid #d4aa50;         /* unified gold border across all four */
+  border: 3px solid #d4aa50;         /* unified gold border across all */
   border-radius: 2px;
   letter-spacing: 0.06em;
   cursor: pointer;
@@ -320,11 +324,13 @@ img    { display: block; }
               box-shadow 0.15s, transform 0.06s;
 }
 
-/* Shared hover/tap — same border brighten + warm halo for all four */
+/* Shared hover/tap — same border brighten + warm halo for all */
 .btn-home-ready:hover,
 .btn-home-versus:hover,
 .btn-home-learn:hover,
-.btn-home-about:hover {
+.btn-home-about:hover,
+.btn-home-arcadium:hover,
+.btn-home-adventure-new:hover {
   border-color: #f0cf6c;
   color: #fff5d8;
   box-shadow:
@@ -337,7 +343,9 @@ img    { display: block; }
 .btn-home-ready:active,
 .btn-home-versus:active,
 .btn-home-learn:active,
-.btn-home-about:active {
+.btn-home-about:active,
+.btn-home-arcadium:active,
+.btn-home-adventure-new:active {
   transform: translateY(4px);
   box-shadow: 0 0 0 #1a0c04, 0 1px 0 #000;
 }
@@ -422,6 +430,33 @@ img    { display: block; }
 .btn-home-feedback:active {
   transform: translateY(3px);
   box-shadow: 0 0 0 #1a0c04, 0 1px 0 #000;
+}
+
+/* ── State-2 back arrow ──────────────────────────────────────────
+   Small secondary control for returning from path-choice (State 2)
+   to the initial home view (State 1). Lower visual weight than
+   the primary buttons — text-button feel with a subtle gold border. */
+.btn-state2-back {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 18px;
+  font-family: var(--font);
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  color: #b89968;
+  background: transparent;
+  border: 1px solid #6a4a20;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.06s;
+}
+.btn-state2-back:hover {
+  color: #f0cf6c;
+  border-color: #d4aa50;
+  background: rgba(42, 22, 8, 0.6);
+}
+.btn-state2-back:active {
+  transform: translateY(1px);
 }
 
 
@@ -7222,26 +7257,23 @@ body.tut-locked #battle-reset-turn {
   box-sizing: border-box;
 }
 
-/* Arcadium / Adventure / Online Versus — path-choice trio styled
-   like I'm Ready but with distinct color accents. */
+/* Path-choice trio (State 2) — share the gold-border / parchment family
+   from the State 1 rules above; only the fill differs per button. */
+
+/* "Arcadium" — saturated royal purple (gameplay path) */
 .btn-home-arcadium {
-  background: #7a3aab; border: 3px solid #000; color: #fff;
-  box-shadow: 0 5px 0 #3e1a60, 0 6px 0 #000;
+  background: linear-gradient(180deg, #7a3aab 0%, #5e2890 100%);
 }
-.btn-home-arcadium:hover { background: #8e4abf; }
-.btn-home-arcadium:active {
-  transform: translateY(5px);
-  box-shadow: 0 0 0 #3e1a60, 0 1px 0 #000;
+.btn-home-arcadium:hover {
+  background: linear-gradient(180deg, #9450c8 0%, #6e34a8 100%);
 }
 
+/* "Adventure" — earthy forest green (exploration path) */
 .btn-home-adventure-new {
-  background: #3a7030; border: 3px solid #000; color: #fff;
-  box-shadow: 0 5px 0 #1c3a18, 0 6px 0 #000;
+  background: linear-gradient(180deg, #4a8540 0%, #2c5224 100%);
 }
-.btn-home-adventure-new:hover { background: #4a8540; }
-.btn-home-adventure-new:active {
-  transform: translateY(5px);
-  box-shadow: 0 0 0 #1c3a18, 0 1px 0 #000;
+.btn-home-adventure-new:hover {
+  background: linear-gradient(180deg, #5ca050 0%, #3c6a30 100%);
 }
 
 /* Path-choice buttons start hidden; JS toggles .btn-visible to show them.

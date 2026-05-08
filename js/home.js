@@ -26,7 +26,7 @@ var HomeFlow = (function () {
 
   /* ── Elements ──────────────────────────────────────────────── */
   var screenHomeEl, homeContentEl, adventureStageEl;
-  var btnReady, btnLearn, btnArcadium, btnAdventureNew, btnVersus;
+  var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back;
   var subtitleIntroEl, subtitlePathEl, subtitleAdventurerEl;
   var charFemaleEl, charMaleEl;
   var backBtn, doorEl, irisEl;
@@ -123,9 +123,11 @@ var HomeFlow = (function () {
     adventureStageEl     = document.getElementById('home-adventure-stage');
     btnReady             = document.getElementById('btn-ready');
     btnLearn             = document.getElementById('btn-learn');
+    btnAbout             = document.getElementById('btn-about');
     btnArcadium          = document.getElementById('btn-arcadium');
     btnAdventureNew      = document.getElementById('btn-adventure-new');
     btnVersus            = document.getElementById('btn-versus');
+    btnState2Back        = document.getElementById('btn-state2-back');
     subtitleIntroEl      = document.getElementById('home-subtitle-intro');
     subtitlePathEl       = document.getElementById('home-subtitle-path');
     subtitleAdventurerEl = document.getElementById('home-subtitle-adventurer');
@@ -141,13 +143,12 @@ var HomeFlow = (function () {
     // Initial subtitle visible
     subtitleIntroEl.classList.add('is-visible');
 
-    // Try to start home music immediately; if blocked by browser autoplay
-    // policy, a first user click will kick it off.
-    startHomeMusic();
+    // Browser autoplay policy blocks audio without prior user interaction.
+    // Defer music start until the first click anywhere on the document — this
+    // covers any home-screen button (Ready / Learn / About) and only fires once.
     document.addEventListener('click', function _firstClick() {
       startHomeMusic();
-      document.removeEventListener('click', _firstClick);
-    }, { once: false });
+    }, { once: true });
 
     // Preload the footsteps SFX so it's ready the instant the walk starts.
     ensureFootsteps();
@@ -157,6 +158,7 @@ var HomeFlow = (function () {
     if (btnArcadium)     btnArcadium.addEventListener('click', onArcadiumClick);
     if (btnAdventureNew) btnAdventureNew.addEventListener('click', onAdventureClick);
     if (btnVersus)       btnVersus.addEventListener('click', onOnlineVersusClick);
+    if (btnState2Back)   btnState2Back.addEventListener('click', onState2BackClick);
     if (backBtn)         backBtn.addEventListener('click', onBackToPathChoice);
     if (charFemaleEl)    charFemaleEl.addEventListener('click', function () { onAdventurerPicked('female'); });
     if (charMaleEl)      charMaleEl.addEventListener('click',   function () { onAdventurerPicked('male');   });
@@ -182,11 +184,12 @@ var HomeFlow = (function () {
     // Fade out intro subtitle + Ready + Learn buttons
     if (typeof gsap === 'undefined') { showPathChoice(); return; }
 
-    gsap.to([subtitleIntroEl, btnReady, btnLearn], {
+    gsap.to([subtitleIntroEl, btnReady, btnLearn, btnAbout], {
       opacity: 0, duration: 0.3, ease: 'power2.out',
       onComplete: function () {
         btnReady.style.display = 'none';
         btnLearn.style.display = 'none';
+        btnAbout.style.display = 'none';
         subtitleIntroEl.classList.remove('is-visible');
         gsap.set(subtitleIntroEl, { opacity: '' });
         showPathChoice();
@@ -195,21 +198,59 @@ var HomeFlow = (function () {
   }
 
   function showPathChoice() {
-    // Show the three path buttons + the "Choose your path" subtitle
+    // Show the three path buttons + back arrow + the "Choose your path" subtitle
     btnArcadium.classList.add('btn-visible');
     btnAdventureNew.classList.add('btn-visible');
     btnVersus.classList.add('btn-visible');
+    btnState2Back.style.display = '';
     if (typeof gsap !== 'undefined') {
-      gsap.set([btnArcadium, btnAdventureNew, btnVersus], { opacity: 0 });
+      gsap.set([btnArcadium, btnAdventureNew, btnVersus, btnState2Back], { opacity: 0 });
     }
     subtitlePathEl.classList.add('is-visible');
 
     if (typeof gsap !== 'undefined') {
-      gsap.to([btnArcadium, btnAdventureNew, btnVersus], {
+      gsap.to([btnArcadium, btnAdventureNew, btnVersus, btnState2Back], {
         opacity: 1, duration: 0.4, ease: 'power2.out', stagger: 0.08
       });
     } else {
-      [btnArcadium, btnAdventureNew, btnVersus].forEach(function (b) { b.style.opacity = 1; });
+      [btnArcadium, btnAdventureNew, btnVersus, btnState2Back].forEach(function (b) { b.style.opacity = 1; });
+    }
+  }
+
+  /* ── STATE 2 → 1: back arrow clicked ───────────────────────── */
+  function onState2BackClick() {
+    if (typeof gsap === 'undefined') {
+      hideState2();
+      restoreState1();
+      return;
+    }
+    gsap.to([btnArcadium, btnAdventureNew, btnVersus, btnState2Back, subtitlePathEl], {
+      opacity: 0, duration: 0.3, ease: 'power2.out',
+      onComplete: function () {
+        hideState2();
+        restoreState1();
+      }
+    });
+  }
+
+  function hideState2() {
+    btnArcadium.classList.remove('btn-visible');
+    btnAdventureNew.classList.remove('btn-visible');
+    btnVersus.classList.remove('btn-visible');
+    btnState2Back.style.display = 'none';
+    subtitlePathEl.classList.remove('is-visible');
+    if (typeof gsap !== 'undefined') gsap.set(subtitlePathEl, { opacity: '' });
+  }
+
+  function restoreState1() {
+    btnReady.style.display = '';
+    btnAbout.style.display = '';
+    applyVisitState();           // restores btn-learn per first-visit rule
+    subtitleIntroEl.classList.add('is-visible');
+    if (typeof gsap !== 'undefined') {
+      gsap.fromTo([btnReady, btnLearn, btnAbout, subtitleIntroEl],
+        { opacity: 0 },
+        { opacity: 1, duration: 0.4, ease: 'power2.out', stagger: 0.05 });
     }
   }
 
@@ -254,12 +295,13 @@ var HomeFlow = (function () {
     // Fade out Arcadium + Online Versus, keep Adventure briefly, then show stage
     if (typeof gsap === 'undefined') { enterAdventureStage(); return; }
 
-    gsap.to([btnArcadium, btnVersus, btnAdventureNew], {
+    gsap.to([btnArcadium, btnVersus, btnAdventureNew, btnState2Back], {
       opacity: 0, duration: 0.3, ease: 'power2.out',
       onComplete: function () {
         btnArcadium.classList.remove('btn-visible');
         btnAdventureNew.classList.remove('btn-visible');
         btnVersus.classList.remove('btn-visible');
+        btnState2Back.style.display = 'none';
         subtitlePathEl.classList.remove('is-visible');
         enterAdventureStage();
       }
@@ -602,8 +644,11 @@ var HomeFlow = (function () {
     btnArcadium.classList.remove('btn-visible');
     btnAdventureNew.classList.remove('btn-visible');
     btnVersus.classList.remove('btn-visible');
+    btnState2Back.style.display = 'none';
     btnReady.style.display = '';
+    btnAbout.style.display = '';
     gsap.set(btnReady, { opacity: 1 });
+    gsap.set(btnAbout, { opacity: 1 });
     applyVisitState();
     subtitlePathEl.classList.remove('is-visible');
     subtitleIntroEl.classList.add('is-visible');
