@@ -621,8 +621,14 @@ var Overworld = (function () {
       if (e.type === 'keydown') e.preventDefault();
       advanceLine();
     };
-    document.addEventListener('click',   dlgAdvanceHandler);
-    document.addEventListener('keydown', dlgAdvanceHandler);
+    // Defer listener attachment so we don't catch the same click that
+    // triggered this dialogue (e.g. the Prehistory-node click that fires
+    // Phase 2). Without this, the click bubbles to document, hits
+    // dlgAdvanceHandler, and skips line 1 before typing has even started.
+    setTimeout(function () {
+      document.addEventListener('click',   dlgAdvanceHandler);
+      document.addEventListener('keydown', dlgAdvanceHandler);
+    }, 0);
 
     showLine(function () {
       // called when all lines done
