@@ -53,6 +53,7 @@
     abilityCardsTapped: {},
     needMagellanMove:      false,
     pendingMove:           null,
+    snapBackBuffer:        null, // displaced card during snap-back (re-inserted after move animation)
     playerActionLog:       [],   // ordered list of {type:'play',cardId,locId} and {type:'move',cardId,...}
     bonusCapitalNextTurn:  0,
     destroyedIPTotal:      0,   // IP accumulated by William the Conqueror
@@ -1376,6 +1377,10 @@
     if (_musicCtrl) _musicCtrl.style.display = '';
 
     showScreen('screen-home');
+    // Restart home music — was faded out when the tutorial began.
+    if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
+      window.HomeFlow.playMusic();
+    }
     showHomeOutcomeDialogue(won);
   }
 
@@ -1654,41 +1659,27 @@
      Only touches the two affected slots — leaves other cards untouched
      so unrevealed cards keep their face-up unplayed state for the
      flip-to-face-down animation that follows. */
-  function tutSnapBack() {
-    var mv = TS.pendingMove;
-    if (!mv) return;
-
-    // Find the card at its current (destination) slot
-    var destSlots = TS.playerSlots[mv.toLocId];
-    var destIdx = -1;
-    for (var i = 0; i < destSlots.length; i++) {
-      if (destSlots[i] && destSlots[i].cardId === mv.cardId) { destIdx = i; break; }
-    }
-    if (destIdx === -1) { TS.pendingMove = null; return; }
-
-    // Move it back to origin in state
-    var origSlots = TS.playerSlots[mv.fromLocId];
-    var origSi = origSlots.indexOf(null);
-    if (origSi === -1) origSi = mv.fromSi; // fallback
-    origSlots[origSi] = mv.sd;
-    destSlots[destIdx] = null;
-
-    // Clear the destination slot DOM (where Magellan was previewed)
-    var destEl = getTutSlotEl('player', mv.toLocId, destIdx);
-    if (destEl) {
-      destEl.className = 'battle-card-slot';
-      destEl.innerHTML = '';
-      delete destEl.dataset.cardId;
-    }
-
-    // Rebuild Magellan at his origin slot
-    var origEl = getTutSlotEl('player', mv.fromLocId, origSi);
-    if (origEl) {
-      var card = CARDS.find(function (c) { return c.id === mv.cardId; });
-      origEl.dataset.cardId = mv.cardId;
-      origEl.className = 'battle-card-slot occupied face-up';
-      origEl.innerHTML = '';
-      if (card) {
+  /* Rebuild every slot's DOM at a location from current state, without
+     re-packing. Used by snap-back to reflect un-compacted state. */
+  function rebuildTutSlotsAt(owner, locId) {
+    var sl = (owner === 'player' ? TS.playerSlots : TS.aiSlots)[locId];
+    for (var i = 0; i < sl.length; i++) {
+      var slotEl = getTutSlotEl(owner, locId, i);
+      if (!slotEl) continue;
+      var sd = sl[i];
+      if (!sd) {
+        slotEl.className = 'battle-card-slot';
+        slotEl.innerHTML = '';
+        slotEl.removeAttribute('draggable');
+        delete slotEl.dataset.cardId;
+        continue;
+      }
+      var card = CARDS.find(function (c) { return c.id === sd.cardId; });
+      if (!card) continue;
+      slotEl.dataset.cardId = card.id;
+      slotEl.innerHTML = '';
+      if (sd.revealed) {
+        slotEl.className = 'battle-card-slot occupied face-up';
         var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
         var ph = document.createElement('div'); ph.className = 'db-card-img-placeholder'; ph.textContent = card.name.charAt(0);
         var img = document.createElement('img'); img.className = 'db-card-img';
@@ -1696,10 +1687,58 @@
         img.onerror = function () { this.style.display = 'none'; };
         wrap.appendChild(ph); wrap.appendChild(img);
         var ccEl = document.createElement('div'); ccEl.className = 'db-overlay-cc'; ccEl.textContent = card.cc;
-        var ipEl = document.createElement('div'); ipEl.className = 'db-overlay-ip'; ipEl.textContent = mv.sd.ip;
-        origEl.appendChild(wrap); origEl.appendChild(ccEl); origEl.appendChild(ipEl);
+        var ipEl = document.createElement('div'); ipEl.className = 'db-overlay-ip'; ipEl.textContent = tEffectiveIP(sd);
+        slotEl.appendChild(wrap); slotEl.appendChild(ccEl); slotEl.appendChild(ipEl);
+      } else {
+        slotEl.className = 'battle-card-slot occupied face-down';
       }
     }
+  }
+
+  function tutSnapBack() {
+    var mv = TS.pendingMove;
+    if (!mv) return;
+
+    // Find Magellan at his current (destination) slot and remove him from state + DOM
+    var destSlots = TS.playerSlots[mv.toLocId];
+    var destIdx = -1;
+    for (var i = 0; i < destSlots.length; i++) {
+      if (destSlots[i] && destSlots[i].cardId === mv.cardId) { destIdx = i; break; }
+    }
+    if (destIdx === -1) { TS.pendingMove = null; return; }
+
+    destSlots[destIdx] = null;
+    var destEl = getTutSlotEl('player', mv.toLocId, destIdx);
+    if (destEl) {
+      destEl.className = 'battle-card-slot';
+      destEl.innerHTML = '';
+      delete destEl.dataset.cardId;
+    }
+
+    // If the source location is now full (a card was played into Magellan's
+    // vacated slot during select), buffer the most-recently-placed unrevealed
+    // card so Magellan can reclaim his original slot without overwriting.
+    var origSlots = TS.playerSlots[mv.fromLocId];
+    TS.snapBackBuffer = null;
+    if (origSlots[origSlots.length - 1] !== null) {
+      for (var s = origSlots.length - 1; s >= 0; s--) {
+        if (origSlots[s] && !origSlots[s].revealed) {
+          TS.snapBackBuffer = { locId: mv.fromLocId, sd: origSlots[s] };
+          origSlots[s] = null;
+          break;
+        }
+      }
+    }
+
+    // Un-compact: shift slots from mv.fromSi onwards one step right, opening
+    // Magellan's original slot. Then place Magellan at mv.fromSi.
+    for (var k = origSlots.length - 1; k > mv.fromSi; k--) {
+      origSlots[k] = origSlots[k - 1];
+    }
+    origSlots[mv.fromSi] = mv.sd;
+
+    // Rebuild source DOM from state (preserves the un-compacted arrangement)
+    rebuildTutSlotsAt('player', mv.fromLocId);
   }
 
   /* Execute the pending move with animation + SFX during reveal. */
@@ -1767,6 +1806,53 @@
             if (typeof Anim !== 'undefined') Anim.floatNumber(destCardEl, 1);
           }
 
+          // Source compaction with FLIP-style slide-up animation. Capture
+          // each source slot's pre-compact rect, run compactTutSlotsAt
+          // (instant DOM rebuild), then animate each shifted slot from its
+          // old position to its new one.
+          var preCompactState = origSlots.slice();
+          var oldRects = [];
+          for (var i2 = 0; i2 < origSlots.length; i2++) {
+            var preEl = getTutSlotEl('player', mv.fromLocId, i2);
+            oldRects[i2] = preEl ? preEl.getBoundingClientRect() : null;
+          }
+
+          compactTutSlotsAt('player', mv.fromLocId);
+
+          for (var newSi = 0; newSi < origSlots.length; newSi++) {
+            var sd2 = origSlots[newSi];
+            if (!sd2) continue;
+            var oldSi = preCompactState.indexOf(sd2);
+            if (oldSi === -1 || oldSi === newSi) continue;
+            var newEl = getTutSlotEl('player', mv.fromLocId, newSi);
+            var oldRect = oldRects[oldSi];
+            if (!newEl || !oldRect) continue;
+            var newRect = newEl.getBoundingClientRect();
+            gsap.fromTo(newEl,
+              { x: oldRect.left - newRect.left, y: oldRect.top - newRect.top },
+              { x: 0, y: 0, duration: 0.3, ease: 'power2.out' });
+          }
+
+          // Re-insert any card buffered during snap-back, face-down at the
+          // next null slot. Brief fade-in after the slide-up settles.
+          if (TS.snapBackBuffer && TS.snapBackBuffer.locId === mv.fromLocId) {
+            var srcSlots2 = TS.playerSlots[mv.fromLocId];
+            var insertSi = srcSlots2.indexOf(null);
+            if (insertSi !== -1) {
+              srcSlots2[insertSi] = TS.snapBackBuffer.sd;
+              var insertEl = getTutSlotEl('player', mv.fromLocId, insertSi);
+              if (insertEl) {
+                insertEl.dataset.cardId = TS.snapBackBuffer.sd.cardId;
+                insertEl.className = 'battle-card-slot occupied face-down';
+                insertEl.innerHTML = '';
+                gsap.fromTo(insertEl,
+                  { opacity: 0 },
+                  { opacity: 1, duration: 0.35, delay: 0.25, ease: 'power2.out' });
+              }
+            }
+            TS.snapBackBuffer = null;
+          }
+
           updateScores();
           evalContinuous_tut();
           setTimeout(done, 600);
@@ -1797,6 +1883,23 @@
         var _cc2 = document.createElement('div'); _cc2.className = 'db-overlay-cc'; _cc2.textContent = card.cc;
         var _ip2 = document.createElement('div'); _ip2.className = 'db-overlay-ip'; _ip2.textContent = tEffectiveIP(sd);
         toEl.appendChild(_w2); toEl.appendChild(_cc2); toEl.appendChild(_ip2);
+      }
+
+      // Compact source + re-insert buffered card (instant, no animation in fallback)
+      compactTutSlotsAt('player', mv.fromLocId);
+      if (TS.snapBackBuffer && TS.snapBackBuffer.locId === mv.fromLocId) {
+        var srcSlotsNG = TS.playerSlots[mv.fromLocId];
+        var insertSiNG = srcSlotsNG.indexOf(null);
+        if (insertSiNG !== -1) {
+          srcSlotsNG[insertSiNG] = TS.snapBackBuffer.sd;
+          var insertElNG = getTutSlotEl('player', mv.fromLocId, insertSiNG);
+          if (insertElNG) {
+            insertElNG.dataset.cardId = TS.snapBackBuffer.sd.cardId;
+            insertElNG.className = 'battle-card-slot occupied face-down';
+            insertElNG.innerHTML = '';
+          }
+        }
+        TS.snapBackBuffer = null;
       }
 
       updateScores();
@@ -1830,6 +1933,16 @@
           if (sl[i] && !sl[i].revealed && sl[i].cardId === action.cardId) {
             return { type: 'play', owner: 'player', locId: action.locId, si: i, sd: sl[i] };
           }
+        }
+        // The card may be temporarily held in the snap-back buffer (when it
+        // was played into Magellan's vacated slot during select). It will be
+        // re-inserted during the move animation; flipCard re-finds the slot
+        // index via item.sd at flip time.
+        if (TS.snapBackBuffer &&
+            TS.snapBackBuffer.locId === action.locId &&
+            TS.snapBackBuffer.sd &&
+            TS.snapBackBuffer.sd.cardId === action.cardId) {
+          return { type: 'play', owner: 'player', locId: action.locId, si: -1, sd: TS.snapBackBuffer.sd };
         }
         return null;
       }).filter(Boolean);
@@ -1905,7 +2018,15 @@
     item.sd.revealed = true;
     var card = CARDS.find(function (c) { return c.id === item.sd.cardId; });
     if (!card) { if (proceed) proceed(); return; }
-    var slotEl = getTutSlotEl(item.owner, item.locId, item.si);
+
+    // Re-find slot index in current state — may have shifted due to compaction
+    // or snap-back buffer re-insertion since the queue was built.
+    var sl = item.owner === 'player' ? TS.playerSlots[item.locId] : TS.aiSlots[item.locId];
+    var si = -1;
+    for (var k = 0; k < sl.length; k++) { if (sl[k] === item.sd) { si = k; break; } }
+    if (si === -1) si = item.si;
+
+    var slotEl = getTutSlotEl(item.owner, item.locId, si);
     if (!slotEl) { if (proceed) proceed(); return; }
 
     if (typeof SFX !== 'undefined') SFX.cardReveal();

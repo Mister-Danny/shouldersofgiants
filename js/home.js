@@ -26,7 +26,7 @@ var HomeFlow = (function () {
 
   /* ── Elements ──────────────────────────────────────────────── */
   var screenHomeEl, homeContentEl, adventureStageEl;
-  var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back;
+  var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback;
   var subtitleIntroEl, subtitlePathEl, subtitleAdventurerEl;
   var charFemaleEl, charMaleEl;
   var backBtn, doorEl, irisEl;
@@ -55,8 +55,9 @@ var HomeFlow = (function () {
     homeMusicAudio.volume = HOME_MUSIC_VOLUME;
     var p = homeMusicAudio.play();
     if (p && typeof p.catch === 'function') {
-      p.catch(function (err) {
-        console.warn('[HomeFlow] home music play() rejected:', err);
+      p.catch(function () {
+        // Browser autoplay policy — expected on first page load before any
+        // user interaction. The first-click fallback in init() will retry.
       });
     }
   }
@@ -128,6 +129,7 @@ var HomeFlow = (function () {
     btnAdventureNew      = document.getElementById('btn-adventure-new');
     btnVersus            = document.getElementById('btn-versus');
     btnState2Back        = document.getElementById('btn-state2-back');
+    btnFeedback          = document.getElementById('btn-home-feedback');
     subtitleIntroEl      = document.getElementById('home-subtitle-intro');
     subtitlePathEl       = document.getElementById('home-subtitle-path');
     subtitleAdventurerEl = document.getElementById('home-subtitle-adventurer');
@@ -143,9 +145,10 @@ var HomeFlow = (function () {
     // Initial subtitle visible
     subtitleIntroEl.classList.add('is-visible');
 
-    // Browser autoplay policy blocks audio without prior user interaction.
-    // Defer music start until the first click anywhere on the document — this
-    // covers any home-screen button (Ready / Learn / About) and only fires once.
+    // Try to start home music immediately. If the browser's autoplay policy
+    // blocks it (no prior interaction this session), the rejection is silent
+    // and the click listener below kicks it off on the first user click.
+    startHomeMusic();
     document.addEventListener('click', function _firstClick() {
       startHomeMusic();
     }, { once: true });
@@ -184,12 +187,13 @@ var HomeFlow = (function () {
     // Fade out intro subtitle + Ready + Learn buttons
     if (typeof gsap === 'undefined') { showPathChoice(); return; }
 
-    gsap.to([subtitleIntroEl, btnReady, btnLearn, btnAbout], {
+    gsap.to([subtitleIntroEl, btnReady, btnLearn, btnAbout, btnFeedback], {
       opacity: 0, duration: 0.3, ease: 'power2.out',
       onComplete: function () {
         btnReady.style.display = 'none';
         btnLearn.style.display = 'none';
         btnAbout.style.display = 'none';
+        if (btnFeedback) btnFeedback.style.display = 'none';
         subtitleIntroEl.classList.remove('is-visible');
         gsap.set(subtitleIntroEl, { opacity: '' });
         showPathChoice();
@@ -246,11 +250,18 @@ var HomeFlow = (function () {
     btnReady.style.display = '';
     btnAbout.style.display = '';
     applyVisitState();           // restores btn-learn per first-visit rule
+    // Re-evaluate Feedback button (visible only past the play-count threshold)
+    if (window.Feedback && typeof window.Feedback.refreshHomeButton === 'function') {
+      window.Feedback.refreshHomeButton();
+    }
     subtitleIntroEl.classList.add('is-visible');
     if (typeof gsap !== 'undefined') {
       gsap.fromTo([btnReady, btnLearn, btnAbout, subtitleIntroEl],
         { opacity: 0 },
         { opacity: 1, duration: 0.4, ease: 'power2.out', stagger: 0.05 });
+      if (btnFeedback && btnFeedback.style.display !== 'none') {
+        gsap.fromTo(btnFeedback, { opacity: 0 }, { opacity: 1, duration: 0.4, ease: 'power2.out' });
+      }
     }
   }
 
@@ -650,6 +661,10 @@ var HomeFlow = (function () {
     gsap.set(btnReady, { opacity: 1 });
     gsap.set(btnAbout, { opacity: 1 });
     applyVisitState();
+    // Re-evaluate Feedback button (threshold-gated by feedback.js)
+    if (window.Feedback && typeof window.Feedback.refreshHomeButton === 'function') {
+      window.Feedback.refreshHomeButton();
+    }
     subtitlePathEl.classList.remove('is-visible');
     subtitleIntroEl.classList.add('is-visible');
     gsap.set([charFemaleEl, charMaleEl], { opacity: 0 });
@@ -666,6 +681,7 @@ var HomeFlow = (function () {
   return {
     init:      init,
     reset:     resetHomeState,
+    playMusic: startHomeMusic,  // exposed so flows returning to home (e.g. tutorial end) can resume it
     stopMusic: stopHomeMusic    // exposed so other flows (Learn tutorial) can silence it
   };
 })();
