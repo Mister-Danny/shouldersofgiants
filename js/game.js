@@ -2857,10 +2857,14 @@
     var oppSide  = owner === 'player' ? 'opp' : 'player';
     var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
 
-    // Find the highest-IP Political/Military card on the opponent's side at this location
+    // Find the highest-IP Political/Military card on the opponent's side at this location.
+    // Include face-down cards being played this turn — Wu's reveal can happen before
+    // theirs in the reveal sequence, and filtering by `revealed` would silently miss
+    // them. The push moves slot data, not the DOM directly, so the target's later
+    // reveal happens at the destination location after the push.
     var best = null;
     oppSlots[locId].forEach(function (s) {
-      if (!s || !s.revealed) return;
+      if (!s) return;
       var c = CARDS.find(function (x) { return x.id === s.cardId; });
       if (!c || (c.type !== 'Political' && c.type !== 'Military')) return;
       var ip = effectiveIP(s);
@@ -2868,20 +2872,11 @@
     });
     if (!best) { done(); return; }
 
-    // Find destination: prefer adjacent locations, but fall back to any other location
-    // with space so Wu never destroys when a push is possible anywhere on the board.
+    // Canonical: push to an adjacent location with a free slot; if none, destroy.
     var destLocId = null;
     var oppDestSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
-    // First pass: adjacent locations (preferred)
     for (var i = 0; i < adjLocs.length; i++) {
       if (oppDestSlots[adjLocs[i]].indexOf(null) !== -1) { destLocId = adjLocs[i]; break; }
-    }
-    // Second pass: any other location if no adjacent slot found
-    if (!destLocId) {
-      for (var j = 0; j < G.locations.length; j++) {
-        var lid = G.locations[j].id;
-        if (lid !== locId && oppDestSlots[lid].indexOf(null) !== -1) { destLocId = lid; break; }
-      }
     }
     var canPush = destLocId !== null;
 
