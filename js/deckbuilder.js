@@ -42,9 +42,22 @@
   // Card-detail popup (read-only)
   var backdropEl      = document.getElementById('card-popup-backdrop');
   var popupNameEl     = document.getElementById('popup-name');
+  var popupTypeEl     = document.getElementById('popup-type');
   var popupAbilNameEl = document.getElementById('popup-ability-name');
   var popupAbilTextEl = document.getElementById('popup-ability-text');
   var popupCloseBtn   = document.getElementById('popup-close-btn');
+
+  // Per-category modifier class for the icon span in the type label.
+  // Mirrors the map in game.js → openBattlePopup so both popup surfaces
+  // render the same symbol+label. Scientific has no PNG yet → falls
+  // through to a label-only display.
+  var TYPE_ICON_CLASS = {
+    Political:   'political',
+    Religious:   'religious',
+    Military:    'military',
+    Cultural:    'cultural',
+    Exploration: 'exploration'
+  };
 
   // Rename modal
   var renameBackdrop  = document.getElementById('rename-deck-backdrop');
@@ -318,6 +331,22 @@
   function openPopup(card, isLocked) {
     popupCardId = card.id;
     popupNameEl.textContent = card.name;
+
+    // Category-type label (single-type for now; expand to type2 here).
+    if (popupTypeEl) {
+      if (card.type) {
+        var iconCls = TYPE_ICON_CLASS[card.type];
+        var iconHTML = iconCls
+          ? '<span class="cat-icon cat-icon--' + iconCls + '" aria-hidden="true"></span>'
+          : '';
+        popupTypeEl.innerHTML =
+          iconHTML + '<span class="cat-label">' + card.type.toUpperCase() + '</span>';
+        popupTypeEl.style.display = '';
+      } else {
+        popupTypeEl.style.display = 'none';
+      }
+    }
+
     if (card.ability) {
       popupAbilNameEl.textContent = card.abilityName;
       popupAbilNameEl.style.display = '';

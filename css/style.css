@@ -1321,6 +1321,73 @@ img    { display: block; }
   margin-bottom: 14px;
 }
 
+/* Category-type label (icon + e.g. "RELIGIOUS") — sits between name and
+   divider. 70% of the card-name size; paler-gold via #battle-popup-backdrop
+   override below. Symbol PNG is rendered as a CSS mask filled with
+   currentColor so the icon picks up the same gold as the label text on
+   every platform, with no per-category tinting. */
+.popup-card-type {
+  font-family: var(--font);
+  font-size: 24px;
+  line-height: 1;            /* tight box so the text glyphs hug their bounds */
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  text-shadow: 1px 1px 0 #000;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: baseline;     /* anchor icon bottom to text baseline */
+  gap: 0.4em;
+}
+.popup-card-type .cat-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask-position: center;
+          mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+          mask-size: contain;
+}
+/* Per-category translate values compensate for transparent padding
+   inside each source PNG so the visible ink's bottom anchors to the
+   text baseline. Measured padding ratios:
+     politcal.png:    6.05% → translateY(0.06em)
+     religious.png:   2.54% → translateY(0.025em)
+     military / cultural / exploration: 0% → no translate */
+.popup-card-type .cat-icon--political {
+  -webkit-mask-image: url('../images/symbols/politcal.png');
+          mask-image: url('../images/symbols/politcal.png');
+  transform: translateY(0.06em);
+}
+.popup-card-type .cat-icon--religious {
+  -webkit-mask-image: url('../images/symbols/religious.png');
+          mask-image: url('../images/symbols/religious.png');
+  width: 0.80em;
+  height: 0.80em;
+  transform: translateY(0.02em);
+}
+.popup-card-type .cat-icon--military {
+  -webkit-mask-image: url('../images/symbols/military.png');
+          mask-image: url('../images/symbols/military.png');
+  width: 0.80em;
+  height: 0.80em;
+}
+.popup-card-type .cat-icon--cultural {
+  -webkit-mask-image: url('../images/symbols/cultural.png');
+          mask-image: url('../images/symbols/cultural.png');
+  width: 0.80em;
+  height: 0.80em;
+}
+.popup-card-type .cat-icon--exploration {
+  -webkit-mask-image: url('../images/symbols/exploration.png');
+          mask-image: url('../images/symbols/exploration.png');
+  width: 0.80em;
+  height: 0.80em;
+}
+
 /* Horizontal rule between name and ability */
 .popup-divider {
   height: 2px;
@@ -1605,6 +1672,26 @@ img    { display: block; }
 #battle-popup-backdrop .popup-ability-name {
   color: #f0d8a0;
   text-shadow: 1px 1px 0 #000, 0 0 4px rgba(220, 170, 60, 0.20);
+}
+
+/* Category-type label — same paler gold as the ability-name heading */
+#card-popup-backdrop .popup-card-type,
+#battle-popup-backdrop .popup-card-type {
+  color: #f0d8a0;
+  text-shadow: 1px 1px 0 #000, 0 0 4px rgba(220, 170, 60, 0.20);
+}
+
+/* The card name carries its own margin (defined above on .popup-card-name).
+   The type label sits on its own line directly below, with a slightly
+   tighter top spacing so it groups visually with the title rather than
+   the divider. */
+#card-popup-backdrop .popup-card-name,
+#battle-popup-backdrop .popup-card-name {
+  margin-bottom: 4px;
+}
+#card-popup-backdrop .popup-card-type,
+#battle-popup-backdrop .popup-card-type {
+  margin-bottom: 14px;
 }
 
 /* Ability body text — cream off-white over dark wood */

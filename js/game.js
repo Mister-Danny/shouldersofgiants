@@ -144,6 +144,7 @@
   var boardEl          = document.getElementById('battle-board');
   var battlePopupEl        = document.getElementById('battle-popup-backdrop');
   var battlePopupNameEl    = document.getElementById('battle-popup-name');
+  var battlePopupTypeEl    = document.getElementById('battle-popup-type');
   var battlePopupAbilNmEl  = document.getElementById('battle-popup-ability-name');
   var battlePopupAbilTxEl  = document.getElementById('battle-popup-ability-text');
   var battlePopupIPBrkEl   = document.getElementById('battle-popup-ip-breakdown');
@@ -3596,8 +3597,39 @@
    * @param {string} [owner]   'player' | 'opp' (required when sd is provided)
    * @param {boolean} [isBoard] True when called from a board slot (changes hint text)
    */
+  // Per-category modifier class for the icon span. The actual PNG mask
+  // is wired in CSS (.cat-icon--<class>); CSS mask + currentColor ensures
+  // the symbol renders in the same paler-gold as the label text on every
+  // platform, with no per-category tinting.
+  // Note: Political's filename is "politcal.png" (typo preserved).
+  // No PNG exists yet for Scientific; that key falls through and renders
+  // the label without a symbol prefix until the asset lands.
+  var TYPE_ICON_CLASS = {
+    Political:   'political',
+    Religious:   'religious',
+    Military:    'military',
+    Cultural:    'cultural',
+    Exploration: 'exploration'
+  };
+
   function openBattlePopup(card, sd, owner, isBoard) {
     battlePopupNameEl.textContent = card.name;
+
+    // Category-type label. Single-type for now; when card.type2 ships,
+    // render both here (icon + "RELIGIOUS · MILITARY") rather than per-card.
+    if (battlePopupTypeEl) {
+      if (card.type) {
+        var iconCls = TYPE_ICON_CLASS[card.type];
+        var iconHTML = iconCls
+          ? '<span class="cat-icon cat-icon--' + iconCls + '" aria-hidden="true"></span>'
+          : '';
+        battlePopupTypeEl.innerHTML =
+          iconHTML + '<span class="cat-label">' + card.type.toUpperCase() + '</span>';
+        battlePopupTypeEl.style.display = '';
+      } else {
+        battlePopupTypeEl.style.display = 'none';
+      }
+    }
 
     if (sd && battlePopupIPBrkEl) {
       battlePopupIPBrkEl.textContent = buildIPBreakdown(sd, owner);
