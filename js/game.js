@@ -216,7 +216,7 @@
     G.deferredPlays          = {};
     dragInfo = null;
 
-    window.setPlayerHand(G.playerHand, G.playerDeck.length);
+    rebuildPlayerHand();
     updateOppHand();
     capitalNumEl = document.getElementById('battle-capital-num');
 
@@ -227,7 +227,6 @@
     document.getElementById('btn-back-results').style.display = 'none';
 
     updateHeader();
-    bindHandEvents();
     refreshMoveableCards();
     startBgMusic();
     _startSelectionTimer();
@@ -961,8 +960,7 @@
     G.playerSlots[locId][slotIndex] = null;
     compactPlayerSlots(locId);
     syncPlayerSlots(locId);
-    window.setPlayerHand(G.playerHand, G.playerDeck.length);
-    bindHandEvents();
+    rebuildPlayerHand();
     updateHeader();
   }
 
@@ -1077,10 +1075,7 @@
     G.moveLog           = [];
     G.playerActionLog   = [];
 
-    window.setPlayerHand(G.playerHand, G.playerDeck.length);
-    refreshHandIPDisplays();
-    refreshHandCostDisplays();
-    bindHandEvents();
+    rebuildPlayerHand();
     updateHeader();
   }
 
@@ -1470,6 +1465,22 @@
       var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"] .db-overlay-cc');
       if (hEl) hEl.textContent = displayCC;
     });
+  }
+
+  /**
+   * Rebuild the player hand DOM and re-apply every overlay that depends
+   * on board state. setPlayerHand recreates each card element with the
+   * raw card.cc / card.ip — Medici/Henry cost discounts and the
+   * G.cardIPBonus accumulators are layered back on by the refresh
+   * functions. Calling these four together is the only correct sequence;
+   * call this helper instead of setPlayerHand directly so they can't
+   * drift apart.
+   */
+  function rebuildPlayerHand() {
+    window.setPlayerHand(G.playerHand, G.playerDeck.length);
+    bindHandEvents();
+    refreshHandIPDisplays();
+    refreshHandCostDisplays();
   }
 
   function flashScore(el) {
@@ -3365,9 +3376,7 @@
     // Player path — ascend animation, then return to hand with glow + sound
     function doReturn() {
       G.playerHand.push(10);
-      window.setPlayerHand(G.playerHand, G.playerDeck.length);
-      bindHandEvents();
-      refreshHandIPDisplays();
+      rebuildPlayerHand();
       var newJesusEl = playerHandEl.querySelector('.battle-hand-card[data-id="10"]');
       if (newJesusEl && typeof Anim !== 'undefined') Anim.jesusReturn(newJesusEl);
       if (typeof SFX !== 'undefined') {
@@ -3482,8 +3491,7 @@
     if (typeof gsap === 'undefined') {
       removeGhost(joanGhost);
       if (hEl) hEl.remove();
-      window.setPlayerHand(G.playerHand, G.playerDeck.length);
-      bindHandEvents(); refreshHandIPDisplays(); refreshHandCostDisplays();
+      rebuildPlayerHand();
       if (done) done();
       return;
     }
@@ -3494,8 +3502,7 @@
     // Ghost the hand card so it can fly independently
     var handGhost = hEl ? makeBoardGhost(hEl, 9999) : null;
     if (hEl) hEl.remove();
-    window.setPlayerHand(G.playerHand, G.playerDeck.length);
-    bindHandEvents(); refreshHandIPDisplays(); refreshHandCostDisplays();
+    rebuildPlayerHand();
 
     var tl = gsap.timeline();
 
@@ -3656,12 +3663,9 @@
     G.playerDeck.splice(0, playerCanDraw).forEach(function (id) { G.playerHand.push(id); });
     G.aiDeck.splice(0, aiCanDraw).forEach(function (id) { G.aiHand.push(id); });
 
-    window.setPlayerHand(G.playerHand, G.playerDeck.length);
+    rebuildPlayerHand();
     updateOppHand();
-    refreshHandIPDisplays();
-    refreshHandCostDisplays();
     updateHeader();
-    bindHandEvents();
     refreshMoveableCards();
 
     endTurnBtn.textContent     = 'END TURN';
