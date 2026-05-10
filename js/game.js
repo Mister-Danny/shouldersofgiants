@@ -925,7 +925,10 @@
     clearSelection();  // any click/keyboard selection becomes stale after commit
 
     var baseIP = card.ip + (G.cardIPBonus[cardId] || 0);
-    G.playerSlots[locId][si] = { cardId: cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [] };
+    // Capture hand position so undoPlay can restore the card to the slot it
+    // came from rather than appending to the end of the hand.
+    var handIndex = G.playerHand.indexOf(cardId);
+    G.playerSlots[locId][si] = { cardId: cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], handIndex: handIndex };
     G.capital -= cost;
     if (typeof SFX !== 'undefined') SFX.capitalSpent();
     G.playerRevealQueue.push(cardId);
@@ -956,7 +959,12 @@
     // turn" ability) instead of clamping back to the base 5.
     G.capital = Math.min(G.capital, G.turnStartCapital);
     G.playerRevealQueue = G.playerRevealQueue.filter(function (id) { return id !== sd.cardId; });
-    G.playerHand.push(sd.cardId);
+    // Restore to the slot the card occupied at play time, clamped to the
+    // current hand length in case the hand has shrunk since.
+    var insertIdx = (typeof sd.handIndex === 'number')
+      ? Math.min(sd.handIndex, G.playerHand.length)
+      : G.playerHand.length;
+    G.playerHand.splice(insertIdx, 0, sd.cardId);
     G.playerSlots[locId][slotIndex] = null;
     compactPlayerSlots(locId);
     syncPlayerSlots(locId);
