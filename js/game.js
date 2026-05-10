@@ -78,6 +78,14 @@
   /* ── Drag state ──────────────────────────────────────────────── */
   var dragInfo = null;
 
+  /* ── Click/keyboard selection state (parallel to dragInfo) ───── */
+  var selectedCardId        = null;
+  var selectedSource        = null;   // 'hand' | 'slot' | 'move'
+  var selectedFromLocId     = null;
+  var selectedFromSlotIndex = null;
+  var pendingPopupTimer     = null;   // setTimeout id for click → popup race
+  var DBLCLICK_MS           = 350;    // matches deckbuilder.js
+
   /* ── Background music playlist ───────────────────────────────── */
   var _musicTracks = [
     { src: 'music/Cupids Revenge.mp3',     name: 'Cupids Revenge — Kevin MacLeod' },
@@ -394,30 +402,74 @@
   function bindHandEvents() {
     playerHandEl.querySelectorAll('.battle-hand-card').forEach(function (el) {
       el.draggable = true;
+      if (el.tabIndex < 0) el.tabIndex = 0;
       el.addEventListener('click',     onHandCardClick);
+      el.addEventListener('dblclick',  onHandCardDblClick);
       el.addEventListener('dragstart', onHandCardDragStart);
       el.addEventListener('dragend',   onHandCardDragEnd);
+      el.addEventListener('keydown',   onHandCardKeyDown);
     });
   }
 
-  function onHandCardClick() {
-    var cardId = parseInt(this.dataset.id, 10);
-    var card   = CARDS.find(function (c) { return c.id === cardId; });
-    if (!card) return;
-
-    // Build a synthetic slot object so openBattlePopup shows the IP breakdown.
-    // Hand cards don't have a live slot, but they may already have accumulated bonuses
-    // stored in G.cardIPBonus (e.g. William absorbs destroyed IP, Jesus gains +3 per return).
-    // William is a special case: his bonus lives in G.destroyedIPTotal, not cardIPBonus.
-    var bonus = (cardId === 15) ? G.destroyedIPTotal : (G.cardIPBonus[cardId] || 0);
+  /* Build the synthetic slot used to render a hand card in the info popup. */
+  function buildHandPopupSd(card) {
+    var bonus = (card.id === 15) ? G.destroyedIPTotal : (G.cardIPBonus[card.id] || 0);
     var sources = [];
     if (bonus) {
-      var label = cardId === 15 ? 'Destroyed cards (William)' :
-                  cardId === 10 ? 'Resurrection bonus'        : 'Bonus';
+      var label = card.id === 15 ? 'Destroyed cards (William)' :
+                  card.id === 10 ? 'Resurrection bonus'        : 'Bonus';
       sources.push({ source: label, delta: bonus });
     }
-    var sd = { cardId: cardId, ip: card.ip, ipMod: bonus, ipModSources: sources, contMod: 0, revealed: true };
-    openBattlePopup(card, sd, 'player', false);
+    return { cardId: card.id, ip: card.ip, ipMod: bonus, ipModSources: sources, contMod: 0, revealed: true };
+  }
+
+  function openHandCardPopup(cardId) {
+    var card = CARDS.find(function (c) { return c.id === cardId; });
+    if (!card) return;
+    openBattlePopup(card, buildHandPopupSd(card), 'player', false);
+  }
+
+  /* Click on a hand card. Schedule the info popup with a 350ms delay
+     so a follow-up click within the window can promote to dblclick →
+     select-to-play without first flashing the popup. */
+  function onHandCardClick(e) {
+    if (e.detail > 1) return;  // dblclick path handled separately
+    var cardId = parseInt(this.dataset.id, 10);
+    if (isNaN(cardId)) return;
+    if (pendingPopupTimer) { clearTimeout(pendingPopupTimer); pendingPopupTimer = null; }
+    pendingPopupTimer = setTimeout(function () {
+      pendingPopupTimer = null;
+      openHandCardPopup(cardId);
+    }, DBLCLICK_MS);
+  }
+
+  /* Double-click on a hand card → toggle select-for-play. */
+  function onHandCardDblClick(e) {
+    if (pendingPopupTimer) { clearTimeout(pendingPopupTimer); pendingPopupTimer = null; }
+    var cardId = parseInt(this.dataset.id, 10);
+    if (isNaN(cardId)) return;
+    e.preventDefault();
+    if (G.phase !== 'select') return;
+    // Re-double-clicking the same card deselects.
+    if (selectedSource === 'hand' && selectedCardId === cardId) {
+      clearSelection();
+      return;
+    }
+    selectHand(cardId);
+  }
+
+  function onHandCardKeyDown(e) {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    if (window.tutorialActive) return;  // tutorial owns its own keyboard flow
+    if (G.phase !== 'select') return;
+    var cardId = parseInt(this.dataset.id, 10);
+    if (isNaN(cardId)) return;
+    e.preventDefault();
+    if (selectedSource === 'hand' && selectedCardId === cardId) {
+      clearSelection();
+      return;
+    }
+    selectHand(cardId);
   }
 
   function onHandCardDragStart(e) {
@@ -471,44 +523,29 @@
   boardEl.addEventListener('dragover', function (e) {
     if (!dragInfo) return;
 
-    if (dragInfo.source === 'hand' && G.phase === 'select') {
+    if (dragInfo.source === 'hand') {
       var col = e.target.closest('.battle-card-slot[data-owner="player"]');
       if (!col) { clearDragOver(); return; }
-      var locId      = parseInt(col.dataset.locId, 10);
-      var card       = CARDS.find(function (c) { return c.id === dragInfo.cardId; });
-      var firstEmpty   = G.playerSlots[locId].indexOf(null);
-      if (!card || firstEmpty === -1 || effectiveCost(card, locId) > G.capital) { clearDragOver(); return; }
-      // FIRST_CARD_HERE: first play on Turn 1 must go to the Great Rift Valley
-      var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
-      if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
-        clearDragOver(); return;
-      }
+      var locId = parseInt(col.dataset.locId, 10);
+      if (!isLegalPlayTarget(dragInfo.cardId, locId)) { clearDragOver(); return; }
       e.preventDefault();
       clearDragOver();
+      var firstEmpty = G.playerSlots[locId].indexOf(null);
       var t = getSlotEl('player', locId, firstEmpty);
       if (t) t.classList.add('drag-over');
       return;
     }
 
-    if (dragInfo.source === 'move' && G.phase === 'select') {
-      var col = e.target.closest('.battle-card-slot[data-owner="player"]');
-      if (!col) { clearDragOver(); return; }
-      var toLocId      = parseInt(col.dataset.locId, 10);
-      if (toLocId === dragInfo.fromLocId) { clearDragOver(); return; }
-      var firstEmpty   = G.playerSlots[toLocId].indexOf(null);
-      var availForMove = G.playerSlots[toLocId].filter(function (s) { return s === null; }).length
-                       - (G.reservedSlotsPerLoc[toLocId] || 0);
-      if (firstEmpty === -1 || availForMove <= 0) { clearDragOver(); return; }
-      // CULTURAL_FREE_MOVE_HERE: Cultural cards (not Magellan/Columbus) can only move to Timbuktu
-      var movingCard  = CARDS.find(function (c) { return c.id === dragInfo.cardId; });
-      var timbuktuLoc = G.locations.find(function (l) { return l.abilityKey === 'CULTURAL_FREE_MOVE_HERE'; });
-      if (movingCard && movingCard.type === 'Cultural' && dragInfo.cardId !== 24 && dragInfo.cardId !== 25) {
-        if (!timbuktuLoc || toLocId !== timbuktuLoc.id) { clearDragOver(); return; }
-      }
+    if (dragInfo.source === 'move') {
+      var col2 = e.target.closest('.battle-card-slot[data-owner="player"]');
+      if (!col2) { clearDragOver(); return; }
+      var toLocId = parseInt(col2.dataset.locId, 10);
+      if (!isLegalMoveTarget(dragInfo.cardId, dragInfo.fromLocId, toLocId)) { clearDragOver(); return; }
       e.preventDefault();
       clearDragOver();
-      var t = getSlotEl('player', toLocId, firstEmpty);
-      if (t) t.classList.add('drag-over');
+      var firstEmptyMv = G.playerSlots[toLocId].indexOf(null);
+      var t2 = getSlotEl('player', toLocId, firstEmptyMv);
+      if (t2) t2.classList.add('drag-over');
     }
   });
 
@@ -559,6 +596,318 @@
   });
 
   /* ═══════════════════════════════════════════════════════════════
+     CLICK + KEYBOARD SELECTION
+     Parallel input path to drag-and-drop. Selection is held in
+     the module-level selected* variables (kept separate from
+     dragInfo so a real drag can't overwrite a click selection).
+     All terminal actions (commitPlay / undoPlay / queueMove) are
+     shared between drag and click flows.
+  ═══════════════════════════════════════════════════════════════ */
+
+  function setSelected(source, cardId, fromLocId, fromSlotIndex) {
+    selectedSource        = source;
+    selectedCardId        = cardId;
+    selectedFromLocId     = (fromLocId  != null) ? fromLocId  : null;
+    selectedFromSlotIndex = (fromSlotIndex != null) ? fromSlotIndex : null;
+  }
+
+  function clearSelection() {
+    if (pendingPopupTimer) { clearTimeout(pendingPopupTimer); pendingPopupTimer = null; }
+    if (selectedSource === null) return;   // nothing to clear
+    setSelected(null, null, null, null);
+    document.querySelectorAll('.battle-hand-card.selected, .battle-card-slot.selected')
+      .forEach(function (el) { el.classList.remove('selected'); });
+    clearLegalTargets();
+  }
+
+  function clearLegalTargets() {
+    boardEl.querySelectorAll('.battle-card-slot.legal-target')
+      .forEach(function (el) { el.classList.remove('legal-target'); });
+    if (playerHandEl) playerHandEl.classList.remove('legal-target-zone');
+  }
+
+  /* Highlight every slot that's a legal target for the current selection. */
+  function highlightLegalTargets() {
+    clearLegalTargets();
+    if (selectedSource === 'hand' && selectedCardId !== null) {
+      G.locations.forEach(function (loc) {
+        if (!isLegalPlayTarget(selectedCardId, loc.id)) return;
+        var fi = G.playerSlots[loc.id].indexOf(null);
+        var t  = getSlotEl('player', loc.id, fi);
+        if (t) t.classList.add('legal-target');
+      });
+    } else if (selectedSource === 'move' && selectedCardId !== null) {
+      G.locations.forEach(function (loc) {
+        if (!isLegalMoveTarget(selectedCardId, selectedFromLocId, loc.id)) return;
+        var fi = G.playerSlots[loc.id].indexOf(null);
+        var t  = getSlotEl('player', loc.id, fi);
+        if (t) t.classList.add('legal-target');
+      });
+    } else if (selectedSource === 'slot' && selectedFromLocId !== null) {
+      // Undo: dropping into the hand area — mark the hand zone instead of slots.
+      if (playerHandEl) playerHandEl.classList.add('legal-target-zone');
+    }
+  }
+
+  function selectHand(cardId) {
+    clearSelection();
+    setSelected('hand', cardId, null, null);
+    var el = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"]');
+    if (el) el.classList.add('selected');
+    highlightLegalTargets();
+  }
+
+  function selectSlotForUndo(locId, slotIndex) {
+    clearSelection();
+    var sd = G.playerSlots[locId] && G.playerSlots[locId][slotIndex];
+    if (!sd) return;
+    setSelected('slot', sd.cardId, locId, slotIndex);
+    var el = getSlotEl('player', locId, slotIndex);
+    if (el) el.classList.add('selected');
+    highlightLegalTargets();
+  }
+
+  function selectMoveable(cardId, fromLocId, fromSlotIndex) {
+    clearSelection();
+    setSelected('move', cardId, fromLocId, fromSlotIndex);
+    var el = getSlotEl('player', fromLocId, fromSlotIndex);
+    if (el) el.classList.add('selected');
+    highlightLegalTargets();
+  }
+
+  /* Delegated click handler on the board. Splits across:
+       - empty slot while hand-selected → commitPlay
+       - empty slot while move-selected → queueMove
+       - own face-down slot (no selection) → select for undo
+       - own moveable slot (no selection) → select for move
+       - revealed slot → open info popup
+     Single-click only (e.detail === 1) for the popup branches; dblclick
+     handled separately. */
+  boardEl.addEventListener('click', function (e) {
+    if (window.tutorialActive) return;     // tutorial owns its own flow
+    if (G.phase !== 'select') return;
+    if (dragInfo) return;                  // mid-drag
+
+    var slotEl = e.target.closest('.battle-card-slot');
+    if (!slotEl) return;
+    var locId = parseInt(slotEl.dataset.locId, 10);
+    if (isNaN(locId)) return;
+    var owner = slotEl.dataset.owner;
+    var siRaw = slotEl.dataset.slotIndex;
+    var slotIndex = siRaw != null ? parseInt(siRaw, 10) : NaN;
+
+    // ── Selection commit branches ────────────────────────────────
+    // A click on a revealed-occupied slot is transparent to selection
+    // so the popup branch below can open card info without committing
+    // (selection persists; user can still click an empty slot to play).
+    var isRevealed = slotEl.classList.contains('face-up') &&
+                     slotEl.classList.contains('occupied');
+    if (!isRevealed && selectedSource === 'hand' && owner === 'player') {
+      if (isLegalPlayTarget(selectedCardId, locId)) {
+        var cid = selectedCardId;
+        clearSelection();
+        commitPlay(cid, locId);
+      } else {
+        flashDeny(slotEl);
+      }
+      return;
+    }
+    if (!isRevealed && selectedSource === 'move' && owner === 'player') {
+      if (isLegalMoveTarget(selectedCardId, selectedFromLocId, locId)) {
+        var fromLoc = selectedFromLocId;
+        var fromIdx = selectedFromSlotIndex;
+        clearSelection();
+        queueMove(fromLoc, fromIdx, locId);
+      } else {
+        flashDeny(slotEl);
+      }
+      return;
+    }
+    // ── No selection: revealed slot opens popup; other branches no-op
+    //    (selection is initiated via dblclick / Enter, not click).
+    if (slotEl.classList.contains('face-up') &&
+        slotEl.classList.contains('occupied') &&
+        !isNaN(slotIndex)) {
+      var slotsRef = owner === 'player' ? G.playerSlots : G.aiSlots;
+      var sd = slotsRef[locId] && slotsRef[locId][slotIndex];
+      if (!sd) return;
+      var card = CARDS.find(function (c) { return c.id === sd.cardId; });
+      if (card) openBattlePopup(card, sd, owner, true);
+    }
+  });
+
+  /* Delegated dblclick handler on the board. Toggles select-for-undo
+     on own face-down slots, and select-for-move on .moveable slots. */
+  boardEl.addEventListener('dblclick', function (e) {
+    if (window.tutorialActive) return;
+    if (G.phase !== 'select') return;
+    var slotEl = e.target.closest('.battle-card-slot[data-owner="player"]');
+    if (!slotEl) return;
+    var locId     = parseInt(slotEl.dataset.locId,     10);
+    var slotIndex = parseInt(slotEl.dataset.slotIndex, 10);
+    if (isNaN(locId) || isNaN(slotIndex)) return;
+
+    // Moveable revealed slot → toggle select-for-move
+    if (slotEl.classList.contains('moveable')) {
+      var mvCardId = parseInt(slotEl.dataset.cardId, 10);
+      e.preventDefault();
+      if (selectedSource === 'move' &&
+          selectedFromLocId === locId &&
+          selectedFromSlotIndex === slotIndex) {
+        clearSelection();
+      } else {
+        selectMoveable(mvCardId, locId, slotIndex);
+      }
+      return;
+    }
+
+    // Face-down player slot (unplayed) → toggle select-for-undo
+    if (slotEl.classList.contains('unplayed')) {
+      e.preventDefault();
+      if (selectedSource === 'slot' &&
+          selectedFromLocId === locId &&
+          selectedFromSlotIndex === slotIndex) {
+        clearSelection();
+      } else {
+        selectSlotForUndo(locId, slotIndex);
+      }
+    }
+  });
+
+  /* Click on the hand area while a face-down slot is selected → undo. */
+  playerHandEl.addEventListener('click', function (e) {
+    if (window.tutorialActive) return;
+    if (G.phase !== 'select') return;
+    if (dragInfo) return;
+    if (selectedSource !== 'slot') return;
+    // Allow undo whether the click landed on a hand-card or empty hand zone:
+    // the selected slot is the source of truth.
+    var fromLoc = selectedFromLocId;
+    var fromIdx = selectedFromSlotIndex;
+    clearSelection();
+    undoPlay(fromLoc, fromIdx);
+  });
+
+  /* Document-level click → clear selection if the click landed
+     outside any card / slot. Bound in capture-light by listening
+     after the bubbling has resolved. */
+  document.addEventListener('click', function (e) {
+    if (selectedSource === null) return;
+    if (e.target.closest('.battle-hand-card')) return;
+    if (e.target.closest('.battle-card-slot')) return;
+    if (e.target.closest('#battle-player-hand')) return;
+    clearSelection();
+  });
+
+  /* Battle-screen keyboard handler: Tab/Enter/Escape for selection +
+     commit. Browser handles the actual focus traversal — we only react
+     to Enter on a focused element and global Escape. */
+  document.addEventListener('keydown', function (e) {
+    if (window.tutorialActive) return;
+    if (G.phase !== 'select') return;
+    if (e.key === 'Escape') {
+      if (selectedSource !== null) { clearSelection(); e.preventDefault(); }
+      return;
+    }
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    var t = e.target;
+    if (!t || !t.classList) return;
+    // Hand cards already have their own keydown handler.
+    if (t.classList.contains('battle-hand-card')) return;
+    var slotEl = t.closest && t.closest('.battle-card-slot[data-owner="player"]');
+    if (!slotEl) return;
+    var locId     = parseInt(slotEl.dataset.locId,     10);
+    var slotIndex = parseInt(slotEl.dataset.slotIndex, 10);
+    if (isNaN(locId) || isNaN(slotIndex)) return;
+
+    if (selectedSource === 'hand') {
+      if (isLegalPlayTarget(selectedCardId, locId)) {
+        var cid = selectedCardId;
+        clearSelection();
+        commitPlay(cid, locId);
+        e.preventDefault();
+      } else {
+        flashDeny(slotEl);
+        e.preventDefault();
+      }
+      return;
+    }
+    if (selectedSource === 'move') {
+      if (isLegalMoveTarget(selectedCardId, selectedFromLocId, locId)) {
+        var fromLoc = selectedFromLocId;
+        var fromIdx = selectedFromSlotIndex;
+        clearSelection();
+        queueMove(fromLoc, fromIdx, locId);
+        e.preventDefault();
+      } else {
+        flashDeny(slotEl);
+        e.preventDefault();
+      }
+      return;
+    }
+    // No selection: Enter on own moveable / face-down slot toggles select.
+    if (slotEl.classList.contains('moveable')) {
+      var mvCardId = parseInt(slotEl.dataset.cardId, 10);
+      selectMoveable(mvCardId, locId, slotIndex);
+      e.preventDefault();
+    } else if (slotEl.classList.contains('unplayed')) {
+      selectSlotForUndo(locId, slotIndex);
+      e.preventDefault();
+    }
+  });
+
+  /* ═══════════════════════════════════════════════════════════════
+     LEGALITY PREDICATES
+     Single source of truth for whether a play / undo / move is
+     legal right now. Called by both the drag-and-drop validators
+     (boardEl dragover) and the click + keyboard flows so the two
+     input paths can never disagree about what's allowed.
+  ═══════════════════════════════════════════════════════════════ */
+
+  /* Can `cardId` be played to `locId` from the player's hand? */
+  function isLegalPlayTarget(cardId, locId) {
+    if (G.phase !== 'select') return false;
+    var card = CARDS.find(function (c) { return c.id === cardId; });
+    if (!card) return false;
+    if (!G.playerSlots[locId]) return false;
+    var firstEmpty   = G.playerSlots[locId].indexOf(null);
+    if (firstEmpty === -1) return false;
+    if (effectiveCost(card, locId) > G.capital) return false;
+    // Turn-1 first-card-here: first play of turn 1 must go to the Great Rift Valley
+    var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
+    if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
+      return false;
+    }
+    return true;
+  }
+
+  /* Is the player's slot at (locId, slotIndex) currently un-playable? */
+  function isLegalUndoTarget(locId, slotIndex) {
+    if (G.phase !== 'select') return false;
+    if (!G.playerSlots[locId]) return false;
+    var sd = G.playerSlots[locId][slotIndex];
+    if (!sd || sd.revealed) return false;
+    return true;
+  }
+
+  /* Can the moveable card `cardId` at `fromLocId` move to `toLocId`? */
+  function isLegalMoveTarget(cardId, fromLocId, toLocId) {
+    if (G.phase !== 'select') return false;
+    if (fromLocId === toLocId) return false;
+    if (!G.playerSlots[toLocId]) return false;
+    var availForMove = G.playerSlots[toLocId].filter(function (s) { return s === null; }).length
+                     - (G.reservedSlotsPerLoc[toLocId] || 0);
+    if (availForMove <= 0) return false;
+    // CULTURAL_FREE_MOVE_HERE: Cultural cards (not Magellan/Columbus) can only move to Timbuktu
+    var movingCard  = CARDS.find(function (c) { return c.id === cardId; });
+    var timbuktuLoc = G.locations.find(function (l) { return l.abilityKey === 'CULTURAL_FREE_MOVE_HERE'; });
+    if (movingCard && movingCard.type === 'Cultural' && cardId !== 24 && cardId !== 25) {
+      if (!timbuktuLoc || toLocId !== timbuktuLoc.id) return false;
+    }
+    return true;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      PLAY / UNDO / RESET
   ═══════════════════════════════════════════════════════════════ */
 
@@ -574,6 +923,7 @@
     if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
       var d2 = getSlotEl('player', locId, 0); if (d2) flashDeny(d2); return;
     }
+    clearSelection();  // any click/keyboard selection becomes stale after commit
 
     var baseIP = card.ip + (G.cardIPBonus[cardId] || 0);
     G.playerSlots[locId][si] = { cardId: cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [] };
@@ -599,6 +949,7 @@
   function undoPlay(locId, slotIndex) {
     var sd = G.playerSlots[locId][slotIndex];
     if (!sd || sd.revealed) return;
+    clearSelection();  // any click/keyboard selection becomes stale after undo
     var card = CARDS.find(function (c) { return c.id === sd.cardId; });
     if (card) G.capital += effectiveCost(card, locId);
     // Cap to this turn's starting capital — preserves bonus capital
@@ -847,17 +1198,13 @@
     slotEl.appendChild(ccEl);
     slotEl.appendChild(ipEl);
 
-    // Direct click handler: look up current slotData from game state at click time
-    slotEl.onclick = function () {
-      if (window.tutorialActive) return;
-      if (dragInfo) return;
-      var ownerStr = slotEl.dataset.owner;
-      var lId      = parseInt(slotEl.dataset.locId,     10);
-      var si       = parseInt(slotEl.dataset.slotIndex, 10);
-      var slotsRef = ownerStr === 'player' ? G.playerSlots : G.aiSlots;
-      var sd       = slotsRef[lId] && slotsRef[lId][si];
-      openBattlePopup(card, sd, ownerStr, true);
-    };
+    // The delegated click handler on boardEl handles popup / select / commit
+    // for all slots; the per-slot onclick that used to live here was removed
+    // when the click + keyboard input path was added. Player-owned slots are
+    // made tab-focusable here so Enter can target them.
+    if (slotEl.dataset.owner === 'player' && slotEl.tabIndex < 0) {
+      slotEl.tabIndex = 0;
+    }
   }
 
   /**
@@ -1670,6 +2017,7 @@
     var toAvail = G.playerSlots[toLocId].filter(function (s) { return s === null; }).length
                 - (G.reservedSlotsPerLoc[toLocId] || 0);
     if (toAvail <= 0) return;
+    clearSelection();  // any click/keyboard selection becomes stale after move
 
     // Snapshot fromLocId before removing the card (first queue from this loc only)
     if (!G.locationSnapshots[fromLocId]) {
@@ -1984,6 +2332,7 @@
 
   function startReveal() {
     G.phase = 'reveal';
+    clearSelection();      // tear down any click/keyboard selection state
     hideRevealFirstHighlight();  // glow shown during selection — clear it now
     snapBack();            // Restore all queued cards to true origin slots
     refreshMoveableCards();
@@ -3873,40 +4222,28 @@
       return el;
     }
 
-    /* Highlight the valid drop target slot (mirrors dragover validation) */
+    /* Highlight the valid drop target slot. Same legality predicates
+       used by the mouse dragover validator. */
     function highlightDropTarget(cx, cy) {
       clearDragOver();
       if (!dragInfo) return;
       var under = elUnder(cx, cy);
       if (!under) return;
 
-      if (dragInfo.source === 'hand') {
-        var slot = under.closest('.battle-card-slot[data-owner="player"]');
-        if (!slot) return;
-        var locId = parseInt(slot.dataset.locId, 10);
-        var card  = CARDS.find(function (c) { return c.id === dragInfo.cardId; });
-        var fi    = G.playerSlots[locId].indexOf(null);
-        if (!card || fi === -1 || effectiveCost(card, locId) > G.capital) return;
-        var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
-        if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) return;
-        var t = getSlotEl('player', locId, fi);
-        if (t) t.classList.add('drag-over');
+      var slot = under.closest('.battle-card-slot[data-owner="player"]');
+      if (!slot) return;
+      var locId = parseInt(slot.dataset.locId, 10);
 
+      if (dragInfo.source === 'hand') {
+        if (!isLegalPlayTarget(dragInfo.cardId, locId)) return;
       } else if (dragInfo.source === 'move') {
-        var slot = under.closest('.battle-card-slot[data-owner="player"]');
-        if (!slot) return;
-        var locId = parseInt(slot.dataset.locId, 10);
-        if (locId === dragInfo.fromLocId) return;
-        var fi = G.playerSlots[locId].indexOf(null);
-        if (fi === -1) return;
-        var mc = CARDS.find(function (c) { return c.id === dragInfo.cardId; });
-        var tl = G.locations.find(function (l) { return l.abilityKey === 'CULTURAL_FREE_MOVE_HERE'; });
-        if (mc && mc.type === 'Cultural' && dragInfo.cardId !== 24 && dragInfo.cardId !== 25) {
-          if (!tl || locId !== tl.id) return;
-        }
-        var t = getSlotEl('player', locId, fi);
-        if (t) t.classList.add('drag-over');
+        if (!isLegalMoveTarget(dragInfo.cardId, dragInfo.fromLocId, locId)) return;
+      } else {
+        return;
       }
+      var fi = G.playerSlots[locId].indexOf(null);
+      var t  = getSlotEl('player', locId, fi);
+      if (t) t.classList.add('drag-over');
     }
 
     /* Reset all touch drag state */

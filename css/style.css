@@ -2548,6 +2548,43 @@ img    { display: block; }
   box-shadow: inset 0 0 0 1px var(--snes-cyan);
 }
 
+/* ── Click + keyboard selection ─────────────────────────────────────
+   .selected   — the currently-chosen card (in hand or on the board)
+   .legal-target — every slot a click/Enter would commit into
+   These mirror the drag-and-drop visuals so the two input paths
+   feel like the same system. Reuses .drag-over styling for the
+   target highlight via a shared rule below. */
+.battle-hand-card.selected,
+.battle-card-slot.selected {
+  outline: 3px solid var(--snes-yellow);
+  outline-offset: 2px;
+  box-shadow: 0 0 12px rgba(248, 208, 0, 0.55),
+              inset 0 0 0 1px var(--snes-yellow);
+}
+
+.battle-card-slot.legal-target {
+  border-color: var(--snes-cyan);
+  border-style: solid;
+  background: rgba(64, 224, 224, 0.12);
+  box-shadow: inset 0 0 0 1px var(--snes-cyan);
+}
+
+/* Hand area glows when an own face-down slot is selected for undo,
+   indicating that clicking the hand will undo the play. */
+#battle-player-hand.legal-target-zone {
+  outline: 2px dashed var(--snes-cyan);
+  outline-offset: 4px;
+}
+
+/* Keyboard focus ring — distinct from .selected so a user can scan
+   with Tab without committing, and only see the selection ring when
+   they explicitly Enter. */
+.battle-hand-card:focus-visible,
+.battle-card-slot:focus-visible {
+  outline: 2px solid var(--snes-cyan);
+  outline-offset: 2px;
+}
+
 /* Moveable card indicator — Magellan / Columbus during select phase */
 @keyframes moveable-pulse {
   0%   { box-shadow: 0 0 0 2px var(--snes-yellow), inset 0 0 0 1px var(--snes-yellow); }

@@ -71,6 +71,15 @@
   var tutBoardDragCardId   = null; // board card being dragged (Magellan move)
   var tutBoardDragFromLocId = null;
   var tutBoardDragFromSi    = null;
+
+  /* Click + keyboard selection state (parallel to drag). Same shape
+     as the main game's selection but scoped to the tutorial's TS world. */
+  var tutSelectedCardId        = null;
+  var tutSelectedSource        = null;   // 'hand' | 'move'
+  var tutSelectedFromLocId     = null;
+  var tutSelectedFromSi        = null;
+  var tutPendingPopupTimer     = null;
+  var TUT_DBLCLICK_MS          = 350;
   var _otziTyping = false, _otziFullText = '', _otziTypeTimer = null, _otziOnDone = null;
 
   /* ═══════════════════════════════════════════════════════════════
@@ -636,6 +645,41 @@
         e.preventDefault();
         if (otziBoxEl && otziBoxEl.style.display !== 'none') { advanceOtzi(); }
         else { advanceDialogue(); }
+      } else if (e.key === 'Escape') {
+        // Active click/keyboard selection takes precedence over skip.
+        if (tutSelectedSource !== null) {
+          tutClearSelection();
+          e.preventDefault();
+          return;
+        }
+        // The battle-info popup has its own Escape handler in game.js;
+        // when it's open it owns the keystroke and we shouldn't skip.
+        var bp = document.getElementById('battle-popup-backdrop');
+        if (bp && bp.classList.contains('visible')) return;
+        e.preventDefault();
+        exitTutorial();
+      } else if (e.key === 'Enter') {
+        // Enter on a focused player slot commits the current tut selection
+        // (or selects a moveable slot if no selection is active).
+        if (tutSelectedSource === null) {
+          var focusedSlot = document.activeElement && document.activeElement.closest &&
+                            document.activeElement.closest('.battle-card-slot.tut-moveable[data-owner="player"]');
+          if (focusedSlot &&
+              (TS.awaitAction === 'magellan_board_move' || TS.awaitAction === 'free_end_turn')) {
+            var fromLocId = parseInt(focusedSlot.dataset.boardDragLocId || '0', 10);
+            var fromSi    = parseInt(focusedSlot.dataset.boardDragSi    || '0', 10);
+            tutSelectMoveable(24, fromLocId, fromSi, focusedSlot);
+            e.preventDefault();
+          }
+          return;
+        }
+        var slotForCommit = document.activeElement && document.activeElement.closest &&
+                            document.activeElement.closest('.battle-card-slot[data-owner="player"]');
+        if (!slotForCommit) return;
+        var locForCommit = parseInt(slotForCommit.dataset.locId, 10);
+        if (isNaN(locForCommit)) return;
+        tutCommitSelectionAt(locForCommit);
+        e.preventDefault();
       }
     });
 
@@ -1548,6 +1592,7 @@
     if (!slotEl) return;
     slotEl.draggable = true;
     slotEl.classList.add('tut-moveable');
+    if (slotEl.tabIndex < 0) slotEl.tabIndex = 0;
     slotEl.dataset.boardDragLocId = locId;
     slotEl.dataset.boardDragSi    = si;
   }
@@ -2784,37 +2829,170 @@
     return false;
   }
 
+  /* Open the tutorial info popup for a hand card. Same gating that
+     the click handler used to do inline (ability_clicks vs. normal
+     popup, ability-text suppression in T1/T2). */
+  function openTutHandPopup(cardId, cardEl) {
+    var card = CARDS.find(function (c) { return c.id === cardId; });
+    if (!card || typeof window.openBattlePopup !== 'function') return;
+
+    if (TS.awaitAction === 'ability_clicks' && card.ability) {
+      if (!TS.abilityCardsTapped[cardId]) {
+        TS.abilityCardsTapped[cardId] = true;
+        if (cardEl) cardEl.classList.remove('tut-ability-glow');
+      }
+      var sd2 = { cardId: cardId, ip: card.ip, ipMod: 0, ipModSources: [], contMod: 0, revealed: true };
+      window.openBattlePopup(card, sd2, 'player', false);
+      waitForPopupClose(function () { checkAllAbilitiesClicked(); });
+      return;
+    }
+
+    var displayCard = TS.abilitiesActive
+      ? card
+      : { name: card.name, cc: card.cc, ip: card.ip, type: card.type, ability: null, abilityName: null };
+    var sd = { cardId: cardId, ip: card.ip, ipMod: 0, ipModSources: [], contMod: 0, revealed: true };
+    window.openBattlePopup(displayCard, sd, 'player', false);
+  }
+
+  /* Add the .tut-valid-slot highlight for the current tut selection. */
+  function tutHighlightLegalTargets() {
+    document.querySelectorAll('.tut-valid-slot').forEach(function (el) {
+      el.classList.remove('tut-valid-slot');
+    });
+    if (tutSelectedSource === 'hand' && tutSelectedCardId !== null) {
+      T_LOCS.forEach(function (loc) {
+        if (!validLocForCard(tutSelectedCardId, loc.id)) return;
+        var si = TS.playerSlots[loc.id].indexOf(null);
+        if (si === -1) return;
+        var sl = getTutSlotEl('player', loc.id, si);
+        if (sl) sl.classList.add('tut-valid-slot');
+      });
+    } else if (tutSelectedSource === 'move' && tutSelectedFromLocId !== null) {
+      T_LOCS.forEach(function (loc) {
+        if (loc.id === tutSelectedFromLocId) return;
+        if (!TS.playerSlots[loc.id] || TS.playerSlots[loc.id].indexOf(null) === -1) return;
+        var sl = getFirstAvailableSlotEl('player', loc.id);
+        if (sl) sl.classList.add('tut-valid-slot');
+      });
+    }
+  }
+
+  function tutClearSelection() {
+    if (tutPendingPopupTimer) { clearTimeout(tutPendingPopupTimer); tutPendingPopupTimer = null; }
+    if (tutSelectedSource === null) return;
+    tutSelectedCardId    = null;
+    tutSelectedSource    = null;
+    tutSelectedFromLocId = null;
+    tutSelectedFromSi    = null;
+    document.querySelectorAll('.battle-hand-card.selected, .battle-card-slot.selected')
+      .forEach(function (el) { el.classList.remove('selected'); });
+    document.querySelectorAll('.tut-valid-slot').forEach(function (el) {
+      el.classList.remove('tut-valid-slot');
+    });
+  }
+
+  function tutSelectHand(cardId, cardEl) {
+    tutClearSelection();
+    if (!canDrag(cardId)) return;          // tutorial step gates it out
+    tutSelectedCardId = cardId;
+    tutSelectedSource = 'hand';
+    if (cardEl) cardEl.classList.add('selected');
+    tutHighlightLegalTargets();
+  }
+
+  function tutSelectMoveable(cardId, fromLocId, fromSi, slotEl) {
+    tutClearSelection();
+    tutSelectedCardId    = cardId;
+    tutSelectedSource    = 'move';
+    tutSelectedFromLocId = fromLocId;
+    tutSelectedFromSi    = fromSi;
+    if (slotEl) slotEl.classList.add('selected');
+    tutHighlightLegalTargets();
+  }
+
+  /* Try to commit the current tut selection at locId. Returns true on
+     success so the caller can fire the matching step-advance callback
+     (the same dispatch the drop handler does). */
+  function tutCommitSelectionAt(locId) {
+    if (tutSelectedSource === 'hand') {
+      var cardId = tutSelectedCardId;
+      if (!validLocForCard(cardId, locId)) return false;
+      var action = TS.awaitAction;
+      tutClearSelection();
+      var ok = playCard(cardId, locId);
+      if (!ok) return false;
+      if (action === 'citizens_rift') {
+        onCitizensPlaced();
+      } else if (action === 'magellan_play' && cardId === 24) {
+        hideEl(lucyBubbleEl);
+        step_freeTurn(onT3EndTurn);
+      }
+      return true;
+    }
+    if (tutSelectedSource === 'move') {
+      var fromLoc = tutSelectedFromLocId;
+      var fromSi  = tutSelectedFromSi;
+      if (locId === fromLoc) return false;
+      if (!TS.playerSlots[locId] || TS.playerSlots[locId].indexOf(null) === -1) return false;
+      var action2 = TS.awaitAction;
+      tutClearSelection();
+      var moved = moveBoardCard(fromLoc, fromSi, locId);
+      if (moved && action2 === 'magellan_board_move') {
+        onMagellanMoved();
+      }
+      return moved;
+    }
+    return false;
+  }
+
   /* Make a hand card draggable; gates on canDrag.
-     Click opens the info popup; in T3 ability_clicks phase it tracks taps. */
+     Click opens the info popup (350ms delay so dblclick can promote
+     to select-for-play); double-click selects when canDrag allows.
+     In T3 ability_clicks phase clicks tracking ability-popup viewing. */
   function addTutDrag(cardEl, cardId) {
     cardEl.draggable = true;
+    if (cardEl.tabIndex < 0) cardEl.tabIndex = 0;
 
     cardEl.addEventListener('click', function (e) {
       e.stopPropagation();
+      if (e.detail > 1) return;            // dblclick path handled separately
       if (tutDragCardId !== null) return;
+      if (tutPendingPopupTimer) { clearTimeout(tutPendingPopupTimer); tutPendingPopupTimer = null; }
+      tutPendingPopupTimer = setTimeout(function () {
+        tutPendingPopupTimer = null;
+        openTutHandPopup(cardId, cardEl);
+      }, TUT_DBLCLICK_MS);
+    });
 
-      var card = CARDS.find(function (c) { return c.id === cardId; });
-      if (!card || typeof window.openBattlePopup !== 'function') return;
-
-      // Ability-click gating (T3)
-      if (TS.awaitAction === 'ability_clicks' && card.ability) {
-        if (!TS.abilityCardsTapped[cardId]) {
-          TS.abilityCardsTapped[cardId] = true;
-          cardEl.classList.remove('tut-ability-glow');
-        }
-        var sd2 = { cardId: cardId, ip: card.ip, ipMod: 0, ipModSources: [], contMod: 0, revealed: true };
-        window.openBattlePopup(card, sd2, 'player', false);
-        // Wait until popup is closed before checking if all abilities are viewed
-        waitForPopupClose(function () { checkAllAbilitiesClicked(); });
+    cardEl.addEventListener('dblclick', function (e) {
+      e.stopPropagation();
+      if (tutPendingPopupTimer) { clearTimeout(tutPendingPopupTimer); tutPendingPopupTimer = null; }
+      // ability_clicks step expects single-clicks to view popups, not selection.
+      if (TS.awaitAction === 'ability_clicks') {
+        openTutHandPopup(cardId, cardEl);
         return;
       }
+      e.preventDefault();
+      if (tutSelectedSource === 'hand' && tutSelectedCardId === cardId) {
+        tutClearSelection();
+      } else {
+        tutSelectHand(cardId, cardEl);
+      }
+    });
 
-      // Normal popup (suppress ability in T1/T2)
-      var displayCard = TS.abilitiesActive
-        ? card
-        : { name: card.name, cc: card.cc, ip: card.ip, type: card.type, ability: null, abilityName: null };
-      var sd = { cardId: cardId, ip: card.ip, ipMod: 0, ipModSources: [], contMod: 0, revealed: true };
-      window.openBattlePopup(displayCard, sd, 'player', false);
+    cardEl.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      if (TS.awaitAction === 'ability_clicks') {
+        e.preventDefault();
+        openTutHandPopup(cardId, cardEl);
+        return;
+      }
+      e.preventDefault();
+      if (tutSelectedSource === 'hand' && tutSelectedCardId === cardId) {
+        tutClearSelection();
+      } else {
+        tutSelectHand(cardId, cardEl);
+      }
     });
 
     cardEl.addEventListener('dragstart', function (e) {
@@ -2848,9 +3026,12 @@
     });
   }
 
-  /* Kept for teardown compatibility. */
+  /* Kept for teardown compatibility. Also clears the click/keyboard
+     selection so a teardown doesn't leave stale selected/.tut-valid-slot
+     classes lying around. */
   function clearSelection() {
     tutDragCardId = null;
+    tutClearSelection();
     clearDragHighlights();
   }
 
@@ -2969,6 +3150,44 @@
         tutBoardDragFromLocId = null;
         tutBoardDragFromSi    = null;
         clearDragHighlights();
+      }
+    });
+
+    /* ── Click + keyboard parallel input ─────────────────────────
+       Mirrors the drag flow with the same TS.awaitAction gating.
+       Click on a legal slot while a hand/move selection is active
+       commits the same step-advance the drop handler would. Skip
+       revealed slots so the existing popup-on-click handler can
+       still open the info popup unambiguously. */
+    boardEl.addEventListener('click', function (e) {
+      if (!TS.active) return;
+      var slotEl = e.target.closest('.battle-card-slot[data-owner="player"]');
+      if (!slotEl) return;
+      if (tutSelectedSource === null) return;
+      // A revealed-occupied slot belongs to the popup handler, not us.
+      if (slotEl.classList.contains('face-up') &&
+          slotEl.classList.contains('occupied')) return;
+      var locId = parseInt(slotEl.dataset.locId, 10);
+      if (isNaN(locId)) return;
+      tutCommitSelectionAt(locId);
+      // If commit failed (illegal target), selection persists; no flashDeny in
+      // tutorial because the awaitAction script already nudges the player.
+    });
+
+    boardEl.addEventListener('dblclick', function (e) {
+      if (!TS.active) return;
+      if (TS.awaitAction !== 'magellan_board_move' && TS.awaitAction !== 'free_end_turn') return;
+      var slotEl = e.target.closest('.battle-card-slot.tut-moveable[data-owner="player"]');
+      if (!slotEl) return;
+      e.preventDefault();
+      var fromLocId = parseInt(slotEl.dataset.boardDragLocId || '0', 10);
+      var fromSi    = parseInt(slotEl.dataset.boardDragSi    || '0', 10);
+      if (tutSelectedSource === 'move' &&
+          tutSelectedFromLocId === fromLocId &&
+          tutSelectedFromSi    === fromSi) {
+        tutClearSelection();
+      } else {
+        tutSelectMoveable(24, fromLocId, fromSi, slotEl);
       }
     });
   }
