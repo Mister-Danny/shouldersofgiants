@@ -438,17 +438,6 @@
   ═══════════════════════════════════════════════════════════════ */
   function setDialogue(text) {
     if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
-    // Alternating-pulse: each new line toggles the .db-tut-pulse class
-    // so the box visibly grows / shrinks back-and-forth as the player
-    // advances. Step index parity drives which state — even steps sit
-    // at the base size, odd steps scale to 1.06. The forceStyleRecalc
-    // call works around a Chrome quirk where dynamically toggling a
-    // class that changes `transform` doesn't always invalidate the
-    // cached computed transform on the same element.
-    if (boxEl) {
-      boxEl.classList.toggle('db-tut-pulse', (stepIdx % 2) === 1);
-      forceStyleRecalc(boxEl);
-    }
     fullText  = text;
     typedLen  = 0;
     typing    = true;
@@ -507,7 +496,6 @@
     if (skipEl)  skipEl.classList.remove('visible');
     if (boxEl) {
       boxEl.classList.remove('db-tut-positioned');
-      boxEl.classList.remove('db-tut-pulse');
       boxEl.style.display = 'none';
     }
   }

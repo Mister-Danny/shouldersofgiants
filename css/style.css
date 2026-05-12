@@ -7913,19 +7913,11 @@ body.tut-locked #battle-reset-turn {
   position: fixed;
   bottom: 32px;
   left: 50%;
-  transform: translateX(-50%) scale(1);
-  transform-origin: 50% 100%;        /* anchor scaling to the bottom-centre */
+  transform: translateX(-50%);
   top: auto;
   right: auto;
   width: min(780px, calc(100vw - 48px));
   z-index: 9200;
-  transition: transform 220ms ease;
-}
-/* Alternating pulse: each new dialogue line toggles this class so the
-   box subtly grows / shrinks back and forth as the player advances.
-   Combined with the base translateX so the centring is preserved. */
-#tut-box.db-tut-positioned.db-tut-pulse {
-  transform: translateX(-50%) scale(1.06);
 }
 /* Tighter inner spacing on the deck-builder variant so the box reads
    as a smaller, less intrusive prompt. */
