@@ -25,7 +25,7 @@
      Turn 1 opening hand; Turn 2 additions                       */
   var PLAYER_T1_HAND = [1, 12, 3, 19, 25]; // Citizens, Samurai, Justinian, Cosimo, Columbus
   // Ordered draw queue for tutorial (draw-what-you-played, max 7 hand size)
-  var TUT_DRAW_QUEUE = [4, 2, 24, 6, 13, 18, 15, 20]; // Empress Wu, Scholar-Officials, Magellan, Priests, Cortes, Juvenal, William, Voltaire
+  var TUT_DRAW_QUEUE = [16, 2, 24, 6, 13, 18, 15, 20]; // Griots, Scholar-Officials, Magellan, Priests, Cortes, Juvenal, William, Voltaire
 
   /* ── Tutorial state ─────────────────────────────────────────── */
   var TS = {
