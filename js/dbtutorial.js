@@ -77,9 +77,15 @@
       advance: 'click'
     },
     {
+      id:      'intro-15',
+      resolve: function () { return null; },
+      line:    "You need 15 cards to complete a deck.",
+      advance: 'click'
+    },
+    {
       id:      'counter',
       resolve: function () { return document.getElementById('db-counter'); },
-      line:    "You need 15 Cards to complete a deck. This counter tracks how many you have.",
+      line:    "This counter tracks how many you have.",
       advance: 'click'
     },
     {
@@ -123,7 +129,12 @@
       id:      'lets-play',
       resolve: function () { return document.getElementById('db-save'); },
       line:    "When you've added 15 cards, click here to play!",
-      advance: 'click'
+      advance: 'click',
+      // The Let's Play button is functionally disabled until the deck
+      // has 15 cards; its disabled style is too dim to read inside the
+      // spotlight. Override the visual to the enabled palette while the
+      // spotlight is on it — the button stays functionally disabled.
+      demoEnabled: true
     }
   ];
 
@@ -269,8 +280,10 @@
   }
 
   function setSpotlight(target) {
+    // Clear any prior demo-enabled treatment.
+    clearDemoEnabled();
     if (!target) {
-      // No-spotlight step (welcome) — hide all dim rects + frame.
+      // No-spotlight step (welcome / intro-15) — hide all dim rects + frame.
       currentTargetEl = null;
       hideDimRects();
       frameEl.classList.remove('visible');
@@ -280,6 +293,49 @@
     repositionFrame();
     showDimRects();
     frameEl.classList.add('visible');
+    // Apply demo-enabled treatment if the current step opted in.
+    var step = STEPS[stepIdx];
+    if (step && step.demoEnabled) applyDemoEnabled(target);
+  }
+
+  // Demo-enabled: the Let's Play button reads as disabled when the
+  // deck has <15 cards, which makes the spotlight unreadable. We can't
+  // override the disabled visual via author CSS (browser-internal
+  // form-control styling clamps it), so we temporarily REMOVE the
+  // disabled attribute while spotlighted. openDifficultyModal already
+  // early-returns on activeCardCount() !== DECK_SIZE, so the button
+  // stays functionally inert — but visually bright and readable.
+  var _demoSavedDisabled = null;
+  var _demoTargetEl      = null;
+
+  function applyDemoEnabled(target) {
+    _demoTargetEl = target;
+    if (typeof target.disabled === 'boolean') {
+      _demoSavedDisabled = target.disabled;
+      target.disabled = false;
+      // Browser quirk: dynamically clearing `disabled` doesn't always
+      // invalidate the cached :disabled computed style on the original
+      // element. Force a style recompute via a single-tick display
+      // toggle (imperceptible — runs synchronously before the next paint).
+      forceStyleRecalc(target);
+    }
+  }
+
+  function clearDemoEnabled() {
+    if (_demoTargetEl && _demoSavedDisabled !== null &&
+        typeof _demoTargetEl.disabled === 'boolean') {
+      _demoTargetEl.disabled = _demoSavedDisabled;
+      forceStyleRecalc(_demoTargetEl);
+    }
+    _demoTargetEl      = null;
+    _demoSavedDisabled = null;
+  }
+
+  function forceStyleRecalc(el) {
+    var prev = el.style.display;
+    el.style.display = 'none';
+    void el.offsetHeight;
+    el.style.display = prev || '';
   }
 
   /* Position the four dim rects so the negative space between them is
@@ -434,6 +490,7 @@
     if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
     typing = false;
     currentTargetEl = null;
+    clearDemoEnabled();
     hideDimRects();
     if (frameEl) frameEl.classList.remove('visible');
     if (skipEl)  skipEl.classList.remove('visible');
