@@ -7842,25 +7842,23 @@ body.tut-locked #battle-reset-turn {
   #screen-deckbuilder .db-header { position: relative; }
 }
 
-/* Dim overlay covering the whole viewport. Eats clicks on any
-   non-spotlighted region so the player can't break out of the flow. */
-#db-tut-overlay {
+/* Spotlight cutout: four dim rectangles arranged around the target
+   (top / right / bottom / left). The cutout is the negative space
+   between them, so the spotlighted element — and anything that opens
+   over it like the ability popup — renders at its natural z-index
+   with no manipulation. Each rect eats clicks on its dim area; the
+   cutout passes clicks straight through to the underlying element. */
+.db-tut-dim {
   position: fixed;
-  inset: 0;
   background: rgba(0, 0, 0, 0.72);
   z-index: 9000;
-  display: none;
   pointer-events: auto;
+  display: none;
+  /* Smooth transitions when the cutout moves between targets. */
+  transition: top 220ms ease, left 220ms ease,
+              width 220ms ease, height 220ms ease;
 }
-#db-tut-overlay.visible { display: block; }
-
-/* Spotlighted element rides above the overlay so it appears
-   bright and remains clickable. The frame element is a separate
-   floating div positioned over the same rect (gold outline + glow). */
-.db-tut-spotlighted {
-  position: relative !important;
-  z-index: 9100 !important;
-}
+.db-tut-dim.visible { display: block; }
 
 #db-tut-frame {
   position: fixed;
@@ -7901,20 +7899,35 @@ body.tut-locked #battle-reset-turn {
 #db-tut-skip.visible { display: block; }
 #db-tut-skip:hover { opacity: 1; color: var(--snes-yellow); border-color: var(--snes-yellow); }
 
-/* Position Lucy's dialogue box in the bottom-left while the
-   deck-builder tutorial is active. The element (#tut-box) is the
-   same one the home-screen intro uses; the base rule centres it
-   horizontally via translateX(-50%) and gives it up to 985px width.
-   This override needs to reset the transform AND shrink the width
-   explicitly — max-width alone wouldn't beat the existing
-   width: min(985px, ...) declaration. */
+/* Position Lucy's dialogue box centred horizontally near the bottom
+   of the viewport while the deck-builder tutorial is active. The
+   element (#tut-box) is the same one the home-screen intro uses;
+   the base rule already centres it via translateX(-50%) and sizes
+   it up to 985px wide. This override:
+     - keeps the horizontal centring (no transform: none)
+     - pins it near the bottom (so the card grid above stays readable)
+     - shrinks the width cap to ~650px (~25% wider than the previous
+       520px cap; comfortable on Chromebook 1366×768 without dominating)
+     - compresses internal padding to keep total height ~15% shorter */
 #tut-box.db-tut-positioned {
   position: fixed;
-  left: 24px;
-  bottom: 24px;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
   top: auto;
   right: auto;
-  transform: none;
-  width: min(520px, calc(100vw - 48px));
+  width: min(650px, calc(100vw - 48px));
   z-index: 9200;
+}
+/* Tighter inner spacing on the deck-builder variant so the box reads
+   as a smaller, less intrusive prompt. */
+#tut-box.db-tut-positioned .tut-portrait {
+  width: 116px;            /* down from 146px */
+}
+#tut-box.db-tut-positioned #tut-text {
+  padding: 10px 14px;
+  line-height: 1.25;
+}
+#tut-box.db-tut-positioned #tut-hint {
+  padding: 0 14px 10px;
 }
