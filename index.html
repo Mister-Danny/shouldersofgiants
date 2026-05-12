@@ -190,6 +190,8 @@
           <div class="db-subtitle">Double-click a card to add or remove</div>
         </div>
         <div class="db-header-right">
+          <button class="db-help-icon" id="db-help-icon"
+                  aria-label="Replay tutorial" title="Replay tutorial">?</button>
           <span class="db-counter" id="db-counter">0 / 15</span>
           <div class="db-play-wrap">
             <button class="btn-save" id="db-save" disabled>Let's Play</button>
@@ -1147,8 +1149,8 @@
             <span class="bypass-btn-desc">Marks tutorial complete and goes to Deck Builder</span>
           </div>
           <div class="bypass-btn-row">
-            <button class="btn-snes btn-snes-close bypass-btn-action" id="bypass-reset-tut">Reset Tutorial</button>
-            <span class="bypass-btn-desc">Clears flag so tutorial plays again on next visit</span>
+            <button class="btn-snes btn-snes-close bypass-btn-action" id="bypass-reset-tut">Reset Tutorials</button>
+            <span class="bypass-btn-desc">Clears all tutorial flags so they play again on next visit</span>
           </div>
         </section>
 
@@ -1316,6 +1318,7 @@
   <script src="js/animations.js"></script>
   <script src="js/progression.js"></script>
   <script src="js/deckbuilder.js"></script>
+  <script src="js/dbtutorial.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/tutorial.js"></script>

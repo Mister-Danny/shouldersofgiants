@@ -13,6 +13,7 @@
   /* ── localStorage keys (must match analytics.js) ─────────────── */
   var FORCED_LOCS_KEY = 'sog_forced_locations';
   var TUTORIAL_KEY    = 'sog_tutorial_complete';
+  var DB_TUTORIAL_KEY = 'sog_deckbuilder_tutorial_complete';
   var TEST_MODE_KEY   = 'sog_test_mode';
   // Saved decks now live in window.Decks (multi-slot system).
   var ABANDONED_KEY   = 'sog_abandoned_session';
@@ -108,7 +109,8 @@
 
   function resetTutorial() {
     localStorage.removeItem(TUTORIAL_KEY);
-    showBypassToast('Tutorial reset — will replay on next visit');
+    localStorage.removeItem(DB_TUTORIAL_KEY);
+    showBypassToast('Tutorials reset — will replay on next visit');
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -137,6 +139,7 @@
     if (!confirm('Reset ALL student data?\n\nThis clears the saved deck, tutorial progress, test mode flag, and all session state. The page will reload immediately.\n\nThis cannot be undone.')) return;
     if (!confirm('Second confirmation: click OK to wipe all data and reload.')) return;
     localStorage.removeItem(TUTORIAL_KEY);
+    localStorage.removeItem(DB_TUTORIAL_KEY);
     localStorage.removeItem(TEST_MODE_KEY);
     if (window.Decks && typeof window.Decks.clearAll === 'function') window.Decks.clearAll();
     localStorage.removeItem(ABANDONED_KEY);

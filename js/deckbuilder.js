@@ -87,6 +87,11 @@
     renderAllGroups();
     updateUI();
     mainEl.scrollTop = 0;
+    // Fire the deck-builder tutorial if the user hasn't completed it
+    // yet. Self-guards on already-active in-game tutorial.
+    if (window.DeckBuilderTutorial && typeof window.DeckBuilderTutorial.startIfNew === 'function') {
+      window.DeckBuilderTutorial.startIfNew();
+    }
   }
 
   /* ── Slot row rendering ──────────────────────────────────────── */
@@ -250,6 +255,10 @@
         var ok = toggleCard(card.id);
         if (ok) {
           flashCard(el, !wasSelected);
+          if (window.DeckBuilderTutorial &&
+              typeof window.DeckBuilderTutorial.notifyCardDblClick === 'function') {
+            window.DeckBuilderTutorial.notifyCardDblClick(card.id);
+          }
         } else {
           flashCounter();
         }
@@ -257,6 +266,10 @@
         clickTimer = setTimeout(function () {
           clickTimer = null;
           openPopup(card);
+          if (window.DeckBuilderTutorial &&
+              typeof window.DeckBuilderTutorial.notifyCardClick === 'function') {
+            window.DeckBuilderTutorial.notifyCardClick(card.id);
+          }
         }, DBLCLICK_MS);
       }
     });
@@ -423,6 +436,13 @@
 
   function openDifficultyModal() {
     if (activeCardCount() !== DECK_SIZE) return;
+    // Notify the deck-builder tutorial that a real Let's Play happened
+    // with a complete deck. The tutorial marks completion here — clicking
+    // disabled or partial-deck has already been filtered above.
+    if (window.DeckBuilderTutorial &&
+        typeof window.DeckBuilderTutorial.notifyLetsPlay === 'function') {
+      window.DeckBuilderTutorial.notifyLetsPlay(activeCardCount());
+    }
     if (window.versusStudentMode) {
       stopDeckMusic();
       if (window.BattleLobby && typeof window.BattleLobby.onLockInDeck === 'function') {

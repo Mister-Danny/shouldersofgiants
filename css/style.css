@@ -7794,3 +7794,127 @@ body.tut-locked #battle-reset-turn {
   border-color: #d8a860;
   color: #ffffff;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   DECK BUILDER TUTORIAL — spotlight overlay
+   Fires on first-time deck-builder entry (and replays via the "?"
+   icon) until the player ships a complete 15-card deck.
+   ════════════════════════════════════════════════════════════════ */
+
+/* "?" help icon in the deck-builder header — gold circular button
+   sitting inline to the left of #db-counter. Distinct enough from
+   the counter that it doesn't read as part of the "15 / 15" number. */
+.db-help-icon {
+  width: 28px;
+  height: 28px;
+  margin-right: 14px;        /* extra spacing so it doesn't crowd the counter */
+  border-radius: 50%;
+  border: 2px solid var(--snes-yellow);
+  background: transparent;
+  color: var(--snes-yellow);
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 24px;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.db-help-icon:hover {
+  background: var(--snes-yellow);
+  color: #2a1608;
+}
+
+/* If the header gets cramped (narrow viewport), promote the help
+   icon to the top-right corner of the deck-builder header so the
+   counter has breathing room. */
+@media (max-width: 880px) {
+  .db-help-icon {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    margin-right: 0;
+  }
+  #screen-deckbuilder .db-header { position: relative; }
+}
+
+/* Dim overlay covering the whole viewport. Eats clicks on any
+   non-spotlighted region so the player can't break out of the flow. */
+#db-tut-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  z-index: 9000;
+  display: none;
+  pointer-events: auto;
+}
+#db-tut-overlay.visible { display: block; }
+
+/* Spotlighted element rides above the overlay so it appears
+   bright and remains clickable. The frame element is a separate
+   floating div positioned over the same rect (gold outline + glow). */
+.db-tut-spotlighted {
+  position: relative !important;
+  z-index: 9100 !important;
+}
+
+#db-tut-frame {
+  position: fixed;
+  pointer-events: none;
+  border: 3px solid var(--snes-yellow);
+  border-radius: 4px;
+  box-shadow:
+    0 0 18px rgba(248, 208, 0, 0.55),
+    inset 0 0 8px rgba(248, 208, 0, 0.20);
+  z-index: 9101;
+  display: none;
+  transition: top 220ms ease, left 220ms ease,
+              width 220ms ease, height 220ms ease;
+}
+#db-tut-frame.visible { display: block; }
+
+/* Skip button: modest weight, bottom-right corner, always above
+   the overlay so it's clickable throughout the flow. */
+#db-tut-skip {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  padding: 6px 14px;
+  border: 2px solid #8a6a30;
+  background: rgba(20, 12, 6, 0.85);
+  color: #c8a060;
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  cursor: pointer;
+  z-index: 9200;
+  opacity: 0.7;
+  display: none;
+  transition: opacity 0.15s;
+}
+#db-tut-skip.visible { display: block; }
+#db-tut-skip:hover { opacity: 1; color: var(--snes-yellow); border-color: var(--snes-yellow); }
+
+/* Position Lucy's dialogue box in the bottom-left while the
+   deck-builder tutorial is active. The element (#tut-box) is the
+   same one the home-screen intro uses; the base rule centres it
+   horizontally via translateX(-50%) and gives it up to 985px width.
+   This override needs to reset the transform AND shrink the width
+   explicitly — max-width alone wouldn't beat the existing
+   width: min(985px, ...) declaration. */
+#tut-box.db-tut-positioned {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  top: auto;
+  right: auto;
+  transform: none;
+  width: min(520px, calc(100vw - 48px));
+  z-index: 9200;
+}
