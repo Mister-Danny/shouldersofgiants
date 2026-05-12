@@ -205,11 +205,7 @@
     ph.className  = 'db-card-img-placeholder';
     ph.textContent = card.name.charAt(0);
 
-    var img = document.createElement('img');
-    img.className = 'db-card-img';
-    img.alt       = card.name;
-    img.src       = 'images/cards/' + card.name + '.jpg';
-    img.onerror   = function () { this.style.display = 'none'; };
+    var img = buildCardImg(card, { size: 'sm' });
 
     imgWrap.appendChild(ph);
     imgWrap.appendChild(img);
@@ -246,8 +242,36 @@
     return el;
   }
 
+  /* ── Card art helper ─────────────────────────────────────────────
+     Single source of truth for rendering a card's <img> element.
+     Compact surfaces (hand row, discard chooser) pass { size: 'sm' }
+     to load a pre-rendered 123x184 variant — see images/cards/<Name>@sm.jpg.
+     If the @sm variant doesn't exist on disk, onerror transparently
+     falls back to the full-size original, then to display:none if
+     even that is missing. Callers don't need to know which assets
+     exist; the @sm files can be added incrementally over time. */
+  function buildCardImg(card, opts) {
+    var img = document.createElement('img');
+    img.className = 'db-card-img';
+    img.alt = card.name;
+    var useSm = opts && opts.size === 'sm';
+    if (useSm) {
+      img.src = card.image.replace(/\.jpg$/, '@sm.jpg');
+      img.onerror = function () {
+        // @sm variant missing → fall back to full-size; hide if that's missing too.
+        this.onerror = function () { this.style.display = 'none'; };
+        this.src = card.image;
+      };
+    } else {
+      img.src = card.image;
+      img.onerror = function () { this.style.display = 'none'; };
+    }
+    return img;
+  }
+
   /* ── Global exports ──────────────────────────────────────────── */
   window.initBattleUI  = initBattleUI;
   window.setPlayerHand = setPlayerHand;
+  window.buildCardImg  = buildCardImg;
 
 })();

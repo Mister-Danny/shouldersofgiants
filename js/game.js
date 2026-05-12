@@ -1184,11 +1184,7 @@
     var ph = document.createElement('div');
     ph.className   = 'db-card-img-placeholder';
     ph.textContent = card.name.charAt(0);
-    var img = document.createElement('img');
-    img.className = 'db-card-img';
-    img.alt       = card.name;
-    img.src       = 'images/cards/' + card.name + '.jpg';
-    img.onerror   = function () { this.style.display = 'none'; };
+    var img = window.buildCardImg(card);
     wrap.appendChild(ph);
     wrap.appendChild(img);
     var ccEl = document.createElement('div');
@@ -3581,11 +3577,7 @@
     ph.className  = 'db-card-img-placeholder';
     ph.textContent = card.name.charAt(0);
 
-    var img = document.createElement('img');
-    img.className = 'db-card-img';
-    img.alt = card.name;
-    img.src = 'images/cards/' + card.name + '.jpg';
-    img.onerror = function () { this.style.display = 'none'; };
+    var img = window.buildCardImg(card, { size: 'sm' });
 
     imgWrap.appendChild(ph);
     imgWrap.appendChild(img);

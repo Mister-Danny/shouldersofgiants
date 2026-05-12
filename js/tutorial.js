@@ -2747,10 +2747,17 @@
     var ph = document.createElement('div');
     ph.className   = 'db-card-img-placeholder';
     ph.textContent = card.name.charAt(0);
-    var img = document.createElement('img');
-    img.className = 'db-card-img';
-    img.src       = 'images/cards/' + card.name + '.jpg';
-    img.onerror   = function () { this.style.display = 'none'; };
+    var img = window.buildCardImg
+      ? window.buildCardImg(card, { size: 'sm' })
+      : (function () {
+          // Fallback when ui.js helper isn't available (defensive — should
+          // never happen since ui.js loads before tutorial.js).
+          var i = document.createElement('img');
+          i.className = 'db-card-img';
+          i.src = card.image;
+          i.onerror = function () { this.style.display = 'none'; };
+          return i;
+        })();
     wrap.appendChild(ph);
     wrap.appendChild(img);
     var cc = document.createElement('div');
