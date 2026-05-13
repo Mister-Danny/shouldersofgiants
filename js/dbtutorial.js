@@ -55,6 +55,38 @@
   var fullText   = '';
   var typedLen   = 0;
 
+  /* Web-Audio typewriter blip — mirrors tutorial.js: 480Hz sine wave,
+     35ms duration, every 3rd character so it doesn't get spammy. */
+  var _audioCtx  = null;
+  var _blipCount = 0;
+  function getAudioCtx() {
+    if (!_audioCtx) {
+      try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { /* audio not supported — silent */ }
+    }
+    return _audioCtx;
+  }
+  function playBlip() {
+    _blipCount++;
+    if (_blipCount % 3 !== 0) return;
+    var ctx = getAudioCtx();
+    if (!ctx) return;
+    try {
+      var osc  = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = 480;
+      var t = ctx.currentTime;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.10, t + 0.005);
+      gain.gain.linearRampToValueAtTime(0,    t + 0.035);
+      osc.start(t);
+      osc.stop(t + 0.04);
+    } catch (e) { /* silently skip */ }
+  }
+
   /* ── DOM refs (resolved lazily on first start) ───────────────── */
   var boxEl, textEl, hintEl, lucyImgEl;
   var dimTopEl, dimRightEl, dimBottomEl, dimLeftEl;
@@ -438,15 +470,17 @@
   ═══════════════════════════════════════════════════════════════ */
   function setDialogue(text) {
     if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
-    fullText  = text;
-    typedLen  = 0;
-    typing    = true;
+    fullText   = text;
+    typedLen   = 0;
+    typing     = true;
+    _blipCount = 0;                  // reset per-line so the blip rhythm starts fresh
     textEl.textContent = '';
     if (hintEl) hintEl.textContent = '▶ Click to continue';
 
     typeTimer = setInterval(function () {
       typedLen++;
       textEl.textContent = fullText.slice(0, typedLen);
+      playBlip();
       if (typedLen >= fullText.length) {
         clearInterval(typeTimer);
         typeTimer = null;
