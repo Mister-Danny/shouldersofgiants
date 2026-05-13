@@ -7917,6 +7917,12 @@ body.tut-locked #battle-reset-turn {
   top: auto;
   right: auto;
   width: min(780px, calc(100vw - 48px));
+  /* Pin the box to a stable height so the perceived size doesn't
+     change between 1-line and 2-line dialogues. Tall enough for the
+     longest 2-line line ("Welcome to the Deck Builder! Here is where
+     you will create your decks to play with.") with comfortable
+     headroom. */
+  min-height: 250px;
   z-index: 9200;
 }
 /* Tighter inner spacing on the deck-builder variant so the box reads
