@@ -92,48 +92,9 @@
   var pendingPopupTimer     = null;   // setTimeout id for click → popup race
   var DBLCLICK_MS           = 350;    // matches deckbuilder.js
 
-  /* ── Background music playlist ───────────────────────────────── */
-  var _musicTracks = [
-    { src: 'music/Cupids Revenge.mp3',     name: 'Cupids Revenge — Kevin MacLeod' },
-    { src: 'music/Crossing the Chasm.mp3', name: 'Crossing the Chasm — Kevin MacLeod' },
-    { src: 'music/Mountain Emperor.mp3',   name: 'Mountain Emperor — Kevin MacLeod' }
-  ];
-  var _musicIdx   = 0;
-  var _musicHowl  = null;
-  var _bgMusicVol = 0.10;  // persists across Play Again
-
-  function _musicUpdateUI() {
-    var nameEl  = document.getElementById('music-track-name');
-    var playBtn = document.getElementById('music-play-btn');
-    if (nameEl)  nameEl.textContent  = _musicTracks[_musicIdx].name;
-    if (playBtn) playBtn.textContent = (_musicHowl && _musicHowl.playing()) ? '\u258c\u258c' : '\u25b6';
-  }
-
-  function _musicLoadTrack(idx, autoplay) {
-    if (_musicHowl) { _musicHowl.stop(); _musicHowl.unload(); _musicHowl = null; }
-    _musicIdx = ((idx % _musicTracks.length) + _musicTracks.length) % _musicTracks.length;
-    if (typeof Howl === 'undefined') { _musicUpdateUI(); return; }
-    _musicHowl = new Howl({
-      src:    [_musicTracks[_musicIdx].src],
-      volume: _bgMusicVol,
-      html5:  true,
-      onend:  function () { _musicLoadTrack(_musicIdx + 1, true); },
-      onplay: function () { _musicUpdateUI(); },
-      onpause: function () { _musicUpdateUI(); },
-      onstop: function () { _musicUpdateUI(); }
-    });
-    if (autoplay) _musicHowl.play();
-    _musicUpdateUI();
-  }
-
-  function startBgMusic() {
-    _musicLoadTrack(0, true);
-  }
-
-  function stopBgMusic() {
-    if (_musicHowl) { _musicHowl.stop(); _musicHowl.unload(); _musicHowl = null; }
-    _musicUpdateUI();
-  }
+  /* ── Background music ─────────────────────────────────────────
+     Moved to game/ui.js in Pass 2. Call sites in this file use
+     SOG.ui.startBgMusic / SOG.ui.stopBgMusic. */
 
   /* ── Selection timer state ──────────────────────────────────── */
   var _timerEl         = null;   /* kept for compat — legacy HUD box, never shown */
@@ -156,15 +117,7 @@
   var resetTurnBtn     = document.getElementById('battle-reset-turn');
   var playerHandEl     = document.getElementById('battle-player-hand');
   var boardEl          = document.getElementById('battle-board');
-  var battlePopupEl        = document.getElementById('battle-popup-backdrop');
-  var battlePopupNameEl    = document.getElementById('battle-popup-name');
-  var battlePopupTypeEl    = document.getElementById('battle-popup-type');
-  var battlePopupAbilNmEl  = document.getElementById('battle-popup-ability-name');
-  var battlePopupAbilTxEl  = document.getElementById('battle-popup-ability-text');
-  var battlePopupIPBrkEl   = document.getElementById('battle-popup-ip-breakdown');
-  var battlePopupHintEl    = document.getElementById('battle-popup-hint');
-  var battlePopupCloseBtn  = document.getElementById('battle-popup-close');
-  var oppHandEl            = document.getElementById('battle-opp-hand');
+  /* Battle-popup and opponent-hand refs moved to game/ui.js (Pass 2). */
 
   /* ═══════════════════════════════════════════════════════════════
      INIT
@@ -223,7 +176,7 @@
     dragInfo = null;
 
     rebuildPlayerHand();
-    updateOppHand();
+    SOG.ui.updateOppHand();
     capitalNumEl = document.getElementById('battle-capital-num');
 
     endTurnBtn.textContent     = 'END TURN';
@@ -234,7 +187,7 @@
 
     updateHeader();
     refreshMoveableCards();
-    startBgMusic();
+    SOG.ui.startBgMusic();
     _startSelectionTimer();
 
     if (typeof Analytics !== 'undefined') {
@@ -364,7 +317,7 @@
       if (slotEl) { slotEl.dataset.cardId = String(a.cardId); setSlotFaceDown(slotEl); }
     });
 
-    updateOppHand();
+    SOG.ui.updateOppHand();
   }
 
   function pickLocations() {
@@ -431,7 +384,7 @@
   function openHandCardPopup(cardId) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return;
-    openBattlePopup(card, buildHandPopupSd(card), 'player', false);
+    SOG.ui.openBattlePopup(card, buildHandPopupSd(card), 'player', false);
   }
 
   /* Click on a hand card. Schedule the info popup with a 350ms delay
@@ -713,7 +666,7 @@
         clearSelection();
         commitPlay(cid, locId);
       } else {
-        flashDeny(slotEl);
+        SOG.ui.flashDeny(slotEl);
       }
       return;
     }
@@ -724,7 +677,7 @@
         clearSelection();
         queueMove(fromLoc, fromIdx, locId);
       } else {
-        flashDeny(slotEl);
+        SOG.ui.flashDeny(slotEl);
       }
       return;
     }
@@ -737,7 +690,7 @@
       var sd = slotsRef[locId] && slotsRef[locId][slotIndex];
       if (!sd) return;
       var card = CARDS.find(function (c) { return c.id === sd.cardId; });
-      if (card) openBattlePopup(card, sd, owner, true);
+      if (card) SOG.ui.openBattlePopup(card, sd, owner, true);
     }
   });
 
@@ -832,7 +785,7 @@
         commitPlay(cid, locId);
         e.preventDefault();
       } else {
-        flashDeny(slotEl);
+        SOG.ui.flashDeny(slotEl);
         e.preventDefault();
       }
       return;
@@ -845,7 +798,7 @@
         queueMove(fromLoc, fromIdx, locId);
         e.preventDefault();
       } else {
-        flashDeny(slotEl);
+        SOG.ui.flashDeny(slotEl);
         e.preventDefault();
       }
       return;
@@ -920,13 +873,13 @@
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return;
     var cost = effectiveCost(card, locId);
-    if (cost > G.capital) { var d = getSlotEl('player', locId, 0); if (d) flashDeny(d); return; }
+    if (cost > G.capital) { var d = getSlotEl('player', locId, 0); if (d) SOG.ui.flashDeny(d); return; }
     var si = G.playerSlots[locId].indexOf(null);
-    if (si === -1) { var d2 = getSlotEl('player', locId, 0); if (d2) flashDeny(d2); return; }
+    if (si === -1) { var d2 = getSlotEl('player', locId, 0); if (d2) SOG.ui.flashDeny(d2); return; }
     // FIRST_CARD_HERE: first play on Turn 1 must go to the Great Rift Valley
     var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
     if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
-      var d2 = getSlotEl('player', locId, 0); if (d2) flashDeny(d2); return;
+      var d2 = getSlotEl('player', locId, 0); if (d2) SOG.ui.flashDeny(d2); return;
     }
     clearSelection();  // any click/keyboard selection becomes stale after commit
 
@@ -1393,19 +1346,7 @@
     sd.ipModSources.push({ source: sourceName, delta: delta });
   }
 
-  /**
-   * Show a floating +/- number on a board slot and play the IP sound.
-   * Safe to call speculatively — silently skips if element not found.
-   */
-  function showIPFloat(owner, cardId, delta) {
-    if (delta === 0) return;
-    var slotEl = findSlotEl(owner, cardId);
-    if (slotEl && typeof Anim !== 'undefined') Anim.floatNumber(slotEl, delta);
-    if (typeof SFX !== 'undefined') {
-      if (delta > 0) SFX.ipGained();
-      else           SFX.ipLost();
-    }
-  }
+  /* showIPFloat moved to game/ui.js (Pass 2) — callers use SOG.ui.showIPFloat. */
 
   /* ═══════════════════════════════════════════════════════════════
      SCORES
@@ -1418,8 +1359,8 @@
       G.aiSlots[loc.id].forEach(    function (s) { if (s && s.revealed) aIP += effectiveIP(s); });
       var pEl = document.getElementById('loc-score-player-' + loc.id);
       var aEl = document.getElementById('loc-score-opp-'    + loc.id);
-      if (pEl) { var o = parseInt(pEl.textContent,10)||0; pEl.textContent=pIP; if(pIP!==o)flashScore(pEl); }
-      if (aEl) { var o = parseInt(aEl.textContent,10)||0; aEl.textContent=aIP; if(aIP!==o)flashScore(aEl); }
+      if (pEl) { var o = parseInt(pEl.textContent,10)||0; pEl.textContent=pIP; if(pIP!==o)SOG.ui.flashScore(pEl); }
+      if (aEl) { var o = parseInt(aEl.textContent,10)||0; aEl.textContent=aIP; if(aIP!==o)SOG.ui.flashScore(aEl); }
     });
   }
 
@@ -1493,12 +1434,7 @@
     refreshHandCostDisplays();
   }
 
-  function flashScore(el) {
-    el.classList.remove('score-pop');
-    void el.offsetWidth;
-    el.classList.add('score-pop');
-    setTimeout(function () { el.classList.remove('score-pop'); }, 350);
-  }
+  /* flashScore moved to game/ui.js (Pass 2) — callers use SOG.ui.flashScore. */
 
   /* ═══════════════════════════════════════════════════════════════
      BUTTONS
@@ -1547,7 +1483,7 @@
     /* ── Normal AI path ──────────────────────────────────────── */
     SOG.ai.runAiMovements();
     SOG.ai.runAiSelection();
-    updateOppHand();
+    SOG.ui.updateOppHand();
     setTimeout(startReveal, 600);
   }
 
@@ -1817,7 +1753,7 @@
       }
 
       if (cardId === 24) {
-        showIPFloat(owner, cardId, 1);
+        SOG.ui.showIPFloat(owner, cardId, 1);
         refreshSlotIPDisplays();
       }
 
@@ -2698,7 +2634,7 @@
       var cortesSdFB = slots[locId].find(function (s) { return s && s.cardId === 13; });
       if (cortesSdFB && ipGainedFB > 0) {
         addIPMod(cortesSdFB, ipGainedFB, 'Cortes');
-        showIPFloat(owner, 13, ipGainedFB);
+        SOG.ui.showIPFloat(owner, 13, ipGainedFB);
         var cIdx = slots[locId].indexOf(cortesSdFB);
         var cEl  = getSlotEl(owner, locId, cIdx);
         if (cEl) { var ipEl = cEl.querySelector('.db-overlay-ip'); if (ipEl) ipEl.textContent = effectiveIP(cortesSdFB); }
@@ -2740,7 +2676,7 @@
         var cortesSd = slots[locId].find(function (s) { return s && s.cardId === 13; });
         if (cortesSd && ipGained > 0) {
           addIPMod(cortesSd, ipGained, 'Cortes');
-          showIPFloat(owner, 13, ipGained);
+          SOG.ui.showIPFloat(owner, 13, ipGained);
           var cIdx    = slots[locId].indexOf(cortesSd);
           var cSlotEl = getSlotEl(owner, locId, cIdx);
           if (cSlotEl) { var ipEl = cSlotEl.querySelector('.db-overlay-ip'); if (ipEl) ipEl.textContent = effectiveIP(cortesSd); }
@@ -2880,7 +2816,7 @@
           if (adjSlotEl && typeof Anim !== 'undefined') {
             Anim.zhengheBounce(adjSlotEl);
           } else {
-            showIPFloat(owner, s.cardId, 2);
+            SOG.ui.showIPFloat(owner, s.cardId, 2);
           }
           found = true;
           anyAffected = true;
@@ -2921,7 +2857,7 @@
       // Staggered +1 floats
       affected.forEach(function (item, i) {
         setTimeout(function () {
-          showIPFloat(item.owner, item.cardId, 1);
+          SOG.ui.showIPFloat(item.owner, item.cardId, 1);
           if (typeof SFX !== 'undefined') SFX.ipGained();
         }, i * 150);
       });
@@ -3234,7 +3170,7 @@
     G.aiDeck.splice(0, aiCanDraw).forEach(function (id) { G.aiHand.push(id); });
 
     rebuildPlayerHand();
-    updateOppHand();
+    SOG.ui.updateOppHand();
     updateHeader();
     refreshMoveableCards();
 
@@ -3288,7 +3224,7 @@
     }
 
     // Stop background music before game-over sounds play
-    stopBgMusic();
+    SOG.ui.stopBgMusic();
 
     /* Shared helper — shows result screen + headline animation */
     var _showResultScreen = function () {
@@ -3456,169 +3392,9 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     CARD INFO POPUP
-  ═══════════════════════════════════════════════════════════════ */
+  /* CARD INFO POPUP, OPPONENT HAND, and flashDeny moved to game/ui.js (Pass 2).
+     Callers use SOG.ui.openBattlePopup / SOG.ui.updateOppHand / SOG.ui.flashDeny. */
 
-  /**
-   * Build an IP breakdown string for a revealed board card.
-   * Shows base + labeled permanent bonus + labeled continuous effects + total.
-   */
-  function buildIPBreakdown(sd, owner) {
-    var parts = ['Base IP: ' + sd.ip];
-
-    // Permanent modifier sources (tracked per-card)
-    if (sd.ipModSources && sd.ipModSources.length > 0) {
-      sd.ipModSources.forEach(function (entry) {
-        parts.push(entry.source + ': ' + (entry.delta >= 0 ? '+' : '') + entry.delta);
-      });
-    } else if (sd.ipMod) {
-      parts.push('Bonus: ' + (sd.ipMod > 0 ? '+' : '') + sd.ipMod);
-    }
-
-    // Continuous modifier labels derived from current board state
-    var slots  = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var locId  = null;
-    G.locations.forEach(function (loc) {
-      slots[loc.id].forEach(function (s) { if (s && s.cardId === sd.cardId) locId = loc.id; });
-    });
-
-    if (locId !== null) {
-      var card = CARDS.find(function (c) { return c.id === sd.cardId; });
-
-      // Juvenal (id 18): -2 to CC≥4 cards at this location (either side)
-      var juvenalHere = ['player', 'opp'].some(function (own) {
-        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        return sl[locId].some(function (s) { return s && s.revealed && s.cardId === 18; });
-      });
-      if (juvenalHere && card && card.cc >= 4) parts.push('Juvenal: -2');
-
-      // Voltaire (id 20): +4 if sole revealed card for this owner
-      var ownerRev = slots[locId].filter(function (s) { return s && s.revealed; });
-      if (ownerRev.length === 1 && sd.cardId === 20) parts.push('Voltaire (Candide): +4');
-
-      // William the Conqueror (id 15): contMod equals total destroyed IP
-      if (sd.cardId === 15) {
-        var dt = owner === 'player' ? G.destroyedIPTotal : G.aiDestroyedIPTotal;
-        if (dt > 0) parts.push('William: +' + dt);
-      }
-    }
-
-    parts.push('Total: ' + effectiveIP(sd));
-    return parts.join('  |  ');
-  }
-
-  /**
-   * Open the battle card info popup.
-   * @param {object} card      Card data from CARDS array
-   * @param {object} [sd]      Slot data (for revealed board cards — shows IP breakdown)
-   * @param {string} [owner]   'player' | 'opp' (required when sd is provided)
-   * @param {boolean} [isBoard] True when called from a board slot (changes hint text)
-   */
-  // Per-category modifier class for the icon span. The actual PNG mask
-  // is wired in CSS (.cat-icon--<class>); CSS mask + currentColor ensures
-  // the symbol renders in the same paler-gold as the label text on every
-  // platform, with no per-category tinting.
-  // Note: Political's filename is "politcal.png" (typo preserved).
-  // No PNG exists yet for Scientific; that key falls through and renders
-  // the label without a symbol prefix until the asset lands.
-  var TYPE_ICON_CLASS = {
-    Political:   'political',
-    Religious:   'religious',
-    Military:    'military',
-    Cultural:    'cultural',
-    Exploration: 'exploration'
-  };
-
-  function openBattlePopup(card, sd, owner, isBoard) {
-    battlePopupNameEl.textContent = card.name;
-
-    // Category-type label. Single-type for now; when card.type2 ships,
-    // render both here (icon + "RELIGIOUS · MILITARY") rather than per-card.
-    if (battlePopupTypeEl) {
-      if (card.type) {
-        var iconCls = TYPE_ICON_CLASS[card.type];
-        var iconHTML = iconCls
-          ? '<span class="cat-icon cat-icon--' + iconCls + '" aria-hidden="true"></span>'
-          : '';
-        battlePopupTypeEl.innerHTML =
-          iconHTML + '<span class="cat-label">' + card.type.toUpperCase() + '</span>';
-        battlePopupTypeEl.style.display = '';
-      } else {
-        battlePopupTypeEl.style.display = 'none';
-      }
-    }
-
-    if (sd && battlePopupIPBrkEl) {
-      battlePopupIPBrkEl.textContent = buildIPBreakdown(sd, owner);
-      battlePopupIPBrkEl.style.display = '';
-    } else if (battlePopupIPBrkEl) {
-      battlePopupIPBrkEl.style.display = 'none';
-    }
-
-    if (battlePopupHintEl) {
-      battlePopupHintEl.textContent = isBoard ? 'CLICK CARD FOR INFO' : 'DRAG CARD TO A SLOT TO PLAY';
-    }
-
-    if (card.ability) {
-      battlePopupAbilNmEl.textContent   = card.abilityName;
-      battlePopupAbilNmEl.style.display = '';
-      battlePopupAbilTxEl.textContent   = card.ability;
-      battlePopupAbilTxEl.className     = 'popup-ability-text';
-    } else {
-      battlePopupAbilNmEl.style.display = 'none';
-      battlePopupAbilTxEl.textContent   = 'No special ability.';
-      battlePopupAbilTxEl.className     = 'popup-ability-text vanilla';
-    }
-    battlePopupEl.classList.add('visible');
-  }
-
-  function closeBattlePopup() { battlePopupEl.classList.remove('visible'); }
-
-  battlePopupCloseBtn.addEventListener('click', closeBattlePopup);
-  battlePopupEl.addEventListener('click', function (e) { if (e.target === battlePopupEl) closeBattlePopup(); });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeBattlePopup(); });
-
-  /**
-   * Rebuild the opponent hand display to match the actual AI hand count + deck count.
-   */
-  function updateOppHand() {
-    if (!oppHandEl) return;
-    oppHandEl.innerHTML = '';
-
-    var pile = document.createElement('div');
-    pile.className = 'battle-deck-pile';
-    var lbl = document.createElement('div');
-    lbl.className = 'battle-deck-label';
-    lbl.textContent = 'DECK';
-    pile.appendChild(lbl);
-    var cnt = document.createElement('div');
-    cnt.className = 'battle-deck-count';
-    cnt.textContent = G.aiDeck.length;
-    pile.appendChild(cnt);
-    oppHandEl.appendChild(pile);
-
-    var sep = document.createElement('div');
-    sep.className = 'battle-hand-sep';
-    oppHandEl.appendChild(sep);
-
-    for (var i = 0; i < G.aiHand.length; i++) {
-      var back = document.createElement('div');
-      back.className = 'battle-card-back';
-      oppHandEl.appendChild(back);
-    }
-  }
-
-  /* ═══════════════════════════════════════════════════════════════
-     VISUAL HELPERS
-  ═══════════════════════════════════════════════════════════════ */
-
-  function flashDeny(el) {
-    el.classList.remove('flash-deny');
-    void el.offsetWidth;
-    el.classList.add('flash-deny');
-    setTimeout(function () { el.classList.remove('flash-deny'); }, 400);
-  }
 
   function clearDragOver() {
     boardEl.querySelectorAll('.drag-over').forEach(function (el) { el.classList.remove('drag-over'); });
@@ -3668,14 +3444,14 @@
 
   document.getElementById('result-home').addEventListener('click', function () {
     if (window.Feedback && window.Feedback.maybeShowPopup()) return;
-    stopBgMusic();
+    SOG.ui.stopBgMusic();
     _playPendingCelebrations(function () {
       showScreen('screen-home');
     });
   });
 
   document.getElementById('result-return-lobby').addEventListener('click', function () {
-    stopBgMusic();
+    SOG.ui.stopBgMusic();
     if (window.Multiplayer && typeof window.Multiplayer.returnToLobby === 'function') {
       window.Multiplayer.returnToLobby();
     }
@@ -3691,40 +3467,7 @@
     showScreen('screen-result');
   });
 
-  /* ── Music control widget ────────────────────────────────────── */
-  (function () {
-    var prevBtn = document.getElementById('music-prev-btn');
-    var playBtn = document.getElementById('music-play-btn');
-    var nextBtn = document.getElementById('music-next-btn');
-    var slider  = document.getElementById('music-volume-slider');
-    if (!prevBtn || !playBtn || !nextBtn || !slider) return;
-
-    slider.value = Math.round(_bgMusicVol * 100);
-
-    prevBtn.addEventListener('click', function () {
-      _musicLoadTrack(_musicIdx - 1, true);
-    });
-
-    playBtn.addEventListener('click', function () {
-      if (!_musicHowl) { _musicLoadTrack(_musicIdx, true); return; }
-      if (_musicHowl.playing()) {
-        _musicHowl.pause();
-      } else {
-        _musicHowl.volume(_bgMusicVol);
-        _musicHowl.play();
-      }
-      _musicUpdateUI();
-    });
-
-    nextBtn.addEventListener('click', function () {
-      _musicLoadTrack(_musicIdx + 1, true);
-    });
-
-    slider.addEventListener('input', function () {
-      _bgMusicVol = parseInt(slider.value, 10) / 100;
-      if (_musicHowl) _musicHowl.volume(_bgMusicVol);
-    });
-  }());
+  /* Music control widget moved to game/ui.js (Pass 2). */
 
   /* ═══════════════════════════════════════════════════════════════
      TOUCH DRAG SUPPORT
@@ -3932,8 +3675,8 @@
 
   /* ── Export ──────────────────────────────────────────────────── */
   window.initGame          = initGame;
-  window.openBattlePopup   = openBattlePopup;
   window.showResult        = showResult;
+  /* window.openBattlePopup is now set by game/ui.js (Pass 2). */
 
   /* ── SOG namespace exports (consumed by game/ai.js) ──────────────
      These are populated synchronously at the end of this IIFE so
@@ -3951,7 +3694,8 @@
     setSlotFaceDown:   setSlotFaceDown,
     effectiveIP:       effectiveIP,
     isKenteProtected:  isKenteProtected,
-    executeMove:       executeMove
+    executeMove:       executeMove,
+    findSlotEl:        findSlotEl
   };
 
 })();
