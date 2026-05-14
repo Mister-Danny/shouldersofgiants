@@ -20,66 +20,20 @@
 (function () {
   'use strict';
 
-  /* ── SOG namespace bootstrap ─────────────────────────────────
-     Used to share state and helpers across the split game modules
-     (currently: game/ai.js; more to come in subsequent refactor passes).
-     See SOG.state / SOG.game assignments at the bottom of this IIFE.    */
-  window.SOG = window.SOG || {};
-
-  /* ── Constants ───────────────────────────────────────────────── */
-  const TURNS         = 5;
-  const CAPITAL       = 5;
-  const HAND_START    = 5;
-  const MAX_HAND_SIZE = 7;
-  const SLOTS_PER_LOC = 4;
-  const REVEAL_DELAY  = 800;
-  const POST_REVEAL   = 1200;
-  // Active deck IDs come from window.Decks (multi-slot save layer).
-  const TYPE_ORDER    = ['Political','Religious','Military','Cultural','Exploration'];
-
-  /* ── Game state ──────────────────────────────────────────────── */
-  var G = {
-    turn:        1,
-    phase:       'select',
-    capital:     CAPITAL,
-    playerFirst: true,
-
-    playerDeck:  [],
-    playerHand:  [],
-    aiDeck:      [],
-    aiHand:      [],
-
-    turnStartCapital: CAPITAL,  // capital at the start of this turn (may exceed CAPITAL with bonus)
-
-    // locId → [ null | {cardId,ip,revealed,ipMod,contMod} ]  ×4, always compacted
-    playerSlots: {},
-    aiSlots:     {},
-
-    playerRevealQueue: [],
-    aiRevealQueue:     [],
-
-    locations: [],
-
-    // ── Ability state ──────────────────────────────────────────
-    bonusCapitalNextTurn:   0,   // Scholar-Officials (player)
-    aiBonusCapitalNextTurn: 0,   // Scholar-Officials (AI)
-    cardIPBonus:            {},  // player cardId → cumulative bonus IP (Samurai, Jesus)
-    aiCardIPBonus:          {},  // AI    cardId → cumulative bonus IP (Samurai, Jesus)
-    destroyedIPTotal:       0,   // total IP of cards destroyed by player (William)
-    aiDestroyedIPTotal:     0,   // total IP of cards destroyed by AI   (William)
-    columbusMoved:          false,
-    aiColumbusMoved:        false,
-    movedThisTurn:          {},  // cardId → bool  (Magellan, per-turn reset)
-    aiMovedThisTurn:        {},
-    moveLog:                [],  // player moves this turn [{cardId,fromLocId,toLocId,toSlotIndex,ipModAdded,isColumbus,queued}]
-    playerActionLog:        [],  // ordered: {type:'play'|'move', cardId, fromLocId?, fromSlotIndex?, toLocId?}
-    locationSnapshots:      {},  // locId → slot-array copy taken at first queueMove from that loc
-    reservedSlotsPerLoc:    {},  // locId → count of snap-back slots reserved (one per queued move FROM that loc)
-    deferredPlays:          {},  // locId → [slotData] new plays that couldn't fit at snap-back; inserted after queued card moves away
-
-    // ── Adventure Mode ────────────────────────────────────────
-    prehistoryMode:         false  // when true, all CC costs are overridden to 0
-  };
+  /* ── State and constants from game/state.js ──────────────────
+     state.js loads before this file (see index.html) and populates
+     SOG.state with G and all numeric/string constants. We alias them
+     into local vars so the rest of this file reads the same as it
+     did before the Pass 3a extraction.                              */
+  var G             = SOG.state.G;
+  var TURNS         = SOG.state.TURNS;
+  var CAPITAL       = SOG.state.CAPITAL;
+  var HAND_START    = SOG.state.HAND_START;
+  var MAX_HAND_SIZE = SOG.state.MAX_HAND_SIZE;
+  var SLOTS_PER_LOC = SOG.state.SLOTS_PER_LOC;
+  var REVEAL_DELAY  = SOG.state.REVEAL_DELAY;
+  var POST_REVEAL   = SOG.state.POST_REVEAL;
+  var TYPE_ORDER    = SOG.state.TYPE_ORDER;
 
   /* ── Drag state ──────────────────────────────────────────────── */
   var dragInfo = null;
@@ -3678,16 +3632,11 @@
   window.showResult        = showResult;
   /* window.openBattlePopup is now set by game/ui.js (Pass 2). */
 
-  /* ── SOG namespace exports (consumed by game/ai.js) ──────────────
-     These are populated synchronously at the end of this IIFE so
-     that any split module loaded *after* game.js can read shared
-     state and call shared helpers via SOG.state / SOG.game.
-     As more modules are extracted, the SOG.game surface will shrink
+  /* ── SOG namespace exports (consumed by game/ai.js, game/ui.js) ──
+     SOG.state is now owned by game/state.js (Pass 3a). This file
+     exposes only SOG.game — the shared helpers used by sibling
+     modules. As more modules are extracted, SOG.game will shrink
      and per-module namespaces (SOG.board, SOG.turn, etc.) will grow. */
-  SOG.state = {
-    G:       G,        // shared by reference — mutations are visible across modules
-    CAPITAL: CAPITAL
-  };
   SOG.game = {
     shuffle:           shuffle,
     getSlotEl:         getSlotEl,
