@@ -63,6 +63,7 @@
 
   /* ── Drag state ──────────────────────────────────────────────── */
   var dragInfo = null;
+  var lastHoveredIllegalSlot = null;  // tracked during mouse dragover; flashed if drop is refused
 
   /* ── Click/keyboard selection state (parallel to dragInfo) ──── */
   var selectedCardId        = null;
@@ -160,8 +161,17 @@
     this.classList.add('dragging');
   }
 
-  function onHandCardDragEnd() {
+  function onHandCardDragEnd(e) {
     this.classList.remove('dragging');
+    // If the browser refused the drop (no preventDefault on any dragover),
+    // dropEffect ends up 'none'. Flash the last-hovered illegal slot to
+    // give the same feedback the click path produces via commitPlay.
+    var refused = false;
+    try {
+      if (e && e.dataTransfer && e.dataTransfer.dropEffect === 'none') refused = true;
+    } catch (err) { /* dropEffect access can throw in some browsers — ignore */ }
+    if (refused && lastHoveredIllegalSlot) SOG.ui.flashDeny(lastHoveredIllegalSlot);
+    lastHoveredIllegalSlot = null;
     dragInfo = null;
     clearDragOver();
   }
@@ -205,12 +215,22 @@
       var col = e.target.closest('.battle-card-slot[data-owner="player"]');
       if (!col) { clearDragOver(); return; }
       var locId = parseInt(col.dataset.locId, 10);
-      if (!isLegalPlayTarget(dragInfo.cardId, locId)) { clearDragOver(); return; }
+      if (!isLegalPlayTarget(dragInfo.cardId, locId)) {
+        clearDragOver();
+        // Track the slot the user is hovering over so dragend can flash it
+        // if the drop is refused.
+        var firstEmptyDeny = G.playerSlots[locId].indexOf(null);
+        lastHoveredIllegalSlot = firstEmptyDeny !== -1
+          ? getSlotEl('player', locId, firstEmptyDeny)
+          : getSlotEl('player', locId, 0);
+        return;
+      }
       e.preventDefault();
       clearDragOver();
       var firstEmpty = G.playerSlots[locId].indexOf(null);
       var t = getSlotEl('player', locId, firstEmpty);
       if (t) t.classList.add('drag-over');
+      lastHoveredIllegalSlot = null;
       return;
     }
 
@@ -218,12 +238,20 @@
       var col2 = e.target.closest('.battle-card-slot[data-owner="player"]');
       if (!col2) { clearDragOver(); return; }
       var toLocId = parseInt(col2.dataset.locId, 10);
-      if (!isLegalMoveTarget(dragInfo.cardId, dragInfo.fromLocId, toLocId)) { clearDragOver(); return; }
+      if (!isLegalMoveTarget(dragInfo.cardId, dragInfo.fromLocId, toLocId)) {
+        clearDragOver();
+        var firstEmptyDenyMv = G.playerSlots[toLocId].indexOf(null);
+        lastHoveredIllegalSlot = firstEmptyDenyMv !== -1
+          ? getSlotEl('player', toLocId, firstEmptyDenyMv)
+          : getSlotEl('player', toLocId, 0);
+        return;
+      }
       e.preventDefault();
       clearDragOver();
       var firstEmptyMv = G.playerSlots[toLocId].indexOf(null);
       var t2 = getSlotEl('player', toLocId, firstEmptyMv);
       if (t2) t2.classList.add('drag-over');
+      lastHoveredIllegalSlot = null;
     }
   });
 
@@ -251,6 +279,12 @@
   boardEl.addEventListener('dragend', function (e) {
     var s = e.target.closest('.battle-card-slot');
     if (s) { s.classList.remove('dragging'); s.classList.remove('drag-over'); }
+    var refused = false;
+    try {
+      if (e && e.dataTransfer && e.dataTransfer.dropEffect === 'none') refused = true;
+    } catch (err) { /* ignore */ }
+    if (refused && lastHoveredIllegalSlot) SOG.ui.flashDeny(lastHoveredIllegalSlot);
+    lastHoveredIllegalSlot = null;
     dragInfo = null;
     clearDragOver();
   });
@@ -1098,8 +1132,14 @@
           commitPlay(dragInfo.cardId, parseInt(slotTarget.dataset.locId, 10));
         } else if (dragInfo.source === 'move') {
           var toLocId = parseInt(slotTarget.dataset.locId, 10);
-          if (toLocId !== dragInfo.fromLocId)
+          if (toLocId === dragInfo.fromLocId) {
+            // Dropped back on the source location — silently no-op.
+          } else if (!isLegalMoveTarget(dragInfo.cardId, dragInfo.fromLocId, toLocId)) {
+            // Illegal move target on touch — flash the slot under the finger.
+            SOG.ui.flashDeny(slotTarget);
+          } else {
             queueMove(dragInfo.fromLocId, dragInfo.fromSlotIndex, toLocId);
+          }
         }
       } else if (handTarget && dragInfo && dragInfo.source === 'slot') {
         undoPlay(dragInfo.locId, dragInfo.slotIndex);
