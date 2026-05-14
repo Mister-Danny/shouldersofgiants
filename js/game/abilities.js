@@ -436,48 +436,33 @@
       var sl = side === 'player' ? G.playerSlots : G.aiSlots;
       sl[locId].forEach(function (s, si) {
         if (!s || !s.revealed) return;
-        var resReset = false;
-        var resDelta = 0;
 
-        // ── Resurrection-chain reset (Samurai 12, Jesus 10) ─────────
-        // Must happen BEFORE the oldMod === 0 early-return below. These
-        // cards bake their resurrection bonus into s.ip at play time
-        // (see commitPlay / placeRevealedCard), so their s.ipMod can be
-        // 0 even when there's a bonus to reset. Clear the accumulator
-        // AND restore s.ip to the card's true base from CARDS.
-        // - Samurai (id 12): G.cardIPBonus[12] grows by 2 per resurrection.
-        // - Jesus Christ (id 10): G.cardIPBonus[10] grows by 3 per resurrection.
+        // ── Clear resurrection-chain accumulator (Samurai 12, Jesus 10) ─
+        // The active bonus on the board lives in s.ipMod (as a named
+        // source, see commitPlay / placeRevealedCard) and is cleared by
+        // the standard ipMod reset below. But the cumulative accumulator
+        // — G.cardIPBonus[cardId] — persists between deaths/replays and
+        // must be zeroed here too, or the next play would re-apply it.
+        //   Samurai (id 12): +2 per resurrection.
+        //   Jesus Christ (id 10): +3 per resurrection.
         if (s.cardId === 12 || s.cardId === 10) {
-          var resBonus = side === 'player' ? G.cardIPBonus : G.aiCardIPBonus;
-          if (resBonus[s.cardId]) {
-            resBonus[s.cardId] = 0;
-          }
-          var c = CARDS.find(function (x) { return x.id === s.cardId; });
-          if (c && s.ip !== c.ip) {
-            resDelta = c.ip - s.ip;       // negative; how much IP we're removing
-            s.ip = c.ip;
-            resReset = true;
-            anyAffected = true;
-          }
+          var resBonusDict = side === 'player' ? G.cardIPBonus : G.aiCardIPBonus;
+          if (resBonusDict[s.cardId]) resBonusDict[s.cardId] = 0;
         }
 
-        // ── Standard ipMod reset (Cape, Zheng He, Cortes, Jan Hus, etc.) ──
+        // ── Standard ipMod reset (Cape, Zheng He, Cortes, Jan Hus, Jesus, Samurai…) ──
         var oldMod = s.ipMod || 0;
-        if (oldMod === 0 && !resReset) return;
+        if (oldMod === 0) return;
         anyAffected = true;
-        if (oldMod !== 0) {
-          s.ipMod = 0;
-          s.ipModSources = [];
-        }
+        s.ipMod = 0;
+        s.ipModSources = [];
 
         var slotEl = getSlotEl(side, locId, si);
         if (slotEl) {
           var ipEl = slotEl.querySelector('.db-overlay-ip');
           if (ipEl) ipEl.textContent = effectiveIP(s);
           if (typeof Anim !== 'undefined') Anim.justinianFlash(slotEl);
-          // Combined float: ipMod loss + resurrection-bonus loss in one number.
-          var totalLoss = -oldMod + resDelta;
-          if (totalLoss !== 0 && typeof Anim !== 'undefined') Anim.floatNumber(slotEl, totalLoss);
+          if (typeof Anim !== 'undefined') Anim.floatNumber(slotEl, -oldMod);
         }
       });
     });
@@ -1043,10 +1028,10 @@
       // that lived alongside the prior chain bonus in the old slot's ipMod.
       // Subtract the prior chain (prevBonus) from savedMod to isolate external-only mods.
       var externalMod     = Math.max(0, (savedMod.ipMod || 0) - prevBonus);
-      var externalSources = savedMod.ipModSources.filter(function (s) { return s.source !== 'Cortes'; });
+      var externalSources = savedMod.ipModSources.filter(function (s) { return s.source !== 'Samurai'; });
       var totalMod = newBonus + externalMod;
       var sources  = externalSources.slice();
-      sources.push({ source: 'Cortes', delta: newBonus });
+      sources.push({ source: 'Samurai', delta: newBonus });
       sd.ipMod        = totalMod;
       sd.ipModSources = sources;
       if (slotEl) {

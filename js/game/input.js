@@ -94,7 +94,8 @@
     var sources = [];
     if (bonus) {
       var label = card.id === 15 ? 'Destroyed cards (William)' :
-                  card.id === 10 ? 'Resurrection bonus'        : 'Bonus';
+                  card.id === 10 ? 'Jesus'                     :
+                  card.id === 12 ? 'Samurai'                   : 'Bonus';
       sources.push({ source: label, delta: bonus });
     }
     return { cardId: card.id, ip: card.ip, ipMod: bonus, ipModSources: sources, contMod: 0, revealed: true };
@@ -600,11 +601,17 @@
     }
     clearSelection();  // any click/keyboard selection becomes stale after commit
 
-    var baseIP = card.ip + (G.cardIPBonus[cardId] || 0);
+    // Resurrection-chain bonus (Jesus +3/return, Samurai +2/return) lives in
+    // G.cardIPBonus[cardId]. Store it as a named ipMod entry so the popup
+    // breakdown shows "Base IP: 5  |  Jesus: +3  |  Total: 8" instead of
+    // collapsing it into base IP. sd.ip stays at the card's immutable base.
+    var resBonus  = G.cardIPBonus[cardId] || 0;
+    var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
+    var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
     // Capture hand position so undoPlay can restore the card to the slot it
     // came from rather than appending to the end of the hand.
     var handIndex = G.playerHand.indexOf(cardId);
-    G.playerSlots[locId][si] = { cardId: cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], handIndex: handIndex };
+    G.playerSlots[locId][si] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources, handIndex: handIndex };
     G.capital -= cost;
     if (typeof SFX !== 'undefined') SFX.capitalSpent();
     G.playerRevealQueue.push(cardId);
@@ -619,7 +626,7 @@
       slotEl.dataset.cardId = cardId;
       slotEl.className = 'battle-card-slot occupied face-up unplayed';
       slotEl.draggable = true;
-      buildCardFace(slotEl, card, baseIP);
+      buildCardFace(slotEl, card, card.ip + resBonus);
     }
     updateHeader();
   }

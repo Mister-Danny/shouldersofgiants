@@ -156,9 +156,15 @@
     if (si === -1) return false;
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return false;
+    // Resurrection bonus stored as named ipMod entry; sd.ip stays at the
+    // card's immutable base so the popup breakdown is honest. Callers that
+    // need to suppress this (e.g. triggerSamurai, which assembles its own
+    // ipMod afterward) zero bonusDict[cardId] before calling.
     var bonusDict = owner === 'player' ? G.cardIPBonus : G.aiCardIPBonus;
-    var baseIP = card.ip + (bonusDict[cardId] || 0);
-    var sd     = { cardId: cardId, ip: baseIP, revealed: true, ipMod: extraIpMod || 0, contMod: 0, ipModSources: [] };
+    var resBonus  = bonusDict[cardId] || 0;
+    var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
+    var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
+    var sd     = { cardId: cardId, ip: card.ip, revealed: true, ipMod: (extraIpMod || 0) + resBonus, contMod: 0, ipModSources: resSources };
     if (!opts.skipLocationAbility) {
       var dl = G.locations.find(function (l) { return l.id === locId; });
       if (dl && dl.abilityKey === 'MOVE_IN_GAINS_IP') addIPMod(sd, 1, 'The Cape of Good Hope');

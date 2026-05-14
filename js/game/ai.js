@@ -41,8 +41,11 @@
       if (!card) return;
       var slotIndex = G.aiSlots[locId].indexOf(null);
       if (slotIndex === -1) return;
-      var baseIP = card.ip + (G.aiCardIPBonus[cardId] || 0);
-      G.aiSlots[locId][slotIndex] = { cardId: cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [] };
+      // Resurrection bonus stored as named ipMod entry (parity with player commitPlay)
+      var resBonus  = G.aiCardIPBonus[cardId] || 0;
+      var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
+      var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
+      G.aiSlots[locId][slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
       G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
       G.aiRevealQueue.push(cardId);
       var slotEl = helpers.getSlotEl('opp', locId, slotIndex);
@@ -88,8 +91,11 @@
       }
       aiFirstPlayed = true;
 
-      var baseIP = card.ip + (G.aiCardIPBonus[cardId] || 0);
-      G.aiSlots[t.locId][t.slotIndex] = { cardId: cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [] };
+      // Resurrection bonus stored as named ipMod entry (parity with player commitPlay)
+      var resBonus  = G.aiCardIPBonus[cardId] || 0;
+      var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
+      var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
+      G.aiSlots[t.locId][t.slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
       G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
       G.aiRevealQueue.push(cardId);
       budget -= card.cc;
