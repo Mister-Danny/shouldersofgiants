@@ -2594,7 +2594,10 @@
     if (typeof Anim !== 'undefined') Anim.williamPulse(wEl);
   }
 
-  /* Empress Wu: push (or destroy) the highest-IP Political/Military card here. */
+  /* Empress Wu: push (or destroy) the highest-IP revealed Political/Military
+   * card here. At-Once abilities affect cards in play; unrevealed cards
+   * are not yet in play and aren't legal targets.
+   */
   function tAb_EmpressWu(owner, locId, done) {
 
     // Find highest-IP Pol/Mil card on the OPPONENT's side at this location (excluding Wu)
@@ -2602,7 +2605,7 @@
     var oppSlots = oppSide === 'player' ? TS.playerSlots : TS.aiSlots;
     var best = null, bestIP = -Infinity, bestOwn = oppSide, bestIdx = -1;
     oppSlots[locId].forEach(function (s, i) {
-      if (!s || s.cardId === 4) return;
+      if (!s || !s.revealed || s.cardId === 4) return;
       var c = CARDS.find(function (c_) { return c_.id === s.cardId; });
       if (!c || (c.type !== 'Political' && c.type !== 'Military')) return;
       var ip = tEffectiveIP(s);

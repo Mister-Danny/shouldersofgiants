@@ -479,14 +479,12 @@
     var oppSide  = owner === 'player' ? 'opp' : 'player';
     var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
 
-    // Find the highest-IP Political/Military card on the opponent's side at this location.
-    // Include face-down cards being played this turn — Wu's reveal can happen before
-    // theirs in the reveal sequence, and filtering by `revealed` would silently miss
-    // them. The push moves slot data, not the DOM directly, so the target's later
-    // reveal happens at the destination location after the push.
+    // Find the highest-IP revealed Political/Military card on the opponent's side
+    // at this location. At-Once abilities affect cards currently in play —
+    // unrevealed cards aren't yet in play and aren't legal targets.
     var best = null;
     oppSlots[locId].forEach(function (s) {
-      if (!s) return;
+      if (!s || !s.revealed) return;
       var c = CARDS.find(function (x) { return x.id === s.cardId; });
       if (!c || (c.type !== 'Political' && c.type !== 'Military')) return;
       var ip = effectiveIP(s);
