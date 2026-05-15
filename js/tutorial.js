@@ -3513,9 +3513,69 @@
 
   function exitTutorial() {
     localStorage.setItem('sog_tutorial_complete', 'true');
-    teardown();
-    showScreen('screen-deckbuilder');
-    if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
+
+    // ── Phase 1: fade out Otzi & Lucy dialogue boxes ──
+    // These are what "got stuck on screen" pre-fix — fade them first
+    // so they don't snap to invisible during the screen transition.
+    var dialogues = [];
+    if (typeof otziBoxEl    !== 'undefined' && otziBoxEl)    dialogues.push(otziBoxEl);
+    if (typeof boxEl        !== 'undefined' && boxEl)        dialogues.push(boxEl);
+    if (typeof endEl        !== 'undefined' && endEl)        dialogues.push(endEl);
+    if (typeof lucyBubbleEl !== 'undefined' && lucyBubbleEl) dialogues.push(lucyBubbleEl);
+    dialogues.forEach(function (el) {
+      el.style.transition = 'opacity 200ms ease-out';
+      el.style.opacity = '0';
+    });
+
+    // ── Phase 2: fade out the battle screen ──
+    var battleScreen = document.getElementById('screen-battle');
+    setTimeout(function () {
+      if (battleScreen) {
+        battleScreen.style.transition = 'opacity 300ms ease-out';
+        battleScreen.style.opacity = '0';
+      }
+    }, 200);
+
+    // ── Phase 3: at total fade-out, teardown + swap + fade-in ──
+    setTimeout(function () {
+      teardown();
+
+      // Reset inline styles so the next tutorial run sees a clean screen
+      dialogues.forEach(function (el) {
+        el.style.transition = '';
+        el.style.opacity = '';
+      });
+      if (battleScreen) {
+        battleScreen.style.transition = '';
+        battleScreen.style.opacity = '';
+      }
+
+      // Prep deckbuilder for fade-in
+      var dbScreen = document.getElementById('screen-deckbuilder');
+      if (dbScreen) {
+        dbScreen.style.opacity = '0';
+      }
+
+      showScreen('screen-deckbuilder');
+      if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
+
+      // Start deck music with fade-in (matches the screen fade)
+      if (typeof window.playDeckMusic === 'function') {
+        window.playDeckMusic(400);  // 400ms fade-in
+      }
+
+      // Fade deckbuilder in
+      if (dbScreen) {
+        requestAnimationFrame(function () {
+          dbScreen.style.transition = 'opacity 300ms ease-in';
+          dbScreen.style.opacity = '1';
+          setTimeout(function () {
+            dbScreen.style.transition = '';
+            dbScreen.style.opacity = '';
+          }, 350);
+        });
+      }
+    }, 500);  // 200ms dialogue fade + 300ms screen fade
   }
 
   function finishTutorial() {

@@ -420,10 +420,19 @@
     return _deckHowl;
   }
 
-  function playDeckMusic() {
+  function playDeckMusic(fadeMs) {
     var m = getDeckMusic();
     if (!m) return;
-    if (!m.playing()) { m.seek(0); m.play(); }
+    if (!m.playing()) {
+      m.seek(0);
+      if (typeof fadeMs === 'number' && fadeMs > 0) {
+        m.volume(0);
+        m.play();
+        m.fade(0, 0.5, fadeMs);  // 0.5 matches getDeckMusic's default volume
+      } else {
+        m.play();
+      }
+    }
   }
 
   function stopDeckMusic() {
