@@ -573,11 +573,16 @@
 
       if (canPush) {
         // ── Push path: route through universal movement handler ──
+        // executeMoveAnimated creates its own slide clone, so tgtGhost is
+        // redundant for this path — remove it before the slide begins
+        // (otherwise it sits at the source slot for the full ~550ms slide).
+        // The destroy path below uses tgtGhost for its scale/fade-out
+        // animation, so we don't drop the variable entirely.
+        if (tgtGhost) { removeEl(tgtGhost); tgtGhost = null; }
         // Hide the target's real slot so the ghost doesn't flicker against it
         if (tgtEl) gsap.set(tgtEl, { opacity: 0 });
         executeMoveAnimated(oppSide, best.cardId, locId, destLocId, {}, function () {
           if (tgtEl) gsap.set(tgtEl, { clearProps: 'opacity' });
-          if (tgtGhost) { removeEl(tgtGhost); }
           tryComplete();
         });
 
