@@ -398,6 +398,7 @@
     if (window.tutorialActive) return;     // tutorial owns its own flow
     if (G.phase !== 'select') return;
     if (dragInfo) return;                  // mid-drag
+    if (e.detail > 1) return;              // 2nd click of a dblclick burst — let dblclick handler run instead
 
     var slotEl = e.target.closest('.battle-card-slot');
     if (!slotEl) return;
@@ -443,7 +444,16 @@
       var sd = slotsRef[locId] && slotsRef[locId][slotIndex];
       if (!sd) return;
       var card = CARDS.find(function (c) { return c.id === sd.cardId; });
-      if (card) SOG.ui.openBattlePopup(card, sd, owner, true);
+      if (!card) return;
+      // Delay the popup so a follow-up click within DBLCLICK_MS can promote
+      // to dblclick (select-for-move on .moveable slots, select-for-undo on
+      // .unplayed slots) without first flashing the popup overlay that would
+      // otherwise absorb the second click. Mirrors onHandCardClick's pattern.
+      if (pendingPopupTimer) { clearTimeout(pendingPopupTimer); pendingPopupTimer = null; }
+      pendingPopupTimer = setTimeout(function () {
+        pendingPopupTimer = null;
+        SOG.ui.openBattlePopup(card, sd, owner, true);
+      }, DBLCLICK_MS);
     }
   });
 
@@ -452,6 +462,7 @@
   boardEl.addEventListener('dblclick', function (e) {
     if (window.tutorialActive) return;
     if (G.phase !== 'select') return;
+    if (pendingPopupTimer) { clearTimeout(pendingPopupTimer); pendingPopupTimer = null; }
     var slotEl = e.target.closest('.battle-card-slot[data-owner="player"]');
     if (!slotEl) return;
     var locId     = parseInt(slotEl.dataset.locId,     10);
