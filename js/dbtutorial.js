@@ -224,11 +224,21 @@
     }
 
     // Escape closes the tutorial without marking complete.
+    // Space/Enter advance the dialogue (mirrors a mouse click on the bubble).
     if (!window._dbTutKeyWired) {
       window._dbTutKeyWired = true;
       window.addEventListener('keydown', function (e) {
         if (!active) return;
-        if (e.key === 'Escape') { e.preventDefault(); skipTutorial(); }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          skipTutorial();
+        } else if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
+          // Space/Enter advance the tutorial identically to a mouse click
+          // on the dialogue bubble — share onBubbleClick so the typing-
+          // completion and advance-gate semantics stay consistent.
+          e.preventDefault();
+          onBubbleClick();
+        }
       });
     }
 
