@@ -240,11 +240,28 @@
         slotEl.removeAttribute('draggable');
         delete slotEl.dataset.cardId;
       } else if (!sd.revealed) {
-        var uCard = CARDS.find(function (c) { return c.id === sd.cardId; });
-        slotEl.dataset.cardId = sd.cardId;
-        slotEl.className      = 'battle-card-slot occupied face-up unplayed';
-        slotEl.draggable      = true;
-        if (uCard) buildCardFace(slotEl, uCard, effectiveIP(sd));
+        if (G.phase === 'reveal') {
+          // During the reveal sequence, a not-yet-revealed player card must
+          // stay hidden — startReveal already flipped it face-down and it
+          // reveals at its own turn in the sequence. Without this guard, any
+          // syncPlayerSlots call triggered by a preceding card's ability or
+          // move (Cortes sweep, destroyCard compaction, executeMoveAnimated
+          // applyMove, snapBack, deferred-plays pop) would prematurely flip
+          // it face-up with its identity visible. Mirrors syncOppSlots's
+          // unrevealed branch.
+          slotEl.dataset.cardId = sd.cardId;
+          slotEl.className      = 'battle-card-slot occupied face-down';
+          slotEl.removeAttribute('draggable');
+          slotEl.innerHTML      = '';
+        } else {
+          // Select phase: show face-up so the player can see and undo their
+          // own plays before ending the turn.
+          var uCard = CARDS.find(function (c) { return c.id === sd.cardId; });
+          slotEl.dataset.cardId = sd.cardId;
+          slotEl.className      = 'battle-card-slot occupied face-up unplayed';
+          slotEl.draggable      = true;
+          if (uCard) buildCardFace(slotEl, uCard, effectiveIP(sd));
+        }
       } else {
         var card = CARDS.find(function (c) { return c.id === sd.cardId; });
         if (card) {
