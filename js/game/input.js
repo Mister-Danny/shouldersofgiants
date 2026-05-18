@@ -931,9 +931,20 @@
     if (toAvail <= 0) return;
     clearSelection();  // any click/keyboard selection becomes stale after move
 
-    // Snapshot fromLocId before removing the card (first queue from this loc only)
+    // Snapshot fromLocId before removing the card (first queue from this loc only).
+    // Exclude any cards that are themselves queued-move previews from another
+    // location — those will be restored from THEIR origin's snapshot at
+    // snapBack time, and including them here would cause double-restoration
+    // (duplicate cards on the board after reveal). See bug 7.
     if (!G.locationSnapshots[fromLocId]) {
-      G.locationSnapshots[fromLocId] = G.playerSlots[fromLocId].slice();
+      var previewCardIdsAtThisLoc = G.moveLog
+        .filter(function (mv) { return mv.queued && mv.toLocId === fromLocId; })
+        .map(function (mv) { return mv.cardId; });
+      G.locationSnapshots[fromLocId] = G.playerSlots[fromLocId].map(function (s) {
+        if (!s) return null;
+        if (previewCardIdsAtThisLoc.indexOf(s.cardId) !== -1) return null;
+        return s;
+      });
     }
     // Reserve a snap-back slot so new plays can't overfill this location
     G.reservedSlotsPerLoc[fromLocId] = (G.reservedSlotsPerLoc[fromLocId] || 0) + 1;
