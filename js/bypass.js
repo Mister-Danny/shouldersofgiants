@@ -114,6 +114,32 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
+     Progression Unlocks
+  ══════════════════════════════════════════════════════════════ */
+  function unlockReligious() {
+    localStorage.setItem('sog_religious_unlocked', 'true');
+    localStorage.setItem('sog_religious_cutscene_seen', 'true');
+    showBypassToast('Religious cards unlocked — reload to see changes in deck builder');
+  }
+
+  function unlockExploration() {
+    localStorage.setItem('sog_exploration_unlocked', 'true');
+    localStorage.setItem('sog_exploration_cutscene_seen', 'true');
+    showBypassToast('Exploration cards unlocked — reload to see changes in deck builder');
+  }
+
+  function unlockAll() {
+    localStorage.setItem('sog_religious_unlocked', 'true');
+    localStorage.setItem('sog_exploration_unlocked', 'true');
+    localStorage.setItem('sog_religious_cutscene_seen', 'true');
+    localStorage.setItem('sog_exploration_cutscene_seen', 'true');
+    localStorage.setItem('sog_serf_wins', '3');
+    localStorage.setItem('sog_giant_wins', '3');
+    localStorage.setItem('sog_total_wins', '6');
+    showBypassToast('All cards unlocked — reload to see changes in deck builder');
+  }
+
+  /* ══════════════════════════════════════════════════════════════
      Session Controls
   ══════════════════════════════════════════════════════════════ */
   function refreshTestModeBtn() {
@@ -524,6 +550,16 @@
 
     var resetTutBtn = document.getElementById('bypass-reset-tut');
     if (resetTutBtn) resetTutBtn.addEventListener('click', resetTutorial);
+
+    /* Progression controls — unlocks */
+    var unlockRelBtn = document.getElementById('bypass-unlock-religious');
+    if (unlockRelBtn) unlockRelBtn.addEventListener('click', unlockReligious);
+
+    var unlockExpBtn = document.getElementById('bypass-unlock-exploration');
+    if (unlockExpBtn) unlockExpBtn.addEventListener('click', unlockExploration);
+
+    var unlockAllBtn = document.getElementById('bypass-unlock-all');
+    if (unlockAllBtn) unlockAllBtn.addEventListener('click', unlockAll);
 
     /* Session controls */
     var testBtn = document.getElementById('bypass-test-toggle');
