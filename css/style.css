@@ -3188,85 +3188,153 @@ img    { display: block; }
   animation: jesus-return 0.75s ease-out forwards;
 }
 
-/* ── Battle music player widget ───────────────────────────────────── */
-.battle-music-ctrl {
+/* ── Global music player widget (always-visible, contextually adapts) ───────────
+ * SNES-themed: solid dialog background, periwinkle border, yellow accents, with
+ * a subtle drop-shadow that anchors the widget to its corner without competing
+ * with primary buttons. Mirrors the .btn-snes vocabulary at a quieter scale. */
+.music-ctrl {
   position: fixed;
   bottom: 14px;
   right: 16px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  background: rgba(5, 0, 21, 0.88);
-  border: 1px solid var(--border-mid);
-  border-radius: 8px;
-  padding: 7px 10px 6px;
+  gap: 6px;
+  background: var(--bg-dialog);
+  border: 2px solid var(--border-bright);
+  border-radius: 6px;
+  padding: 8px 11px 7px;
   z-index: 50;
-  min-width: 158px;
+  min-width: 170px;
+  box-shadow: 0 2px 0 var(--border-mid), 0 3px 0 #000;
+  font-family: var(--font);
+}
+
+/* Context-dependent visibility for music widget sub-controls.
+ * Battle screen shows all controls (prev/play/next + volume + track name).
+ * All other screens show only play/pause + volume — single-track, no playlist. */
+body:not([data-screen="battle"]) #music-prev-btn,
+body:not([data-screen="battle"]) #music-next-btn,
+body:not([data-screen="battle"]) #music-track-name {
+  display: none;
 }
 
 .music-track-name {
-  font-family: 'CT Galbite', monospace;
-  font-size: 8px;
+  font-family: var(--font);
+  font-size: 9px;
   color: var(--snes-yellow);
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  opacity: 0.85;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
+  border-bottom: 1px solid var(--border-mid);
+  padding-bottom: 4px;
 }
 
 .music-controls {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 
 .music-ctrl-btn {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 9px;
+  font-family: var(--font);
+  font-size: 10px;
   color: var(--snes-yellow);
-  padding: 2px 4px;
+  padding: 3px 5px;
   line-height: 1;
-  opacity: 0.75;
-  transition: opacity 0.15s;
+  transition: color 0.15s, text-shadow 0.15s;
   user-select: none;
   flex-shrink: 0;
 }
-.music-ctrl-btn:hover { opacity: 1; }
-.music-play-btn { font-size: 11px; padding: 2px 5px; }
+.music-ctrl-btn:hover {
+  color: var(--snes-white);
+  text-shadow: 0 0 6px var(--snes-yellow);
+}
+.music-ctrl-btn:active {
+  transform: translateY(1px);
+}
+.music-play-btn { font-size: 13px; padding: 3px 6px; }
 
 .music-volume-slider {
   -webkit-appearance: none;
   appearance: none;
   flex: 1;
-  height: 3px;
-  background: var(--border-mid);
-  border-radius: 2px;
+  height: 6px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-bright);
+  border-radius: 3px;
   outline: none;
   cursor: pointer;
-  margin-left: 4px;
+  margin-left: 5px;
 }
 .music-volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--snes-yellow);
   cursor: pointer;
-  border: none;
+  border: 1px solid var(--border-bright);
+  box-shadow: 0 0 4px rgba(248, 208, 0, 0.4);
 }
 .music-volume-slider::-moz-range-thumb {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--snes-yellow);
   cursor: pointer;
-  border: none;
+  border: 1px solid var(--border-bright);
+  box-shadow: 0 0 4px rgba(248, 208, 0, 0.4);
+}
+
+/* ── Per-screen palette override: home screen (warm leather + gold) ─────────────
+ * The home screen's wood-plank background + .btn-home-* gold-on-brown buttons
+ * form the "history book" aesthetic. The music widget switches to the same
+ * palette on this screen via the body[data-screen="home"] selector set by
+ * showScreen(). Deckbuilder + battle keep the default SNES (cold) palette.
+ *
+ * Colour tokens borrowed from .btn-home-* rules:
+ *   #2a1608  leather brown (plate / About fill)
+ *   #d4aa50  unified gold border
+ *   #f0cf6c  gold text
+ *   #fff5d8  cream hover
+ *   #1a0c04  deep brown shadow base
+ */
+body[data-screen="home"] .music-ctrl {
+  background: #2a1608;
+  border-color: #d4aa50;
+  box-shadow: 0 2px 0 #1a0c04, 0 3px 0 #000;
+}
+body[data-screen="home"] .music-track-name {
+  color: #f0cf6c;
+  border-bottom-color: #5a3818;
+}
+body[data-screen="home"] .music-ctrl-btn {
+  color: #f0cf6c;
+}
+body[data-screen="home"] .music-ctrl-btn:hover {
+  color: #fff5d8;
+  text-shadow: 0 0 6px #d4aa50;
+}
+body[data-screen="home"] .music-volume-slider {
+  background: #1a0c04;
+  border-color: #d4aa50;
+}
+body[data-screen="home"] .music-volume-slider::-webkit-slider-thumb {
+  background: #f0cf6c;
+  border-color: #d4aa50;
+  box-shadow: 0 0 4px rgba(212, 170, 80, 0.5);
+}
+body[data-screen="home"] .music-volume-slider::-moz-range-thumb {
+  background: #f0cf6c;
+  border-color: #d4aa50;
+  box-shadow: 0 0 4px rgba(212, 170, 80, 0.5);
 }
 
 

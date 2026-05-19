@@ -326,17 +326,6 @@
       </div>
     </div>
 
-    <!-- ── Music player ───────────────────────────────────────── -->
-    <div id="battle-music-ctrl" class="battle-music-ctrl">
-      <div class="music-track-name" id="music-track-name">Cupids Revenge</div>
-      <div class="music-controls">
-        <button id="music-prev-btn" class="music-ctrl-btn" title="Previous">&#9664;&#9664;</button>
-        <button id="music-play-btn" class="music-ctrl-btn music-play-btn" title="Play/Pause">&#9654;</button>
-        <button id="music-next-btn" class="music-ctrl-btn" title="Next">&#9654;&#9654;</button>
-        <input type="range" id="music-volume-slider" class="music-volume-slider" min="0" max="100" value="10">
-      </div>
-    </div>
-
     <!-- ── Card info popup (click any hand card to open) ───────── -->
     <div id="battle-popup-backdrop" class="popup-backdrop">
       <div class="card-popup">
@@ -739,6 +728,9 @@
         s.classList.remove('active');
       });
       document.getElementById(id).classList.add('active');
+      // Expose the current screen on body so CSS selectors and JS subscribers
+      // can react to screen changes (e.g., music widget context-visibility).
+      document.body.dataset.screen = id.replace(/^screen-/, '');
     }
   </script>
 
@@ -1312,6 +1304,19 @@
     <div id="bypass-toast" class="bypass-toast"></div>
   </div>
 
+  <!-- ── Global Music player (always-visible, contextually adapts) ──────────────────
+       Must be in the DOM before the scripts below, so game/ui.js's IIFE can wire
+       its event handlers via getElementById at script-load time. -->
+  <div id="music-ctrl" class="music-ctrl">
+    <div class="music-track-name" id="music-track-name">Cupids Revenge</div>
+    <div class="music-controls">
+      <button id="music-prev-btn" class="music-ctrl-btn" title="Previous">&#9664;&#9664;</button>
+      <button id="music-play-btn" class="music-ctrl-btn music-play-btn" title="Play/Pause">&#9654;</button>
+      <button id="music-next-btn" class="music-ctrl-btn" title="Next">&#9654;&#9654;</button>
+      <input type="range" id="music-volume-slider" class="music-volume-slider" min="0" max="100" value="10">
+    </div>
+  </div>
+
   <!-- ── Multi-deck save layer (must load before any deck consumer) ── -->
   <script src="js/decks.js"></script>
 
@@ -1346,6 +1351,9 @@
   <script src="js/bypass.js"></script>
   <script src="js/welcome.js"></script>
   <script src="js/feedback.js"></script>
+
+  <!-- Initial screen tag for CSS selectors (showScreen overwrites on navigation) -->
+  <script>document.body.dataset.screen = 'home';</script>
 
 </body>
 </html>

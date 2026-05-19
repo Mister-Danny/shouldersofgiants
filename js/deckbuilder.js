@@ -407,12 +407,20 @@
 
   // Deck-select background music (Howler for reliable cross-browser playback)
   var _deckHowl = null;
+  // Mutable live volume — read from localStorage on Howl creation
+  // (sog_music_volume) and updated by the global music widget. Bug 14.
+  var _deckMusicVolLive = 0.5;
 
   function getDeckMusic() {
+    // Apply any persisted volume before creating the Howl (bug 14).
+    var storedVol = parseInt(localStorage.getItem('sog_music_volume'), 10);
+    if (!isNaN(storedVol)) {
+      _deckMusicVolLive = Math.max(0, Math.min(100, storedVol)) / 100;
+    }
     if (!_deckHowl && typeof Howl !== 'undefined') {
       _deckHowl = new Howl({
         src:    ['music/Dozing Off Card Select.m4a'],
-        volume: 0.5,
+        volume: _deckMusicVolLive,
         loop:   false,
         html5:  true
       });
@@ -428,7 +436,7 @@
       if (typeof fadeMs === 'number' && fadeMs > 0) {
         m.volume(0);
         m.play();
-        m.fade(0, 0.5, fadeMs);  // 0.5 matches getDeckMusic's default volume
+        m.fade(0, _deckMusicVolLive, fadeMs);
       } else {
         m.play();
       }
@@ -437,6 +445,25 @@
 
   function stopDeckMusic() {
     if (_deckHowl && _deckHowl.playing()) { _deckHowl.stop(); }
+  }
+
+  /* ── Music widget integration (bug 14) ───────────────────────── */
+  function pauseDeckMusic() {
+    if (!_deckHowl || !_deckHowl.playing()) return;
+    _deckHowl.pause();
+  }
+  function resumeDeckMusic() {
+    var m = getDeckMusic();
+    if (!m) return;
+    if (!m.playing()) m.play();
+  }
+  function toggleDeckMusic() {
+    if (!_deckHowl || !_deckHowl.playing()) resumeDeckMusic();
+    else pauseDeckMusic();
+  }
+  function setDeckMusicVolume(vol) {
+    _deckMusicVolLive = vol;
+    if (_deckHowl) _deckHowl.volume(vol);
   }
 
   /* ── Difficulty modal ────────────────────────────────────────── */
@@ -538,6 +565,9 @@
 
   // Expose deck music so HomeFlow can start it when routing to the deck builder
   window.playDeckMusic = playDeckMusic;
+  // Bug 14: expose toggle + volume setter for the global music widget.
+  window.toggleDeckMusic    = toggleDeckMusic;
+  window.setDeckMusicVolume = setDeckMusicVolume;
 
   // "About the Game" — open the About screen, no music change
   var btnAbout = document.getElementById('btn-about');

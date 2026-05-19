@@ -748,7 +748,7 @@
     });
 
     // Hide music player and stop any background music during tutorial
-    var _musicCtrl = document.getElementById('battle-music-ctrl');
+    var _musicCtrl = document.getElementById('music-ctrl');
     if (_musicCtrl) _musicCtrl.style.display = 'none';
     if (typeof Howler !== 'undefined') Howler.stop();
 
@@ -1417,7 +1417,7 @@
     });
     document.querySelectorAll('.tut-loc-glow').forEach(function (el) { el.classList.remove('tut-loc-glow'); });
     document.querySelectorAll('.tut-ability-hidden').forEach(function (el) { el.classList.remove('tut-ability-hidden'); });
-    var _musicCtrl = document.getElementById('battle-music-ctrl');
+    var _musicCtrl = document.getElementById('music-ctrl');
     if (_musicCtrl) _musicCtrl.style.display = '';
 
     showScreen('screen-home');
@@ -3630,7 +3630,7 @@
     tutBoardDragFromLocId = null;
     tutBoardDragFromSi    = null;
     // Restore music player
-    var _musicCtrl = document.getElementById('battle-music-ctrl');
+    var _musicCtrl = document.getElementById('music-ctrl');
     if (_musicCtrl) _musicCtrl.style.display = '';
   }
 

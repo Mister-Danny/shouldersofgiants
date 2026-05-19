@@ -85,7 +85,11 @@
     _musicUpdateUI();
   }
 
-  /* ── Music control widget (prev/play/next/volume buttons) ───── */
+  /* ── Music control widget (shared across home / deckbuilder / battle) ──
+     Volume is the single source of truth: localStorage('sog_music_volume') in
+     percent (0-100). Play/Pause routes to the current screen's audio source
+     via body.dataset.screen. Prev/Next are battle-only (CSS hides them on
+     other screens, but the click handlers are no-ops outside battle anyway). */
   (function () {
     var prevBtn = document.getElementById('music-prev-btn');
     var playBtn = document.getElementById('music-play-btn');
@@ -93,30 +97,49 @@
     var slider  = document.getElementById('music-volume-slider');
     if (!prevBtn || !playBtn || !nextBtn || !slider) return;
 
-    slider.value = Math.round(_bgMusicVol * 100);
+    // Read persisted volume; fallback to 10%
+    var stored = parseInt(localStorage.getItem('sog_music_volume'), 10);
+    var initialPct = isNaN(stored) ? 10 : Math.max(0, Math.min(100, stored));
+    _bgMusicVol = initialPct / 100;
+    slider.value = initialPct;
 
-    prevBtn.addEventListener('click', function () {
-      _musicLoadTrack(_musicIdx - 1, true);
-    });
+    // Helper: apply current volume to whichever audio sources exist
+    function applyVolumeToAll() {
+      if (_musicHowl) _musicHowl.volume(_bgMusicVol);
+      if (typeof window.setHomeMusicVolume === 'function') window.setHomeMusicVolume(_bgMusicVol);
+      if (typeof window.setDeckMusicVolume === 'function') window.setDeckMusicVolume(_bgMusicVol);
+    }
 
-    playBtn.addEventListener('click', function () {
-      if (!_musicHowl) { _musicLoadTrack(_musicIdx, true); return; }
-      if (_musicHowl.playing()) {
-        _musicHowl.pause();
-      } else {
-        _musicHowl.volume(_bgMusicVol);
-        _musicHowl.play();
+    // Helper: route play/pause by current screen
+    function togglePlayPauseForCurrentScreen() {
+      var screen = document.body.dataset.screen;
+      if (screen === 'battle') {
+        if (!_musicHowl) { _musicLoadTrack(_musicIdx, true); return; }
+        if (_musicHowl.playing()) _musicHowl.pause();
+        else { _musicHowl.volume(_bgMusicVol); _musicHowl.play(); }
+        _musicUpdateUI();
+      } else if (screen === 'home') {
+        if (window.HomeFlow && typeof window.HomeFlow.toggleMusic === 'function') {
+          window.HomeFlow.toggleMusic();
+        }
+        _musicUpdateUI();
+      } else if (screen === 'deckbuilder') {
+        if (typeof window.toggleDeckMusic === 'function') {
+          window.toggleDeckMusic();
+        }
+        _musicUpdateUI();
       }
-      _musicUpdateUI();
-    });
+      // Other screens (about, result, video, etc.) don't have music
+    }
 
-    nextBtn.addEventListener('click', function () {
-      _musicLoadTrack(_musicIdx + 1, true);
-    });
+    prevBtn.addEventListener('click', function () { _musicLoadTrack(_musicIdx - 1, true); });
+    playBtn.addEventListener('click', togglePlayPauseForCurrentScreen);
+    nextBtn.addEventListener('click', function () { _musicLoadTrack(_musicIdx + 1, true); });
 
     slider.addEventListener('input', function () {
       _bgMusicVol = parseInt(slider.value, 10) / 100;
-      if (_musicHowl) _musicHowl.volume(_bgMusicVol);
+      localStorage.setItem('sog_music_volume', slider.value);
+      applyVolumeToAll();
     });
   }());
 

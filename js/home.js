@@ -35,7 +35,10 @@ var HomeFlow = (function () {
      Howler's HTML5 audio pool was exhausting with the game's other
      SFX running, which blocked our home music. Using a dedicated
      <audio> element sidesteps the pool entirely. */
-  var HOME_MUSIC_VOLUME = 0.50; // ~66% × 0.75 = 50%
+  var HOME_MUSIC_VOLUME = 0.50; // ~66% × 0.75 = 50% (legacy default; live value below)
+  // Mutable live volume — read from localStorage on init (sog_music_volume) and
+  // updated by the global music widget's slider. Bug 14.
+  var HOME_MUSIC_VOLUME_LIVE = HOME_MUSIC_VOLUME;
   var homeMusicAudio = null;
   var homeMusicEnabled = false;  // gate: prevents deferred autoplay-fallback from playing music after the user has navigated away
 
@@ -43,7 +46,7 @@ var HomeFlow = (function () {
     if (homeMusicAudio) return;
     homeMusicAudio = new Audio("music/The Silent Knight's Tale.m4a");
     homeMusicAudio.loop    = true;
-    homeMusicAudio.volume  = HOME_MUSIC_VOLUME;
+    homeMusicAudio.volume  = HOME_MUSIC_VOLUME_LIVE;
     homeMusicAudio.preload = 'auto';
     homeMusicAudio.addEventListener('error', function () {
       console.warn('[HomeFlow] home music audio error:', homeMusicAudio.error);
@@ -54,7 +57,7 @@ var HomeFlow = (function () {
     ensureHomeMusic();
     if (!homeMusicAudio) return;
     if (!homeMusicAudio.paused) return;
-    homeMusicAudio.volume = HOME_MUSIC_VOLUME;
+    homeMusicAudio.volume = HOME_MUSIC_VOLUME_LIVE;
     var p = homeMusicAudio.play();
     if (p && typeof p.catch === 'function') {
       p.catch(function () {
@@ -78,13 +81,42 @@ var HomeFlow = (function () {
           clearInterval(iv);
           homeMusicAudio.pause();
           homeMusicAudio.currentTime = 0;
-          homeMusicAudio.volume = HOME_MUSIC_VOLUME;
+          homeMusicAudio.volume = HOME_MUSIC_VOLUME_LIVE;
         }
       }, stepMs);
     } else {
       homeMusicAudio.pause();
       homeMusicAudio.currentTime = 0;
     }
+  }
+
+  /* ── Music widget integration (bug 14) ─────────────────────────
+     pause/resume/toggle methods consumed by the global music widget.
+     setHomeMusicVolume is exposed as window.setHomeMusicVolume so the
+     widget's volume slider can apply changes to home audio. */
+  function pauseHomeMusic() {
+    if (!homeMusicAudio || homeMusicAudio.paused) return;
+    homeMusicAudio.pause();
+  }
+  function resumeHomeMusic() {
+    if (!homeMusicAudio || !homeMusicAudio.paused) {
+      ensureHomeMusic();
+      if (!homeMusicAudio || !homeMusicAudio.paused) return;
+    }
+    homeMusicEnabled = true;  // re-assert intent (same pattern as HomeFlow.playMusic)
+    var p = homeMusicAudio.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(function () { /* autoplay blocked */ });
+    }
+  }
+  function toggleHomeMusic() {
+    if (!homeMusicAudio || homeMusicAudio.paused) resumeHomeMusic();
+    else pauseHomeMusic();
+  }
+  function setHomeMusicVolume(vol) {
+    // vol is 0..1
+    HOME_MUSIC_VOLUME_LIVE = vol;
+    if (homeMusicAudio) homeMusicAudio.volume = vol;
   }
 
   // Plain HTMLAudioElement — simpler and more reliable than Howler for
@@ -122,6 +154,10 @@ var HomeFlow = (function () {
 
   /* ── Init ──────────────────────────────────────────────────── */
   function init() {
+    // Apply persisted music volume if present (bug 14 — shared with deck + battle)
+    var storedVol = parseInt(localStorage.getItem('sog_music_volume'), 10);
+    if (!isNaN(storedVol)) HOME_MUSIC_VOLUME_LIVE = Math.max(0, Math.min(100, storedVol)) / 100;
+
     screenHomeEl         = document.getElementById('screen-home');
     homeContentEl        = document.getElementById('home-content');
     adventureStageEl     = document.getElementById('home-adventure-stage');
@@ -683,8 +719,8 @@ var HomeFlow = (function () {
   }
 
   return {
-    init:      init,
-    reset:     resetHomeState,
+    init:        init,
+    reset:       resetHomeState,
     playMusic: function () {
       // External callers (tutorial-return-to-home, etc.) re-assert
       // intent that home music should play. This bypasses the bug-13
@@ -693,8 +729,21 @@ var HomeFlow = (function () {
       homeMusicEnabled = true;
       startHomeMusic();
     },
-    stopMusic: stopHomeMusic    // exposed so other flows (Learn tutorial) can silence it
+    stopMusic:      stopHomeMusic,    // exposed so other flows (Learn tutorial) can silence it
+    toggleMusic:    toggleHomeMusic,  // bug 14: global widget play/pause
+    pauseMusic:     pauseHomeMusic,   // bug 14
+    resumeMusic:    resumeHomeMusic,  // bug 14
+    setMusicVolume: setHomeMusicVolume // bug 14: global widget volume slider
   };
 })();
 
 window.HomeFlow = HomeFlow;
+// Bug 14: expose home volume setter as a window-level hook for the global
+// music widget. Lives outside HomeFlow's curated API since the widget needs
+// to call it via a flat function reference without depending on HomeFlow
+// being initialized.
+window.setHomeMusicVolume = function (vol) {
+  if (window.HomeFlow && typeof window.HomeFlow.setMusicVolume === 'function') {
+    window.HomeFlow.setMusicVolume(vol);
+  }
+};
