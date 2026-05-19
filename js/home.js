@@ -37,6 +37,7 @@ var HomeFlow = (function () {
      <audio> element sidesteps the pool entirely. */
   var HOME_MUSIC_VOLUME = 0.50; // ~66% × 0.75 = 50%
   var homeMusicAudio = null;
+  var homeMusicEnabled = false;  // gate: prevents deferred autoplay-fallback from playing music after the user has navigated away
 
   function ensureHomeMusic() {
     if (homeMusicAudio) return;
@@ -49,6 +50,7 @@ var HomeFlow = (function () {
     });
   }
   function startHomeMusic() {
+    if (!homeMusicEnabled) return;   // bug 13: user has navigated away — don't honor stale deferred start
     ensureHomeMusic();
     if (!homeMusicAudio) return;
     if (!homeMusicAudio.paused) return;
@@ -62,6 +64,7 @@ var HomeFlow = (function () {
     }
   }
   function stopHomeMusic(fadeMs) {
+    homeMusicEnabled = false;        // bug 13: cancel the play-intent so any pending first-click fallback no-ops
     if (!homeMusicAudio || homeMusicAudio.paused) return;
     if (fadeMs && fadeMs > 0) {
       var startVol = homeMusicAudio.volume;
@@ -148,6 +151,7 @@ var HomeFlow = (function () {
     // Try to start home music immediately. If the browser's autoplay policy
     // blocks it (no prior interaction this session), the rejection is silent
     // and the click listener below kicks it off on the first user click.
+    homeMusicEnabled = true;   // bug 13: this init is the only place we WANT music to play
     startHomeMusic();
     document.addEventListener('click', function _firstClick() {
       startHomeMusic();
@@ -681,7 +685,14 @@ var HomeFlow = (function () {
   return {
     init:      init,
     reset:     resetHomeState,
-    playMusic: startHomeMusic,  // exposed so flows returning to home (e.g. tutorial end) can resume it
+    playMusic: function () {
+      // External callers (tutorial-return-to-home, etc.) re-assert
+      // intent that home music should play. This bypasses the bug-13
+      // leak gate — internal startHomeMusic remains gate-checked so
+      // the deferred autoplay-fallback can't fire after navigation.
+      homeMusicEnabled = true;
+      startHomeMusic();
+    },
     stopMusic: stopHomeMusic    // exposed so other flows (Learn tutorial) can silence it
   };
 })();
