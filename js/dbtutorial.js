@@ -278,12 +278,20 @@
     skipEl.classList.add('visible');
     boxEl.style.display = '';
     boxEl.classList.add('db-tut-positioned');
+    document.body.dataset.dbtutorial = 'active';  // bug 23: hide music widget + silence music while Lucy spotlights
     nextStep();
   }
 
   function startIfNew() {
     if (isComplete()) return;
     start();
+  }
+
+  // bug 23: callers about to enter the deck builder use this to decide
+  // whether to start deck music. Mirrors startIfNew's gate: tutorial will
+  // run only if it hasn't been completed AND no in-game tutorial is active.
+  function willRunOnNext() {
+    return !isComplete() && !window.tutorialActive;
   }
 
   function notifyCardClick(cardId) {
@@ -313,7 +321,7 @@
     if (stepIdx >= STEPS.length) {
       // Final click-to-continue past lets-play closes the tutorial.
       // Completion isn't marked here — only on a real Let's Play with 15 cards.
-      tearDown();
+      tearDown({ restartMusic: true });  // bug 23: natural end — fade in deck music
       return;
     }
     var step = STEPS[stepIdx];
@@ -522,7 +530,7 @@
 
   function skipTutorial() {
     if (!active) return;
-    tearDown();
+    tearDown({ restartMusic: true });  // bug 23: Skip button — fade in deck music
   }
 
   /* Called by deckbuilder navigation handlers when the user leaves
@@ -538,7 +546,7 @@
   /* ═══════════════════════════════════════════════════════════════
      TEARDOWN
   ═══════════════════════════════════════════════════════════════ */
-  function tearDown() {
+  function tearDown(opts) {
     active = false;
     stepIdx = -1;
     if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
@@ -552,12 +560,22 @@
       boxEl.classList.remove('db-tut-positioned');
       boxEl.style.display = 'none';
     }
+    // bug 23: clear the screen-level dbtutorial marker so the music widget
+    // CSS rule stops applying and the widget fades back in.
+    delete document.body.dataset.dbtutorial;
+    // bug 23: natural-end + Skip Button paths request music restart; the
+    // notifyLetsPlay / notifyExit paths intentionally omit this because the
+    // caller is leaving the deck builder.
+    if (opts && opts.restartMusic && typeof window.playDeckMusic === 'function') {
+      window.playDeckMusic(400);
+    }
   }
 
   /* ── Public export ─────────────────────────────────────────────── */
   window.DeckBuilderTutorial = {
     start:              start,
     startIfNew:         startIfNew,
+    willRunOnNext:      willRunOnNext,
     notifyCardClick:    notifyCardClick,
     notifyCardDblClick: notifyCardDblClick,
     notifyLetsPlay:     notifyLetsPlay,

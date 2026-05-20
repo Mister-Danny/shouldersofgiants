@@ -3559,11 +3559,17 @@
         dbScreen.style.opacity = '0';
       }
 
+      // bug 23: if dbtutorial will run, preset the marker so the music widget
+      // never flashes visible, and skip the deck-music start (tearDown will).
+      var dbWillRun = window.DeckBuilderTutorial &&
+                      typeof window.DeckBuilderTutorial.willRunOnNext === 'function' &&
+                      window.DeckBuilderTutorial.willRunOnNext();
+      if (dbWillRun) document.body.dataset.dbtutorial = 'active';
       showScreen('screen-deckbuilder');
       if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
 
       // Start deck music with fade-in (matches the screen fade)
-      if (typeof window.playDeckMusic === 'function') {
+      if (!dbWillRun && typeof window.playDeckMusic === 'function') {
         window.playDeckMusic(400);  // 400ms fade-in
       }
 

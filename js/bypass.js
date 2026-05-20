@@ -108,11 +108,17 @@
       window.HomeFlow.stopMusic(400);
     }
     setTimeout(function () {
+      // bug 23: if dbtutorial will run, preset the marker so the music widget
+      // never flashes visible, and skip the deck-music start (tearDown will).
+      var dbWillRun = window.DeckBuilderTutorial &&
+                      typeof window.DeckBuilderTutorial.willRunOnNext === 'function' &&
+                      window.DeckBuilderTutorial.willRunOnNext();
+      if (dbWillRun) document.body.dataset.dbtutorial = 'active';
       if (typeof showScreen      === 'function') showScreen('screen-deckbuilder');
       if (typeof initDeckBuilder === 'function') initDeckBuilder();
       // Match the home.js Arcadium handler's order: init first, then start
       // deck music with the same 400ms fade-in used by the tutorial-end path.
-      if (typeof window.playDeckMusic === 'function') window.playDeckMusic(400);
+      if (!dbWillRun && typeof window.playDeckMusic === 'function') window.playDeckMusic(400);
     }, 600);
   }
 

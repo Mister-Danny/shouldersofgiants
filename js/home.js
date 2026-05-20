@@ -310,9 +310,15 @@ var HomeFlow = (function () {
     stopHomeMusic(400);
     window.multiplayerMode = false;
     if (localStorage.getItem('sog_tutorial_complete')) {
+      // bug 23: if dbtutorial will run, preset the marker so the music widget
+      // never flashes visible, and skip the deck-music start (tearDown will).
+      var dbWillRun = window.DeckBuilderTutorial &&
+                      typeof window.DeckBuilderTutorial.willRunOnNext === 'function' &&
+                      window.DeckBuilderTutorial.willRunOnNext();
+      if (dbWillRun) document.body.dataset.dbtutorial = 'active';
       window.showScreen('screen-deckbuilder');
       if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
-      if (typeof window.playDeckMusic   === 'function') window.playDeckMusic();
+      if (!dbWillRun && typeof window.playDeckMusic === 'function') window.playDeckMusic();
       return;
     }
     // First-time player: Lucy 3-line home intro → video → tutorial
@@ -336,9 +342,15 @@ var HomeFlow = (function () {
       return;
     }
     window.multiplayerMode = true;
+    // bug 23: if dbtutorial will run, preset the marker so the music widget
+    // never flashes visible, and skip the deck-music start (tearDown will).
+    var dbWillRun = window.DeckBuilderTutorial &&
+                    typeof window.DeckBuilderTutorial.willRunOnNext === 'function' &&
+                    window.DeckBuilderTutorial.willRunOnNext();
+    if (dbWillRun) document.body.dataset.dbtutorial = 'active';
     window.showScreen('screen-deckbuilder');
     if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
-    if (typeof window.playDeckMusic   === 'function') window.playDeckMusic();
+    if (!dbWillRun && typeof window.playDeckMusic === 'function') window.playDeckMusic();
   }
 
   /* ── STATE 2 → 3: Adventure clicked ────────────────────────── */

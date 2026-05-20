@@ -3207,6 +3207,16 @@ img    { display: block; }
   min-width: 170px;
   box-shadow: 0 2px 0 var(--border-mid), 0 3px 0 #000;
   font-family: var(--font);
+  /* bug 23: opacity transition so the widget fades when dbtutorial toggles. */
+  transition: opacity 400ms ease-out;
+}
+
+/* bug 23: hide music widget while the deck-builder tutorial (Lucy) is active.
+ * Keeps focus on Lucy's instructions and prevents the Skip Tutorial button
+ * from visually overlapping the bottom-right widget. */
+body[data-dbtutorial="active"] .music-ctrl {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Context-dependent visibility for music widget sub-controls.
