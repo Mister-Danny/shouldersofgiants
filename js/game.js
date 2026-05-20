@@ -161,6 +161,7 @@
     showRevealFirstHighlight(G.playerFirst);
     G.playerRevealQueue = [];
     G.aiRevealQueue     = [];
+    G.aiActionLog       = [];   // bug 16: unified action log mirroring playerActionLog
 
     G.bonusCapitalNextTurn   = 0;
     G.aiBonusCapitalNextTurn = 0;
@@ -285,6 +286,10 @@
   function applyOpponentActions(actions) {
     if (!actions) actions = [];
     G.aiRevealQueue = [];
+    // Bug 16 scope note: multiplayer's executeMove path is preserved for now
+    // (bug 20). aiActionLog is reset here to keep state clean even though
+    // applyOpponentActions doesn't write to it yet.
+    G.aiActionLog   = [];
 
     /* ── Moves: delegate to executeMove so face-up render, IP mods
           (Cape +1, Magellan +1, Columbus), and slot compaction all
@@ -849,8 +854,11 @@
   function buildRevealSequence() {
     // Player side uses playerActionLog (ordered plays + queued moves)
     var pQ = G.playerActionLog.slice();
-    // AI side: map raw cardIds to play-type items
-    var aQ = G.aiRevealQueue.map(function (id) { return { type: 'play', cardId: id }; });
+    // AI side uses aiActionLog (ordered plays + queued moves, populated by
+    // runAiSelection and runAiMovements). Already in {type, cardId, ...} shape
+    // — symmetric with playerActionLog so revealNext's 'move'/'play' branches
+    // handle both sides uniformly. Bug 16.
+    var aQ = G.aiActionLog.slice();
     var fQ = G.playerFirst ? pQ : aQ;
     var sQ = G.playerFirst ? aQ : pQ;
     var fO = G.playerFirst ? 'player' : 'opp';
@@ -976,6 +984,7 @@
     var aiDrew     = G.aiRevealQueue.length;
     G.playerRevealQueue = [];
     G.aiRevealQueue     = [];
+    G.aiActionLog       = [];   // bug 16
     G.playerFirst       = !G.playerFirst;
     showRevealFirstHighlight(G.playerFirst);
     G.movedThisTurn          = {};

@@ -70,6 +70,7 @@
     aiMovedThisTurn:        {},
     moveLog:                [],  // player moves this turn [{cardId,fromLocId,toLocId,toSlotIndex,ipModAdded,isColumbus,queued}]
     playerActionLog:        [],  // ordered: {type:'play'|'move', cardId, fromLocId?, fromSlotIndex?, toLocId?}
+    aiActionLog:            [],  // ordered: {type:'play',cardId} and {type:'move',cardId,fromLocId,fromSlotIndex,toLocId} entries — mirrors playerActionLog for buildRevealSequence symmetry (bug 16)
     locationSnapshots:      {},  // locId → slot-array copy taken at first queueMove from that loc
     reservedSlotsPerLoc:    {},  // locId → count of snap-back slots reserved (one per queued move FROM that loc)
     deferredPlays:          {},  // locId → [slotData] new plays that couldn't fit at snap-back; inserted after queued card moves away

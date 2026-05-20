@@ -32,6 +32,9 @@
 
   function runAiSelection() {
     G.aiRevealQueue = [];
+    // Note: aiActionLog is reset at the start of runAiMovements (which runs
+    // before runAiSelection on the AI's turn). Don't reset it here or we'd
+    // wipe any movement entries the AI just recorded.
     var budget = CAPITAL + G.aiBonusCapitalNextTurn;
     G.aiBonusCapitalNextTurn = 0;
 
@@ -48,6 +51,7 @@
       G.aiSlots[locId][slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
       G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
       G.aiRevealQueue.push(cardId);
+      G.aiActionLog.push({ type: 'play', cardId: cardId });  // bug 16: unified action log
       var slotEl = helpers.getSlotEl('opp', locId, slotIndex);
       if (slotEl) { slotEl.dataset.cardId = cardId; helpers.setSlotFaceDown(slotEl); }
     }
@@ -98,6 +102,7 @@
       G.aiSlots[t.locId][t.slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
       G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
       G.aiRevealQueue.push(cardId);
+      G.aiActionLog.push({ type: 'play', cardId: cardId });  // bug 16: unified action log
       budget -= card.cc;
 
       var slotEl = helpers.getSlotEl('opp', t.locId, t.slotIndex);
@@ -392,9 +397,40 @@
   /**
    * AI auto-movement (both modes).
    * Giant mode also repositions Military from Scandinavia and Cultural toward Timbuktu.
+   *
+   * Bug 16: previously called executeMove (synchronous, no animation) directly
+   * during the AI's turn. Now records each decision into G.aiActionLog as a
+   * {type:'move'} entry; the reveal pipeline picks it up via buildRevealSequence
+   * and animates via executeMoveAnimated alongside player moves.
+   *
+   * Intended-destination accounting (intendedDestUses) prevents multiple
+   * Military cards at Scandinavia (or Culturals targeting Timbuktu) from all
+   * picking the same destination based on stale "this slot is free" reads.
+   * Without it, only the first such card would actually move during reveal
+   * (subsequent executeMoveAnimated calls bail at toIndex === -1).
    */
   function runAiMovements() {
     var isHard = window.aiDifficulty === 'hard';
+    // bug 16: locId → count of moves this turn whose destination is this loc.
+    // availableAt() consults it so subsequent decisions don't pile into a
+    // destination that's already been "claimed" by an earlier decision.
+    var intendedDestUses = {};
+    function availableAt(locId) {
+      var nullCount = 0;
+      var locSlots = G.aiSlots[locId];
+      for (var i = 0; i < locSlots.length; i++) if (!locSlots[i]) nullCount++;
+      return nullCount - (intendedDestUses[locId] || 0);
+    }
+    function recordMove(cardId, fromLocId, fromSlotIndex, toLocId) {
+      G.aiActionLog.push({
+        type: 'move',
+        cardId: cardId,
+        fromLocId: fromLocId,
+        fromSlotIndex: fromSlotIndex,
+        toLocId: toLocId
+      });
+      intendedDestUses[toLocId] = (intendedDestUses[toLocId] || 0) + 1;
+    }
 
     G.locations.forEach(function (loc) {
       G.aiSlots[loc.id].forEach(function (s, si) {
@@ -404,7 +440,7 @@
         if (s.cardId === 24 && !G.aiMovedThisTurn[24]) {
           var magBest = null, magBestScore = -Infinity;
           G.locations.forEach(function (l) {
-            if (l.id === loc.id || G.aiSlots[l.id].indexOf(null) === -1) return;
+            if (l.id === loc.id || availableAt(l.id) <= 0) return;
             // Giant: move toward most contested (highest gap = AI losing there)
             // Easy: move toward highest player IP
             var magScore = isHard ? _aiLocGap(l.id)
@@ -413,14 +449,17 @@
               }, 0);
             if (magScore > magBestScore) { magBestScore = magScore; magBest = l.id; }
           });
-          if (magBest !== null) helpers.executeMove('opp', loc.id, si, magBest);
+          if (magBest !== null) {
+            recordMove(24, loc.id, si, magBest);
+            G.aiMovedThisTurn[24] = true;  // preserves the flag-setting executeMove used to do
+          }
         }
 
         // ── Columbus (id=25) ─────────────────────────────────────
         if (s.cardId === 25 && !G.aiColumbusMoved) {
           var colBest = null, colBestCount = 0;
           G.locations.forEach(function (l) {
-            if (l.id === loc.id || G.aiSlots[l.id].indexOf(null) === -1) return;
+            if (l.id === loc.id || availableAt(l.id) <= 0) return;
             var cnt = G.playerSlots[l.id].filter(function (ps) {
               if (!ps || !ps.revealed) return false;
               var c = CARDS.find(function (x) { return x.id === ps.cardId; });
@@ -428,7 +467,10 @@
             }).length;
             if (cnt > colBestCount) { colBestCount = cnt; colBest = l.id; }
           });
-          if (colBest !== null) helpers.executeMove('opp', loc.id, si, colBest);
+          if (colBest !== null) {
+            recordMove(25, loc.id, si, colBest);
+            G.aiColumbusMoved = true;  // preserves the flag-setting executeMove used to do
+          }
         }
 
         // ── Giant: Scandinavia military repositioning ─────────────
@@ -441,13 +483,13 @@
               !G.aiMovedThisTurn[s.cardId]) {
             var scandBest = null, scandBestGap = -Infinity;
             G.locations.forEach(function (l) {
-              if (l.id === loc.id || G.aiSlots[l.id].indexOf(null) === -1) return;
+              if (l.id === loc.id || availableAt(l.id) <= 0) return;
               var gap = _aiLocGap(l.id);
               if (gap > scandBestGap) { scandBestGap = gap; scandBest = l.id; }
             });
             // Only reposition if AI is losing or tied at the destination
             if (scandBest !== null && scandBestGap >= 0) {
-              helpers.executeMove('opp', loc.id, si, scandBest);
+              recordMove(s.cardId, loc.id, si, scandBest);
               G.aiMovedThisTurn[s.cardId] = true;
             }
           }
@@ -464,12 +506,12 @@
           G.aiSlots[srcLoc.id].forEach(function (s, si) {
             if (!s || !s.revealed) return;
             if (G.aiMovedThisTurn[s.cardId]) return;
-            if (G.aiSlots[timbuktuLoc.id].indexOf(null) === -1) return; // Timbuktu full
+            if (availableAt(timbuktuLoc.id) <= 0) return; // Timbuktu full (incl. intended moves)
             var crd = CARDS.find(function (c) { return c.id === s.cardId; });
             if (!crd || crd.type !== 'Cultural') return;
             // Only pull from a location where AI is comfortably ahead (safe to spare the card)
             if (_aiLocGap(srcLoc.id) > -2) return;
-            helpers.executeMove('opp', srcLoc.id, si, timbuktuLoc.id);
+            recordMove(s.cardId, srcLoc.id, si, timbuktuLoc.id);
             G.aiMovedThisTurn[s.cardId] = true;
           });
         });
