@@ -101,9 +101,18 @@
     localStorage.setItem(TUTORIAL_KEY, 'true');
     showBypassToast('Tutorial skipped — going to Deck Builder');
     close();
+    // Fade home music out while the bypass menu animates closed, so the
+    // user lands on the deck builder in silence ready for deck music.
+    // Sibling to bug 13's home-music leak fix.
+    if (window.HomeFlow && typeof window.HomeFlow.stopMusic === 'function') {
+      window.HomeFlow.stopMusic(400);
+    }
     setTimeout(function () {
       if (typeof showScreen      === 'function') showScreen('screen-deckbuilder');
       if (typeof initDeckBuilder === 'function') initDeckBuilder();
+      // Match the home.js Arcadium handler's order: init first, then start
+      // deck music with the same 400ms fade-in used by the tutorial-end path.
+      if (typeof window.playDeckMusic === 'function') window.playDeckMusic(400);
     }, 600);
   }
 
