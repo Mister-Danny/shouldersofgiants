@@ -189,6 +189,11 @@
     resetTurnBtn.disabled      = false;
     resetTurnBtn.style.display = '';
     document.getElementById('btn-back-results').style.display = 'none';
+    // Bug 19: tutorial.js hides Play Again at the end of the tutorial battle
+    // via inline style.display = 'none' but never restores it. Reset on every
+    // fresh game so subsequent battles show Play Again again.
+    var _resultPlayAgainBtn = document.getElementById('result-play-again');
+    if (_resultPlayAgainBtn) _resultPlayAgainBtn.style.display = '';
 
     updateHeader();
     refreshMoveableCards();
