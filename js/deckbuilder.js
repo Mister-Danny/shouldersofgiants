@@ -543,7 +543,13 @@
   });
 
   saveBtn.addEventListener('click', openDifficultyModal);
-  backBtn.addEventListener('click', function () { stopDeckMusic(); showScreen('screen-home'); });
+  backBtn.addEventListener('click', function () {
+    stopDeckMusic();
+    showScreen('screen-home');
+    if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
+      window.HomeFlow.playMusic();
+    }
+  });
 
   // Export so tutorial.js can re-enter the deck builder after tutorial ends
   window.initDeckBuilder = initDeckBuilder;
@@ -559,6 +565,9 @@
       showScreen('screen-home');
       if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') {
         window.HomeFlow.reset();
+      }
+      if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
+        window.HomeFlow.playMusic();
       }
     });
   }
@@ -580,7 +589,12 @@
   }
   var btnAboutBack = document.getElementById('about-back');
   if (btnAboutBack) {
-    btnAboutBack.addEventListener('click', function () { showScreen('screen-home'); });
+    btnAboutBack.addEventListener('click', function () {
+      showScreen('screen-home');
+      if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
+        window.HomeFlow.playMusic();
+      }
+    });
   }
 
   document.getElementById('btn-learn').addEventListener('click', function () {

@@ -1281,6 +1281,9 @@
     SOG.ui.stopBgMusic();
     _playPendingCelebrations(function () {
       showScreen('screen-home');
+      if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
+        window.HomeFlow.playMusic();
+      }
     });
   });
 
