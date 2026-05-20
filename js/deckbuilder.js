@@ -544,6 +544,9 @@
 
   saveBtn.addEventListener('click', openDifficultyModal);
   backBtn.addEventListener('click', function () {
+    if (window.DeckBuilderTutorial && typeof window.DeckBuilderTutorial.notifyExit === 'function') {
+      window.DeckBuilderTutorial.notifyExit();
+    }
     stopDeckMusic();
     showScreen('screen-home');
     if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {

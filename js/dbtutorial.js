@@ -525,6 +525,16 @@
     tearDown();
   }
 
+  /* Called by deckbuilder navigation handlers when the user leaves
+     screen-deckbuilder via a path that wasn't a natural tutorial
+     completion (e.g. back-to-home button). Same effect as
+     skipTutorial — tears down all DOM artifacts so Lucy doesn't
+     follow the user to other screens. */
+  function notifyExit() {
+    if (!active) return;
+    tearDown();
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      TEARDOWN
   ═══════════════════════════════════════════════════════════════ */
@@ -550,7 +560,8 @@
     startIfNew:         startIfNew,
     notifyCardClick:    notifyCardClick,
     notifyCardDblClick: notifyCardDblClick,
-    notifyLetsPlay:     notifyLetsPlay
+    notifyLetsPlay:     notifyLetsPlay,
+    notifyExit:         notifyExit
   };
 
 }());
