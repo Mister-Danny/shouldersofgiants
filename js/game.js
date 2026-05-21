@@ -935,9 +935,10 @@
       ? rSlots[rLocId].findIndex(function (s) { return s && s.cardId === item.cardId; })
       : -1;
     var rSd    = rSi !== -1 ? rSlots[rLocId][rSi] : null;
-    // Use data state (sd.revealed) rather than DOM class — syncPlayerSlots called during a
-    // preceding move's applyMove can reset an unrevealed card back to face-up unplayed,
-    // causing the DOM class check to miss the card and skip its reveal entirely.
+    // Gate on data state (sd.revealed), not on DOM class. The slot's classList
+    // is derived from the slot data; checking sd.revealed reads the canonical
+    // source of truth and correctly skips slots whose reveal has already fired
+    // earlier in the sequence.
     if (slotEl && rSd && !rSd.revealed) {
       if (!slotEl.classList.contains('face-down')) {
         slotEl.classList.remove('face-up', 'unplayed');
