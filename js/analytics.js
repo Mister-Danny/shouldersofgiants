@@ -43,6 +43,7 @@
   var gameActive    = false;  // true while a game is in progress (not yet over)
   var turnStartTime = 0;      // Date.now() at the start of the current turn
   var turnDurations = [];     // array of seconds (one entry per completed turn)
+  var analyticsDisabled = false;  // bug 3: set true on first permission-denied; subsequent writes silently no-op
 
   /* ══════════════════════════════════════════════════════════════
      UUID / session ID
@@ -80,8 +81,22 @@
 
   function writeDoc(ref, data, merge) {
     if (!ref) return;
+    // bug 3: short-circuit after permission-denied — analytics is configured
+    // but Firestore rules deny the writes. We log once, then suppress further
+    // attempts and noise for the session. The server-side fix is to update
+    // Firestore rules in the Firebase Console — until then, gameplay is
+    // unaffected, data is just not captured.
+    if (analyticsDisabled) return;
     ref.set(data, { merge: !!merge }).catch(function (e) {
-      console.warn('[Analytics] Firestore write error:', e);
+      if (e && e.code === 'permission-denied') {
+        if (!analyticsDisabled) {
+          console.warn('[Analytics] Disabled — Firestore writes denied. Update security rules in Firebase Console to enable telemetry. (Suppressing further warnings this session.)');
+          analyticsDisabled = true;
+        }
+      } else {
+        // Non-permission errors might be transient (network, etc.) — keep warning
+        console.warn('[Analytics] Firestore write error:', e);
+      }
     });
   }
 
