@@ -1165,6 +1165,34 @@ img    { display: block; }
   background: #100a02;
 }
 
+/* bug 24: source images bake a pure-black band into top and bottom edges
+   (verified via raw pixel sampling) but leave left/right as image content.
+   Earlier attempts used box-shadow:inset on the wrap, which paints in the
+   parent's background layer — the <img> child paints on top and hides it.
+   This ::after pseudo-element renders the frame AS A FOREGROUND LAYER
+   above the image (z-index 5, above the CC/IP overlays' z-index 4), with
+   pointer-events:none to keep clicks reaching the card. */
+.db-card-img-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Border width in cqw scales with card size — matches the baked-in
+     top/bottom band proportionally on any viewport.
+     SNES-style two-tone bevel: dark-gray highlight on top + left,
+     deep-shadow on bottom + right (light source top-left = raised look).
+     Gray reads cleanly against the warm-gold baked-in card frame
+     without blending into it the way a gold highlight did. */
+  border-style: solid;
+  border-width: 1.5cqw;
+  border-top-color:    #4a4a4a;
+  border-left-color:   #4a4a4a;
+  border-right-color:  #1a0a04;
+  border-bottom-color: #1a0a04;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 5;
+}
+
 .db-card-img {
   width: 100%;
   height: 100%;
