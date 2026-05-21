@@ -2490,10 +2490,13 @@ img    { display: block; }
 
 /* Deny flash — invalid action (not enough capital / slot occupied) */
 @keyframes flash-deny {
+  /* bug 12: inset prevents clipping by ancestor overflow:hidden
+     on .battle-col / .battle-location. Outer shadows would be cut
+     off on the bottom edge of the bottom-most player slot. */
   0%, 40% {
     box-shadow:
-      0 0 0 2px var(--snes-red),
-      0 0 8px  var(--snes-red);
+      inset 0 0 0 2px var(--snes-red),
+      inset 0 0 8px var(--snes-red);
   }
   100% { box-shadow: none; }
 }
