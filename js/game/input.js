@@ -674,6 +674,15 @@
       buildCardFace(slotEl, card, card.ip + resBonus);
     }
     updateHeader();
+
+    // Adventure Mode (Prehistory tutorial) hook: notify the adventure
+    // module so it can draw a card, enable End Turn, and (turn 1) show
+    // Lucy's "click End Turn" prompt. Standard battles ignore this.
+    if (G.prehistoryMode && window.SOG && SOG.Adventure &&
+        SOG.Adventure.Prehistory &&
+        typeof SOG.Adventure.Prehistory.notifyPlayerPlayed === 'function') {
+      SOG.Adventure.Prehistory.notifyPlayerPlayed(cardId, locId);
+    }
   }
 
   function undoPlay(locId, slotIndex) {

@@ -412,6 +412,35 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
+       ADVENTURE MODE — Neanderthal battle result screens (phase F)
+       Placeholder victory / defeat overlays shown when the battle ends.
+       Sit at body level so they cover the battle screen entirely.
+       The card-reveal celebration animation (Neanderthal + Lucy +
+       Hunter companion) is a separate, follow-up prompt.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="adv-result-victory" class="adv-result" style="display:none">
+    <div class="adv-result-panel">
+      <div class="adv-result-title">YOU WIN!</div>
+      <div class="adv-result-message">
+        You sent the Neanderthal back to whatever came before the Stone Age.
+      </div>
+      <!-- TODO follow-up: card reveal animation (Neanderthal + Lucy +
+           Hunter companion) goes inside this panel before the Continue
+           button. Implemented in a separate prompt. -->
+      <button class="btn-snes" id="adv-result-victory-continue">CONTINUE</button>
+    </div>
+  </div>
+  <div id="adv-result-defeat" class="adv-result" style="display:none">
+    <div class="adv-result-panel">
+      <div class="adv-result-title">DEFEATED</div>
+      <div class="adv-result-message">
+        The Neanderthal grunts in triumph. Try again?
+      </div>
+      <button class="btn-snes" id="adv-result-defeat-retry">TRY AGAIN</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
        RESULT SCREEN
   ════════════════════════════════════════════════════════════════ -->
   <div id="screen-result" class="screen">

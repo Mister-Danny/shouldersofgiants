@@ -424,6 +424,16 @@ var Overworld = (function () {
       nodeEl.appendChild(img);
       // (no text label — node image alone)
       nodeEl.addEventListener('click', function () { onNodeClick(n); });
+      // Adventure Mode completion badge: if this node has a battle
+      // completion flag in localStorage, apply the .overworld-node-complete
+      // class so the gold checkmark badge renders. Adding this directly
+      // here (during build) handles re-entry after victory as well as
+      // initial loads on a new browser session.
+      if (n.id === 'prehistory' &&
+          window.SOG && SOG.Adventure && SOG.Adventure.Prehistory &&
+          SOG.Adventure.Prehistory.isBattleComplete()) {
+        nodeEl.classList.add('overworld-node-complete');
+      }
       overlayEl.appendChild(nodeEl);
     });
 

@@ -8088,6 +8088,104 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
   transform-origin: center;
 }
 
+/* ────────────────────────────────────────────────────────────────
+   Phase F additions: End Turn pulse, result screens, completed node
+   ──────────────────────────────────────────────────────────────── */
+
+/* End Turn button pulse used on turn 1 to draw attention after the
+   player makes their first play (spec step 8). JS adds .adv-pulse
+   and removes it once the player clicks End Turn. */
+@keyframes adv-button-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--snes-yellow),
+                          4px 4px 0 #111; }
+  50%      { box-shadow: 0 0 0 2px var(--snes-yellow),
+                          0 0 18px 6px rgba(248, 208, 0, 0.75),
+                          4px 4px 0 #111; }
+}
+.btn-end-turn.adv-pulse:not([disabled]) {
+  animation: adv-button-pulse 0.85s ease-in-out infinite;
+}
+
+/* Result screens (victory / defeat) — fullscreen overlay above the
+   battle. Modal-style panel with title, message, action button. */
+.adv-result {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font);
+  animation: adv-result-fadein 0.35s ease-out;
+}
+@keyframes adv-result-fadein {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.adv-result-panel {
+  width: 86%;
+  max-width: 560px;
+  padding: 32px 28px;
+  text-align: center;
+  background: linear-gradient(180deg, #241a3c 0%, #120a22 100%);
+  border: 3px solid #f8d000;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 0 5px #f8d000,
+    0 0 0 7px #000,
+    0 12px 36px rgba(0, 0, 0, 0.8);
+  color: #ffffff;
+}
+.adv-result-title {
+  font-family: var(--font);
+  font-size: 42px;
+  letter-spacing: 0.12em;
+  margin-bottom: 18px;
+  color: #f8d000;
+  text-shadow: 3px 3px 0 #000;
+}
+#adv-result-defeat .adv-result-title { color: #f04030; }
+.adv-result-message {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 18px;
+  line-height: 1.4;
+  margin-bottom: 26px;
+  color: #ffffff;
+}
+.adv-result-panel .btn-snes {
+  padding: 14px 28px;
+  font-size: 16px;
+  letter-spacing: 0.10em;
+}
+
+/* Completed-node treatment: gold checkmark badge overlaid on the
+   Prehistory node once the battle is won. Sits above the node image,
+   below the location label. Phase F adds .overworld-node-complete
+   on entry to the overworld after a victory. */
+.overworld-node.overworld-node-complete::before {
+  content: '\2713';   /* ✓ */
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--snes-yellow);
+  color: #1a0a04;
+  font-family: var(--font);
+  font-size: 18px;
+  font-weight: bold;
+  border: 2px solid #1a0a04;
+  border-radius: 50%;
+  box-shadow: 0 2px 0 #000, 0 0 8px rgba(248, 208, 0, 0.5);
+  z-index: 3;
+  pointer-events: none;
+}
+
 /* Home-screen Adventure Mode button — warm gold accent */
 .btn-home-adventure {
   background: linear-gradient(180deg, #3a2810 0%, #2a1c08 100%);
