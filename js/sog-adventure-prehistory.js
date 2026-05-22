@@ -65,6 +65,193 @@ window.SOG.Adventure.Prehistory = (function () {
   /* ── Logging helper ────────────────────────────────────────── */
   function log(msg) { console.log('[Adventure/Prehistory] ' + msg); }
 
+  /* ── Tuning constants ──────────────────────────────────────── */
+  var TYPE_SPEED_MS      = 32;     // ms per character (slightly slower
+                                   // than overworld dialogue's 28 — these
+                                   // are short shouts, give them weight)
+  var POST_TYPE_HOLD_MS  = 900;    // hold after each line types out before
+                                   // auto-advancing
+  var POST_DIALOGUE_MS   = 2000;   // 2-second beat after both bubbles
+                                   // before the wipe fires (per spec step 2)
+  var WIPE_DURATION_MS   = 1000;   // 1s radial expansion (per spec step 3)
+
+  /* ── Audio (lazy-loaded Howl for woosh.m4a) ────────────────── */
+  var wooshHowl = null;
+  function ensureWoosh() {
+    if (wooshHowl || typeof Howl === 'undefined') return;
+    wooshHowl = new Howl({
+      src: ['sfx/woosh.m4a'],
+      volume: 0.8,
+      html5: true
+    });
+  }
+  function playWoosh() {
+    ensureWoosh();
+    if (wooshHowl) { try { wooshHowl.stop(); wooshHowl.play(); } catch (e) {} }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     PHASE C — Pre-battle dialogue (speech bubbles)
+     ════════════════════════════════════════════════════════════
+     Neanderthal "AARRGH!" (top-right) then Explorer "Uh oh…"
+     (bottom-left). Auto-advancing typewriter — this is a cutscene
+     reaction shot, not an interactive conversation. After both
+     lines have typed + their hold, a 2-second beat lands the
+     moment before the radial wipe fires.
+
+     Both bubbles stay visible on screen through the 2-second beat
+     and through the start of the wipe; the wipe element covers
+     them as it expands, so an explicit fade isn't necessary. */
+
+  function getBubbleEl(who) {
+    return document.getElementById('adv-bubble-' + who);
+  }
+
+  function showBubbleText(who, text, onDone) {
+    var el = getBubbleEl(who);
+    if (!el) { log('bubble #adv-bubble-' + who + ' missing — skipping'); if (onDone) onDone(); return; }
+    var textEl = el.querySelector('.adv-bubble-text');
+    if (!textEl) { if (onDone) onDone(); return; }
+
+    textEl.textContent = '';
+    el.classList.add('is-visible');
+
+    // Typewriter — char-by-char, then hold, then call onDone.
+    var i = 0;
+    var timer = setInterval(function () {
+      i++;
+      textEl.textContent = text.slice(0, i);
+      if (i >= text.length) {
+        clearInterval(timer);
+        setTimeout(onDone, POST_TYPE_HOLD_MS);
+      }
+    }, TYPE_SPEED_MS);
+  }
+
+  function hideAllBubbles() {
+    ['neanderthal', 'explorer', 'lucy'].forEach(function (who) {
+      var el = getBubbleEl(who);
+      if (el) el.classList.remove('is-visible');
+    });
+  }
+
+  function playPreBattleDialogue(onDone) {
+    log('Phase C — pre-battle dialogue starting');
+    // Belt-and-suspenders: clear any stale bubble state from a previous run
+    hideAllBubbles();
+    showBubbleText('neanderthal', 'AARRGH!', function () {
+      showBubbleText('explorer', 'Uh oh…', function () {
+        log('Phase C — both lines typed; holding ' + POST_DIALOGUE_MS + 'ms before wipe');
+        setTimeout(function () {
+          log('Phase C — pre-battle dialogue complete');
+          if (onDone) onDone();
+        }, POST_DIALOGUE_MS);
+      });
+    });
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     PHASE C — Radial wipe transition
+     ════════════════════════════════════════════════════════════
+     Center the wipe on the Prehistory node's current screen
+     position (the character + node are still rendered on the
+     overworld). Animate clip-path circle from radius 0 to
+     viewport-cover. Plays woosh.m4a at the start. */
+
+  function getPrehistoryNodeCenter() {
+    // Look up the node element placed by overworld.js's loadMap().
+    var nodeEl = document.querySelector(
+      '#overworld-overlay [data-id="prehistory"]'
+    );
+    if (!nodeEl) {
+      // Fallback to viewport center if the node DOM is missing for any
+      // reason (shouldn't happen in normal flow — overworld must be
+      // active for the player to have clicked the node).
+      log('WARN: prehistory node DOM not found, wiping from viewport center');
+      return { xPct: 50, yPct: 50 };
+    }
+    var rect = nodeEl.getBoundingClientRect();
+    var cx   = rect.left + rect.width  / 2;
+    var cy   = rect.top  + rect.height / 2;
+    return {
+      xPct: (cx / window.innerWidth)  * 100,
+      yPct: (cy / window.innerHeight) * 100
+    };
+  }
+
+  function radialWipe(onCoverComplete) {
+    var wipeEl = document.getElementById('adv-radial-wipe');
+    if (!wipeEl) {
+      log('WARN: #adv-radial-wipe missing — skipping wipe');
+      if (onCoverComplete) onCoverComplete();
+      return;
+    }
+    var center  = getPrehistoryNodeCenter();
+    var maxR    = Math.max(window.innerWidth, window.innerHeight) * 1.4;
+
+    log('Phase C — radial wipe starting (center ' + center.xPct.toFixed(1) +
+        '%,' + center.yPct.toFixed(1) + '%, max radius ' + Math.round(maxR) + 'px)');
+
+    // Position + reveal the overlay at radius 0
+    wipeEl.style.clipPath = 'circle(0px at ' + center.xPct + '% ' + center.yPct + '%)';
+    wipeEl.classList.add('active');
+
+    // SFX in lock-step with the wipe start
+    playWoosh();
+
+    // GSAP-driven radius tween (clip-path isn't directly tween-able)
+    if (typeof gsap === 'undefined') {
+      // Fallback: snap to fully-covered, then call onCoverComplete.
+      wipeEl.style.clipPath = 'circle(' + maxR + 'px at ' + center.xPct + '% ' + center.yPct + '%)';
+      setTimeout(function () { if (onCoverComplete) onCoverComplete(); }, WIPE_DURATION_MS);
+      return;
+    }
+    var proxy = { r: 0 };
+    gsap.to(proxy, {
+      r: maxR,
+      duration: WIPE_DURATION_MS / 1000,
+      ease: 'power2.inOut',
+      onUpdate: function () {
+        wipeEl.style.clipPath = 'circle(' + proxy.r + 'px at ' + center.xPct + '% ' + center.yPct + '%)';
+      },
+      onComplete: function () {
+        log('Phase C — radial wipe fully covered');
+        if (onCoverComplete) onCoverComplete();
+      }
+    });
+  }
+
+  /* PHASE C TESTING ONLY: reverse the wipe so the overworld becomes
+     visible again. Phase D will replace this with: setupBattleBoard()
+     then fade the cover out to reveal the board. */
+  function _tempReverseWipeForTesting(onDone) {
+    var wipeEl = document.getElementById('adv-radial-wipe');
+    if (!wipeEl) { if (onDone) onDone(); return; }
+    var center = getPrehistoryNodeCenter();
+    var maxR   = Math.max(window.innerWidth, window.innerHeight) * 1.4;
+    log('Phase C TEST — reversing wipe so overworld becomes visible again ' +
+        '(Phase D will replace this with board setup)');
+    if (typeof gsap === 'undefined') {
+      wipeEl.classList.remove('active');
+      if (onDone) onDone();
+      return;
+    }
+    var proxy = { r: maxR };
+    gsap.to(proxy, {
+      r: 0,
+      duration: 0.6,
+      ease: 'power2.inOut',
+      onUpdate: function () {
+        wipeEl.style.clipPath = 'circle(' + proxy.r + 'px at ' + center.xPct + '% ' + center.yPct + '%)';
+      },
+      onComplete: function () {
+        wipeEl.classList.remove('active');
+        hideAllBubbles();
+        if (onDone) onDone();
+      }
+    });
+  }
+
   /* ── localStorage helpers ──────────────────────────────────── */
   function isBattleComplete() {
     try { return localStorage.getItem(KEY_BATTLE_COMPLETE) === 'true'; }
@@ -103,14 +290,25 @@ window.SOG.Adventure.Prehistory = (function () {
       // TODO phase D+F: setupBattleBoard() then runTurnLoop()
       log('TODO phase D+F: straight-to-gameboard path');
     } else {
-      // TODO phase C: playPreBattleDialogue() → radialWipe()
-      // TODO phase D: setupBattleBoard()
-      // TODO phase E: playCoaching()
-      // TODO phase F: runTurnLoop() + win/loss flow
-      log('TODO phase C-F: full intro sequence');
       // Set this BEFORE the intro plays so a defeat-replay this session
       // skips straight to the gameboard.
       neanderthalIntroSeenThisSession = true;
+      // Phase C: pre-battle dialogue → radial wipe.
+      playPreBattleDialogue(function () {
+        radialWipe(function () {
+          // TODO phase D: setupBattleBoard() — render gameboard behind the
+          //              still-covered radial wipe, then fade the cover out.
+          // TODO phase E: playCoaching() once the board is visible.
+          // TODO phase F: runTurnLoop() + win/loss flow.
+          log('TODO phase D-F: board setup + coaching + turn loop');
+          // PHASE C TESTING: reverse the wipe so the overworld becomes
+          // visible again — lets us verify the wipe completed cleanly
+          // without phases D-F being implemented yet. Remove in phase D.
+          _tempReverseWipeForTesting(function () {
+            log('Phase C TEST — wipe reversed, ready for next click');
+          });
+        });
+      });
     }
   }
 

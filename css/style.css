@@ -7892,6 +7892,94 @@ body.tut-locked #battle-reset-turn {
   }
 }
 
+/* ================================================================
+   ADVENTURE MODE — Pre-battle speech bubbles + radial wipe (phase C)
+   ================================================================
+   Two reaction-shot bubbles for the Neanderthal pre-battle cutscene:
+     • .adv-bubble-tr  Neanderthal in the top-right (portrait on right)
+     • .adv-bubble-bl  Explorer in the bottom-left  (portrait on left)
+   Distinct from the .adv-dialogue dual-box system above — these are
+   shorter, position:fixed, auto-advance, no click-to-continue hint.
+
+   #adv-radial-wipe: a fullscreen black overlay clipped to a circle.
+   JS animates the circle radius from 0 to viewport-cover, centered
+   on the Prehistory node. Same clip-path technique as #home-iris-wipe. */
+
+.adv-bubble {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 380px;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, #f6efdc 0%, #e8dcb8 100%);
+  border: 3px solid #1a0a04;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 2px #c89b2d,
+    0 6px 18px rgba(0, 0, 0, 0.55);
+  font-family: var(--font);
+  font-size: 22px;
+  line-height: 1.3;
+  color: #1a0a04;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease;
+  z-index: 9998;
+  pointer-events: none;  /* cutscene — no interaction expected */
+}
+.adv-bubble.is-visible { opacity: 1; visibility: visible; }
+
+/* Neanderthal: top-right, portrait on the right side of the bubble */
+.adv-bubble-tr {
+  top:   32px;
+  right: 32px;
+  flex-direction: row-reverse;
+  text-align: right;
+}
+/* Explorer: bottom-left, portrait on the left */
+.adv-bubble-bl {
+  bottom: 32px;
+  left:   32px;
+}
+
+.adv-bubble-portrait {
+  width: 84px;
+  height: 84px;
+  flex-shrink: 0;
+  object-fit: cover;
+  object-position: center 18%;  /* crop card art down toward face */
+  border: 2px solid #1a0a04;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.adv-bubble-text {
+  flex: 1;
+  font-family: var(--font);
+  font-size: 22px;
+  line-height: 1.3;
+  color: #1a0a04;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.4);
+  min-height: 1.3em;
+}
+
+/* Radial wipe — fullscreen black, clipped to an expanding circle.
+   Inline clip-path style is set by JS each frame during the GSAP
+   tween. .active toggles visibility; opacity stays at 1 throughout
+   the expansion (the circle's grow IS the animation). */
+#adv-radial-wipe {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 10001;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 1;
+  clip-path: circle(0px at 50% 50%);
+}
+#adv-radial-wipe.active { visibility: visible; }
+
 /* Home-screen Adventure Mode button — warm gold accent */
 .btn-home-adventure {
   background: linear-gradient(180deg, #3a2810 0%, #2a1c08 100%);
