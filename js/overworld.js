@@ -264,9 +264,25 @@ var Overworld = (function () {
     if (visitedMaps.indexOf('eastafrica') === -1) visitedMaps.push('eastafrica');
   }
   function saveState() {
-    localStorage.setItem(KEY_MAP,     currentMapId);
-    localStorage.setItem(KEY_POS,     JSON.stringify(currentPos));
-    localStorage.setItem(KEY_VISITED, JSON.stringify(visitedMaps));
+    try {
+      localStorage.setItem(KEY_MAP, currentMapId);
+      // Strip any non-(x,y) properties before serializing. GSAP's
+      // tween targets pick up a `_gsap` metadata object with cyclic
+      // back-references, which previously crashed JSON.stringify
+      // here — silently killing whatever callback was supposed to
+      // run after walkPath (e.g. SOG.Adventure.Prehistory's battle
+      // launch). Pinning to {x,y} sidesteps it without rewriting
+      // every gsap.to(currentPos, ...) call site.
+      localStorage.setItem(KEY_POS, JSON.stringify({
+        x: currentPos.x,
+        y: currentPos.y
+      }));
+      localStorage.setItem(KEY_VISITED, JSON.stringify(visitedMaps));
+    } catch (e) {
+      // Storage failure (quota, private mode, etc.) shouldn't crash
+      // the walk's onComplete callback chain. Log and move on.
+      console.warn('[Overworld] saveState failed:', e);
+    }
   }
 
   /* ── Character rendering ───────────────────────────────────── */
@@ -336,11 +352,20 @@ var Overworld = (function () {
     var duration = Math.max(0.6, distance * 0.08);
 
     if (typeof gsap !== 'undefined') {
-      gsap.to(currentPos, {
+      // Tween a disposable proxy rather than `currentPos` itself —
+      // gsap attaches a non-trivial metadata object to its targets
+      // and we want `currentPos` to stay a plain {x,y} (saveState
+      // serializes it). Sync x/y back into currentPos each tick.
+      var proxy = { x: currentPos.x, y: currentPos.y };
+      gsap.to(proxy, {
         x: wp.x, y: wp.y,
         duration: duration,
         ease: 'none',
-        onUpdate: function () { positionChar(currentPos.x, currentPos.y); },
+        onUpdate: function () {
+          currentPos.x = proxy.x;
+          currentPos.y = proxy.y;
+          positionChar(currentPos.x, currentPos.y);
+        },
         onComplete: function () {
           currentPos.x = wp.x; currentPos.y = wp.y;
           positionChar(wp.x, wp.y);
