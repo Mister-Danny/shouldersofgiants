@@ -380,36 +380,43 @@
       <div class="adv-dialogue-hint">&#9654; Click to continue</div>
     </div>
 
-    <!-- Pre-battle speech bubbles (Neanderthal tutorial — phase C).
-         Cutscene reaction shots, separate from the dual-dialogue-box
-         system above. Auto-advancing typewriter, no click-to-continue
-         hint. Positioned with .adv-bubble-tr (top-right, Neanderthal)
-         and .adv-bubble-bl (bottom-left, Explorer). -->
-    <div id="adv-bubble-neanderthal" class="adv-bubble adv-bubble-tr">
-      <img class="adv-bubble-portrait" src="images/prehistorycards/neanderthalcard@sm.jpg" alt="">
-      <div class="adv-bubble-text"></div>
-    </div>
-    <div id="adv-bubble-explorer" class="adv-bubble adv-bubble-bl">
-      <img class="adv-bubble-portrait" src="images/femaleexplorer portrait.jpeg" alt="">
-      <div class="adv-bubble-text"></div>
-    </div>
-    <!-- Lucy coaching bubble (phase E). Same bottom-left position as
-         the Explorer bubble above — only one is visible at a time
-         (controlled by .is-visible). Distinct DOM so we don't have
-         to swap portraits mid-flight during the coaching runner. -->
-    <div id="adv-bubble-lucy" class="adv-bubble adv-bubble-bl">
-      <img class="adv-bubble-portrait" src="images/Lucy.png" alt="">
-      <div class="adv-bubble-text"></div>
-    </div>
-
-    <!-- Radial wipe overlay (phase C). Covers the viewport with a
-         circle expanding outward from the Prehistory node. JS sets
-         clip-path inline; .active toggles visibility. Z-index above
-         the speech bubbles so it covers them during the transition. -->
-    <div id="adv-radial-wipe"></div>
-
     <button id="overworld-back" class="btn-snes btn-snes-close">&#8592; Back to Home</button>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ADVENTURE MODE — Speech bubbles & transition overlay (phases C/E)
+       Kept at body level (outside all .screen containers) so they remain
+       visible regardless of which screen is currently active.
+       position:fixed anchors them to the viewport from any parent.
+  ════════════════════════════════════════════════════════════════ -->
+
+  <!-- Pre-battle speech bubbles (Neanderthal tutorial — phase C).
+       Cutscene reaction shots, separate from the dual-dialogue-box
+       system. Auto-advancing typewriter, no click-to-continue hint.
+       Positioned with .adv-bubble-tr (top-right, Neanderthal)
+       and .adv-bubble-bl (bottom-left, Explorer). -->
+  <div id="adv-bubble-neanderthal" class="adv-bubble adv-bubble-tr">
+    <img class="adv-bubble-portrait" src="images/prehistorycards/neanderthalcard@sm.jpg" alt="">
+    <div class="adv-bubble-text"></div>
+  </div>
+  <div id="adv-bubble-explorer" class="adv-bubble adv-bubble-bl">
+    <img class="adv-bubble-portrait" src="images/femaleexplorer portrait.jpeg" alt="">
+    <div class="adv-bubble-text"></div>
+  </div>
+  <!-- Lucy coaching bubble (phase E). Same bottom-left position as
+       the Explorer bubble above — only one is visible at a time
+       (controlled by .is-visible). Distinct DOM so we don't have
+       to swap portraits mid-flight during the coaching runner. -->
+  <div id="adv-bubble-lucy" class="adv-bubble adv-bubble-bl">
+    <img class="adv-bubble-portrait" src="images/Lucy.png" alt="">
+    <div class="adv-bubble-text"></div>
+  </div>
+
+  <!-- Radial wipe overlay (phase C). Covers the viewport with a
+       circle expanding outward from the Prehistory node. JS sets
+       clip-path inline; .active toggles visibility. Z-index above
+       the speech bubbles so it covers them during the transition. -->
+  <div id="adv-radial-wipe"></div>
 
   <!-- ═══════════════════════════════════════════════════════════════
        ADVENTURE MODE — Neanderthal battle result screens (phase F)
