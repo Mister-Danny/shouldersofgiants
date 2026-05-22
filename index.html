@@ -393,6 +393,14 @@
       <img class="adv-bubble-portrait" src="images/femaleexplorer portrait.jpeg" alt="">
       <div class="adv-bubble-text"></div>
     </div>
+    <!-- Lucy coaching bubble (phase E). Same bottom-left position as
+         the Explorer bubble above — only one is visible at a time
+         (controlled by .is-visible). Distinct DOM so we don't have
+         to swap portraits mid-flight during the coaching runner. -->
+    <div id="adv-bubble-lucy" class="adv-bubble adv-bubble-bl">
+      <img class="adv-bubble-portrait" src="images/Lucy.png" alt="">
+      <div class="adv-bubble-text"></div>
+    </div>
 
     <!-- Radial wipe overlay (phase C). Covers the viewport with a
          circle expanding outward from the Prehistory node. JS sets

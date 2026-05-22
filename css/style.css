@@ -8061,13 +8061,31 @@ body.prehistory-battle .battle-avatar-lucy.adv-active {
   transform: scale(1);
 }
 
-/* Pre-coaching arrival window: hide hand, deck pile, opp hand, and
-   the bottom-right HUD buttons (RESET + END TURN). Phase E removes
-   the `prehistory-pre-coaching` body class to slide them in. */
+/* Pre-coaching arrival window: hide hand, deck pile, opp hand, the
+   bottom-right HUD (RESET + END TURN), and the top-left Turn counter.
+   Phase E removes the `prehistory-pre-coaching` body class and GSAP
+   animates each element from its off-screen starting position into
+   place. Using `visibility: hidden` (not display:none) so the
+   bounding rects exist for the slide-in delta calculation. */
 body.prehistory-battle.prehistory-pre-coaching .battle-player-hand,
 body.prehistory-battle.prehistory-pre-coaching .battle-opp-hand,
-body.prehistory-battle.prehistory-pre-coaching .battle-hud-bottomright {
+body.prehistory-battle.prehistory-pre-coaching .battle-hud-bottomright,
+body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
   visibility: hidden;
+}
+
+/* IP-overlay pulse used during the "See that number?" coaching beat
+   (phase E). Phase E JS adds .adv-ip-pulse to the rightmost hand
+   card's .db-overlay-ip; the next coaching line removes it.
+   Yellow drop-shadow + slight scale-up. */
+@keyframes adv-ip-pulse {
+  0%, 100% { transform: scale(1);   filter: drop-shadow(0 0 0 transparent); }
+  50%      { transform: scale(1.4); filter: drop-shadow(0 0 14px #f8d000)
+                                             drop-shadow(0 0 6px #fff); }
+}
+.adv-ip-pulse {
+  animation: adv-ip-pulse 0.85s ease-in-out infinite;
+  transform-origin: center;
 }
 
 /* Home-screen Adventure Mode button — warm gold accent */

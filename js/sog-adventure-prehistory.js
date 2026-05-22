@@ -401,6 +401,300 @@ window.SOG.Adventure.Prehistory = (function () {
     });
   }
 
+  /* ════════════════════════════════════════════════════════════
+     PHASE E — Coaching dialogue + UI slide-in
+     ════════════════════════════════════════════════════════════
+     Step 5 (intro exchange): Neanderthal + Lucy 5-line exchange,
+     played with click-to-advance typewriter (mid-type click skips
+     to full text; full-text click advances). Lucy avatar pops in
+     during her first line and stays visible for the rest of the
+     battle.
+
+     Step 6 (transition): light camera shake (~300ms), then UI
+     slide-in — hand cards fly individually from Lucy's avatar
+     position into their dock; opp hand slides down from the top;
+     Turn counter slides from the left; Reset/End Turn buttons
+     slide from the right.
+
+     Step 7 (coaching): Lucy's 9-line tutorial coaching. During the
+     "See that number?" line, the rightmost hand card's IP overlay
+     pulses (adv-ip-pulse class); the next line clears the pulse.
+     After the final line, the pulse is cleared and Phase F's turn
+     loop kicks in.
+  ═══════════════════════════════════════════════════════════════ */
+
+  var COACHING_PHASE_1 = [
+    { who: 'neanderthal', text: 'This my fire.' },
+    { who: 'lucy',        text: 'He thinks because he invented fire. No one else can have it.',
+                          popLucyOnStart: true },
+    { who: 'neanderthal', text: 'Me no think. Me know.' },
+    { who: 'lucy',        text: 'You no think alright.' },
+    { who: 'neanderthal', text: 'AARRGH!!!' }
+  ];
+
+  var COACHING_PHASE_2 = [
+    { who: 'lucy', text: 'If this Neanderthal wants a battle, I came prepared.' },
+    { who: 'lucy', text: 'See those cards?' },
+    { who: 'lucy', text: 'You play one each turn on your side of the center location.' },
+    { who: 'lucy', text: 'See that number?',                  startIPPulse: true },
+    { who: 'lucy', text: 'Those are Influence Points, or IP for short.' },
+    { who: 'lucy', text: 'Your goal here is to gain the most IP at The Camp after four turns.' },
+    { who: 'lucy', text: 'Oh, and most cards have special abilities' },
+    { who: 'lucy', text: 'Click on them to read what they have in store.' },
+    { who: 'lucy', text: "When you're ready, click and drag your first card into play and send this guy back to whatever came before the Stone Age." }
+  ];
+
+  /* ── Coaching dialogue runner ──────────────────────────────── */
+  // Per-line typewriter state — module-scoped because the click
+  // handler and the typewriter timer both need to mutate it.
+  var co_isTyping     = false;
+  var co_timer        = null;
+  var co_fullText     = '';
+  var co_textEl       = null;
+  // Per-runner state.
+  var co_lines        = null;
+  var co_lineIdx      = 0;
+  var co_clickHandler = null;
+  var co_onAllDone    = null;
+
+  function runCoachingLines(lines, onAllDone) {
+    co_lines     = lines;
+    co_lineIdx   = 0;
+    co_onAllDone = onAllDone;
+
+    co_clickHandler = function (e) {
+      if (e.type === 'keydown' && e.key !== ' ' && e.key !== 'Enter') return;
+      if (e.type === 'keydown') e.preventDefault();
+      coachingAdvance();
+    };
+    // Defer the listener so the click that triggered the previous beat
+    // doesn't bubble in and skip line 1 before typing starts.
+    setTimeout(function () {
+      document.addEventListener('click',   co_clickHandler);
+      document.addEventListener('keydown', co_clickHandler);
+    }, 0);
+
+    showCoachingLine();
+  }
+
+  function showCoachingLine() {
+    var line = co_lines[co_lineIdx];
+    if (!line) { finishCoachingRunner(); return; }
+
+    // Side-effect markers — fire BEFORE typing starts.
+    if (line.popLucyOnStart) popLucyIn();
+    if (line.startIPPulse)   startIPPulse();
+
+    // Hide the other bubbles — only one bubble visible at a time.
+    var who = line.who;  // 'neanderthal' | 'lucy' | 'explorer'
+    ['neanderthal', 'explorer', 'lucy'].forEach(function (w) {
+      if (w === who) return;
+      var el = getBubbleEl(w);
+      if (el) el.classList.remove('is-visible');
+    });
+
+    var el     = getBubbleEl(who);
+    if (!el) { co_lineIdx++; showCoachingLine(); return; }
+    var textEl = el.querySelector('.adv-bubble-text');
+    if (!textEl) { co_lineIdx++; showCoachingLine(); return; }
+
+    textEl.textContent = '';
+    el.classList.add('is-visible');
+
+    co_fullText = line.text;
+    co_textEl   = textEl;
+    co_isTyping = true;
+
+    var i = 0;
+    if (co_timer) clearInterval(co_timer);
+    co_timer = setInterval(function () {
+      i++;
+      textEl.textContent = line.text.slice(0, i);
+      if (i >= line.text.length) {
+        clearInterval(co_timer);
+        co_timer    = null;
+        co_isTyping = false;
+      }
+    }, TYPE_SPEED_MS);
+  }
+
+  function coachingAdvance() {
+    if (co_isTyping) {
+      // First click during typewriter — skip to full text immediately.
+      if (co_timer) { clearInterval(co_timer); co_timer = null; }
+      if (co_textEl) co_textEl.textContent = co_fullText;
+      co_isTyping = false;
+      return;
+    }
+    co_lineIdx++;
+    if (co_lineIdx >= co_lines.length) {
+      finishCoachingRunner();
+      return;
+    }
+    showCoachingLine();
+  }
+
+  function finishCoachingRunner() {
+    if (co_clickHandler) {
+      document.removeEventListener('click',   co_clickHandler);
+      document.removeEventListener('keydown', co_clickHandler);
+      co_clickHandler = null;
+    }
+    if (co_timer) { clearInterval(co_timer); co_timer = null; }
+    co_isTyping = false;
+    hideAllBubbles();
+    stopIPPulse();
+    var onDone = co_onAllDone;
+    co_onAllDone = null;
+    co_lines     = null;
+    if (onDone) onDone();
+  }
+
+  /* ── Lucy avatar pop-in (large bottom-left battle portrait) ── */
+  function popLucyIn() {
+    var avEl = document.querySelector('.battle-avatar-lucy');
+    if (avEl) avEl.classList.add('adv-active');
+    // CSS handles the scale + opacity transition (.adv-active in style.css)
+  }
+
+  /* ── IP pulse on rightmost hand card ───────────────────────── */
+  function startIPPulse() {
+    var cards = document.querySelectorAll('#battle-player-hand .battle-hand-card');
+    if (!cards.length) return;
+    var lastCard = cards[cards.length - 1];
+    var ipEl = lastCard.querySelector('.db-overlay-ip');
+    if (ipEl) ipEl.classList.add('adv-ip-pulse');
+  }
+  function stopIPPulse() {
+    var pulsing = document.querySelectorAll('.adv-ip-pulse');
+    for (var i = 0; i < pulsing.length; i++) {
+      pulsing[i].classList.remove('adv-ip-pulse');
+    }
+  }
+
+  /* ── Camera shake ───────────────────────────────────────────── */
+  function shakeCamera(onDone) {
+    var el = document.getElementById('screen-battle');
+    if (!el || typeof gsap === 'undefined') {
+      setTimeout(function () { if (onDone) onDone(); }, 300);
+      return;
+    }
+    var tl = gsap.timeline({
+      onComplete: function () {
+        gsap.set(el, { x: 0, y: 0 });
+        if (onDone) onDone();
+      }
+    });
+    // Quick rumble: 5 offset frames over ~300ms total.
+    tl.to(el, { x: -10, y:  4, duration: 0.05, ease: 'none' })
+      .to(el, { x:  10, y: -4, duration: 0.06, ease: 'none' })
+      .to(el, { x:  -7, y:  3, duration: 0.05, ease: 'none' })
+      .to(el, { x:   5, y: -2, duration: 0.05, ease: 'none' })
+      .to(el, { x:   0, y:  0, duration: 0.05, ease: 'none' });
+  }
+
+  /* ── UI slide-in ────────────────────────────────────────────── */
+  // After pre-coaching dialogue ends and the camera shakes, the
+  // gameplay UI elements (hand, opp hand, deck pile, HUD buttons,
+  // Turn counter) animate in from their respective edges.
+  // Each hand card flies individually from Lucy avatar's position
+  // toward its dock spot. Other elements slide from edges.
+  function slideInUI(onDone) {
+    // Remove the pre-coaching class FIRST so the CSS visibility:hidden
+    // clears and the elements have real bounding rects to animate from.
+    document.body.classList.remove('prehistory-pre-coaching');
+
+    if (typeof gsap === 'undefined') {
+      if (onDone) onDone();
+      return;
+    }
+
+    var lucyAvEl   = document.querySelector('.battle-avatar-lucy');
+    var hudTopLeft = document.querySelector('.battle-hud-topleft');
+    var oppHand    = document.getElementById('battle-opp-hand');
+    var hudBR      = document.querySelector('.battle-hud-bottomright');
+    var handCards  = document.querySelectorAll('#battle-player-hand .battle-hand-card');
+    var deckPile   = document.querySelector('#battle-player-hand .battle-deck-pile');
+
+    // Hand cards fly from Lucy's portrait position. Compute per-card
+    // delta so each card starts ON Lucy and ends in its dock spot.
+    if (lucyAvEl && handCards.length) {
+      var lucyRect = lucyAvEl.getBoundingClientRect();
+      var lucyCx   = lucyRect.left + lucyRect.width  / 2;
+      var lucyCy   = lucyRect.top  + lucyRect.height / 2;
+      for (var i = 0; i < handCards.length; i++) {
+        (function (card, idx) {
+          var rect = card.getBoundingClientRect();
+          var dx = lucyCx - (rect.left + rect.width  / 2);
+          var dy = lucyCy - (rect.top  + rect.height / 2);
+          gsap.fromTo(card,
+            { x: dx, y: dy, opacity: 0, scale: 0.35, rotate: -15 },
+            { x: 0,  y: 0,  opacity: 1, scale: 1,    rotate: 0,
+              duration: 0.55, ease: 'power2.out', delay: idx * 0.09 }
+          );
+        })(handCards[i], i);
+      }
+    }
+
+    // Deck pile slides in from the right (it sits at the end of the
+    // hand row). Slightly delayed so it lands after the cards.
+    if (deckPile) {
+      gsap.fromTo(deckPile,
+        { x: 120, opacity: 0 },
+        { x: 0,   opacity: 1, duration: 0.45, ease: 'power2.out', delay: 0.4 }
+      );
+    }
+
+    // Opp hand slides down from above the viewport.
+    if (oppHand) {
+      gsap.fromTo(oppHand,
+        { y: -120, opacity: 0 },
+        { y: 0,    opacity: 1, duration: 0.5, ease: 'power2.out' }
+      );
+    }
+
+    // Turn counter HUD slides in from the left.
+    if (hudTopLeft) {
+      gsap.fromTo(hudTopLeft,
+        { x: -160, opacity: 0 },
+        { x: 0,    opacity: 1, duration: 0.5, ease: 'power2.out' }
+      );
+    }
+
+    // Reset + End Turn buttons slide in from the right.
+    if (hudBR) {
+      gsap.fromTo(hudBR,
+        { x: 160, opacity: 0 },
+        { x: 0,   opacity: 1, duration: 0.5, ease: 'power2.out', delay: 0.1 }
+      );
+    }
+
+    // Total animation duration approx: 0.55 (cards) + 0.27 (last card
+    // stagger) = ~0.82s; deck pile lands ~0.85s. Schedule the
+    // onDone callback slightly after everything settles.
+    setTimeout(function () { if (onDone) onDone(); }, 950);
+  }
+
+  /* ── Main coaching entry point ─────────────────────────────── */
+  function playCoaching(onAllDone) {
+    log('Phase E — coaching starting (phase 1: intro exchange)');
+    runCoachingLines(COACHING_PHASE_1, function () {
+      log('Phase E — phase 1 complete, shake + UI slide-in');
+      shakeCamera(function () {
+        slideInUI(function () {
+          log('Phase E — UI in place, starting phase 2 (Lucy coaching)');
+          runCoachingLines(COACHING_PHASE_2, function () {
+            log('Phase E — coaching complete; enabling card interaction');
+            stopIPPulse();
+            // TODO phase F: enableCardInteraction() — kick off the
+            // turn loop and gate card-drag on G.prehistoryMode.
+            if (onAllDone) onAllDone();
+          });
+        });
+      });
+    });
+  }
+
   /* ── Exit back to overworld (devtools / temporary escape) ──── */
   function exitToOverworld() {
     log('Exiting Prehistory battle — returning to overworld');
@@ -456,9 +750,12 @@ window.SOG.Adventure.Prehistory = (function () {
       // dialogue, no wipe, no coaching). Spec: "Drop the player straight
       // into the gameboard with their current deck."
       setupBattleBoard();
-      // Skip-intro doesn't need the coaching slide-in either — show
-      // hand + buttons immediately.
+      // Skip-intro doesn't need the coaching slide-in either — clear
+      // the pre-coaching state immediately so the hand + buttons + HUD
+      // are visible right away. Lucy avatar still pops in (spec: "Her
+      // portrait stays on screen for the rest of the battle").
       document.body.classList.remove('prehistory-pre-coaching');
+      popLucyIn();
       log('TODO phase F: runTurnLoop (skip-intro path)');
     } else {
       // Set this BEFORE the intro plays so a defeat-replay this session
@@ -466,20 +763,22 @@ window.SOG.Adventure.Prehistory = (function () {
       neanderthalIntroSeenThisSession = true;
       // Phase C: pre-battle dialogue → radial wipe.
       // Phase D: setupBattleBoard() while cover is up → fade cover out.
+      // Phase E: playCoaching() — intro exchange → shake + UI slide-in
+      //          → Lucy tutorial coaching → enable card interaction.
       playPreBattleDialogue(function () {
         radialWipe(function () {
-          // Cover is fully up. Build the gameboard underneath it so the
-          // reveal feels instant when the cover fades.
           setupBattleBoard();
           // Bubbles are no longer needed; the wipe covered them anyway.
           hideAllBubbles();
-          // Reveal the board by fading the cover to transparent.
           fadeOutCover(function () {
-            log('Phase D complete — gameboard visible');
-            // TODO phase E: playCoaching() — Lucy pops in, coaches the
-            //              player through the rules; then UI slides in.
-            // TODO phase F: runTurnLoop() once coaching ends.
-            log('TODO phase E-F: coaching + turn loop');
+            log('Phase D complete — gameboard visible, starting Phase E');
+            playCoaching(function () {
+              log('Phase E complete — ready for Phase F (turn loop)');
+              // TODO phase F: kick off the turn loop. For now the
+              //               cards/buttons are visible but the
+              //               game/input.js drag handlers don't do
+              //               anything in prehistory mode yet.
+            });
           });
         });
       });
