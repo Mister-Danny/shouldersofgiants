@@ -262,6 +262,63 @@
           });
         });
       }
+
+      // ── Prehistory abilities (Adventure Mode tutorial) ──────────
+      // Slot-index proxies for turn-order: each slot's array index
+      // reflects when it was played relative to its siblings in the
+      // same loc/owner. Exact in 1-play-per-turn battles (the
+      // prehistory tutorial); approximate elsewhere.
+
+      // Fire (id 29): +1 IP to cards played AFTER Fire here (same side,
+      // higher slot index, revealed).
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        sl[loc.id].forEach(function (fire, fireIdx) {
+          if (!fire || !fire.revealed || fire.cardId !== 29) return;
+          sl[loc.id].forEach(function (s, si) {
+            if (s && s.revealed && si > fireIdx) s.contMod = (s.contMod || 0) + 1;
+          });
+        });
+      });
+
+      // Cave Art (id 30): +1 IP to cards played BEFORE Cave Art here
+      // (same side, lower slot index, revealed).
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        sl[loc.id].forEach(function (cave, caveIdx) {
+          if (!cave || !cave.revealed || cave.cardId !== 30) return;
+          sl[loc.id].forEach(function (s, si) {
+            if (s && s.revealed && si < caveIdx) s.contMod = (s.contMod || 0) + 1;
+          });
+        });
+      });
+
+      // Domesticated Animal (id 32): +1 IP to slots adjacent (index ±1)
+      // here (same side, revealed).
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        sl[loc.id].forEach(function (dom, domIdx) {
+          if (!dom || !dom.revealed || dom.cardId !== 32) return;
+          [domIdx - 1, domIdx + 1].forEach(function (adjIdx) {
+            var s = sl[loc.id][adjIdx];
+            if (s && s.revealed) s.contMod = (s.contMod || 0) + 1;
+          });
+        });
+      });
+
+      // Tribe (id 36): +1 IP to TRIBE itself if the slot immediately
+      // after Tribe is filled and revealed (same side). Spec frames
+      // this as At Once with a future-state check ("if you play a card
+      // here next turn"); since At Once can't observe future state,
+      // it's implemented continuously with the slot-index proxy.
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        sl[loc.id].forEach(function (tribe, tribeIdx) {
+          if (!tribe || !tribe.revealed || tribe.cardId !== 36) return;
+          var nextSlot = sl[loc.id][tribeIdx + 1];
+          if (nextSlot && nextSlot.revealed) tribe.contMod = (tribe.contMod || 0) + 1;
+        });
+      });
     });
 
     // Fire Voltaire animation + sound when his bonus transitions 0 → +4
@@ -1260,6 +1317,22 @@
        • ipDisplay(ctx)    — let cards override how their IP overlay
          renders (Magellan +1 per move, William ticker, etc.)
   ═══════════════════════════════════════════════════════════════ */
+  /* ── Tool (id 26) — At Once: draw 1 card ──────────────────────
+     The drawn card bypasses the start-of-turn hand-cap check because
+     Tool's draw is owned by the ability, not by the start-of-turn
+     loop. In the prehistory tutorial battle (4-card hand cap), Tool's
+     draw can push the hand from 4 → 5. */
+  function abilityTool(owner, locId, done) {
+    var deck = owner === 'player' ? G.playerDeck : G.aiDeck;
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    if (deck.length > 0) {
+      hand.push(deck.shift());
+      if (owner === 'player') rebuildPlayerHand();
+      else                    SOG.ui.updateOppHand();
+    }
+    done();
+  }
+
   var CARD_ABILITIES = {
     2:  { onAtOnce: abilityScholarOfficials },
     3:  { onAtOnce: abilityJustinian        },
@@ -1268,7 +1341,8 @@
     8:  { onAtOnce: abilityFrancisOfAssisi  },
     9:  { onAtOnce: abilityErasmus          },
     13: { onAtOnce: abilityCortes           },
-    23: { onAtOnce: abilityZhengHe          }
+    23: { onAtOnce: abilityZhengHe          },
+    26: { onAtOnce: abilityTool             }   // Prehistory tutorial
   };
 
   /* ═══════════════════════════════════════════════════════════════
@@ -1280,7 +1354,8 @@
   function fireAtOnce(owner, cardId, locId, done) {
     // Cards with actual At Once abilities: play sound + pulse animation.
     // Cards 2, 3, 5, 13 have custom sfx — skip the generic 8-bit chime for those.
-    var hasAtOnce = [4, 8, 9, 23].indexOf(cardId) !== -1;
+    // Tool (26) joins the generic-chime list: no custom SFX yet, simple draw effect.
+    var hasAtOnce = [4, 8, 9, 23, 26].indexOf(cardId) !== -1;
     if (hasAtOnce) {
       if (typeof SFX !== 'undefined') SFX.atOnce();
       var atSlotEl = findSlotEl(owner, cardId);
