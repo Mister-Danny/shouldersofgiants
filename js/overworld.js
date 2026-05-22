@@ -486,17 +486,44 @@ var Overworld = (function () {
     // Clicking the Prehistory node ends the urgent idle pulse if active
     clearUrgentPulse();
 
+    // Adventure Mode handoff: the Prehistory node launches the Neanderthal
+    // tutorial battle. If the player has already won it, skip the walk
+    // entirely and drop straight into the gameboard (spec: "skip the
+    // overworld walk, the pre-battle dialogue, the radial wipe, and
+    // Lucy's tutorial coaching" once sog_battle_neanderthal_complete is set).
+    var isPrehistory = node.id === 'prehistory' && currentMapId === 'eastafrica';
+    var preh         = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
+    if (isPrehistory && preh && preh.isBattleComplete()) {
+      log('Prehistory node clicked — battle already won, launching directly (no walk)');
+      preh.startNeanderthalBattle();
+      return;
+    }
+
     // ── Adventure-mode Phase 2 dialogue: first click on Prehistory
     //    node runs the Explorer+Lucy exchange BEFORE walking. The
     //    intro-complete flag isn't set until Phase 2 finishes, so
     //    this condition catches exactly the first click.
-    var needPhase2 = node.id === 'prehistory' &&
-                     currentMapId === 'eastafrica' &&
+    var needPhase2 = isPrehistory &&
                      localStorage.getItem(KEY_ADVENTURE_INTRO) !== 'true';
+
+    // After-walk callback: for the Prehistory node, hand off to the
+    // adventure module (which decides whether to play the intro or skip
+    // it based on its own session/localStorage state). For any other
+    // node (e.g. Akkad, Hammurabi's Code in Mesopotamia), just resume
+    // the idle character routine — those nodes don't have battles wired
+    // up yet.
+    var onArrived = function () {
+      if (isPrehistory && preh) {
+        log('Walk to Prehistory node complete — launching Neanderthal battle');
+        preh.startNeanderthalBattle();
+      } else {
+        scheduleIdle();
+      }
+    };
 
     var doWalk = function () {
       var path = node.path || [{ x: node.x, y: node.y }];
-      walkPath(path, function () { scheduleIdle(); });
+      walkPath(path, onArrived);
     };
 
     if (needPhase2) {
