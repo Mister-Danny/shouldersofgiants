@@ -75,7 +75,7 @@ var Overworld = (function () {
     var osc = ctx.createOscillator();
     var gain = ctx.createGain();
     // Slight pitch wobble so consecutive bleeps don't feel robotic
-    var baseFreq = (who === 'lucy') ? 340 : 520;
+    var baseFreq = (who === 'lucy') ? 340 : (who === 'neanderthal') ? 160 : 520;
     var freq = baseFreq + (Math.random() - 0.5) * 30;
     osc.type = 'square';
     osc.frequency.setValueAtTime(freq, now);
@@ -222,7 +222,7 @@ var Overworld = (function () {
 
   /* ── DOM refs + state ──────────────────────────────────────── */
   var mapImgEl, overlayEl, charEl, fogEl, transitionEl, transitionTextEl;
-  var lucyBoxEl, lucyTextEl, explorerBoxEl, explorerTextEl;
+  var lucyBoxEl, lucyTextEl, explorerBoxEl, explorerTextEl, neanderthalBoxEl;
   var currentMapId   = 'eastafrica';
   var currentPos     = { x: 0, y: 0 };
   var visitedMaps    = [];
@@ -697,8 +697,9 @@ var Overworld = (function () {
       document.removeEventListener('click',   dlgAdvanceHandler);
       document.removeEventListener('keydown', dlgAdvanceHandler);
       dlgAdvanceHandler = null;
-      fadeBox(explorerBoxEl, false);
-      fadeBox(lucyBoxEl,     false);
+      fadeBox(explorerBoxEl,    false);
+      fadeBox(lucyBoxEl,        false);
+      fadeBox(neanderthalBoxEl, false);
       dlgRunning = false;
       dlgLines   = null;
       log('dialogue runner finished');
@@ -720,7 +721,9 @@ var Overworld = (function () {
     if (!line) { if (onAllLinesDone) onAllLinesDone(); return; }
     log('line ' + (dlgLineIdx + 1) + '/' + dlgLines.length + ' [' + line.who + '] "' + line.text + '"');
 
-    var activeBox = (line.who === 'lucy') ? lucyBoxEl : explorerBoxEl;
+    var activeBox = (line.who === 'lucy')        ? lucyBoxEl
+                  : (line.who === 'neanderthal') ? neanderthalBoxEl
+                  :                                explorerBoxEl;
     ty_activeBox  = activeBox;
     ty_activeText = activeBox.querySelector('.adv-dialogue-text');
 
@@ -874,8 +877,9 @@ var Overworld = (function () {
     fogEl            = document.getElementById('overworld-fog-full');
     transitionEl     = document.getElementById('overworld-transition');
     transitionTextEl = document.getElementById('overworld-transition-text');
-    lucyBoxEl        = document.getElementById('adv-dialogue-lucy');
-    explorerBoxEl    = document.getElementById('adv-dialogue-explorer');
+    lucyBoxEl          = document.getElementById('adv-dialogue-lucy');
+    explorerBoxEl      = document.getElementById('adv-dialogue-explorer');
+    neanderthalBoxEl   = document.getElementById('adv-dialogue-neanderthal');
     if (!mapImgEl || !overlayEl || !charEl) {
       console.warn('[Overworld] Missing DOM elements');
       return;
@@ -938,6 +942,18 @@ var Overworld = (function () {
       resetBox(lucyBoxEl); resetBox(explorerBoxEl);
       playPhase2Then(function () {
         console.log('[Adventure Intro] Phase 2 ended (character would now walk to node)');
+      });
+    },
+    // Called by SOG.Adventure.Prehistory.playPreBattleDialogue() to run
+    // the Neanderthal/Explorer pre-battle lines in the same .adv-dialogue
+    // style as the Lucy/Explorer intro conversation.
+    runPreBattleLines: function (lines, onDone) {
+      resetBox(neanderthalBoxEl);
+      resetBox(explorerBoxEl);
+      isDialogueLocked = true;
+      runDialogue(lines, function () {
+        isDialogueLocked = false;
+        if (onDone) onDone();
       });
     },
     // Devtools helpers

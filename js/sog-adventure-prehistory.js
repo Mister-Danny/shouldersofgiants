@@ -131,23 +131,28 @@ window.SOG.Adventure.Prehistory = (function () {
   function hideAllBubbles() {
     ['neanderthal', 'explorer', 'lucy'].forEach(function (who) {
       var el = getBubbleEl(who);
-      if (el) el.classList.remove('is-visible');
+      if (el) el.classList.remove('is-visible', 'is-ready');
     });
   }
 
   function playPreBattleDialogue(onDone) {
     log('Phase C — pre-battle dialogue starting');
-    // Belt-and-suspenders: clear any stale bubble state from a previous run
-    hideAllBubbles();
-    showBubbleText('neanderthal', 'AARRGH!', function () {
-      showBubbleText('explorer', 'Uh oh…', function () {
-        log('Phase C — both lines typed; holding ' + POST_DIALOGUE_MS + 'ms before wipe');
-        setTimeout(function () {
-          log('Phase C — pre-battle dialogue complete');
-          if (onDone) onDone();
-        }, POST_DIALOGUE_MS);
+    // Use the overworld's .adv-dialogue system so the Neanderthal/Explorer
+    // pre-battle exchange looks identical to the Lucy intro conversation.
+    var ow = window.Overworld;
+    if (ow && typeof ow.runPreBattleLines === 'function') {
+      ow.runPreBattleLines([
+        { who: 'neanderthal', text: 'AARRGH!' },
+        { who: 'explorer',    text: 'Uh oh…' }
+      ], function () {
+        log('Phase C — pre-battle dialogue complete');
+        if (onDone) onDone();
       });
-    });
+    } else {
+      // Fallback: overworld module unavailable — skip dialogue, go to wipe.
+      log('Phase C — Overworld.runPreBattleLines unavailable, skipping dialogue');
+      if (onDone) onDone();
+    }
   }
 
   /* ════════════════════════════════════════════════════════════
@@ -366,7 +371,10 @@ window.SOG.Adventure.Prehistory = (function () {
     if (typeof window.initBattleUI === 'function') window.initBattleUI(G.locations);
 
     // Build the player hand DOM (visibility-hidden by CSS until Phase E).
-    if (typeof window.setPlayerHand === 'function') {
+    // rebuildPlayerHand also calls bindHandEvents so single-click → popup works.
+    if (SOG.input && typeof SOG.input.rebuildPlayerHand === 'function') {
+      SOG.input.rebuildPlayerHand();
+    } else if (typeof window.setPlayerHand === 'function') {
       window.setPlayerHand(G.playerHand, G.playerDeck.length);
     }
     if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') {
@@ -451,6 +459,7 @@ window.SOG.Adventure.Prehistory = (function () {
   var co_timer        = null;
   var co_fullText     = '';
   var co_textEl       = null;
+  var co_activeEl     = null;   // bubble element currently shown (for hint management)
   // Per-runner state.
   var co_lines        = null;
   var co_lineIdx      = 0;
@@ -490,7 +499,7 @@ window.SOG.Adventure.Prehistory = (function () {
     ['neanderthal', 'explorer', 'lucy'].forEach(function (w) {
       if (w === who) return;
       var el = getBubbleEl(w);
-      if (el) el.classList.remove('is-visible');
+      if (el) el.classList.remove('is-visible', 'is-ready');
     });
 
     var el     = getBubbleEl(who);
@@ -500,10 +509,12 @@ window.SOG.Adventure.Prehistory = (function () {
 
     textEl.textContent = '';
     el.classList.add('is-visible');
+    el.classList.remove('is-ready');  // hide hint while typing
 
     co_fullText = line.text;
     co_textEl   = textEl;
     co_isTyping = true;
+    co_activeEl = el;  // track active bubble for hint management
 
     var i = 0;
     if (co_timer) clearInterval(co_timer);
@@ -514,6 +525,7 @@ window.SOG.Adventure.Prehistory = (function () {
         clearInterval(co_timer);
         co_timer    = null;
         co_isTyping = false;
+        el.classList.add('is-ready');  // show hint when typing finishes
       }
     }, TYPE_SPEED_MS);
   }
@@ -524,6 +536,8 @@ window.SOG.Adventure.Prehistory = (function () {
       if (co_timer) { clearInterval(co_timer); co_timer = null; }
       if (co_textEl) co_textEl.textContent = co_fullText;
       co_isTyping = false;
+      // Show hint immediately after skip
+      if (co_activeEl) co_activeEl.classList.add('is-ready');
       return;
     }
     co_lineIdx++;
@@ -764,7 +778,10 @@ window.SOG.Adventure.Prehistory = (function () {
     while (G.playerHand.length < HAND_CAP && G.playerDeck.length > 0) {
       G.playerHand.push(G.playerDeck.shift());
     }
-    if (typeof window.setPlayerHand === 'function') {
+    // rebuildPlayerHand re-binds click events so popup keeps working mid-battle.
+    if (SOG.input && typeof SOG.input.rebuildPlayerHand === 'function') {
+      SOG.input.rebuildPlayerHand();
+    } else if (typeof window.setPlayerHand === 'function') {
       window.setPlayerHand(G.playerHand, G.playerDeck.length);
     }
   }

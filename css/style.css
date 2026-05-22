@@ -7964,6 +7964,138 @@ body.tut-locked #battle-reset-turn {
   min-height: 1.3em;
 }
 
+/* Click-to-continue hint — hidden during typing, shown when is-ready */
+.adv-bubble-hint {
+  font-family: var(--font);
+  font-size: 11px;
+  color: #888;
+  margin-top: 5px;
+  text-align: right;
+  letter-spacing: 0.05em;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.adv-bubble.is-ready .adv-bubble-hint {
+  opacity: 0.85;
+  animation: tut-hint-blink 1.4s ease-in-out infinite;
+}
+
+/* ── Battle context: comic-book speech-bubble style ─────────────
+   In body.prehistory-battle the .adv-bubble boxes are repositioned
+   to sit BESIDE the avatar circles (not covering them), with a CSS
+   tail pointing back toward the speaker.
+
+   Lucy avatar:      bottom:80px; left:54px  — frame 120×120px
+   Neanderthal avatar: top:20px;  right:54px — frame 120×120px
+
+   Bubble leading edge = avatar far edge + 16px gap:
+     Lucy bubble    left:  54 + 120 + 16 = 190px (matching tut-lucy-bubble)
+     Neanderthal    right: max(190px, calc(100vw - 1090px))  (matching tut-otzi-box)
+   ────────────────────────────────────────────────────────────── */
+
+body.prehistory-battle #adv-bubble-lucy {
+  /* Reset .adv-bubble-bl corner positioning */
+  bottom: max(80px, calc(100vh - 720px));
+  left: 190px;
+  right: auto;
+  top: auto;
+  /* Comic-book style */
+  flex-direction: column;
+  align-items: flex-start;
+  width: 230px;
+  gap: 0;
+  background: #fffef5;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: 4px 4px 0 #111;
+}
+/* Tail pointing left toward Lucy */
+body.prehistory-battle #adv-bubble-lucy::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-right-color: #111;
+}
+body.prehistory-battle #adv-bubble-lucy::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-right-color: #fffef5;
+}
+
+body.prehistory-battle #adv-bubble-neanderthal {
+  /* Reset .adv-bubble-tr corner positioning */
+  top: 26px;
+  right: max(190px, calc(100vw - 1090px));
+  left: auto;
+  bottom: auto;
+  /* Comic-book style */
+  flex-direction: column;
+  align-items: flex-start;
+  width: 270px;
+  gap: 0;
+  background: #f0ebe0;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: -4px 4px 0 #111;
+}
+/* Tail pointing right toward Neanderthal */
+body.prehistory-battle #adv-bubble-neanderthal::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-left-color: #111;
+}
+body.prehistory-battle #adv-bubble-neanderthal::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-left-color: #f0ebe0;
+}
+
+/* In battle context: hide the portrait inside the bubble —
+   the circular avatar frame on the screen handles the portrait. */
+body.prehistory-battle .adv-bubble .adv-bubble-portrait {
+  display: none;
+}
+
+/* In battle context: match tutorial bubble text size */
+body.prehistory-battle .adv-bubble .adv-bubble-text {
+  font-size: 18px;
+  line-height: 1.45;
+  color: #111;
+  text-shadow: none;
+  min-height: 28px;
+}
+
+body.prehistory-battle .adv-bubble .adv-bubble-hint {
+  color: #666;
+  margin-top: 6px;
+}
+
+/* ── Prehistory battle: spread hand cards (no fan overlap) ───── */
+body.prehistory-battle .battle-hand-card {
+  margin-left: 6px;
+}
+body.prehistory-battle .battle-player-hand .battle-hand-card:first-child {
+  margin-left: 0;
+}
+
 /* Radial wipe — fullscreen black, clipped to an expanding circle.
    Inline clip-path style is set by JS each frame during the GSAP
    tween. .active toggles visibility; opacity stays at 1 throughout
