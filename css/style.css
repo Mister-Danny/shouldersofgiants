@@ -8088,9 +8088,11 @@ body.prehistory-battle .adv-bubble .adv-bubble-hint {
   margin-top: 6px;
 }
 
-/* ── Prehistory battle: spread hand cards (no fan overlap) ───── */
+/* ── Prehistory battle: spread hand cards (smaller, tighter gap) ─ */
 body.prehistory-battle .battle-hand-card {
-  margin-left: 6px;
+  margin-left: 3px;   /* 50% of the 6px non-overlap gap */
+  width:  111px;      /* 123px × 0.9 */
+  height: 166px;      /* 184px × 0.9 */
 }
 body.prehistory-battle .battle-player-hand .battle-hand-card:first-child {
   margin-left: 0;
@@ -8148,8 +8150,8 @@ body.prehistory-battle .battle-board {
 body.prehistory-battle .battle-board::after { display: none; } /* compass watermark off */
 body.prehistory-battle .battle-col[data-loc-id="100"] {
   flex: 0 0 auto;
-  width: 280px;          /* fixed, narrow column framing The Camp */
-  max-width: 38vw;
+  width: 796px;                    /* match arcadium location proportions */
+  max-width: calc(100% - 32px);   /* never overflow on narrow viewports */
 }
 
 /* The Camp background — same ::before pattern as the standard

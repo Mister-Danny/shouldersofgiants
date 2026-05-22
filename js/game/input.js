@@ -635,7 +635,8 @@
   function commitPlay(cardId, locId) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return;
-    var cost = effectiveCost(card, locId);
+    // In prehistory mode Capital Cost is ignored (all cards are free).
+    var cost = G.prehistoryMode ? 0 : effectiveCost(card, locId);
     if (cost > G.capital) { var d = getSlotEl('player', locId, 0); if (d) SOG.ui.flashDeny(d); return; }
     var si = G.playerSlots[locId].indexOf(null);
     if (si === -1) { var d2 = getSlotEl('player', locId, 0); if (d2) SOG.ui.flashDeny(d2); return; }
