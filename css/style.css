@@ -7980,6 +7980,96 @@ body.tut-locked #battle-reset-turn {
 }
 #adv-radial-wipe.active { visibility: visible; }
 
+/* ================================================================
+   ADVENTURE MODE — Prehistory battle (single-location board, phase D)
+   ================================================================
+   Context class `body.prehistory-battle` (set by JS in
+   sog-adventure-prehistory.js's setupBattleBoard) gates all these
+   overrides. The standard #screen-battle DOM renders normally —
+   these rules just constrain it for the tutorial:
+     • Hide all .battle-col except the single 'The Camp' col
+     • Center the board, no compass watermark
+     • Turn counter takes the place of Capital in the upper-left HUD
+     • CC numerals are hidden on hand cards + slot cards (IP only)
+     • Otzi avatar img is swapped to Neanderthal via JS (src override)
+     • Lucy avatar is hidden until Phase E pops her in (.adv-active)
+
+   Sub-class `body.prehistory-pre-coaching` is set by JS during the
+   Phase D arrival window and removed once Phase E coaching ends.
+   It additionally hides the player hand, opp hand, deck, and the
+   bottom-right HUD buttons — those slide in at the end of coaching. */
+
+/* Hide all .battle-col except the one with The Camp (data-loc-id="100"
+   — assigned in JS, sidesteps collisions with the standard loc IDs 1-6). */
+body.prehistory-battle .battle-col:not([data-loc-id="100"]) { display: none; }
+
+/* Center the single remaining col + reclaim the board padding (the
+   original 16px is for a 6-col row; with one col centered it pushes
+   the Camp leftward). */
+body.prehistory-battle .battle-board {
+  justify-content: center;
+  align-items: stretch;
+  padding-left: 0;
+  padding-right: 0;
+  gap: 0;
+}
+body.prehistory-battle .battle-board::after { display: none; } /* compass watermark off */
+body.prehistory-battle .battle-col[data-loc-id="100"] {
+  flex: 0 0 auto;
+  width: 280px;          /* fixed, narrow column framing The Camp */
+  max-width: 38vw;
+}
+
+/* The Camp background — same ::before pattern as the standard
+   locations (loc IDs 1-6). Source asset: images/locations/prehistorycamp.jpg */
+.battle-col[data-loc-id="100"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/prehistorycamp.jpg') center / cover no-repeat;
+  z-index: 0;
+}
+
+/* Hide ability text on The Camp (spec: "No ability text"). The .battle-loc-name
+   still shows so the player sees "The Camp" centered on the tile. */
+body.prehistory-battle .battle-loc-ability { display: none; }
+
+/* Hide CC numerals on every card surface (spec: "Capital Cost numbers
+   are hidden on all cards in this battle. Only the IP number is shown.") */
+body.prehistory-battle .db-overlay-cc { display: none; }
+
+/* Turn counter takes the Capital box. JS writes "Turn X / 4" into
+   #battle-capital-info; the existing turn-info element is emptied.
+   Slight font tweak so the longer string fits the parchment box. */
+body.prehistory-battle .battle-turn-info { display: none; }
+body.prehistory-battle .battle-capital-info {
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  padding: 6px 14px;
+}
+
+/* Lucy avatar hidden until Phase E pops her in. .adv-active is added
+   by Phase E's coaching kickoff. */
+body.prehistory-battle .battle-avatar-lucy {
+  opacity: 0;
+  transform: scale(0.3);
+  transform-origin: center bottom;
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+body.prehistory-battle .battle-avatar-lucy.adv-active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Pre-coaching arrival window: hide hand, deck pile, opp hand, and
+   the bottom-right HUD buttons (RESET + END TURN). Phase E removes
+   the `prehistory-pre-coaching` body class to slide them in. */
+body.prehistory-battle.prehistory-pre-coaching .battle-player-hand,
+body.prehistory-battle.prehistory-pre-coaching .battle-opp-hand,
+body.prehistory-battle.prehistory-pre-coaching .battle-hud-bottomright {
+  visibility: hidden;
+}
+
 /* Home-screen Adventure Mode button — warm gold accent */
 .btn-home-adventure {
   background: linear-gradient(180deg, #3a2810 0%, #2a1c08 100%);

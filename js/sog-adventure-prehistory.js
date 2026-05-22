@@ -221,35 +221,200 @@ window.SOG.Adventure.Prehistory = (function () {
     });
   }
 
-  /* PHASE C TESTING ONLY: reverse the wipe so the overworld becomes
-     visible again. Phase D will replace this with: setupBattleBoard()
-     then fade the cover out to reveal the board. */
-  function _tempReverseWipeForTesting(onDone) {
+  /* ════════════════════════════════════════════════════════════
+     PHASE D — Gameboard customization
+     ════════════════════════════════════════════════════════════
+     Bypasses initGame() (per the architecture decision in phase B —
+     option β). Builds G state directly, calls the same low-level
+     SOG.* render helpers initGame() uses, and applies a body
+     context class so CSS overrides constrain the standard
+     #screen-battle DOM into the single-location tutorial layout.
+
+     Specifically:
+       • body.prehistory-battle           — gates all CSS overrides
+       • body.prehistory-pre-coaching     — additionally hides hand +
+                                            deck + opp hand + bottom-
+                                            right HUD until Phase E
+                                            slides them in.
+
+     The Camp uses loc.id = 100, a value safely outside the standard
+     1-6 range so CSS rules (.battle-col[data-loc-id="100"]) target
+     it without colliding with the canonical locations.
+
+     Player deck (8 cards, no Lucy):
+       26 Tool, 27 Hunter, 28 Gatherer, 29 Fire,
+       30 Cave Art, 31 Megalith, 32 Domesticated Animal, 36 Tribe
+     Shuffled on entry; initial hand of 4 drawn off the top.
+
+     AI deck (scripted, no shuffle):
+       27 Hunter, 28 Gatherer, 31 Megalith, 34 Neanderthal
+     The AI "hand" pre-loads all 4 — phase F consumes from index 0
+     each turn for a deterministic scripted sequence.
+  ═══════════════════════════════════════════════════════════════ */
+
+  // Pseudo-location for The Camp. ID 100 sidesteps the standard locs
+  // (1-6) so the CSS rule .battle-col[data-loc-id="100"] targets only
+  // this tile and we don't accidentally style any real game location.
+  function buildCampLocation() {
+    return {
+      id:          100,
+      name:        'The Camp',
+      region:      '',
+      abilityText: '',  // spec: "No ability text"
+      abilityKey:  null
+    };
+  }
+
+  function buildPrehistoryDeck() {
+    // IDs per cards.js:206-279 — no duplicates, no Lucy (id 33).
+    return [26, 27, 28, 29, 30, 31, 32, 36];
+  }
+
+  function buildNeanderthalAiDeck() {
+    // Scripted AI plays exactly these in order across turns 1-4:
+    //   T1 Hunter, T2 Gatherer, T3 Megalith, T4 Neanderthal
+    return [27, 28, 31, 34];
+  }
+
+  // Fisher-Yates shuffle (in-place). The standard SOG.board.shuffle
+  // is the same algorithm but we avoid the cross-module dependency.
+  function shuffleInPlace(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  // Swap the Otzi avatar img src to the Neanderthal card art (cropped
+  // to face region via object-position). Stash original src so the
+  // exit path can restore it for the next standard battle.
+  function applyNeanderthalAvatar() {
+    var img = document.querySelector('.battle-avatar-otzi .battle-avatar-frame img');
+    if (!img) return;
+    if (typeof img.dataset.origSrc === 'undefined') img.dataset.origSrc = img.src;
+    img.src = 'images/prehistorycards/neanderthalcard.jpg';
+    img.style.objectPosition = 'center 18%';
+  }
+  function restoreOtziAvatar() {
+    var img = document.querySelector('.battle-avatar-otzi .battle-avatar-frame img');
+    if (!img) return;
+    if (img.dataset.origSrc) img.src = img.dataset.origSrc;
+    img.style.objectPosition = '';
+  }
+
+  function setTurnCounter(current, total) {
+    var capEl = document.getElementById('battle-capital-info');
+    if (capEl) capEl.textContent = 'Turn ' + current + ' / ' + total;
+    // The turn-info element is hidden via CSS in prehistory mode but
+    // clear it anyway so a stale value doesn't reappear if CSS misses.
+    var turnEl = document.getElementById('battle-turn-info');
+    if (turnEl) turnEl.textContent = '';
+  }
+
+  function setupBattleBoard() {
+    log('Phase D — setting up Prehistory battle board');
+
+    // Body context class — drives all CSS overrides. Pre-coaching
+    // sub-class hides hand+deck+HUD until Phase E slides them in.
+    document.body.classList.add('prehistory-battle');
+    document.body.classList.add('prehistory-pre-coaching');
+
+    // Build minimal G state directly (option β architecture — we do
+    // not call initGame()). The reveal sequence, hand UI, and ability
+    // engine all read from G, so populating it here is enough to make
+    // the rendering helpers happy.
+    var G = SOG.state.G;
+    var camp = buildCampLocation();
+
+    G.locations    = [camp];
+    G.playerSlots  = {};
+    G.aiSlots      = {};
+    G.playerSlots[camp.id] = [null, null, null, null];
+    G.aiSlots[camp.id]     = [null, null, null, null];
+
+    G.playerDeck = shuffleInPlace(buildPrehistoryDeck().slice());
+    G.playerHand = G.playerDeck.splice(0, 4);  // hand of 4 (spec)
+
+    G.aiDeck = [];                                   // AI doesn't draw
+    G.aiHand = buildNeanderthalAiDeck().slice();     // scripted, all 4 pre-loaded
+
+    G.turn               = 1;
+    G.phase              = 'select';
+    G.capital            = 0;          // spec: CC ignored entirely
+    G.turnStartCapital   = 0;
+    G.prehistoryMode     = true;       // flag for the input layer (Phase F)
+    G.playerFirst        = true;
+    G.bonusCapitalNextTurn   = 0;
+    G.aiBonusCapitalNextTurn = 0;
+    G.cardIPBonus         = {};
+    G.aiCardIPBonus       = {};
+    G.destroyedIPTotal    = 0;
+    G.aiDestroyedIPTotal  = 0;
+    G.movedThisTurn       = {};
+    G.aiMovedThisTurn     = {};
+    G.moveLog             = [];
+    G.playerActionLog     = [];
+    G.aiActionLog         = [];
+    G.locationSnapshots   = {};
+    G.reservedSlotsPerLoc = {};
+    G.deferredPlays       = {};
+
+    // Show the battle screen + build the board DOM. initBattleUI
+    // builds opp hand, board cols, and clears the player hand container.
+    if (typeof window.showScreen   === 'function') window.showScreen('screen-battle');
+    if (typeof window.initBattleUI === 'function') window.initBattleUI(G.locations);
+
+    // Build the player hand DOM (visibility-hidden by CSS until Phase E).
+    if (typeof window.setPlayerHand === 'function') {
+      window.setPlayerHand(G.playerHand, G.playerDeck.length);
+    }
+    if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') {
+      SOG.ui.updateOppHand();
+    }
+
+    setTurnCounter(1, 4);
+    applyNeanderthalAvatar();
+  }
+
+  /* ── Fade the radial-wipe cover out to reveal the board ───── */
+  function fadeOutCover(onDone) {
     var wipeEl = document.getElementById('adv-radial-wipe');
     if (!wipeEl) { if (onDone) onDone(); return; }
-    var center = getPrehistoryNodeCenter();
-    var maxR   = Math.max(window.innerWidth, window.innerHeight) * 1.4;
-    log('Phase C TEST — reversing wipe so overworld becomes visible again ' +
-        '(Phase D will replace this with board setup)');
     if (typeof gsap === 'undefined') {
       wipeEl.classList.remove('active');
+      wipeEl.style.opacity  = '';
+      wipeEl.style.clipPath = '';
       if (onDone) onDone();
       return;
     }
-    var proxy = { r: maxR };
-    gsap.to(proxy, {
-      r: 0,
-      duration: 0.6,
-      ease: 'power2.inOut',
-      onUpdate: function () {
-        wipeEl.style.clipPath = 'circle(' + proxy.r + 'px at ' + center.xPct + '% ' + center.yPct + '%)';
-      },
+    gsap.to(wipeEl, {
+      opacity: 0,
+      duration: 0.45,
+      ease: 'power2.out',
       onComplete: function () {
         wipeEl.classList.remove('active');
-        hideAllBubbles();
+        wipeEl.style.opacity  = '';
+        wipeEl.style.clipPath = '';
         if (onDone) onDone();
       }
     });
+  }
+
+  /* ── Exit back to overworld (devtools / temporary escape) ──── */
+  function exitToOverworld() {
+    log('Exiting Prehistory battle — returning to overworld');
+    document.body.classList.remove('prehistory-battle');
+    document.body.classList.remove('prehistory-pre-coaching');
+    restoreOtziAvatar();
+    hideAllBubbles();
+    var wipeEl = document.getElementById('adv-radial-wipe');
+    if (wipeEl) {
+      wipeEl.classList.remove('active');
+      wipeEl.style.opacity  = '';
+      wipeEl.style.clipPath = '';
+    }
+    if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
   }
 
   /* ── localStorage helpers ──────────────────────────────────── */
@@ -287,25 +452,34 @@ window.SOG.Adventure.Prehistory = (function () {
         ' → skipIntro=' + skipIntro);
 
     if (skipIntro) {
-      // TODO phase D+F: setupBattleBoard() then runTurnLoop()
-      log('TODO phase D+F: straight-to-gameboard path');
+      // Skip-intro path: drop straight to the gameboard (no walk, no
+      // dialogue, no wipe, no coaching). Spec: "Drop the player straight
+      // into the gameboard with their current deck."
+      setupBattleBoard();
+      // Skip-intro doesn't need the coaching slide-in either — show
+      // hand + buttons immediately.
+      document.body.classList.remove('prehistory-pre-coaching');
+      log('TODO phase F: runTurnLoop (skip-intro path)');
     } else {
       // Set this BEFORE the intro plays so a defeat-replay this session
-      // skips straight to the gameboard.
+      // skips straight to the gameboard (phase F's loss-replay flow).
       neanderthalIntroSeenThisSession = true;
       // Phase C: pre-battle dialogue → radial wipe.
+      // Phase D: setupBattleBoard() while cover is up → fade cover out.
       playPreBattleDialogue(function () {
         radialWipe(function () {
-          // TODO phase D: setupBattleBoard() — render gameboard behind the
-          //              still-covered radial wipe, then fade the cover out.
-          // TODO phase E: playCoaching() once the board is visible.
-          // TODO phase F: runTurnLoop() + win/loss flow.
-          log('TODO phase D-F: board setup + coaching + turn loop');
-          // PHASE C TESTING: reverse the wipe so the overworld becomes
-          // visible again — lets us verify the wipe completed cleanly
-          // without phases D-F being implemented yet. Remove in phase D.
-          _tempReverseWipeForTesting(function () {
-            log('Phase C TEST — wipe reversed, ready for next click');
+          // Cover is fully up. Build the gameboard underneath it so the
+          // reveal feels instant when the cover fades.
+          setupBattleBoard();
+          // Bubbles are no longer needed; the wipe covered them anyway.
+          hideAllBubbles();
+          // Reveal the board by fading the cover to transparent.
+          fadeOutCover(function () {
+            log('Phase D complete — gameboard visible');
+            // TODO phase E: playCoaching() — Lucy pops in, coaches the
+            //              player through the rules; then UI slides in.
+            // TODO phase F: runTurnLoop() once coaching ends.
+            log('TODO phase E-F: coaching + turn loop');
           });
         });
       });
@@ -324,7 +498,11 @@ window.SOG.Adventure.Prehistory = (function () {
     startNeanderthalBattle: startNeanderthalBattle,
     isBattleComplete:       isBattleComplete,
     markBattleComplete:     markBattleComplete,
-    resetBattleComplete:    resetBattleComplete
+    resetBattleComplete:    resetBattleComplete,
+    // Devtools escape — call from console while testing Phase D-E
+    // (the player can't progress past the board until Phase F wires
+    // the turn loop). Returns to overworld and clears the context class.
+    exitToOverworld:        exitToOverworld
   };
 
 })();
