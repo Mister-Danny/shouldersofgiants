@@ -64,6 +64,9 @@
     aiCardIPBonus:          {},  // AI    cardId → cumulative bonus IP (Samurai, Jesus)
     destroyedIPTotal:       0,   // total IP of cards destroyed by player (William)
     aiDestroyedIPTotal:     0,   // total IP of cards destroyed by AI   (William)
+    destroyedCards:         [],  // [{cardId, ip, eventId}] — per-card destruction log (William Pattern B display)
+    aiDestroyedCards:       [],  // same for AI
+    nextEventId:            0,   // monotonic counter; incremented by nextEventId() in board.js
     columbusMoved:          false,
     aiColumbusMoved:        false,
     movedThisTurn:          {},  // cardId → bool  (Magellan, per-turn reset)

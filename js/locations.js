@@ -3,11 +3,17 @@
  * Shoulders of Giants — Location Data
  *
  * Each location object contains:
- *   id          {number}  Unique location identifier
- *   name        {string}  Display name of the location
- *   region      {string}  Region subtitle shown on the location tile
- *   abilityText {string}  Plain-English description of the location's ability
- *   abilityKey  {string}  Machine-readable key used by game.js to apply the ability effect
+ *   id             {number}      Unique location identifier
+ *   name           {string}      Display name of the location
+ *   region         {string}      Region subtitle shown on the location tile
+ *   abilityText    {string}      Plain-English description of the location's ability
+ *   abilityKey     {string}      Machine-readable key used by game.js to apply the ability effect
+ *   image          {string}      Path to the location's artwork image
+ *   thumbnailCrop  {object|null} CSS crop hint for IP-breakdown thumbnail rendering:
+ *                                  { bgSize: string, bgPos: string }
+ *                                Only locations that currently grant IP bonuses need a
+ *                                thumbnailCrop defined; others may set null. Future locations
+ *                                with IP effects just need this field filled in.
  *
  * Ability keys and their effects (implemented in game.js):
  *
@@ -41,41 +47,57 @@ const LOCATIONS = [
     name: "Scandinavia",
     region: "Fjordlandia",
     abilityText: "Military cards can freely move away from here.",
-    abilityKey: "MILITARY_FREE_MOVE_AWAY"
+    abilityKey: "MILITARY_FREE_MOVE_AWAY",
+    image: "images/locations/scandinavia.jpg",
+    thumbnailCrop: null   // no IP bonus — no thumbnail needed
   },
   {
     id: 2,
     name: "The Great Rift Valley",
     region: "Cradle of Humanity",
     abilityText: "You must play your first card of the game here.",
-    abilityKey: "FIRST_CARD_HERE"
+    abilityKey: "FIRST_CARD_HERE",
+    image: "images/locations/greatriftvalley.jpg",
+    thumbnailCrop: null
   },
   {
     id: 3,
     name: "The Cape of Good Hope",
     region: "Waypoint",
     abilityText: "When a card moves here it gains +1 IP.",
-    abilityKey: "MOVE_IN_GAINS_IP"
+    abilityKey: "MOVE_IN_GAINS_IP",
+    image: "images/locations/capeofgoodhope.jpg",
+    // Traders-on-the-dock region: lower portion of the image.
+    // Adjust bgPos if the dock area falls in a different spot after reviewing the image.
+    thumbnailCrop: { bgSize: '200%', bgPos: '40% 80%' }
   },
   {
     id: 4,
     name: "The Levant",
     region: "Monotheism",
     abilityText: "Religious cards cost -1 CC to play here.",
-    abilityKey: "RELIGIOUS_DISCOUNT"
+    abilityKey: "RELIGIOUS_DISCOUNT",
+    image: "images/locations/levant.jpg",
+    thumbnailCrop: null
   },
   {
     id: 5,
     name: "Timbuktu",
     region: "Beacon of Culture",
     abilityText: "Cultural cards can freely move here.",
-    abilityKey: "CULTURAL_FREE_MOVE_HERE"
+    abilityKey: "CULTURAL_FREE_MOVE_HERE",
+    image: "images/locations/timbuktu.jpg",
+    thumbnailCrop: null
   },
   {
     id: 6,
     name: "The Sahara",
     region: "Endless Sands",
     abilityText: "-1 IP to all cards here.",
-    abilityKey: "ALL_MINUS_ONE_IP"
+    abilityKey: "ALL_MINUS_ONE_IP",
+    image: "images/locations/sahara.jpg",
+    // Travelers-on-the-camels region: centre of the image.
+    // Adjust bgPos after reviewing the image.
+    thumbnailCrop: { bgSize: '200%', bgPos: '50% 45%' }
   }
 ];

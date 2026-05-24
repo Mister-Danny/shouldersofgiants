@@ -164,7 +164,14 @@
     var resBonus  = bonusDict[cardId] || 0;
     var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
     var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
-    var sd     = { cardId: cardId, ip: card.ip, revealed: true, ipMod: (extraIpMod || 0) + resBonus, contMod: 0, ipModSources: resSources };
+    var sd     = { cardId: cardId, ip: card.ip, revealed: true, ipMod: (extraIpMod || 0) + resBonus, contMod: 0, ipModSources: resSources, bonuses: [] };
+    // Populate bonuses[] for the resurrection IP so the popup breakdown shows it.
+    // Pattern 'A' (own portrait) is used here since we don't have the original
+    // discard-trigger context; abilities.js may add a more accurate 'C' record.
+    if (resBonus > 0) {
+      var resInfo = SOURCE_ID_MAP[resLabel];
+      if (resInfo) addBonus(sd, resBonus, resInfo.type, resInfo.id, nextEventId(), resInfo.pattern, false);
+    }
     if (!opts.skipLocationAbility) {
       var dl = G.locations.find(function (l) { return l.id === locId; });
       if (dl && dl.abilityKey === 'MOVE_IN_GAINS_IP') addIPMod(sd, 1, 'The Cape of Good Hope');
@@ -311,6 +318,73 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     BONUS ATTRIBUTION
+  ═══════════════════════════════════════════════════════════════ */
+
+  /**
+   * Maps source-name strings (as passed to addIPMod / addBonus calls) to
+   * the canonical { type, id, pattern } descriptor used by the bonus display.
+   *   type:    'card' | 'location'
+   *   id:      card id (from CARDS) or location id (from LOCATIONS)
+   *   pattern: 'A' (self) | 'B' (destruction-chain) | 'C' (trigger) | 'D' (target)
+   */
+  var SOURCE_ID_MAP = {
+    'The Cape of Good Hope': { type: 'location', id: 3,  pattern: 'A' },
+    'The Sahara':            { type: 'location', id: 6,  pattern: 'A' },
+    'Scholar-Officials':     { type: 'card',     id: 2,  pattern: 'A' },
+    'Jan Hus':               { type: 'card',     id: 7,  pattern: 'A' },
+    'Jesus':                 { type: 'card',     id: 10, pattern: 'A' },
+    'Samurai':               { type: 'card',     id: 12, pattern: 'A' },
+    'Cortes':                { type: 'card',     id: 13, pattern: 'A' },
+    'William the Conqueror': { type: 'card',     id: 15, pattern: 'B' },
+    'Kente':                 { type: 'card',     id: 17, pattern: 'A' },
+    'Juvenal':               { type: 'card',     id: 18, pattern: 'A' },
+    'Voltaire':              { type: 'card',     id: 20, pattern: 'A' },
+    'Magellan':              { type: 'card',     id: 24, pattern: 'A' },
+    'Zheng He':              { type: 'card',     id: 23, pattern: 'D' },
+    'Fire':                  { type: 'card',     id: 29, pattern: 'A' },
+    'Cave Art':              { type: 'card',     id: 30, pattern: 'A' },
+    'Domesticated Animal':   { type: 'card',     id: 32, pattern: 'A' },
+    'Tribe':                 { type: 'card',     id: 36, pattern: 'A' }
+  };
+
+  /**
+   * Return a unique event ID string.  Monotonic counter in G.nextEventId.
+   * Each distinct trigger event gets its own ID; multiple addBonus calls
+   * that share one ID collapse into a single thumbnail column in the IP grid.
+   */
+  function nextEventId() {
+    G.nextEventId = (G.nextEventId || 0) + 1;
+    return 'e' + G.nextEventId;
+  }
+
+  /**
+   * Push a single bonus record onto sd.bonuses[].
+   * Low-level primitive; addIPMod calls this automatically for known sources.
+   *
+   * @param {object}      sd           Slot data
+   * @param {number}      amount       IP delta (positive or negative)
+   * @param {string}      sourceType   'card' | 'location' | 'unknown'
+   * @param {number|null} sourceId     Card or location id (null = unknown)
+   * @param {string}      eventId      From nextEventId() — groups thumbnails
+   * @param {string}      pattern      'A' | 'B' | 'C' | 'D'
+   * @param {boolean}     isContinuous True for evaluateContinuous-driven bonuses
+   */
+  function addBonus(sd, amount, sourceType, sourceId, eventId, pattern, isContinuous) {
+    if (!sd.bonuses) sd.bonuses = [];
+    sd.bonuses.push({
+      sourceType:  sourceType,
+      sourceId:    (sourceId !== undefined) ? sourceId : null,
+      amount:      amount,
+      eventId:     eventId,
+      pattern:     pattern      || 'A',
+      continuous:  !!isContinuous,
+      reset:       false,
+      resetBy:     null
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      COST / IP MATH
   ═══════════════════════════════════════════════════════════════ */
 
@@ -337,11 +411,24 @@
     return sd.ip + (sd.ipMod || 0) + (sd.contMod || 0);
   }
 
-  /** Add a named modifier to a slot's permanent IP. */
-  function addIPMod(sd, delta, sourceName) {
+  /**
+   * Add a named modifier to a slot's permanent IP.
+   * Also pushes a bonus record onto sd.bonuses[] for the display system.
+   * @param {string} [eventId]  Pre-allocated event ID to share across multiple
+   *                            simultaneous addIPMod calls from one trigger.
+   *                            Auto-generated when omitted.
+   */
+  function addIPMod(sd, delta, sourceName, eventId) {
     sd.ipMod = (sd.ipMod || 0) + delta;
     if (!sd.ipModSources) sd.ipModSources = [];
     sd.ipModSources.push({ source: sourceName, delta: delta });
+    var info = SOURCE_ID_MAP[sourceName];
+    var eid  = eventId || nextEventId();
+    if (info) {
+      addBonus(sd, delta, info.type, info.id, eid, info.pattern, false);
+    } else {
+      addBonus(sd, delta, 'unknown', null, eid, 'A', false);
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -405,8 +492,11 @@
     syncPlayerSlots:       syncPlayerSlots,
     compactOppSlots:       compactOppSlots,
     syncOppSlots:          syncOppSlots,
+    SOURCE_ID_MAP:         SOURCE_ID_MAP,
     effectiveCost:         effectiveCost,
     effectiveIP:           effectiveIP,
+    nextEventId:           nextEventId,
+    addBonus:              addBonus,
     addIPMod:              addIPMod,
     updateScores:          updateScores,
     refreshSlotIPDisplays: refreshSlotIPDisplays,

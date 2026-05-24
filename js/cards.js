@@ -13,7 +13,12 @@
  *   abilityName{string|null} Short name for the card's ability (null for vanilla cards)
  *   ability    {string|null} Full ability description (null for vanilla cards)
  *   image      {string}      Path to the card's artwork image
- *   locked     {boolean}     If true, card is hidden from the demo deck builder (future content)
+ *   locked            {boolean}  If true, card is hidden from the demo deck builder (future content)
+ *   attributionPattern{string}   Bonus-attribution pattern for the IP breakdown display:
+ *     'A' — Direct: the card's own portrait is the thumbnail source (default)
+ *     'B' — Destruction-chain: each destroyed card's portrait is a separate thumbnail
+ *     'C' — Trigger-source: the card that caused the triggering event is the thumbnail
+ *     'D' — Affected-target: the ability owner's portrait appears on each target card
  *
  * Ability trigger keywords (used by the ability engine in game.js):
  *   "At Once"       — fires immediately when the card is revealed
@@ -92,7 +97,8 @@ const CARDS = [
     type: "Religious", type2: null, era: "Early Christianity",
     abilityName: "King of Martyrs",
     ability: "If Jesus is discarded, he gains +3 IP and returns to your hand.",
-    image: "images/cards/Jesus Christ.jpg", locked: false
+    image: "images/cards/Jesus Christ.jpg", locked: false,
+    attributionPattern: 'C'   // thumbnail = the card that did the discarding
   },
 
   // ─── MILITARY ─────────────────────────────────────────────────────────────
@@ -128,7 +134,8 @@ const CARDS = [
     type: "Military", type2: null, era: "Middle Ages",
     abilityName: "The Norman Conquest",
     ability: "Continuous: Accumulates the IP from all cards you destroyed this game.",
-    image: "images/cards/William the Conqueror.jpg", locked: false
+    image: "images/cards/William the Conqueror.jpg", locked: false,
+    attributionPattern: 'B'   // each destroyed card's portrait = separate thumbnail
   },
 
   // ─── CULTURAL ─────────────────────────────────────────────────────────────
@@ -186,7 +193,8 @@ const CARDS = [
     type: "Exploration", type2: null, era: "China",
     abilityName: "Treasure Fleet",
     ability: "At Once: Zheng He delivers +2 IP to 1 card at each adjacent location.",
-    image: "images/cards/Zheng He.jpg", locked: false
+    image: "images/cards/Zheng He.jpg", locked: false,
+    attributionPattern: 'D'   // Zheng He's portrait appears on each target card's breakdown
   },
   {
     id: 24, name: "Magellan", cc: 4, ip: 4,

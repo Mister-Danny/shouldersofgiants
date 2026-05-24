@@ -53,6 +53,9 @@
   var syncPlayerSlots       = SOG.board.syncPlayerSlots;
   var effectiveCost         = SOG.board.effectiveCost;
   var effectiveIP           = SOG.board.effectiveIP;
+  var nextEventId           = SOG.board.nextEventId;
+  var addBonus              = SOG.board.addBonus;
+  var SOURCE_ID_MAP         = SOG.board.SOURCE_ID_MAP;
   var refreshSlotIPDisplays = SOG.board.refreshSlotIPDisplays;
   var updateScores          = SOG.board.updateScores;
   var updateHeader          = SOG.board.updateHeader;
@@ -93,13 +96,25 @@
   function buildHandPopupSd(card) {
     var bonus = (card.id === 15) ? G.destroyedIPTotal : (G.cardIPBonus[card.id] || 0);
     var sources = [];
+    var bonuses = [];
     if (bonus) {
       var label = card.id === 15 ? 'Destroyed cards (William)' :
                   card.id === 10 ? 'Jesus'                     :
                   card.id === 12 ? 'Samurai'                   : 'Bonus';
       sources.push({ source: label, delta: bonus });
     }
-    return { cardId: card.id, ip: card.ip, ipMod: bonus, ipModSources: sources, contMod: 0, revealed: true };
+    var sd = { cardId: card.id, ip: card.ip, ipMod: bonus, ipModSources: sources, contMod: 0, contModSources: [], revealed: true, bonuses: bonuses };
+    // William (Pattern B): one thumbnail per destroyed card
+    if (card.id === 15 && G.destroyedIPTotal > 0) {
+      G.destroyedCards.forEach(function (dc) {
+        addBonus(sd, dc.ip, 'card', dc.cardId, dc.eventId, 'B', false);
+      });
+    } else if (bonus > 0) {
+      // Jesus / Samurai resurrection chain (Pattern A — own portrait)
+      var info = SOURCE_ID_MAP[label];
+      if (info) addBonus(sd, bonus, info.type, info.id, nextEventId(), info.pattern, false);
+    }
+    return sd;
   }
 
   function openHandCardPopup(cardId) {
@@ -396,9 +411,10 @@
      handled separately. */
   boardEl.addEventListener('click', function (e) {
     if (window.tutorialActive) return;     // tutorial owns its own flow
-    if (G.phase !== 'select') return;
+    // Allow 'over' phase through for board review popups; block all other non-select phases
+    if (G.phase !== 'select' && G.phase !== 'over') return;
     if (dragInfo) return;                  // mid-drag
-    if (e.detail > 1) return;              // 2nd click of a dblclick burst — let dblclick handler run instead
+    if (e.detail > 1) return;             // 2nd click of a dblclick burst — let dblclick handler run instead
 
     var slotEl = e.target.closest('.battle-card-slot');
     if (!slotEl) return;
@@ -408,32 +424,34 @@
     var siRaw = slotEl.dataset.slotIndex;
     var slotIndex = siRaw != null ? parseInt(siRaw, 10) : NaN;
 
-    // ── Selection commit branches ────────────────────────────────
+    // ── Selection commit branches (select phase only) ────────────
     // A click on a revealed-occupied slot is transparent to selection
     // so the popup branch below can open card info without committing
     // (selection persists; user can still click an empty slot to play).
     var isRevealed = slotEl.classList.contains('face-up') &&
                      slotEl.classList.contains('occupied');
-    if (!isRevealed && selectedSource === 'hand' && owner === 'player') {
-      if (isLegalPlayTarget(selectedCardId, locId)) {
-        var cid = selectedCardId;
-        clearSelection();
-        commitPlay(cid, locId);
-      } else {
-        SOG.ui.flashDeny(slotEl);
+    if (G.phase === 'select') {
+      if (!isRevealed && selectedSource === 'hand' && owner === 'player') {
+        if (isLegalPlayTarget(selectedCardId, locId)) {
+          var cid = selectedCardId;
+          clearSelection();
+          commitPlay(cid, locId);
+        } else {
+          SOG.ui.flashDeny(slotEl);
+        }
+        return;
       }
-      return;
-    }
-    if (!isRevealed && selectedSource === 'move' && owner === 'player') {
-      if (isLegalMoveTarget(selectedCardId, selectedFromLocId, locId)) {
-        var fromLoc = selectedFromLocId;
-        var fromIdx = selectedFromSlotIndex;
-        clearSelection();
-        queueMove(fromLoc, fromIdx, locId);
-      } else {
-        SOG.ui.flashDeny(slotEl);
+      if (!isRevealed && selectedSource === 'move' && owner === 'player') {
+        if (isLegalMoveTarget(selectedCardId, selectedFromLocId, locId)) {
+          var fromLoc = selectedFromLocId;
+          var fromIdx = selectedFromSlotIndex;
+          clearSelection();
+          queueMove(fromLoc, fromIdx, locId);
+        } else {
+          SOG.ui.flashDeny(slotEl);
+        }
+        return;
       }
-      return;
     }
     // ── No selection: revealed slot opens popup; other branches no-op
     //    (selection is initiated via dblclick / Enter, not click).
@@ -593,7 +611,9 @@
     if (!G.playerSlots[locId]) return false;
     var firstEmpty   = G.playerSlots[locId].indexOf(null);
     if (firstEmpty === -1) return false;
-    if (effectiveCost(card, locId) > G.capital) return false;
+    if (!G.prehistoryMode && effectiveCost(card, locId) > G.capital) return false;
+    // Prehistory tutorial: only 1 card per turn.
+    if (G.prehistoryMode && G.prehistoryHasPlayed) return false;
     // Turn-1 first-card-here: first play of turn 1 must go to the Great Rift Valley
     var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
     if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
@@ -657,7 +677,12 @@
     // Capture hand position so undoPlay can restore the card to the slot it
     // came from rather than appending to the end of the hand.
     var handIndex = G.playerHand.indexOf(cardId);
-    G.playerSlots[locId][si] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources, handIndex: handIndex };
+    var newSd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources, bonuses: [], handIndex: handIndex };
+    if (resBonus > 0) {
+      var resInfo = SOURCE_ID_MAP[resLabel];
+      if (resInfo) addBonus(newSd, resBonus, resInfo.type, resInfo.id, nextEventId(), resInfo.pattern, false);
+    }
+    G.playerSlots[locId][si] = newSd;
     G.capital -= cost;
     if (typeof SFX !== 'undefined') SFX.capitalSpent();
     G.playerRevealQueue.push(cardId);
@@ -1202,6 +1227,7 @@
     refreshHandCostDisplays: refreshHandCostDisplays,
     refreshMoveableCards:    refreshMoveableCards,
     commitPlay:              commitPlay,
+    undoPlay:                undoPlay,
     queueMove:               queueMove,
     snapBack:                snapBack,
     resetTurn:               resetTurn,

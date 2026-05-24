@@ -144,56 +144,136 @@
   }());
 
   /* ═══════════════════════════════════════════════════════════════
+     IMAGE CACHES — built once at module load
+     _cardById:     id → { image, name }
+     _locationById: id → { image, thumbnailCrop }
+     _cardNameToImage: name → image  (legacy fallback only)
+  ═══════════════════════════════════════════════════════════════ */
+
+  var _cardById     = {};
+  var _locationById = {};
+  var _cardNameToImage = {};
+
+  (function () {
+    if (typeof CARDS !== 'undefined') {
+      CARDS.forEach(function (c) {
+        _cardById[c.id]          = { image: c.image, name: c.name };
+        _cardNameToImage[c.name] = c.image;
+      });
+    }
+    if (typeof LOCATIONS !== 'undefined') {
+      LOCATIONS.forEach(function (l) {
+        _locationById[l.id] = { image: l.image, thumbnailCrop: l.thumbnailCrop || null };
+      });
+    }
+  }());
+
+  /**
+   * Build the thumbnail HTML for a bonus source.
+   * @param {string}      sourceType  'card' | 'location' | 'unknown'
+   * @param {number|null} sourceId    Card or location id
+   * @param {object|null} [crop]      { bgSize, bgPos } — overrides location's thumbnailCrop
+   */
+  function _thumbHTML(sourceType, sourceId, crop) {
+    if (sourceType === 'card' && sourceId != null && _cardById[sourceId]) {
+      var safePath = _cardById[sourceId].image.replace(/'/g, '%27');
+      return '<div class="ip-thumb" style="background-image:url(\'' + safePath + '\')" aria-hidden="true"></div>';
+    }
+    if (sourceType === 'location' && sourceId != null && _locationById[sourceId]) {
+      var locData  = _locationById[sourceId];
+      var locCrop  = crop || locData.thumbnailCrop;
+      var safePath = locData.image.replace(/'/g, '%27');
+      var styleStr = 'background-image:url(\'' + safePath + '\')';
+      if (locCrop) styleStr += ';background-size:' + locCrop.bgSize + ';background-position:' + locCrop.bgPos;
+      return '<div class="ip-thumb ip-thumb-loc" style="' + styleStr + '" aria-hidden="true"></div>';
+    }
+    return '<div class="ip-thumb ip-thumb-empty" aria-hidden="true"></div>';
+  }
+
+  /** Legacy thumbnail builder for ipModSources / contModSources fallback path. */
+  function _thumbHTMLLegacy(sourceName, fallbackImg) {
+    var img = _cardNameToImage[sourceName] || fallbackImg || null;
+    if (!img) return '<div class="ip-thumb ip-thumb-empty" aria-hidden="true"></div>';
+    var safePath = img.replace(/'/g, '%27');
+    return '<div class="ip-thumb" style="background-image:url(\'' + safePath + '\')" aria-hidden="true"></div>';
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      BATTLE CARD INFO POPUP
   ═══════════════════════════════════════════════════════════════ */
 
   /**
-   * Build the human-readable IP breakdown line shown in the battle popup.
-   * Lists Base IP, each permanent modifier source, any continuous modifiers
-   * derived from current board state (Juvenal/Voltaire/William), and total.
+   * Build the IP breakdown grid shown in the battle popup footer.
+   * Returns an HTML string (ip-grid) set via innerHTML.
+   *
+   * New path: reads sd.bonuses[] (per-bonus records with attribution metadata).
+   * Legacy fallback: reads sd.ipModSources / sd.contModSources when bonuses[]
+   *   is absent (cards created before the refactor land here).
+   *
+   * Grid cols: [IP label / base] [thumb-wrap / ±delta per bonus]... [total]
    */
-  function buildIPBreakdown(sd, owner) {
-    var parts = ['Base IP: ' + sd.ip];
+  function buildIPBreakdown(sd, owner, card /* card whose popup this is */) {
+    var baseIP  = sd.ip;
+    var total   = helpers.effectiveIP(sd);
+    var selfImg = (card && card.image) ? card.image : null;
 
-    // Permanent modifier sources (tracked per-card)
-    if (sd.ipModSources && sd.ipModSources.length > 0) {
-      sd.ipModSources.forEach(function (entry) {
-        parts.push(entry.source + ': ' + (entry.delta >= 0 ? '+' : '') + entry.delta);
+    var html = '<div class="ip-grid">'
+      + '<div class="ip-col ip-col-base">'
+      +   '<span class="ip-label">IP</span>'
+      +   '<span class="ip-basenum">' + baseIP + '</span>'
+      + '</div>';
+
+    // ── New system: bonuses[] ─────────────────────────────────
+    if (sd.bonuses && sd.bonuses.length > 0) {
+      sd.bonuses.forEach(function (b) {
+        var isReset = !!b.reset;
+        var modCls  = isReset ? ' ip-col-mod--reset' : '';
+        var dltCls  = isReset ? ' ip-delta--reset'   : '';
+        var sign    = b.amount >= 0 ? '+' : '−';
+
+        var thumbHtml = _thumbHTML(b.sourceType, b.sourceId, null);
+
+        // Reset badge: first letter of the resetting card (e.g. 'J' for Justinian)
+        var badgeHtml = '';
+        if (isReset && b.resetBy != null && _cardById[b.resetBy]) {
+          var initial = _cardById[b.resetBy].name.charAt(0).toUpperCase();
+          var rName   = _cardById[b.resetBy].name;
+          badgeHtml   = '<span class="ip-reset-badge" title="Reset by ' + rName + '">' + initial + '</span>';
+        }
+
+        html += '<div class="ip-col ip-col-mod' + modCls + '">'
+              +   '<div class="ip-thumb-wrap">' + thumbHtml + badgeHtml + '</div>'
+              +   '<span class="ip-delta' + dltCls + '">' + sign + Math.abs(b.amount) + '</span>'
+              + '</div>';
       });
-    } else if (sd.ipMod) {
-      parts.push('Bonus: ' + (sd.ipMod > 0 ? '+' : '') + sd.ipMod);
-    }
 
-    // Continuous modifier labels derived from current board state
-    var slots  = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var locId  = null;
-    G.locations.forEach(function (loc) {
-      slots[loc.id].forEach(function (s) { if (s && s.cardId === sd.cardId) locId = loc.id; });
-    });
-
-    if (locId !== null) {
-      var card = CARDS.find(function (c) { return c.id === sd.cardId; });
-
-      // Juvenal (id 18): -2 to CC≥4 cards at this location (either side)
-      var juvenalHere = ['player', 'opp'].some(function (own) {
-        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        return sl[locId].some(function (s) { return s && s.revealed && s.cardId === 18; });
-      });
-      if (juvenalHere && card && card.cc >= 4) parts.push('Juvenal: -2');
-
-      // Voltaire (id 20): +4 if sole revealed card for this owner
-      var ownerRev = slots[locId].filter(function (s) { return s && s.revealed; });
-      if (ownerRev.length === 1 && sd.cardId === 20) parts.push('Voltaire (Candide): +4');
-
-      // William the Conqueror (id 15): contMod equals total destroyed IP
-      if (sd.cardId === 15) {
-        var dt = owner === 'player' ? G.destroyedIPTotal : G.aiDestroyedIPTotal;
-        if (dt > 0) parts.push('William: +' + dt);
+    // ── Legacy fallback: ipModSources / contModSources ────────
+    } else {
+      var legacyBonuses = [];
+      if (sd.ipModSources && sd.ipModSources.length > 0) {
+        sd.ipModSources.forEach(function (e) { legacyBonuses.push(e); });
+      } else if (sd.ipMod) {
+        legacyBonuses.push({ delta: sd.ipMod, source: 'Bonus' });
       }
+      if (sd.contModSources && sd.contModSources.length > 0) {
+        sd.contModSources.forEach(function (e) { legacyBonuses.push(e); });
+      } else if (sd.contMod) {
+        legacyBonuses.push({ delta: sd.contMod, source: 'Bonus' });
+      }
+      legacyBonuses.forEach(function (b) {
+        var sign = b.delta >= 0 ? '+' : '−';
+        html += '<div class="ip-col ip-col-mod">'
+              +   '<div class="ip-thumb-wrap">' + _thumbHTMLLegacy(b.source, selfImg) + '</div>'
+              +   '<span class="ip-delta">' + sign + Math.abs(b.delta) + '</span>'
+              + '</div>';
+      });
     }
 
-    parts.push('Total: ' + helpers.effectiveIP(sd));
-    return parts.join('  |  ');
+    html += '<div class="ip-col ip-col-total">'
+          +   '<span class="ip-total">' + total + '</span>'
+          + '</div>'
+          + '</div>';
+    return html;
   }
 
   // Per-category modifier class for the icon span. The actual PNG mask
@@ -221,10 +301,11 @@
   function openBattlePopup(card, sd, owner, isBoard) {
     battlePopupNameEl.textContent = card.name;
 
-    // Category-type label. Single-type for now; when card.type2 ships,
-    // render both here (icon + "RELIGIOUS · MILITARY") rather than per-card.
+    // Header row: type label.
+    // Hidden for Prehistory era cards and cards with no type assigned.
     if (battlePopupTypeEl) {
-      if (card.type) {
+      var showType = !!(card.type && card.era !== 'Prehistory');
+      if (showType) {
         var iconCls = TYPE_ICON_CLASS[card.type];
         var iconHTML = iconCls
           ? '<span class="cat-icon cat-icon--' + iconCls + '" aria-hidden="true"></span>'
@@ -237,15 +318,19 @@
       }
     }
 
+    // Footer row: board cards get the IP breakdown; hand cards get the hint.
     if (sd && battlePopupIPBrkEl) {
-      battlePopupIPBrkEl.textContent = buildIPBreakdown(sd, owner);
+      battlePopupIPBrkEl.innerHTML = buildIPBreakdown(sd, owner, card);
       battlePopupIPBrkEl.style.display = '';
-    } else if (battlePopupIPBrkEl) {
-      battlePopupIPBrkEl.style.display = 'none';
-    }
-
-    if (battlePopupHintEl) {
-      battlePopupHintEl.textContent = isBoard ? 'CLICK CARD FOR INFO' : 'DRAG CARD TO A SLOT TO PLAY';
+      if (battlePopupHintEl) battlePopupHintEl.style.display = 'none';
+    } else {
+      if (battlePopupIPBrkEl) battlePopupIPBrkEl.style.display = 'none';
+      if (battlePopupHintEl) {
+        battlePopupHintEl.style.display = '';
+        battlePopupHintEl.textContent = isBoard
+          ? 'CLICK CARD FOR INFO'
+          : 'DRAG CARD TO A SLOT TO PLAY';
+      }
     }
 
     if (card.ability) {

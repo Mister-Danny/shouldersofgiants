@@ -78,6 +78,9 @@
   var syncOppSlots          = SOG.board.syncOppSlots;
   var effectiveIP           = SOG.board.effectiveIP;
   var addIPMod              = SOG.board.addIPMod;
+  var nextEventId           = SOG.board.nextEventId;
+  var addBonus              = SOG.board.addBonus;
+  var SOURCE_ID_MAP         = SOG.board.SOURCE_ID_MAP;
   var placeRevealedCard     = SOG.board.placeRevealedCard;
   var makeBoardGhost        = SOG.board.makeBoardGhost;
   var removeEl              = SOG.board.removeEl;
@@ -172,6 +175,14 @@
       if (wLocId !== null) {
         var wSd = G.playerSlots[wLocId][wSlotIdx];
         wSd.contMod = G.destroyedIPTotal;
+        wSd.contModSources = G.destroyedIPTotal > 0
+          ? [{ source: 'William the Conqueror', delta: G.destroyedIPTotal }]
+          : [];
+        // Rebuild continuous bonuses[] — Pattern B: one entry per destroyed card
+        if (wSd.bonuses) wSd.bonuses = wSd.bonuses.filter(function (b) { return !b.continuous; });
+        G.destroyedCards.forEach(function (dc) {
+          addBonus(wSd, dc.ip, 'card', dc.cardId, dc.eventId, 'B', true);
+        });
         ipEl.textContent = effectiveIP(wSd);
       }
     } else {
@@ -211,11 +222,17 @@
       });
     });
 
-    // Clear contMod on all slots
+    // Clear contMod + contModSources (and continuous bonuses[]) so each evaluation starts fresh
     G.locations.forEach(function (loc) {
       ['player','opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        sl[loc.id].forEach(function (s) { if (s) s.contMod = 0; });
+        sl[loc.id].forEach(function (s) {
+          if (s) {
+            s.contMod = 0;
+            s.contModSources = [];
+            if (s.bonuses) s.bonuses = s.bonuses.filter(function (b) { return !b.continuous; });
+          }
+        });
       });
     });
 
@@ -229,7 +246,11 @@
             ts[loc.id].forEach(function (s) {
               if (!s || !s.revealed) return;
               var c = CARDS.find(function (x) { return x.id === s.cardId; });
-              if (c && c.cc >= 4) s.contMod = (s.contMod || 0) - 2;
+              if (c && c.cc >= 4) {
+                s.contMod = (s.contMod || 0) - 2;
+                s.contModSources.push({ source: 'Juvenal', delta: -2 });
+                addBonus(s, -2, 'card', 18, nextEventId(), 'A', true);
+              }
             });
           });
         }
@@ -239,26 +260,50 @@
       ['player','opp'].forEach(function (own) {
         var sl  = own === 'player' ? G.playerSlots : G.aiSlots;
         var rev = sl[loc.id].filter(function (s) { return s && s.revealed; });
-        if (rev.length === 1 && rev[0].cardId === 20)
+        if (rev.length === 1 && rev[0].cardId === 20) {
           rev[0].contMod = (rev[0].contMod || 0) + 4;
+          rev[0].contModSources.push({ source: 'Voltaire', delta: 4 });
+          addBonus(rev[0], 4, 'card', 20, nextEventId(), 'A', true);
+        }
       });
 
       // William the Conqueror (id 15): contMod = total destroyed IP for that owner
       G.playerSlots[loc.id].forEach(function (s) {
-        if (s && s.revealed && s.cardId === 15)
+        if (s && s.revealed && s.cardId === 15) {
           s.contMod = (s.contMod || 0) + G.destroyedIPTotal;
+          if (G.destroyedIPTotal > 0) {
+            s.contModSources.push({ source: 'William the Conqueror', delta: G.destroyedIPTotal });
+            // Pattern B: each destroyed card is a separate thumbnail
+            G.destroyedCards.forEach(function (dc) {
+              addBonus(s, dc.ip, 'card', dc.cardId, dc.eventId, 'B', true);
+            });
+          }
+        }
       });
       G.aiSlots[loc.id].forEach(function (s) {
-        if (s && s.revealed && s.cardId === 15)
+        if (s && s.revealed && s.cardId === 15) {
           s.contMod = (s.contMod || 0) + G.aiDestroyedIPTotal;
+          if (G.aiDestroyedIPTotal > 0) {
+            s.contModSources.push({ source: 'William the Conqueror', delta: G.aiDestroyedIPTotal });
+            // Pattern B: each destroyed card is a separate thumbnail
+            G.aiDestroyedCards.forEach(function (dc) {
+              addBonus(s, dc.ip, 'card', dc.cardId, dc.eventId, 'B', true);
+            });
+          }
+        }
       });
 
       // The Sahara (ALL_MINUS_ONE_IP): -1 IP to ALL revealed cards here (both sides)
       if (loc.abilityKey === 'ALL_MINUS_ONE_IP') {
+        var saharaName = loc.name || 'The Sahara';
         ['player', 'opp'].forEach(function (own) {
           var sl = own === 'player' ? G.playerSlots : G.aiSlots;
           sl[loc.id].forEach(function (s) {
-            if (s && s.revealed) s.contMod = (s.contMod || 0) - 1;
+            if (s && s.revealed) {
+              s.contMod = (s.contMod || 0) - 1;
+              s.contModSources.push({ source: saharaName, delta: -1 });
+              addBonus(s, -1, 'location', loc.id, nextEventId(), 'A', true);
+            }
           });
         });
       }
@@ -276,7 +321,11 @@
         sl[loc.id].forEach(function (fire, fireIdx) {
           if (!fire || !fire.revealed || fire.cardId !== 29) return;
           sl[loc.id].forEach(function (s, si) {
-            if (s && s.revealed && si > fireIdx) s.contMod = (s.contMod || 0) + 1;
+            if (s && s.revealed && si > fireIdx) {
+              s.contMod = (s.contMod || 0) + 1;
+              s.contModSources.push({ source: 'Fire', delta: 1 });
+              addBonus(s, 1, 'card', 29, nextEventId(), 'A', true);
+            }
           });
         });
       });
@@ -288,7 +337,11 @@
         sl[loc.id].forEach(function (cave, caveIdx) {
           if (!cave || !cave.revealed || cave.cardId !== 30) return;
           sl[loc.id].forEach(function (s, si) {
-            if (s && s.revealed && si < caveIdx) s.contMod = (s.contMod || 0) + 1;
+            if (s && s.revealed && si < caveIdx) {
+              s.contMod = (s.contMod || 0) + 1;
+              s.contModSources.push({ source: 'Cave Art', delta: 1 });
+              addBonus(s, 1, 'card', 30, nextEventId(), 'A', true);
+            }
           });
         });
       });
@@ -301,7 +354,11 @@
           if (!dom || !dom.revealed || dom.cardId !== 32) return;
           [domIdx - 1, domIdx + 1].forEach(function (adjIdx) {
             var s = sl[loc.id][adjIdx];
-            if (s && s.revealed) s.contMod = (s.contMod || 0) + 1;
+            if (s && s.revealed) {
+              s.contMod = (s.contMod || 0) + 1;
+              s.contModSources.push({ source: 'Domesticated Animal', delta: 1 });
+              addBonus(s, 1, 'card', 32, nextEventId(), 'A', true);
+            }
           });
         });
       });
@@ -316,7 +373,11 @@
         sl[loc.id].forEach(function (tribe, tribeIdx) {
           if (!tribe || !tribe.revealed || tribe.cardId !== 36) return;
           var nextSlot = sl[loc.id][tribeIdx + 1];
-          if (nextSlot && nextSlot.revealed) tribe.contMod = (tribe.contMod || 0) + 1;
+          if (nextSlot && nextSlot.revealed) {
+            tribe.contMod = (tribe.contMod || 0) + 1;
+            tribe.contModSources.push({ source: 'Tribe', delta: 1 });
+            addBonus(tribe, 1, 'card', 36, nextEventId(), 'A', true);
+          }
         });
       });
     });
@@ -373,8 +434,15 @@
 
     var dIP    = effectiveIP(sd);
     var cardId = sd.cardId;
-    if (owner === 'player') { G.destroyedIPTotal  += dIP; updateWilliamDisplay(); pulseWilliam(); }
-    else                      G.aiDestroyedIPTotal += dIP;
+    var dEid   = nextEventId();
+    if (owner === 'player') {
+      G.destroyedIPTotal += dIP;
+      G.destroyedCards.push({ cardId: cardId, ip: dIP, eventId: dEid });
+      updateWilliamDisplay(); pulseWilliam();
+    } else {
+      G.aiDestroyedIPTotal += dIP;
+      G.aiDestroyedCards.push({ cardId: cardId, ip: dIP, eventId: dEid });
+    }
 
     // Joan of Arc with a Religious card available → skip standard destroy anim,
     // hand off a ghost to triggerJoanOfArc for the special summon sequence
@@ -511,6 +579,12 @@
         var oldMod = s.ipMod || 0;
         if (oldMod === 0) return;
         anyAffected = true;
+        // Mark non-continuous bonus records as reset (display: greyed + initial badge)
+        if (s.bonuses) {
+          s.bonuses.forEach(function (b) {
+            if (!b.continuous) { b.reset = true; b.resetBy = 3; }
+          });
+        }
         s.ipMod = 0;
         s.ipModSources = [];
 
@@ -779,8 +853,15 @@
           var _fbSd  = slots[locId][v.slotIdx];
           if (_fbSd) G[_fbKey] = { ipMod: _fbSd.ipMod || 0, ipModSources: (_fbSd.ipModSources || []).slice() };
         }
-        if (owner === 'player') { G.destroyedIPTotal  += v.ip; updateWilliamDisplay(); pulseWilliam(); }
-        else                      G.aiDestroyedIPTotal += v.ip;
+        var _fbEid = nextEventId();
+        if (owner === 'player') {
+          G.destroyedIPTotal += v.ip;
+          G.destroyedCards.push({ cardId: v.cardId, ip: v.ip, eventId: _fbEid });
+          updateWilliamDisplay(); pulseWilliam();
+        } else {
+          G.aiDestroyedIPTotal += v.ip;
+          G.aiDestroyedCards.push({ cardId: v.cardId, ip: v.ip, eventId: _fbEid });
+        }
         slots[locId][v.slotIdx] = null;
         clearSlotDOM(owner, locId, v.slotIdx);
         ipGainedFB++;
@@ -935,8 +1016,15 @@
           }
 
           // Update William's IP display live as each card falls; queue the sound/anim for after Cortes
-          if (owner === 'player') { G.destroyedIPTotal += victim.ip; updateWilliamDisplay(); williamPulseCount++; }
-          else                      G.aiDestroyedIPTotal += victim.ip;
+          var _eid = nextEventId();
+          if (owner === 'player') {
+            G.destroyedIPTotal += victim.ip;
+            G.destroyedCards.push({ cardId: victim.cardId, ip: victim.ip, eventId: _eid });
+            updateWilliamDisplay(); williamPulseCount++;
+          } else {
+            G.aiDestroyedIPTotal += victim.ip;
+            G.aiDestroyedCards.push({ cardId: victim.cardId, ip: victim.ip, eventId: _eid });
+          }
 
           slots[locId][sIdx] = null;
           clearSlotDOM(owner, locId, sIdx);
@@ -1094,6 +1182,15 @@
       sources.push({ source: 'Samurai', delta: newBonus });
       sd.ipMod        = totalMod;
       sd.ipModSources = sources;
+      // Rebuild bonuses[] to match: Samurai chain + any surviving external bonuses
+      if (!sd.bonuses) sd.bonuses = [];
+      sd.bonuses = sd.bonuses.filter(function (b) { return b.continuous; });
+      if (newBonus > 0) addBonus(sd, newBonus, 'card', 12, nextEventId(), 'A', false);
+      externalSources.forEach(function (esrc) {
+        var info = SOURCE_ID_MAP[esrc.source];
+        if (info) addBonus(sd, esrc.delta, info.type, info.id, nextEventId(), info.pattern, false);
+        else      addBonus(sd, esrc.delta, 'unknown', null, nextEventId(), 'A', false);
+      });
       if (slotEl) {
         var ipEl = slotEl.querySelector('.db-overlay-ip');
         if (ipEl) ipEl.textContent = effectiveIP(sd);

@@ -317,7 +317,7 @@
       var slotIndex = G.aiSlots[locId].indexOf(null);
       if (slotIndex === -1) return;
       var baseIP = card.ip + (G.aiCardIPBonus[a.cardId] || 0);
-      G.aiSlots[locId][slotIndex] = { cardId: a.cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [] };
+      G.aiSlots[locId][slotIndex] = { cardId: a.cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
       G.aiHand = G.aiHand.filter(function (id) { return id !== a.cardId; });
       G.aiRevealQueue.push(a.cardId);
       var slotEl = getSlotEl('opp', locId, slotIndex);
@@ -1312,16 +1312,6 @@
      game/input.js (Pass 3c). input.js auto-initializes touch drag at module load. */
 
 
-  /* ── Battle screen scale for sub-1280 viewports ─────────────── */
-  (function () {
-    function updateBattleScale() {
-      var scale = Math.min(1, window.innerWidth / 1280);
-      document.documentElement.style.setProperty('--battle-scale', scale);
-    }
-    updateBattleScale();
-    window.addEventListener('resize', updateBattleScale);
-  }());
-
   /* ── Export ──────────────────────────────────────────────────── */
   window.initGame          = initGame;
   window.showResult        = showResult;
@@ -1350,7 +1340,9 @@
     executeMove:           executeMove,
     executeMoveAnimated:   executeMoveAnimated,
     findSlotEl:            findSlotEl,
-    refreshMoveableCards:  refreshMoveableCards
+    refreshMoveableCards:  refreshMoveableCards,
+    // Exposed for the Prehistory adventure module's reveal sequence.
+    flipSlot:              flipSlot
   };
 
 })();

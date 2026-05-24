@@ -68,10 +68,17 @@
 }
 
 html, body {
-  width: 100%;
-  height: 100%;
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
-  background: var(--bg-base);
+  background: #000;
+}
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-white);
   font-family: var(--font);
   font-size: 14px;
@@ -79,6 +86,17 @@ html, body {
   /* Sharpen pixel font rendering */
   -webkit-font-smoothing: none;
   font-smooth: never;
+}
+
+/* ── Fixed-stage container (1280×720, scaled by SOG.Stage) ─── */
+#sog-stage {
+  width: 1280px;
+  height: 720px;
+  position: relative;
+  transform-origin: center center;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-base);
 }
 
 button { font-family: var(--font); cursor: pointer; }
@@ -472,7 +490,7 @@ img    { display: block; }
 
 .feedback-popup {
   width: 540px;
-  max-width: 92vw;
+  max-width: 1178px;
   padding: 28px 36px 26px;
   background: linear-gradient(180deg,
     #2a1608 0%,
@@ -946,7 +964,7 @@ img    { display: block; }
 /* Compact width — just enough for the input + buttons */
 .rename-deck-popup {
   width: 460px;
-  max-width: 92vw;
+  max-width: 1178px;
 }
 
 .rename-deck-body {
@@ -1005,24 +1023,6 @@ img    { display: block; }
   border-color: #f0cf6c;
 }
 
-
-/* ── Mobile / narrow viewport — stack the slot row ──────────────── */
-@media (max-width: 700px) {
-  .db-header { padding: 10px 14px; gap: 8px; }
-  .db-header-row-top {
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  .db-title-block { order: -1; flex: 1 0 100%; }
-  .db-title { font-size: 18px; }
-  .db-subtitle { font-size: 11px; }
-  .db-slot-row {
-    /* Single column stack so each slot remains tappable */
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-  .db-save-hint { font-size: 9px; }
-}
 
 
 /* ── Scrollable card area ───────────────────────────────────────── */
@@ -1324,7 +1324,8 @@ img    { display: block; }
 /* SNES-style dialogue panel */
 .card-popup {
   width: 700px;
-  padding: 28px 32px 26px;
+  padding: 18px 32px 20px;
+  position: relative;            /* anchor the absolute X close button */
   background: var(--bg-dialog);
 
   /* Double-border via border + box-shadow:
@@ -1352,7 +1353,7 @@ img    { display: block; }
   text-transform: uppercase;
   letter-spacing: 0.08em;
   text-shadow: 1px 1px 0 #000;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 /* Category-type label (icon + e.g. "RELIGIOUS") — sits between name and
@@ -1367,7 +1368,7 @@ img    { display: block; }
   text-transform: uppercase;
   letter-spacing: 0.07em;
   text-shadow: 1px 1px 0 #000;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
   display: flex;
   align-items: baseline;     /* anchor icon bottom to text baseline */
   gap: 0.4em;
@@ -1427,7 +1428,7 @@ img    { display: block; }
   height: 2px;
   background: var(--border-bright);
   box-shadow: 0 0 4px var(--border-bright);
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 /* Ability name — italic-style label in SNES cyan */
@@ -1437,7 +1438,7 @@ img    { display: block; }
   color: var(--snes-cyan);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   text-shadow: 0 0 6px var(--snes-cyan), 1px 1px 0 #000;
 }
 
@@ -1447,22 +1448,21 @@ img    { display: block; }
   font-size: 26px;
   color: var(--text-white);
   line-height: 1.65;
-  min-height: 72px;
-  margin-bottom: 28px;
+  margin-bottom: 14px;
   text-shadow: 1px 1px 0 #000;
 }
 
 /* Vanilla card: muted dimmed text */
 .popup-ability-text.vanilla { color: var(--text-dim); }
 
-/* IP breakdown line — shown for revealed board cards */
+/* IP breakdown line — shown for revealed board cards (single inline expression) */
 .popup-ip-breakdown {
   font-family: var(--font);
   font-size:   22px;
   color:       var(--snes-yellow);
   text-align:  center;
   letter-spacing: 0.04em;
-  padding:     6px 0 0;
+  padding:     4px 0 0;
   border-top:  1px solid rgba(136,152,255,0.25);
 }
 
@@ -1471,7 +1471,7 @@ img    { display: block; }
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 10px;
 }
 
 /* Dim instruction text telling players to double-click */
@@ -1492,6 +1492,235 @@ img    { display: block; }
   flex-shrink: 0;
 }
 
+/* ── Card-detail popup: redesigned layout classes ─────────────────
+   Used by #card-popup-backdrop (deck builder) and
+   #battle-popup-backdrop (in-game). Other popups keep the old
+   structure and are unaffected by these rules.
+─────────────────────────────────────────────────────────────────── */
+
+/* Header row: card name  ·  type icon + label on a single flex line */
+.popup-header-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+/* Card name inside header — shrink from the base 34px, allow truncation */
+.popup-header-row .popup-card-name {
+  font-size: 24px;
+  margin-bottom: 0;   /* override base block margin */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
+  letter-spacing: 0.06em;
+}
+
+/* X close button — flush against popup border, top-right corner */
+.popup-close-x {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  background: transparent;
+  border: none;
+  font-family: var(--font);
+  font-size: 20px;
+  color: rgba(212, 170, 80, 0.55);
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 2px;
+  transition: color 0.15s, background-color 0.15s;
+  user-select: none;
+}
+.popup-close-x:hover {
+  color: #f3e6c4;
+  background: rgba(212, 170, 80, 0.15);
+}
+.popup-close-x:active {
+  color: #fff5d8;
+  background: rgba(212, 170, 80, 0.28);
+}
+
+/* Type label inside header — smaller than name, no wrap */
+.popup-header-row .popup-card-type {
+  font-size: 16px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-bottom: 0;   /* override base block margin */
+  letter-spacing: 0.06em;
+}
+
+/* Rescale cat-icon to match the 16px type label */
+.popup-header-row .popup-card-type .cat-icon {
+  width: 1em;
+  height: 1em;
+}
+
+/* Footer row: IP breakdown (or hint) left, close button right */
+.popup-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* IP breakdown inside footer — fills left, text-align reset */
+.popup-footer-row .popup-ip-breakdown {
+  flex: 1;
+  font-size: 15px;
+  text-align: left;
+  padding: 0;
+  border-top: none;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+/* Hint text inside footer */
+.popup-footer-row .popup-hint {
+  flex: 1;
+  font-family: var(--font);
+  font-size: 15px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+/* ── IP breakdown 2-row grid ──────────────────────────────────────
+   Columns: [IP label + base] · [thumb + delta]... · [large total]
+   The total is always shown. Modifier columns added per source.
+─────────────────────────────────────────────────────────────────── */
+
+/* Outer flex row — all columns stretch to the same height */
+.ip-grid {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;          /* fill the breakdown container */
+}
+
+/* Every column: vertical flex stack */
+.ip-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Column 1: "IP" label top, base number bottom */
+.ip-col-base {
+  min-width: 41px;
+  justify-content: space-between;
+}
+
+.ip-label {
+  font-family: var(--font);
+  font-size: 46px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.ip-basenum {
+  font-family: var(--font);
+  font-size: 20px;
+  line-height: 1;
+  text-align: left;
+  width: 100%;
+  padding-left: 7px;
+}
+
+/* Middle columns: thumbnail+badge top, modifier value bottom */
+.ip-col-mod {
+  gap: 4px;
+  justify-content: flex-start;
+}
+
+/* Wrapper for thumbnail + optional reset badge */
+.ip-thumb-wrap {
+  position: relative;
+  display: block;
+  width: 41px;
+  height: 41px;
+  flex-shrink: 0;
+}
+
+/* Portrait thumbnail — 1:1 square crop centred on the face region */
+.ip-thumb {
+  display: block;
+  width: 41px;
+  height: 41px;
+  background-size: 280%;
+  background-position: 50% 28%;
+  border: 1px solid rgba(212, 170, 80, 0.45);
+  border-radius: 2px;
+}
+
+/* Location thumbnail — uses its own crop (bgSize/bgPos inline) */
+.ip-thumb-loc {
+  background-size: 200%;
+  background-position: 50% 50%;
+}
+
+/* Placeholder when no card art found for the source name */
+.ip-thumb-empty {
+  background-color: rgba(180, 140, 60, 0.08);
+}
+
+/* Justinian-reset overlay badge — large red initial centered on greyed thumbnail */
+.ip-reset-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font);
+  font-size: 28px;
+  font-weight: bold;
+  color: #e04040;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Reset columns: desaturate + dim the thumbnail and delta */
+.ip-col-mod--reset .ip-thumb {
+  filter: grayscale(1) opacity(0.45);
+}
+
+/* Modifier value under its thumbnail — same min-width as thumb */
+.ip-delta {
+  font-family: var(--font);
+  font-size: 20px;
+  line-height: 1;
+  text-align: center;
+  min-width: 41px;
+}
+
+/* Dimmed delta for reset bonuses */
+.ip-delta--reset {
+  opacity: 0.35;
+}
+
+/* Total column: right-aligned, largest element, separated by a rule */
+.ip-col-total {
+  justify-content: center;
+  margin-left: auto;   /* push to the right edge of the grid */
+  padding-left: 10px;
+  border-left: 1px solid rgba(180, 140, 60, 0.20);
+}
+
+/* The effective IP — most visually prominent element in the breakdown */
+.ip-total {
+  font-family: var(--font);
+  font-size: 52px;
+  font-weight: 600;
+  line-height: 1;
+}
+
 
 /* ══════════════════════════════════════════════════════════════════
    WELCOME ("Before You Begin") POPUP — first-load only
@@ -1507,7 +1736,7 @@ img    { display: block; }
 /* Dark-wood panel with bronze double-border (replaces the periwinkle ring) */
 .welcome-popup {
   width: 760px;
-  max-width: 92vw;
+  max-width: 1178px;
   padding: 26px 34px 24px;
   /* Subtle vertical wood-grain gradient (warm dark browns) */
   background:
@@ -1622,6 +1851,12 @@ img    { display: block; }
   background: rgba(20, 10, 2, 0.82);
 }
 
+/* Card-detail popups: narrowed 20% from the 700px base */
+#card-popup-backdrop .card-popup,
+#battle-popup-backdrop .card-popup {
+  width: 560px;
+}
+
 /* Dark-wood panel with bronze double-border (replaces periwinkle SNES rings) */
 #card-popup-backdrop .card-popup,
 #battle-popup-backdrop .card-popup,
@@ -1701,74 +1936,102 @@ img    { display: block; }
   opacity: 1;
 }
 
-/* Ability name label — paler gold so it sits below the title hierarchically */
+/* ── Header row palette (redesigned card-detail popup) ──────────
+
+   Hierarchy (dim → prominent):
+     type label (smallest, muted)  →  separator (ghost)
+     ability name (medium, gold)   →  card name (medium, gold)
+     ability text (largest, cream) — the visual focal point        */
+
+/* Card name in the header row — warm gold, no text-shadow to keep it quiet */
+#card-popup-backdrop .popup-header-row .popup-card-name,
+#battle-popup-backdrop .popup-header-row .popup-card-name {
+  color: #e8c060;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* Type icon + label — smaller, muted gold-cream */
+#card-popup-backdrop .popup-header-row .popup-card-type,
+#battle-popup-backdrop .popup-header-row .popup-card-type {
+  color: rgba(240, 216, 160, 0.58);
+  text-shadow: none;
+}
+
+/* ── Ability section ─────────────────────────────────────────── */
+
+/* Ability name — gold, acts as a mini-heading; same gold as card name */
 #card-popup-backdrop .popup-ability-name,
 #battle-popup-backdrop .popup-ability-name {
-  color: #f0d8a0;
-  text-shadow: 1px 1px 0 #000, 0 0 4px rgba(220, 170, 60, 0.20);
+  font-size: 21px;
+  color: #e0b84c;
+  text-shadow: 1px 1px 0 #000;
+  margin-bottom: 10px;
 }
 
-/* Category-type label — same paler gold as the ability-name heading */
-#card-popup-backdrop .popup-card-type,
-#battle-popup-backdrop .popup-card-type {
-  color: #f0d8a0;
-  text-shadow: 1px 1px 0 #000, 0 0 4px rgba(220, 170, 60, 0.20);
-}
-
-/* The card name carries its own margin (defined above on .popup-card-name).
-   The type label sits on its own line directly below, with a slightly
-   tighter top spacing so it groups visually with the title rather than
-   the divider. */
-#card-popup-backdrop .popup-card-name,
-#battle-popup-backdrop .popup-card-name {
-  margin-bottom: 4px;
-}
-#card-popup-backdrop .popup-card-type,
-#battle-popup-backdrop .popup-card-type {
-  margin-bottom: 14px;
-}
-
-/* Ability body text — cream off-white over dark wood */
+/* Ability text — cream, the largest readable block (focal point) */
 #card-popup-backdrop .popup-ability-text,
 #battle-popup-backdrop .popup-ability-text {
+  font-size: 26px;
   color: #f3e6c4;
+  line-height: 1.6;
+  margin-bottom: 12px;
 }
 
-/* Vanilla card (no ability) — dimmed cream */
+/* Vanilla card (no ability) — dimmed cream, same comfortable size */
 #card-popup-backdrop .popup-ability-text.vanilla,
 #battle-popup-backdrop .popup-ability-text.vanilla {
-  color: rgba(243, 230, 196, 0.55);
+  color: rgba(243, 230, 196, 0.50);
 }
 
-/* IP breakdown line (battle popup) — gold accent + bronze rule */
-#battle-popup-backdrop .popup-ip-breakdown {
-  color: #e8c060;
-  border-top-color: rgba(212, 170, 80, 0.30);
+/* ── Footer row palette ─────────────────────────────────────── */
+
+/* Hint text in footer */
+#card-popup-backdrop .popup-footer-row .popup-hint,
+#battle-popup-backdrop .popup-footer-row .popup-hint {
+  color: rgba(243, 230, 196, 0.50);
 }
 
-/* Hint text on the left of popup-actions */
-#card-popup-backdrop .popup-hint,
-#battle-popup-backdrop .popup-hint {
-  color: rgba(243, 230, 196, 0.55);
+/* IP breakdown — muted cream, smallest text, bronze thumbnails */
+#battle-popup-backdrop .popup-footer-row .popup-ip-breakdown {
+  color: rgba(243, 230, 196, 0.58);
 }
 
-/* CLOSE button — bronze theme to match the panel */
-#card-popup-backdrop .popup-actions .btn-snes,
-#battle-popup-backdrop .popup-actions .btn-snes {
-  background: #3a200c;
-  border-color: #d4aa50;
+/* IP thumbnail border tint — bronze to match panel */
+#battle-popup-backdrop .ip-thumb {
+  border-color: rgba(212, 170, 80, 0.50);
+}
+
+/* IP total — brightest element, full cream */
+#card-popup-backdrop .ip-total,
+#battle-popup-backdrop .ip-total {
   color: #f3e6c4;
-  box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000;
 }
-#card-popup-backdrop .popup-actions .btn-snes:hover,
-#battle-popup-backdrop .popup-actions .btn-snes:hover {
-  background: #4a2a10;
-  border-color: #f0cf6c;
-  color: #fff5d8;
+
+/* IP base number and label — muted gold */
+#card-popup-backdrop .ip-basenum,
+#battle-popup-backdrop .ip-basenum {
+  color: rgba(243, 230, 196, 0.75);
 }
-#card-popup-backdrop .popup-actions .btn-snes:active,
-#battle-popup-backdrop .popup-actions .btn-snes:active {
-  box-shadow: 0 0 0 #1a0c04, 0 1px 0 #000;
+#card-popup-backdrop .ip-label,
+#battle-popup-backdrop .ip-label {
+  color: rgba(243, 230, 196, 0.45);
+}
+
+/* IP delta signs — warm gold */
+#card-popup-backdrop .ip-delta,
+#battle-popup-backdrop .ip-delta {
+  color: rgba(240, 200, 100, 0.85);
+}
+
+/* X close button — scoped palette: gold-cream on dark bronze hover */
+#card-popup-backdrop .popup-close-x,
+#battle-popup-backdrop .popup-close-x {
+  color: rgba(212, 170, 80, 0.60);
+}
+#card-popup-backdrop .popup-close-x:hover,
+#battle-popup-backdrop .popup-close-x:hover {
+  color: #f3e6c4;
+  background: rgba(212, 170, 80, 0.15);
 }
 
 
@@ -1869,7 +2132,7 @@ img    { display: block; }
   display: flex;
   flex-direction: column;
   width: 1280px;
-  height: 800px;
+  height: 720px;   /* locked to stage height — was 800px for old viewport layout */
   overflow: hidden;
   position: relative;
   /* Warm dark wood-grain table */
@@ -1917,22 +2180,22 @@ img    { display: block; }
 
 .battle-hud-bottomright {
   position: fixed;
-  bottom: max(80px, calc(100vh - 720px));
-  right: max(24px, calc(100vw - 1256px));
+  bottom: 80px;   /* 80 = 14px edge + ~52px music widget + 14px gap */
+  right: 20px;    /* +4px extra breathing room from gameboard frame */
   z-index: 55;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;       /* −25%: was 10px (orig) → −10% of prev */
   align-items: stretch;
-  min-width: 205px;
+  min-width: 157px; /* −25%: was 205px (orig) → −10% of prev */
 }
 
 .battle-hud-bottomright .btn-reset-turn,
 .battle-hud-bottomright .btn-end-turn,
 .battle-hud-bottomright .btn-back-results,
 .battle-hud-bottomright .btn-undo-endturn {
-  padding: 18px 25px;
-  font-size: 16px;
+  padding: 13px 19px;  /* −25%: was 18px 25px (orig) → −10% of prev */
+  font-size: 13px;     /* −25%: was 16px (orig) → −10% of prev */
   width: 100%;
   text-align: center;
   letter-spacing: 0.10em;
@@ -2252,7 +2515,7 @@ img    { display: block; }
   align-items: center;
   justify-content: center;
   gap: 0;
-  height: 280px;
+  height: 210px;   /* 280px was for 800px screen; 210px fits within 720px stage */
   flex-shrink: 0;
   padding: 0 20px;
   background: rgba(28, 14, 4, 0.62);
@@ -2684,7 +2947,7 @@ img    { display: block; }
 }
 
 .discard-panel {
-  max-width: 95vw;
+  max-width: 1216px;
   padding: 24px 28px;
   background: var(--bg-surface);
   border: 3px solid var(--border-mid);
@@ -3226,16 +3489,16 @@ img    { display: block; }
 .music-ctrl {
   position: fixed;
   bottom: 14px;
-  right: 16px;
+  right: 20px;       /* +4px extra breathing room; aligns with HUD above */
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   background: var(--bg-dialog);
   border: 2px solid var(--border-bright);
   border-radius: 6px;
-  padding: 8px 11px 7px;
+  padding: 6px 6px 5px; /* horizontal −25% of 8px → 6px; height unchanged */
   z-index: 50;
-  min-width: 170px;
+  min-width: 98px;   /* −25% horizontal: was 130px → 130 × 0.75 = 98px */
   box-shadow: 0 2px 0 var(--border-mid), 0 3px 0 #000;
   font-family: var(--font);
   /* bug 23: opacity transition so the widget fades when dbtutorial toggles. */
@@ -3276,7 +3539,7 @@ body:not([data-screen="battle"]) #music-track-name {
 .music-controls {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;  /* −25% horizontal: was 4px */
 }
 
 .music-ctrl-btn {
@@ -3286,7 +3549,7 @@ body:not([data-screen="battle"]) #music-track-name {
   font-family: var(--font);
   font-size: 10px;
   color: var(--snes-yellow);
-  padding: 3px 5px;
+  padding: 3px 4px;  /* horizontal −25%: was 5px → 4px; height unchanged */
   line-height: 1;
   transition: color 0.15s, text-shadow 0.15s;
   user-select: none;
@@ -3299,7 +3562,7 @@ body:not([data-screen="battle"]) #music-track-name {
 .music-ctrl-btn:active {
   transform: translateY(1px);
 }
-.music-play-btn { font-size: 13px; padding: 3px 6px; }
+.music-play-btn { font-size: 13px; padding: 3px 4px; } /* horiz −25%: was 6px → 4px */
 
 .music-volume-slider {
   -webkit-appearance: none;
@@ -3311,7 +3574,7 @@ body:not([data-screen="battle"]) #music-track-name {
   border-radius: 3px;
   outline: none;
   cursor: pointer;
-  margin-left: 5px;
+  margin-left: 4px; /* −25% horizontal: was 5px → 4px */
 }
 .music-volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -3403,13 +3666,17 @@ button,
 }
 
 .battle-avatar-lucy {
-  bottom: 80px;
-  left: 54px;
+  /* Player-hand zone = 210px. Avatar = 120px. Equal inner+outer padding:
+     (210 − 120) / 2 = 45 → round to 40px for comfortable breathing room. */
+  bottom: 40px;
+  left: 40px;
 }
 
 .battle-avatar-otzi {
+  /* Opp-hand zone = 160px. Avatar = 120px. Equal inner+outer padding:
+     (160 − 120) / 2 = 20px on each side. */
   top: 20px;
-  right: 54px;
+  right: 20px;
 }
 
 .battle-avatar-frame {
@@ -3472,31 +3739,6 @@ button,
    RESPONSIVE — MOBILE / TABLET  (< 768 px wide)
 ══════════════════════════════════════════════════════════════════ */
 
-@media (max-width: 767px) {
-  /* Deck builder: 3-column card grid (fits ~360px wide phones) */
-  .db-card-row { grid-template-columns: repeat(3, 1fr); }
-
-  /* Ensure all interactive targets are at least 44 × 44 px */
-  .btn-snes    { min-height: 44px; padding-top: 11px; padding-bottom: 11px; }
-  .btn-primary { min-height: 52px; }
-  .btn-back,
-  .btn-watch-intro,
-  .btn-save    { min-height: 44px; }
-}
-
-
-/* ══════════════════════════════════════════════════════════════════
-   BATTLE SCREEN SCALE — sub-1280 px viewports
-   --battle-scale is computed by JS (window.innerWidth / 1280).
-   transform-origin top-left keeps the header pinned to the corner.
-══════════════════════════════════════════════════════════════════ */
-
-@media (max-width: 1279px) {
-  #screen-battle.active {
-    transform: scale(var(--battle-scale, 1));
-    transform-origin: top left;
-  }
-}
 
 
 /* ══════════════════════════════════════════════════════════════════
@@ -3520,8 +3762,8 @@ button,
 /* ── Skip button — bottom-right corner, SNES style ───────────── */
 #tut-skip {
   position: fixed;
-  bottom: max(14px, calc(100vh - 786px));
-  right: max(16px, calc(100vw - 1264px));
+  bottom: 14px;
+  right: 16px;
   top: auto;
   z-index: 1100;
   font-family: var(--font);
@@ -3548,7 +3790,7 @@ button,
 /* ── Dialogue box ─────────────────────────────────────────────── */
 #tut-box {
   position: fixed;
-  bottom: max(24px, calc(100vh - 776px));
+  bottom: 24px;
   left: min(50%, 640px);
   transform: translateX(-50%);
   z-index: 1000;
@@ -3557,7 +3799,7 @@ button,
   align-items: stretch;
   gap: 0;
 
-  width: min(985px, calc(100vw - 32px));
+  width: 985px;
 
   background: var(--bg-dialog);
   border: 3px solid var(--border-bright);
@@ -3667,8 +3909,12 @@ button,
 }
 
 @keyframes tut-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px var(--snes-yellow),  0 0 10px 3px rgba(248,208,0,0.45); }
-  50%       { box-shadow: 0 0 0 3px var(--snes-yellow),  0 0 18px 6px rgba(248,208,0,0.70); }
+  /* Solid ring is inset so it draws INSIDE the slot box and is never
+     clipped by parent overflow:hidden on the location column.
+     The soft glow (second shadow) is outset but fuzzy — its clipping
+     at slot edges is imperceptible. */
+  0%, 100% { box-shadow: inset 0 0 0 2px var(--snes-yellow), 0 0 10px 3px rgba(248,208,0,0.45); }
+  50%       { box-shadow: inset 0 0 0 3px var(--snes-yellow), 0 0 18px 6px rgba(248,208,0,0.70); }
 }
 
 /* ── Number highlight box (CC / IP tutorial callout) ─────────── */
@@ -3751,7 +3997,7 @@ body.tut-locked #battle-reset-turn {
   padding: 36px 48px;
   text-align: center;
   max-width: 480px;
-  width: calc(100vw - 48px);
+  width: 1232px;
 }
 
 .tut-end-text {
@@ -4045,17 +4291,6 @@ body.tut-locked #battle-reset-turn {
   pointer-events: none;
 }
 
-/* Responsive — iPad and smaller */
-@media (max-width: 1024px) {
-  .matchup-portrait-frame { width: 160px; height: 160px; }
-  .matchup-portrait-col   { gap: 12px; }
-  .matchup-vs-text        { font-size: 88px; }
-  .matchup-name-text      { font-size: 21px; }
-  .matchup-dialogue       { width: 340px; padding: 14px 20px 12px; }
-  .matchup-dialogue-text  { font-size: 20px; }
-  .matchup-lucy-group     { top: 40px; left: 60px; gap: 32px; }
-  .matchup-otzi-group     { bottom: 80px; right: 60px; gap: 32px; }
-}
 
 /* ── Comic speech bubbles (tutorial battle) ──────────────────── */
 
@@ -4071,8 +4306,14 @@ body.tut-locked #battle-reset-turn {
 
 #tut-lucy-bubble {
   position: fixed;
-  bottom: max(80px, calc(100vh - 720px));  /* tracks battle-screen bottom */
-  left: 190px;   /* 54px avatar-left + 120px frame + 16px gap     */
+  /* Side-center anchor: bubble is vertically centered on Lucy's portrait centre.
+     Portrait centre Y = 720 − avatar_bottom(40) − radius(60) = 620px from top.
+     transform: translateY(-50%) keeps the midpoint pinned at 620px as the
+     bubble grows or shrinks with content; the tail stays at mid-side.
+     Left: avatar right edge (40+120=160px) + 12px gap = 172px.            */
+  top: 620px;
+  transform: translateY(-50%);
+  left: 172px;
   max-width: 200px; /* constrained to dead-space left of hand cards */
   background: #fffef5;
   border: 3px solid #111;
@@ -4082,7 +4323,9 @@ body.tut-locked #battle-reset-turn {
   z-index: 200;
   cursor: pointer;
 }
-/* Tail pointing left toward Lucy avatar */
+/* Tail pointing left toward Lucy — emerges from the LEFT-CENTER of the bubble.
+   top:50% + translateY(-50%) keeps the tip at the bubble's vertical midpoint,
+   which stays pinned to Lucy's portrait centre as bubble height changes.    */
 #tut-lucy-bubble::before {
   content: '';
   position: absolute;
@@ -4102,17 +4345,23 @@ body.tut-locked #battle-reset-turn {
   border-right-color: #fffef5;
 }
 
-/* Ötzi's bubble — to the left of his avatar (top-right)          */
-/* right tracks the 1280px battle container edge regardless of viewport width.
-   Battle container is left-aligned; Ötzi avatar is at right:54px within it,
-   so its left edge is always at viewport-left + (1280-54-120) = 1106px.
-   We want the bubble right edge 16px left of that = 1090px from left
-   = (100vw - 1090px) from viewport right. Use max() so it never clips
-   on small viewports where the formula undershoots 190px.           */
+/* Ötzi's bubble — to the left of his avatar (top-right).
+   This element is created dynamically and appended to #sog-stage (not body)
+   so that position:fixed is relative to the 1280×720 stage coordinate system,
+   matching the avatar's absolute-positioned layout coordinates.      */
 #tut-otzi-box {
   position: fixed;
-  top: 26px;
-  right: max(190px, calc(100vw - 1090px));
+  /* Side-center anchor: bubble is vertically centered on Ötzi's portrait centre.
+     Portrait centre Y = avatar_top(20) + radius(60) = 80px from stage top.
+     transform: translateY(-50%) keeps the midpoint pinned at 80px as the
+     bubble grows or shrinks with content; the tail stays at mid-side.
+     Right: avatar left edge (1280−20−120=1140px) − 12px gap = 1128px
+            → right = 1280−1128 = 152px.
+     NOTE: appended to #sog-stage in tutorial.js so that position:fixed
+     resolves against the 1280×720 stage coordinate space. */
+  top: 80px;
+  transform: translateY(-50%);
+  right: 152px;
   max-width: 330px;
   background: #f0ebe0;
   border: 3px solid #111;
@@ -4122,7 +4371,9 @@ body.tut-locked #battle-reset-turn {
   z-index: 200;
   cursor: pointer;
 }
-/* Tail pointing right toward Ötzi */
+/* Tail pointing right toward Ötzi — emerges from the RIGHT-CENTER of the bubble.
+   top:50% + translateY(-50%) keeps the tip at the bubble's vertical midpoint,
+   which stays pinned to Ötzi's portrait centre as bubble height changes.   */
 #tut-otzi-box::before {
   content: '';
   position: absolute;
@@ -4208,18 +4459,6 @@ body.tut-locked #battle-reset-turn {
 /* ── Magellan moveable board slot ─────────────────────────────── */
 .tut-moveable { cursor: grab; }
 .tut-moveable:active { cursor: grabbing; }
-
-/* ── Responsive adjustments ───────────────────────────────────── */
-@media (max-width: 767px) {
-  #tut-box {
-    bottom: 12px;
-    width: calc(100vw - 16px);
-  }
-
-  .tut-portrait { width: 96px; }
-  .tut-lucy-svg { width: 72px; }
-  .tut-text { font-size: 20px; }
-}
 
 
 /* ══════════════════════════════════════════════════════════════════
@@ -4377,8 +4616,8 @@ body.tut-locked #battle-reset-turn {
 
 /* ── Dialog container ──────────────────────────────────────────── */
 .bypass-dialog {
-  width: min(860px, 96vw);
-  max-height: 88vh;
+  width: 860px;
+  max-height: 634px;
   display: flex;
   flex-direction: column;
   background: var(--bg-dialog);
@@ -4820,7 +5059,7 @@ body.tut-locked #battle-reset-turn {
     0 0 70px rgba(248, 208, 0, 0.50),
     3px 3px 0 #000;
   /* No transform here — GSAP controls y on this element */
-  max-width: 84vw;
+  max-width: 1075px;
 }
 
 /* ── Portrait area ─────────────────────────────────────────────── */
@@ -4939,23 +5178,6 @@ body.tut-locked #battle-reset-turn {
   /* No transform — GSAP controls autoAlpha only */
 }
 
-/* ── Responsive tweaks for smaller screens ─────────────────────── */
-@media (max-width: 900px) {
-  #legend-opening-title { font-size: 3rem; }
-  #legend-word          { font-size: 7rem; }
-  .legend-portrait-img  { width: 160px; height: 160px; }
-  .legend-speech-bubble { font-size: 13px; max-width: 220px; }
-  #legend-subtitle      { font-size: 1.2rem; }
-}
-
-@media (max-width: 600px) {
-  #legend-opening-title { font-size: 2.2rem; }
-  #legend-word          { font-size: 5rem; letter-spacing: 0.08em; }
-  #legend-portrait-area { flex-direction: column; gap: 20px; padding: 20px 5%; }
-  .legend-portrait-img  { width: 120px; height: 120px; }
-  .legend-speech-bubble { font-size: 11px; max-width: 200px; padding: 10px 12px; }
-  #legend-subtitle      { font-size: 1rem; bottom: 10%; }
-}
 
 /* ══════════════════════════════════════════════════════════════════
    HOME SCREEN — Versus Mode button
@@ -5219,8 +5441,8 @@ body.tut-locked #battle-reset-turn {
 
 /* ── Dialog container ─── */
 .teacher-lobby-dialog {
-  width:        min(820px, 96vw);
-  max-height:   90vh;
+  width:        820px;
+  max-height:   648px;
   display:      flex;
   flex-direction: column;
   background:   var(--bg-dialog);
@@ -7288,16 +7510,6 @@ body.tut-locked #battle-reset-turn {
   letter-spacing: 0.05em;
 }
 
-/* ── Mobile / small-screen tuning ──────────────────────────────── */
-@media (max-width: 768px) {
-  .about-main    { padding: 22px 12px 40px; }
-  .about-content { padding: 26px 22px 28px; }
-  .about-title   { font-size: 34px; }
-  .about-section-heading { font-size: 22px; }
-  .about-section p,
-  .about-list li { font-size: 16px; }
-  .about-header-title { font-size: 14px; }
-}
 
 
 /* ══════════════════════════════════════════════════════════════════
@@ -7802,8 +8014,8 @@ body.tut-locked #battle-reset-turn {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  width: 86%;
-  max-width: 1100px;
+  width: 64.5%;
+  max-width: 825px;
   padding: 18px 22px;
   background: linear-gradient(180deg, #241a3c 0%, #120a22 100%);
   border: 3px solid #f8d000;
@@ -7873,6 +8085,8 @@ body.tut-locked #battle-reset-turn {
   letter-spacing: 0.04em;
 }
 .adv-dialogue.is-ready .adv-dialogue-hint { opacity: 0.85; }
+/* Top boxes (Lucy/Neanderthal) have portrait on the RIGHT — move hint to the left so it doesn't overlap */
+.adv-dialogue-top .adv-dialogue-hint { left: 16px; right: auto; }
 
 /* Prehistory node: amplified pulse used after 30s of idle waiting */
 .overworld-node.overworld-node-urgent > img {
@@ -7984,22 +8198,31 @@ body.tut-locked #battle-reset-turn {
 /* ── Battle context: comic-book speech-bubble style ─────────────
    In body.prehistory-battle the .adv-bubble boxes are repositioned
    to sit BESIDE the avatar circles (not covering them), with a CSS
-   tail pointing back toward the speaker.
+   tail pointing horizontally from the bubble's mid-side toward the portrait.
 
-   Lucy avatar:      bottom:80px; left:54px  — frame 120×120px
-   Neanderthal avatar: top:20px;  right:54px — frame 120×120px
+   Side-center anchor: top + translateY(-50%) pins the bubble's vertical
+   midpoint at the portrait's centre Y. As text grows the bubble expands
+   equally above and below, keeping the tail tip stationary.
 
-   Bubble leading edge = avatar far edge + 16px gap:
-     Lucy bubble    left:  54 + 120 + 16 = 190px (matching tut-lucy-bubble)
-     Neanderthal    right: max(190px, calc(100vw - 1090px))  (matching tut-otzi-box)
+   Lucy avatar:        bottom:36px; left:36px  — frame 120×120px
+     Portrait centre Y from top: 720 − 36 − 60 = 624px
+     Bubble left: portrait right (36+120=156px) + 12px gap = 168px
+   Neanderthal avatar: top:36px;   right:36px  — frame 120×120px
+     Portrait centre Y from top: 36 + 60 = 96px
+     Bubble right: 1280 − (portrait left 1124px − 12px gap) = 168px
    ────────────────────────────────────────────────────────────── */
 
 body.prehistory-battle #adv-bubble-lucy {
   /* Reset .adv-bubble-bl corner positioning */
-  bottom: max(80px, calc(100vh - 720px));
-  left: 190px;
+  /* Side-center anchor: bubble vertically centred on Lucy's portrait centre.
+     Portrait centre Y = 720 − 36 − 60 = 624px from stage top.
+     transform: translateY(-50%) keeps the midpoint pinned as text changes.
+     left = avatar right (36+120=156px) + 12px gap = 168px. */
+  top: 624px;
+  transform: translateY(-50%);
+  left: 168px;
   right: auto;
-  top: auto;
+  bottom: auto;
   /* Comic-book style */
   flex-direction: column;
   align-items: flex-start;
@@ -8011,7 +8234,7 @@ body.prehistory-battle #adv-bubble-lucy {
   padding: 12px 14px 10px;
   box-shadow: 4px 4px 0 #111;
 }
-/* Tail pointing left toward Lucy */
+/* Tail pointing left toward Lucy — emerges from LEFT-CENTER of bubble. */
 body.prehistory-battle #adv-bubble-lucy::before {
   content: '';
   position: absolute;
@@ -8033,8 +8256,13 @@ body.prehistory-battle #adv-bubble-lucy::after {
 
 body.prehistory-battle #adv-bubble-neanderthal {
   /* Reset .adv-bubble-tr corner positioning */
-  top: 26px;
-  right: max(190px, calc(100vw - 1090px));
+  /* Side-center anchor: bubble vertically centred on Neanderthal's portrait centre.
+     Portrait centre Y = 36 + 60 = 96px from stage top.
+     transform: translateY(-50%) keeps the midpoint pinned as text changes.
+     right = 1280 − (avatar left 1124px − 12px gap) = 168px. */
+  top: 96px;
+  transform: translateY(-50%);
+  right: 168px;
   left: auto;
   bottom: auto;
   /* Comic-book style */
@@ -8048,7 +8276,7 @@ body.prehistory-battle #adv-bubble-neanderthal {
   padding: 12px 14px 10px;
   box-shadow: -4px 4px 0 #111;
 }
-/* Tail pointing right toward Neanderthal */
+/* Tail pointing right toward Neanderthal — emerges from RIGHT-CENTER of bubble. */
 body.prehistory-battle #adv-bubble-neanderthal::before {
   content: '';
   position: absolute;
@@ -8139,7 +8367,8 @@ body.prehistory-battle .battle-col:not([data-loc-id="100"]) { display: none; }
 
 /* Center the single remaining col + reclaim the board padding (the
    original 16px is for a 6-col row; with one col centered it pushes
-   the Camp leftward). */
+   the Camp leftward). Fixed column width so the location tile and
+   gold strip frame only The Camp, not the full 1280px board.       */
 body.prehistory-battle .battle-board {
   justify-content: center;
   align-items: stretch;
@@ -8148,20 +8377,73 @@ body.prehistory-battle .battle-board {
   gap: 0;
 }
 body.prehistory-battle .battle-board::after { display: none; } /* compass watermark off */
+
+/* Standard Arcadium 3-location column width:
+   (1280px − 32px padding − 2×28px gap) / 3 ≈ 397px.
+   Matches one of three locations in the standard Arcadium board layout.
+   Base CSS flex:1; aspect-ratio:2/3; max-height:100% slots fill naturally
+   at ~95px wide × 140px tall — no per-slot width override needed.      */
 body.prehistory-battle .battle-col[data-loc-id="100"] {
-  flex: 0 0 auto;
-  width: 796px;                    /* match arcadium location proportions */
-  max-width: calc(100% - 32px);   /* never overflow on narrow viewports */
+  flex: 0 0 397px;
+  width: 397px;
+}
+
+/* Three symmetric 192 / 336 / 192px sections:
+   top (opp band):    192px — Neanderthal portrait + face-down deck pile
+   middle (board):    flex:1 = 720 − 192 − 192 = 336px gameboard
+   bottom (player band): 192px — Lucy portrait + player hand + HUD buttons
+   Height 192px = card height (166px) + 26px breathing room, matching the
+   standard game ratio (210px band, 184px card → 26px breathing room).    */
+body.prehistory-battle .battle-opp-hand    { height: 192px; }
+body.prehistory-battle .battle-player-hand { height: 192px; }
+
+/* Slot rows: standard Arcadium 3-location height (140px).
+   336px board − 2×140px rows − 2×6px gaps = 44px for the location strip.
+   padding:0 — base CSS flex:1 slots fill the 397px column naturally.   */
+body.prehistory-battle .battle-slots-opp,
+body.prehistory-battle .battle-slots-player {
+  height: 140px;
+  padding: 0;
 }
 
 /* The Camp background — same ::before pattern as the standard
-   locations (loc IDs 1-6). Source asset: images/locations/prehistorycamp.jpg */
+   locations (loc IDs 1-6). Source asset: images/locations/prehistorycamp.jpg
+   z-index MUST be -1 (not 0): with isolation:isolate on .battle-col
+   the stacking order puts flex children (card slots) at step 3 and
+   positioned elements with z-index≥0 at step 6, which would paint
+   the background image on top of every played card. -1 keeps it
+   behind flex children at step 2. */
 .battle-col[data-loc-id="100"]::before {
   content: '';
   position: absolute;
   inset: 0;
   background: url('../images/locations/prehistorycamp.jpg') center / cover no-repeat;
-  z-index: 0;
+  z-index: -1;
+  opacity: 0.72;
+}
+
+/* Location strip: fills leftover board space between the two slot rows.
+   With 336px board, 140px slot rows, 2×6px gaps → ~44px for this strip.
+   max-height:80px caps it if the board is ever taller (safety guard).
+   width/align-self no longer needed — column IS 397px, strip fills it. */
+body.prehistory-battle .battle-location {
+  flex: 1 1 auto;
+  max-height: 80px;
+}
+
+/* Neanderthal avatar: top-right corner of the 192px opp band, mirroring
+   Lucy's bottom-left placement. Equal inner+outer padding:
+   (192 − 120) / 2 = 36px → top:36px; right:36px. */
+body.prehistory-battle .battle-avatar-otzi {
+  top:   36px;
+  right: 36px;
+}
+
+/* Flip the portrait image so Neanderthal faces LEFT (toward the board).
+   Only the <img> is flipped — the circular frame stays unflipped so the
+   gold ring and shadow are not mirrored. */
+body.prehistory-battle .battle-avatar-otzi .battle-avatar-frame img {
+  transform: scaleX(-1);
 }
 
 /* Hide ability text on The Camp (spec: "No ability text"). The .battle-loc-name
@@ -8183,8 +8465,12 @@ body.prehistory-battle .battle-capital-info {
 }
 
 /* Lucy avatar hidden until Phase E pops her in. .adv-active is added
-   by Phase E's coaching kickoff. */
+   by Phase E's coaching kickoff.
+   Position: bottom-left corner of the 192px player band, matching Neanderthal.
+   Equal inner+outer padding: (192 − 120) / 2 = 36px → bottom:36px; left:36px. */
 body.prehistory-battle .battle-avatar-lucy {
+  bottom: 36px;
+  left:   36px;
   opacity: 0;
   transform: scale(0.3);
   transform-origin: center bottom;
@@ -8208,18 +8494,16 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
   visibility: hidden;
 }
 
-/* IP-overlay pulse used during the "See that number?" coaching beat
-   (phase E). Phase E JS adds .adv-ip-pulse to the rightmost hand
-   card's .db-overlay-ip; the next coaching line removes it.
-   Yellow drop-shadow + slight scale-up. */
-@keyframes adv-ip-pulse {
-  0%, 100% { transform: scale(1);   filter: drop-shadow(0 0 0 transparent); }
-  50%      { transform: scale(1.4); filter: drop-shadow(0 0 14px #f8d000)
-                                             drop-shadow(0 0 6px #fff); }
-}
+/* IP-overlay highlight used during the "See that number?" coaching beat
+   (phase E). Phase E JS adds .adv-ip-pulse to the leftmost hand card's
+   .db-overlay-ip; the next coaching line removes it.
+   Static gold box outline — matches the gold strip colour (#f8d000) and
+   the SNES UI palette. No scale/grow animation (spec: looks off). */
 .adv-ip-pulse {
-  animation: adv-ip-pulse 0.85s ease-in-out infinite;
-  transform-origin: center;
+  outline: 2px solid #f8d000;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(248, 208, 0, 0.28);
+  border-radius: 3px;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -8241,7 +8525,8 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
 }
 
 /* Result screens (victory / defeat) — fullscreen overlay above the
-   battle. Modal-style panel with title, message, action button. */
+   battle. Uses the same .result-wrap parchment panel as the Arcadium
+   result screen, centred by this fixed backdrop. */
 .adv-result {
   position: fixed;
   inset: 0;
@@ -8257,41 +8542,11 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-.adv-result-panel {
-  width: 86%;
-  max-width: 560px;
-  padding: 32px 28px;
-  text-align: center;
-  background: linear-gradient(180deg, #241a3c 0%, #120a22 100%);
-  border: 3px solid #f8d000;
-  border-radius: 6px;
-  box-shadow:
-    0 0 0 2px #000,
-    0 0 0 5px #f8d000,
-    0 0 0 7px #000,
-    0 12px 36px rgba(0, 0, 0, 0.8);
-  color: #ffffff;
-}
-.adv-result-title {
-  font-family: var(--font);
-  font-size: 42px;
-  letter-spacing: 0.12em;
-  margin-bottom: 18px;
-  color: #f8d000;
-  text-shadow: 3px 3px 0 #000;
-}
-#adv-result-defeat .adv-result-title { color: #f04030; }
-.adv-result-message {
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 18px;
-  line-height: 1.4;
-  margin-bottom: 26px;
-  color: #ffffff;
-}
-.adv-result-panel .btn-snes {
-  padding: 14px 28px;
-  font-size: 16px;
-  letter-spacing: 0.10em;
+/* Single-row result-locs: first-child AND last-child — give all four
+   corners the same 2px radius (rather than having :last-child win and
+   removing the top-corner radius set by :first-child). */
+.adv-result .result-loc-row:first-child:last-child {
+  border-radius: 2px;
 }
 
 /* Completed-node treatment: gold checkmark badge overlaid on the
@@ -8366,18 +8621,6 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
   color: #2a1608;
 }
 
-/* If the header gets cramped (narrow viewport), promote the help
-   icon to the top-right corner of the deck-builder header so the
-   counter has breathing room. */
-@media (max-width: 880px) {
-  .db-help-icon {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    margin-right: 0;
-  }
-  #screen-deckbuilder .db-header { position: relative; }
-}
 
 /* Spotlight cutout: four dim rectangles arranged around the target
    (top / right / bottom / left). The cutout is the negative space
@@ -8453,7 +8696,7 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
   transform: translateX(-50%);
   top: auto;
   right: auto;
-  width: min(900px, calc(100vw - 48px));
+  width: 900px;
   /* Pin the box to a stable height so the perceived size doesn't
      change between 1-line and 2-line dialogues. Wider 900px width
      makes the longest dialogue wrap to a single line, so 188px is
