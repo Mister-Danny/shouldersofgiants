@@ -3130,7 +3130,8 @@ img    { display: block; }
   animation: result-defeat-glow 2.2s ease-in-out infinite;
   text-shadow: 3px 4px 0 rgba(50,0,0,0.9), 0 0 10px rgba(160,0,10,0.55);
 }
-.result-headline.result-draw {
+.result-headline.result-draw,
+.result-headline.result-tie {
   color:       var(--snes-cyan);
   text-shadow: 3px 4px 0 rgba(0,40,40,0.85), 0 0 12px rgba(64,224,224,0.55);
 }
@@ -7730,6 +7731,45 @@ body.tut-locked #battle-reset-turn {
   background: linear-gradient(180deg, #5ca050 0%, #3c6a30 100%);
 }
 
+/* ── Adventure Mode: in-development treatment ────────────────────
+   Apply this single class to #btn-adventure-new to signal the mode
+   is not production-ready. Remove the class when ready to ship.
+   The original .btn-home-adventure-new values above are untouched —
+   one class removal restores the full-colour appearance instantly. */
+.adventure-mode-in-development {
+  opacity: 0.6;
+  filter: grayscale(50%);
+}
+/* Suppress the hover glow so the button doesn't look fully active */
+.adventure-mode-in-development:hover {
+  border-color: #d4aa50;        /* reset to base gold, no brighten */
+  color: #f0cf6c;               /* reset to base text colour */
+  box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000;  /* no halo */
+  background: linear-gradient(180deg, #4a8540 0%, #2c5224 100%);
+}
+/* Suppress the press animation */
+.adventure-mode-in-development:active {
+  transform: none;
+  box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000;
+}
+
+/* ── Adventure in-development warning popup ──────────────────────
+   Reuses .popup-backdrop + .card-popup; just widens the body text
+   and adds breathing room between the two action buttons.          */
+.adv-dev-warning-popup {
+  max-width: 480px;
+}
+.adv-dev-warning-body {
+  text-align: center;
+  line-height: 1.6;
+  padding: 4px 8px 8px;
+}
+.adv-dev-warning-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
 /* Path-choice buttons start hidden; JS toggles .btn-visible to show them.
    Using class toggle (not inline `display:''`) so the CSS fallback stays
    correct. */
@@ -8494,16 +8534,18 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
   visibility: hidden;
 }
 
-/* IP-overlay highlight used during the "See that number?" coaching beat
-   (phase E). Phase E JS adds .adv-ip-pulse to the leftmost hand card's
-   .db-overlay-ip; the next coaching line removes it.
-   Static gold box outline — matches the gold strip colour (#f8d000) and
-   the SNES UI palette. No scale/grow animation (spec: looks off). */
-.adv-ip-pulse {
-  outline: 2px solid #f8d000;
-  outline-offset: 3px;
-  box-shadow: 0 0 0 4px rgba(248, 208, 0, 0.28);
-  border-radius: 3px;
+/* IP gold ring injected during the "See that number?" coaching beat.
+   JS creates a <div.adv-ip-ring> directly on #sog-stage (bypassing the
+   card's overflow:hidden) and positions it via getBoundingClientRect().
+   border-radius:50% makes it a circle; z-index sits above hand cards. */
+.adv-ip-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 4px solid #f8d000;
+  box-shadow: 0 0 10px 3px rgba(248, 208, 0, 0.55),
+              inset 0 0 6px 1px rgba(248, 208, 0, 0.15);
+  pointer-events: none;
+  z-index: 9000;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -8522,6 +8564,74 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
 }
 .btn-end-turn.adv-pulse:not([disabled]) {
   animation: adv-button-pulse 0.85s ease-in-out infinite;
+}
+
+/* ── Post-battle dim overlay (win card-reveal sequence) ────────
+   Sits inside #sog-stage (moved there by JS) so it scales with the
+   stage transform. Covers the gameboard while the card rises. */
+#adv-post-battle-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.80);
+  z-index: 5000;
+  pointer-events: none;
+}
+
+/* Card reveal container — centred flex column on stage */
+#adv-card-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 5100;
+  pointer-events: auto;
+}
+
+/* Battle popup must sit above the card-acquisition overlay (z-index 5100)
+   when it's triggered from the card reveal screen. z-index: 200 (the base)
+   is buried under the dim (5000) and card-reveal (5100) layers because
+   #screen-battle has no stacking context of its own. */
+#battle-popup-backdrop.visible {
+  z-index: 5200;
+}
+
+/* Card acquisition image — clicking opens the card-info popup */
+#adv-card-reveal-img {
+  width: 320px;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.75),
+              0 0 0 2px rgba(212, 170, 80, 0.5);
+  display: block;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+#adv-card-reveal-img:hover {
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.75),
+              0 0 0 3px rgba(248, 208, 0, 0.85);
+  transform: scale(1.02);
+}
+
+/* "New Card Acquired" banner — pixel-art gold ribbon above the card */
+#adv-card-reveal-banner {
+  font-family: var(--font);
+  font-size: 20px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1a0a04;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    #f8d000     10%,
+    #f8d000     90%,
+    transparent 100%);
+  padding: 7px 40px;
+  margin-bottom: 14px;
+  border-top:    2px solid #c8a800;
+  border-bottom: 2px solid #c8a800;
+  white-space: nowrap;
+  /* entrance handled inline by JS transition */
 }
 
 /* Result screens (victory / defeat) — fullscreen overlay above the

@@ -75,19 +75,74 @@ window.SOG.Adventure.Prehistory = (function () {
                                    // before the wipe fires (per spec step 2)
   var WIPE_DURATION_MS   = 1000;   // 1s radial expansion (per spec step 3)
 
-  /* ── Audio (lazy-loaded Howl for woosh.m4a) ────────────────── */
-  var wooshHowl = null;
+  /* ── Audio (lazy-loaded Howls) ──────────────────────────────── */
+  var wooshHowl       = null;
+  var cardAcquireHowl = null;
+
   function ensureWoosh() {
     if (wooshHowl || typeof Howl === 'undefined') return;
-    wooshHowl = new Howl({
-      src: ['sfx/woosh.m4a'],
-      volume: 0.8,
-      html5: true
-    });
+    wooshHowl = new Howl({ src: ['sfx/woosh.m4a'], volume: 0.8, html5: true });
   }
   function playWoosh() {
     ensureWoosh();
     if (wooshHowl) { try { wooshHowl.stop(); wooshHowl.play(); } catch (e) {} }
+  }
+
+  function ensureCardAcquire() {
+    if (cardAcquireHowl || typeof Howl === 'undefined') return;
+    cardAcquireHowl = new Howl({ src: ['sfx/cardacquire.mp3'], volume: 0.9, html5: true });
+  }
+  function playCardAcquire() {
+    ensureCardAcquire();
+    if (cardAcquireHowl) { try { cardAcquireHowl.stop(); cardAcquireHowl.play(); } catch (e) {} }
+  }
+
+  /* ── Text-bleep audio (Web Audio API, no asset required) ──────
+     Mirrors the overworld.js bleep engine so voices feel consistent
+     across both systems.
+
+     Profiles:
+       'lucy'        — 340 Hz square, every 2 non-space chars.
+                       Identical to her overworld voice so she always
+                       sounds the same.
+       'otzi'        — 210 Hz triangle, every 2 chars. Warmer/earthier
+                       than Lucy; used as the Otzi baseline.
+       'neanderthal' — 185 Hz triangle, every 3 chars. Same texture as
+                       Otzi but the bleep fires one char later, making
+                       it feel heavier and slightly slower.             */
+  var _bleepCtx = null;
+  function _getBleepCtx() {
+    if (_bleepCtx) return _bleepCtx;
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) _bleepCtx = new Ctx();
+    } catch (e) {}
+    return _bleepCtx;
+  }
+
+  var BLEEP_PROFILES = {
+    lucy:        { freq: 340, wobble: 30, wave: 'square',   peak: 0.08, decay: 0.05, dur: 0.06, every: 2 },
+    otzi:        { freq: 210, wobble: 20, wave: 'triangle', peak: 0.07, decay: 0.07, dur: 0.08, every: 2 },
+    neanderthal: { freq: 185, wobble: 20, wave: 'triangle', peak: 0.07, decay: 0.09, dur: 0.10, every: 3 }
+  };
+
+  function playBleep(who) {
+    var ctx = _getBleepCtx();
+    if (!ctx) return;
+    if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (e) {} }
+    var p   = BLEEP_PROFILES[who] || BLEEP_PROFILES.otzi;
+    var now = ctx.currentTime;
+    var osc  = ctx.createOscillator();
+    var gain = ctx.createGain();
+    var freq = p.freq + (Math.random() - 0.5) * p.wobble;
+    osc.type = p.wave;
+    osc.frequency.setValueAtTime(freq, now);
+    gain.gain.setValueAtTime(0,      now);
+    gain.gain.linearRampToValueAtTime(p.peak,  now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + p.dur);
   }
 
   /* ════════════════════════════════════════════════════════════
@@ -116,11 +171,17 @@ window.SOG.Adventure.Prehistory = (function () {
     textEl.textContent = '';
     el.classList.add('is-visible');
 
-    // Typewriter — char-by-char, then hold, then call onDone.
-    var i = 0;
+    // Typewriter — char-by-char with bleeps, then hold, then call onDone.
+    var i = 0, bleepCount = 0;
     var timer = setInterval(function () {
       i++;
       textEl.textContent = text.slice(0, i);
+      var c = text.charAt(i - 1);
+      if (c && c !== ' ' && c !== '\n') {
+        var profile = BLEEP_PROFILES[who] || BLEEP_PROFILES.otzi;
+        bleepCount++;
+        if (bleepCount >= profile.every) { bleepCount = 0; playBleep(who); }
+      }
       if (i >= text.length) {
         clearInterval(timer);
         setTimeout(onDone, POST_TYPE_HOLD_MS);
@@ -251,10 +312,12 @@ window.SOG.Adventure.Prehistory = (function () {
        30 Cave Art, 31 Megalith, 32 Domesticated Animal, 36 Tribe
      Shuffled on entry; initial hand of 4 drawn off the top.
 
-     AI deck (scripted, no shuffle):
-       27 Hunter, 28 Gatherer, 31 Megalith, 34 Neanderthal
-     The AI "hand" pre-loads all 4 — phase F consumes from index 0
-     each turn for a deterministic scripted sequence.
+     AI hand/deck (parallel-to-player model):
+       Game start: AI hand=[26,27,31,34] (4 scripted cards), AI deck=[29,30,32,36,28] (5 cosmetic).
+       T1 plays Tool (26): hand 4→3; Tool's draw fires → hand 3→4, deck 5→4.
+       T2 start draw → hand 5; plays Hunter (27) → hand 4, deck 3.
+       T3 start draw → hand 5; plays Megalith (31) → hand 4, deck 2.
+       T4 start draw → hand 5; plays Neanderthal (34) → hand 4, deck 1.
   ═══════════════════════════════════════════════════════════════ */
 
   // Pseudo-location for The Camp. ID 100 sidesteps the standard locs
@@ -276,9 +339,14 @@ window.SOG.Adventure.Prehistory = (function () {
   }
 
   function buildNeanderthalAiDeck() {
-    // Scripted AI plays exactly these in order across turns 1-4:
-    //   T1 Hunter, T2 Gatherer, T3 Megalith, T4 Neanderthal
-    return [27, 28, 31, 34];
+    // Full scripted play sequence T1→T4: Tool(26), Hunter(27), Megalith(31), Neanderthal(34).
+    // Tool fires its "draw 1" ability during the reveal phase (fireRevealAbilities →
+    // abilityTool), pushing an extra cosmetic card from deck to hand. This makes the
+    // AI's hand/deck pattern mirror a player who opens with Tool.
+    // All 4 are loaded directly into G.aiHand at setup. G.aiDeck is seeded
+    // separately with 5 cosmetic cards so the opp-hand display starts at
+    // hand=4, deck=5 — mirroring the player's opening state.
+    return [26, 27, 31, 34];
   }
 
   // Fisher-Yates shuffle (in-place). The standard SOG.board.shuffle
@@ -291,15 +359,15 @@ window.SOG.Adventure.Prehistory = (function () {
     return arr;
   }
 
-  // Swap the Otzi avatar img src to the Neanderthal card art (cropped
-  // to face region via object-position). Stash original src so the
-  // exit path can restore it for the next standard battle.
+  // Swap the Otzi avatar img src to the Neanderthal portrait photo.
+  // Stash the original src so the exit path can restore it for the next
+  // standard battle.
   function applyNeanderthalAvatar() {
     var img = document.querySelector('.battle-avatar-otzi .battle-avatar-frame img');
     if (!img) return;
     if (typeof img.dataset.origSrc === 'undefined') img.dataset.origSrc = img.src;
-    img.src = 'images/prehistorycards/neanderthalcard.jpg';
-    img.style.objectPosition = 'center 18%';
+    img.src = 'images/portraits/neanderthalportait.jpeg';
+    img.style.objectPosition = '';   // use default (center top) from CSS
   }
   function restoreOtziAvatar() {
     var img = document.querySelector('.battle-avatar-otzi .battle-avatar-frame img');
@@ -341,8 +409,15 @@ window.SOG.Adventure.Prehistory = (function () {
     G.playerDeck = shuffleInPlace(buildPrehistoryDeck().slice());
     G.playerHand = G.playerDeck.splice(0, 4);  // hand of 4 (spec)
 
-    G.aiDeck = [];                                   // AI doesn't draw
-    G.aiHand = buildNeanderthalAiDeck().slice();     // scripted, all 4 pre-loaded
+    // Parallel-to-player model: AI starts with 4 scripted cards in hand
+    // and 5 cosmetic padding cards in deck. aiPlayScripted() always takes
+    // aiHand[0] so the scripted sequence runs T1→T4 in order. The deck
+    // cards are cosmetic — they keep the opp-hand display at hand=4, deck=5
+    // at game start, exactly matching the player's opening hand/deck counts.
+    // T1 Tool fires its draw ability and pulls one cosmetic card from deck
+    // into hand, making hand briefly 4 before the next-turn draw brings it to 5.
+    G.aiHand = buildNeanderthalAiDeck().slice();   // [26, 27, 31, 34]
+    G.aiDeck = [29, 30, 32, 36, 28];              // 5 cosmetic padding cards (faces never shown)
 
     G.turn               = 1;
     G.phase              = 'select';
@@ -364,6 +439,15 @@ window.SOG.Adventure.Prehistory = (function () {
     G.locationSnapshots   = {};
     G.reservedSlotsPerLoc = {};
     G.deferredPlays       = {};
+    // Explicit resets for Play Again safety: these are NOT set by
+    // teardownBattle() and can carry stale values from a previous game.
+    // • prehistoryHasPlayed: still true after the player's last turn →
+    //   isLegalPlayTarget returns false → no-drop cursor on retry.
+    // • reveal queues: stale entries from the previous game don't
+    //   affect correctness but are confusing to debug.
+    G.prehistoryHasPlayed = false;
+    G.playerRevealQueue   = [];
+    G.aiRevealQueue       = [];
 
     // Show the battle screen + build the board DOM. initBattleUI
     // builds opp hand, board cols, and clears the player hand container.
@@ -383,6 +467,12 @@ window.SOG.Adventure.Prehistory = (function () {
 
     setTurnCounter(1, 4);
     applyNeanderthalAvatar();
+
+    // tutorial.js hides the reset button (display:none) for the guided
+    // tutorial; initGame() restores it but we skip initGame() here.
+    // Explicitly restore so the button is visible in adventure mode.
+    var resetBtn = document.getElementById('battle-reset-turn');
+    if (resetBtn) resetBtn.style.display = '';
   }
 
   /* ── Fade the radial-wipe cover out to reveal the board ───── */
@@ -433,23 +523,25 @@ window.SOG.Adventure.Prehistory = (function () {
 
   var COACHING_PHASE_1 = [
     { who: 'neanderthal', text: 'This my fire.' },
-    { who: 'lucy',        text: 'He thinks because he invented fire. No one else can have it.',
+    { who: 'lucy',        text: "He thinks he invented fire and doesn't have to share it.",
                           popLucyOnStart: true },
     { who: 'neanderthal', text: 'Me no think. Me know.' },
-    { who: 'lucy',        text: 'You no think alright.' },
+    { who: 'lucy',        text: 'You no think, alright.' },
     { who: 'neanderthal', text: 'AARRGH!!!' }
   ];
 
   var COACHING_PHASE_2 = [
-    { who: 'lucy', text: 'If this Neanderthal wants a battle, I came prepared.' },
+    { who: 'lucy', text: "If this Neanderthal wants to get rocked, we're ready to roll." },
+    { who: 'lucy', text: 'Pay attention, this is important...' },
     { who: 'lucy', text: 'See those cards?' },
-    { who: 'lucy', text: 'You play one each turn on your side of the center location.' },
+    { who: 'lucy', text: 'You play one each turn on your side of The Camp.' },
     { who: 'lucy', text: 'See that number?',                  startIPPulse: true },
     { who: 'lucy', text: 'Those are Influence Points, or IP for short.' },
     { who: 'lucy', text: 'Your goal here is to gain the most IP at The Camp after four turns.' },
     { who: 'lucy', text: 'Oh, and most cards have special abilities' },
-    { who: 'lucy', text: 'Click on them to read what they have in store.' },
-    { who: 'lucy', text: "When you're ready, click and drag your first card into play and send this guy back to whatever came before the Stone Age." }
+    { who: 'lucy', text: 'If you want to win, click on them to read what they have in store.' },
+    { who: 'lucy', text: "When you're ready to send this guy back to whatever came before the Stone Age..." },
+    { who: 'lucy', text: 'Click and drag your first card into play.' }
   ];
 
   /* ── Coaching dialogue runner ──────────────────────────────── */
@@ -516,11 +608,17 @@ window.SOG.Adventure.Prehistory = (function () {
     co_isTyping = true;
     co_activeEl = el;  // track active bubble for hint management
 
-    var i = 0;
+    var i = 0, bleepCount = 0;
     if (co_timer) clearInterval(co_timer);
     co_timer = setInterval(function () {
       i++;
       textEl.textContent = line.text.slice(0, i);
+      var c = line.text.charAt(i - 1);
+      if (c && c !== ' ' && c !== '\n') {
+        var profile = BLEEP_PROFILES[who] || BLEEP_PROFILES.otzi;
+        bleepCount++;
+        if (bleepCount >= profile.every) { bleepCount = 0; playBleep(who); }
+      }
       if (i >= line.text.length) {
         clearInterval(co_timer);
         co_timer    = null;
@@ -564,6 +662,303 @@ window.SOG.Adventure.Prehistory = (function () {
     if (onDone) onDone();
   }
 
+  /* ════════════════════════════════════════════════════════════
+     POST-BATTLE DIALOGUE + CARD REVEAL (win / loss sequences)
+     ════════════════════════════════════════════════════════════ */
+
+  /* ── Dialogue line arrays ───────────────────────────────────── */
+  var WIN_DIALOGUE = [
+    { who: 'neanderthal', text: 'Hey, you not so bad.'        },
+    { who: 'lucy',        text: 'No, you were awesome.'       },
+    { who: 'neanderthal', text: 'You join my tribe?'          },
+    { who: 'lucy',        text: "Don't let him get any ideas." },
+    { who: 'neanderthal', text: 'Oh fine, can I join yours?'  }
+  ];
+
+  var LOSS_DIALOGUE = [
+    { who: 'neanderthal', text: 'You no match for me.'        },
+    { who: 'lucy',        text: 'How did you let that happen?' },
+    { who: 'neanderthal', text: 'Me the strongest.'           },
+    { who: 'lucy',        text: "Click and read your card abilities and he doesn't stand a chance." }
+  ];
+
+  var TIE_DIALOGUE = [
+    { who: 'neanderthal', text: 'Hm. We same.'                              },
+    { who: 'lucy',        text: 'A tie is not a win.'                       },
+    { who: 'neanderthal', text: 'Come back. I ready.'                       },
+    { who: 'lucy',        text: 'We were close. Use your abilities and go again.' }
+  ];
+
+  /* ── Post-battle dialogue runner (mirrors co_* coaching runner) ─
+     Same typewriter + click-to-advance pattern as the coaching
+     dialogue.  First click while typing = skip to full text.
+     First click after line is done = advance to next line.       */
+  var pb_isTyping     = false;
+  var pb_timer        = null;
+  var pb_fullText     = '';
+  var pb_textEl       = null;
+  var pb_activeEl     = null;
+  var pb_lines        = null;
+  var pb_lineIdx      = 0;
+  var pb_clickHandler = null;
+  var pb_onAllDone    = null;
+
+  // Active flag — blocks card clicks and other input while running.
+  var postBattleDialogueActive = false;
+
+  function runPostBattleDialogue(lines, onAllDone) {
+    pb_lines              = lines;
+    pb_lineIdx            = 0;
+    pb_onAllDone          = onAllDone;
+    postBattleDialogueActive = true;
+
+    pb_clickHandler = function (e) {
+      if (e.type === 'keydown' && e.key !== ' ' && e.key !== 'Enter') return;
+      if (e.type === 'keydown') e.preventDefault();
+      pbAdvance();
+    };
+    // Defer listener so the click that ended the reveal phase doesn't
+    // skip line 1 before the typewriter has even started.
+    setTimeout(function () {
+      document.addEventListener('click',   pb_clickHandler);
+      document.addEventListener('keydown', pb_clickHandler);
+    }, 0);
+
+    showPostBattleLine();
+  }
+
+  function showPostBattleLine() {
+    var line = pb_lines[pb_lineIdx];
+    if (!line) { finishPostBattleRunner(); return; }
+
+    var who = line.who;
+    ['neanderthal', 'explorer', 'lucy'].forEach(function (w) {
+      if (w === who) return;
+      var el = getBubbleEl(w);
+      if (el) el.classList.remove('is-visible', 'is-ready');
+    });
+
+    var el     = getBubbleEl(who);
+    if (!el)     { pb_lineIdx++; showPostBattleLine(); return; }
+    var textEl = el.querySelector('.adv-bubble-text');
+    if (!textEl) { pb_lineIdx++; showPostBattleLine(); return; }
+
+    textEl.textContent = '';
+    el.classList.add('is-visible');
+    el.classList.remove('is-ready');
+
+    pb_fullText = line.text;
+    pb_textEl   = textEl;
+    pb_isTyping = true;
+    pb_activeEl = el;
+
+    var i = 0, bleepCount = 0;
+    if (pb_timer) clearInterval(pb_timer);
+    pb_timer = setInterval(function () {
+      i++;
+      textEl.textContent = line.text.slice(0, i);
+      var c = line.text.charAt(i - 1);
+      if (c && c !== ' ' && c !== '\n') {
+        var profile = BLEEP_PROFILES[who] || BLEEP_PROFILES.otzi;
+        bleepCount++;
+        if (bleepCount >= profile.every) { bleepCount = 0; playBleep(who); }
+      }
+      if (i >= line.text.length) {
+        clearInterval(pb_timer);
+        pb_timer    = null;
+        pb_isTyping = false;
+        el.classList.add('is-ready');
+      }
+    }, TYPE_SPEED_MS);
+  }
+
+  function pbAdvance() {
+    if (pb_isTyping) {
+      // First click skips to full text, shows hint.
+      if (pb_timer) { clearInterval(pb_timer); pb_timer = null; }
+      if (pb_textEl) pb_textEl.textContent = pb_fullText;
+      pb_isTyping = false;
+      if (pb_activeEl) pb_activeEl.classList.add('is-ready');
+      return;
+    }
+    pb_lineIdx++;
+    if (pb_lineIdx >= pb_lines.length) {
+      finishPostBattleRunner();
+      return;
+    }
+    showPostBattleLine();
+  }
+
+  function finishPostBattleRunner() {
+    if (pb_clickHandler) {
+      document.removeEventListener('click',   pb_clickHandler);
+      document.removeEventListener('keydown', pb_clickHandler);
+      pb_clickHandler = null;
+    }
+    if (pb_timer) { clearInterval(pb_timer); pb_timer = null; }
+    pb_isTyping              = false;
+    postBattleDialogueActive = false;
+    hideAllBubbles();
+    var onDone   = pb_onAllDone;
+    pb_onAllDone = null;
+    pb_lines     = null;
+    if (onDone) onDone();
+  }
+
+  /* ── Win card-reveal sequence ────────────────────────────────
+     1. Fade in 80% black dim over the gameboard.
+     2. Neanderthal card rises from off-screen bottom (GSAP).
+     3. "New Card Acquired" banner fades/bounces in above card.
+     4. Click anywhere to fade out card + banner + dim → onDismiss.
+
+     Both #adv-post-battle-dim and #adv-card-reveal are moved into
+     #sog-stage on first call so they inherit the stage scale.
+
+     #battle-popup-backdrop is also moved here. It lives inside
+     #screen-battle in the HTML, but #screen-battle has position:relative
+     with no z-index — it forms no stacking context of its own, so the
+     browser paints everything inside it before any explicitly z-indexed
+     sibling of #sog-stage (like #adv-card-reveal at 5100). No z-index
+     value on the popup can overcome that. Moving it to #sog-stage puts
+     it in the same stacking context as #adv-card-reveal so z-index 5200
+     (applied by .visible in CSS) correctly appears on top.              */
+  var _revealElementsMoved = false;
+  function _ensureRevealInStage() {
+    if (_revealElementsMoved) return;
+    _revealElementsMoved = true;
+    var stage = document.getElementById('sog-stage');
+    if (!stage) return;
+    ['adv-post-battle-dim', 'adv-card-reveal', 'battle-popup-backdrop'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && el.parentNode !== stage) stage.appendChild(el);
+    });
+  }
+
+  /* ── Shared card-acquisition component ─────────────────────────
+     showCardAcquisition(card, sfxFn, onComplete)
+       card      — a CARDS[] entry (uses card.image, card.id, etc.)
+       sfxFn     — function to call when the banner appears;
+                   pass null to use the default playCardAcquire()
+       onComplete— called after the player dismisses the reveal
+
+     Interaction after the card lands:
+       • Click the card image   → open the standard card-info popup
+       • Click outside the card/banner → dismiss (fade out + callback)
+       • Closing the popup      → returns to the reveal; card still showing
+       Re-entrant safe: only one reveal is active at a time because
+       each caller waits for onComplete before triggering the next.    */
+  function showCardAcquisition(card, sfxFn, onComplete) {
+    _ensureRevealInStage();
+
+    var dimEl    = document.getElementById('adv-post-battle-dim');
+    var revealEl = document.getElementById('adv-card-reveal');
+    var imgEl    = document.getElementById('adv-card-reveal-img');
+    var bannerEl = document.getElementById('adv-card-reveal-banner');
+
+    if (!revealEl || !imgEl) { if (onComplete) onComplete(); return; }
+
+    // Point the image at this card
+    imgEl.src = card.image || '';
+
+    // Show and fade-in the dim overlay
+    if (dimEl) {
+      dimEl.style.display = 'block';
+      gsap.fromTo(dimEl, { opacity: 0 }, { opacity: 1, duration: 0.5, ease: 'none' });
+    }
+
+    // Prepare card: start off below stage, transparent
+    revealEl.style.display = 'flex';
+    gsap.set(imgEl, { y: 380, opacity: 0 });
+    if (bannerEl) {
+      bannerEl.style.transition = '';
+      bannerEl.style.opacity    = '0';
+      bannerEl.style.transform  = 'scale(0.88)';
+    }
+
+    // Card rises into centre
+    gsap.to(imgEl, {
+      y:        0,
+      opacity:  1,
+      duration: 1.5,
+      ease:     'power2.out',
+      onComplete: function () {
+        // Banner bounces in
+        if (bannerEl) {
+          bannerEl.style.transition = 'opacity 0.15s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          bannerEl.style.opacity    = '1';
+          bannerEl.style.transform  = 'scale(1.0)';
+        }
+
+        // SFX on banner entrance
+        if (typeof sfxFn === 'function') sfxFn();
+        else playCardAcquire();
+
+        // Wire up interactions after a short guard (so the click that
+        // advanced the last dialogue line doesn't instantly fire).
+        setTimeout(function () {
+          _wireCardAcquisitionInteractions(card, dimEl, revealEl, imgEl, bannerEl, onComplete);
+        }, 80);
+      }
+    });
+  }
+
+  /* Attaches the click-to-popup / click-outside-to-dismiss handlers
+     for a live card-acquisition reveal.  Called once per reveal.     */
+  function _wireCardAcquisitionInteractions(card, dimEl, revealEl, imgEl, bannerEl, onComplete) {
+    var _dismissed = false;
+
+    function dismiss() {
+      if (_dismissed) return;
+      _dismissed = true;
+      revealEl.removeEventListener('click', onRevealAreaClick);
+
+      if (bannerEl) bannerEl.style.transition = '';
+      gsap.to(imgEl, { opacity: 0, duration: 0.3 });
+      if (bannerEl) gsap.to(bannerEl, { opacity: 0, duration: 0.3 });
+
+      var dimTarget = dimEl || revealEl;
+      gsap.to(dimTarget, {
+        opacity:  0,
+        duration: 0.3,
+        onComplete: function () {
+          revealEl.style.display = 'none';
+          if (dimEl) { dimEl.style.display = 'none'; dimEl.style.opacity = ''; }
+          gsap.set(imgEl, { clearProps: 'all' });
+          if (bannerEl) { bannerEl.style.opacity = ''; bannerEl.style.transform = ''; }
+          if (onComplete) onComplete();
+        }
+      });
+    }
+
+    function onRevealAreaClick(e) {
+      // If the card-info popup is open, let it handle the click — do nothing.
+      var popupEl = document.getElementById('battle-popup-backdrop');
+      if (popupEl && popupEl.classList.contains('visible')) return;
+
+      // Click on the card image → open the card-info popup
+      if (e.target === imgEl) {
+        var minimalSd = {
+          cardId: card.id,  ip: card.ip,
+          ipMod: 0, contMod: 0,
+          revealed: true,
+          bonuses: [], ipModSources: [], contModSources: []
+        };
+        if (SOG.ui && typeof SOG.ui.openBattlePopup === 'function') {
+          SOG.ui.openBattlePopup(card, minimalSd, 'player', false);
+        }
+        return;
+      }
+
+      // Click on the banner → no action (let them keep reading)
+      if (bannerEl && (e.target === bannerEl || bannerEl.contains(e.target))) return;
+
+      // Click anywhere else (outside card + banner) → dismiss
+      dismiss();
+    }
+
+    revealEl.addEventListener('click', onRevealAreaClick);
+  }
+
   /* ── Lucy avatar pop-in (large bottom-left battle portrait) ── */
   function popLucyIn() {
     var avEl = document.querySelector('.battle-avatar-lucy');
@@ -571,18 +966,50 @@ window.SOG.Adventure.Prehistory = (function () {
     // CSS handles the scale + opacity transition (.adv-active in style.css)
   }
 
-  /* ── IP pulse on rightmost hand card ───────────────────────── */
+  /* ── IP gold-ring highlight on leftmost hand card ─────────────
+     The card has overflow:hidden, so outline/box-shadow on a child
+     element gets clipped.  Instead we inject a <div.adv-ip-ring>
+     directly onto #sog-stage, positioned over the IP number via
+     getBoundingClientRect() → stage-local coords (accounting for
+     the stage scale transform).                                   */
   function startIPPulse() {
     var cards = document.querySelectorAll('#battle-player-hand .battle-hand-card');
     if (!cards.length) return;
-    var lastCard = cards[cards.length - 1];
-    var ipEl = lastCard.querySelector('.db-overlay-ip');
-    if (ipEl) ipEl.classList.add('adv-ip-pulse');
+    var firstCard = cards[0];
+    var ipEl = firstCard.querySelector('.db-overlay-ip');
+    if (!ipEl) return;
+
+    stopIPPulse();   // remove any stale ring first
+
+    var stage = document.getElementById('sog-stage');
+    if (!stage) return;
+
+    var ipRect    = ipEl.getBoundingClientRect();
+    var stageRect = stage.getBoundingClientRect();
+    var scale     = stageRect.width / 1280;   // stage is always 1280px logical width
+
+    // Centre of the IP element in stage-local (unscaled) coordinates
+    var cx = (ipRect.left + ipRect.width  / 2 - stageRect.left) / scale;
+    var cy = (ipRect.top  + ipRect.height / 2 - stageRect.top)  / scale;
+
+    // Ring diameter: ~2.4× the IP element's larger dimension
+    var ipW  = ipRect.width  / scale;
+    var ipH  = ipRect.height / scale;
+    var r    = Math.max(ipW, ipH) * 1.2;
+    var size = r * 2;
+
+    var ring = document.createElement('div');
+    ring.className = 'adv-ip-ring';
+    ring.style.left   = (cx - r) + 'px';
+    ring.style.top    = (cy - r) + 'px';
+    ring.style.width  = size + 'px';
+    ring.style.height = size + 'px';
+    stage.appendChild(ring);
   }
   function stopIPPulse() {
-    var pulsing = document.querySelectorAll('.adv-ip-pulse');
-    for (var i = 0; i < pulsing.length; i++) {
-      pulsing[i].classList.remove('adv-ip-pulse');
+    var rings = document.querySelectorAll('.adv-ip-ring');
+    for (var i = 0; i < rings.length; i++) {
+      rings[i].parentNode.removeChild(rings[i]);
     }
   }
 
@@ -743,6 +1170,7 @@ window.SOG.Adventure.Prehistory = (function () {
   // Module-level turn-loop state. Reset on each setupBattleBoard().
   var _hasPlayedThisTurn = false;
   var _endTurnHandler    = null;
+  var _resetHandler      = null;
   var _onResultDismiss   = null;
 
   // Public function called by input.js's commitPlay when a card is
@@ -750,16 +1178,22 @@ window.SOG.Adventure.Prehistory = (function () {
   function notifyPlayerPlayed(cardId, locId) {
     log('Phase F — player played card ' + cardId + ' at loc ' + locId);
     _hasPlayedThisTurn = true;
+    // Mirror onto G so isLegalPlayTarget (in input.js) can block a
+    // second play this turn — G is the shared object both modules read.
+    SOG.state.G.prehistoryHasPlayed = true;
 
-    // Post-play draw: maintain hand at 4. If hand is already at or
-    // above the cap (e.g. Tool's onAtOnce raised it to 5 last turn),
-    // don't draw — the cap stands until the next play brings it
-    // back down.
-    drawToHandCap();
+    // NO draw here. Draw timing spec:
+    //   • Selection phase begins → draw 1 card (in advanceToNextTurn)
+    //   • Tool (id 26) At Once fires during the reveal phase and draws
+    //     its own card — can push hand to 5 on the following turn's draw.
+    // Drawing immediately after the play was removed so the hand
+    // visibly drops to 3 between placement and the next turn's refill.
 
-    // Enable End Turn now that the player has committed.
+    // Enable End Turn and Reset now that the player has committed.
     var endTurnBtn = document.getElementById('battle-end-turn');
+    var resetBtn   = document.getElementById('battle-reset-turn');
     if (endTurnBtn) endTurnBtn.disabled = false;
+    if (resetBtn)   resetBtn.disabled   = false;
 
     // Turn 1 only — Lucy bubble + End Turn pulse.
     var G = SOG.state.G;
@@ -835,23 +1269,87 @@ window.SOG.Adventure.Prehistory = (function () {
     _endTurnHandler = null;
   }
 
+  /* ── Reset button hook ─────────────────────────────────────── */
+  // Capture phase (same rationale as End Turn): runs before game.js's
+  // bubbling handler, which does nothing in prehistoryMode anyway.
+  function installResetHook() {
+    if (_resetHandler) return;
+    var resetBtn = document.getElementById('battle-reset-turn');
+    if (!resetBtn) return;
+    _resetHandler = function (e) {
+      if (resetBtn.disabled) return;
+      e.stopPropagation();
+      onPrehistoryReset();
+    };
+    resetBtn.addEventListener('click', _resetHandler, true);
+  }
+
+  function removeResetHook() {
+    if (!_resetHandler) return;
+    var resetBtn = document.getElementById('battle-reset-turn');
+    if (resetBtn) resetBtn.removeEventListener('click', _resetHandler, true);
+    _resetHandler = null;
+  }
+
+  function onPrehistoryReset() {
+    log('Phase F — Reset (turn ' + SOG.state.G.turn + ')');
+    // Return the played card to the exact hand slot it came from.
+    // undoPlay reads sd.handIndex (stored by commitPlay) and splices the
+    // card back at that position — so the hand order is preserved.
+    // We scan the camp slots for the first unrevealed entry (there can
+    // only ever be one in the prehistory battle).
+    var G   = SOG.state.G;
+    var campId = G.locations && G.locations[0] ? G.locations[0].id : null;
+    var restored = false;
+    if (campId !== null && SOG.input && typeof SOG.input.undoPlay === 'function') {
+      var slots = G.playerSlots[campId] || [];
+      for (var i = 0; i < slots.length; i++) {
+        if (slots[i] && !slots[i].revealed) {
+          SOG.input.undoPlay(campId, i);
+          restored = true;
+          break;
+        }
+      }
+    }
+    if (!restored && SOG.input && typeof SOG.input.resetTurn === 'function') {
+      // Fallback (should not occur in normal prehistory flow).
+      SOG.input.resetTurn();
+    }
+    // Reset prehistory gate flags so the player can place again.
+    _hasPlayedThisTurn = false;
+    SOG.state.G.prehistoryHasPlayed = false;
+    // Disable both action buttons — nothing is pending.
+    var endTurnBtn = document.getElementById('battle-end-turn');
+    var resetBtn   = document.getElementById('battle-reset-turn');
+    if (endTurnBtn) { endTurnBtn.disabled = true; endTurnBtn.classList.remove('adv-pulse'); }
+    if (resetBtn)   resetBtn.disabled = true;
+    hideLucyOneLiner();
+  }
+
   function onPrehistoryEndTurn() {
     log('Phase F — End Turn (turn ' + SOG.state.G.turn + ')');
     var endTurnBtn = document.getElementById('battle-end-turn');
+    var resetBtn   = document.getElementById('battle-reset-turn');
     if (endTurnBtn) {
       endTurnBtn.disabled = true;
       endTurnBtn.classList.remove('adv-pulse');
     }
+    // Lock Reset during the reveal + AI phase — nothing to undo now.
+    if (resetBtn) resetBtn.disabled = true;
     hideLucyOneLiner();
     aiPlayScripted();
-    runPrehistoryReveal(function () {
-      var G = SOG.state.G;
-      if (G.turn >= TOTAL_TURNS) {
-        endBattle();
-      } else {
-        advanceToNextTurn();
-      }
-    });
+    // Brief pause so the player sees the Neanderthal's face-down card
+    // appear before the reveal animation flips both cards.
+    setTimeout(function () {
+      runPrehistoryReveal(function () {
+        var G = SOG.state.G;
+        if (G.turn >= TOTAL_TURNS) {
+          endBattle();
+        } else {
+          advanceToNextTurn();
+        }
+      });
+    }, 600);
   }
 
   /* ── AI scripted play ──────────────────────────────────────── */
@@ -869,7 +1367,7 @@ window.SOG.Adventure.Prehistory = (function () {
     var slotIndex = G.aiSlots[camp.id].indexOf(null);
     if (slotIndex === -1) { log('AI slots full — cannot place'); return; }
 
-    var card = window.CARDS && window.CARDS.find(function (c) { return c.id === cardId; });
+    var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) { log('AI card id ' + cardId + ' not found in CARDS'); return; }
 
     G.aiSlots[camp.id][slotIndex] = {
@@ -937,7 +1435,7 @@ window.SOG.Adventure.Prehistory = (function () {
     if (slots[locId] && slots[locId][slotIndex]) slots[locId][slotIndex].revealed = true;
     slotEl.classList.remove('face-down', 'unplayed');
     slotEl.classList.add('face-up');
-    var card = window.CARDS && window.CARDS.find(function (c) { return c.id === cardId; });
+    var card = CARDS.find(function (c) { return c.id === cardId; });
     if (card && SOG.board && SOG.board.buildCardFace) {
       var sd = slots[locId][slotIndex];
       var ip = SOG.board.effectiveIP(sd);
@@ -1015,19 +1513,44 @@ window.SOG.Adventure.Prehistory = (function () {
     log('Phase F — advancing to turn ' + G.turn);
     setTurnCounter(G.turn, TOTAL_TURNS);
     _hasPlayedThisTurn = false;
-    // Reset End Turn button (disabled until player places this turn).
+    G.prehistoryHasPlayed = false;  // unlock next play for isLegalPlayTarget
+
+    // Reset End Turn and Reset buttons (disabled until player places).
     var endTurnBtn = document.getElementById('battle-end-turn');
+    var resetBtn   = document.getElementById('battle-reset-turn');
     if (endTurnBtn) {
       endTurnBtn.disabled = true;
       endTurnBtn.classList.remove('adv-pulse');
     }
-    // Standard hand refill at turn start — same rule as post-play
-    // (only draw if hand below cap, so Tool's hand-of-5 sticks until
-    // a play brings it back to 4).
-    drawToHandCap();
+    if (resetBtn) resetBtn.disabled = true;
+
+    // Start-of-turn draw (player): exactly 1 card (flat draw, not draw-to-cap).
+    // Because this is a flat +1, Tool's reveal-phase draw (which fires
+    // before advanceToNextTurn) can push the hand to 4, and then this
+    // +1 brings it to 5 — the only legal way to exceed the 4-card cap.
+    var G2 = SOG.state.G;
+    if (G2.playerDeck.length > 0) {
+      G2.playerHand.push(G2.playerDeck.shift());
+      if (SOG.input && typeof SOG.input.rebuildPlayerHand === 'function') {
+        SOG.input.rebuildPlayerHand();
+      } else if (typeof window.setPlayerHand === 'function') {
+        window.setPlayerHand(G2.playerHand, G2.playerDeck.length);
+      }
+    }
+
+    // Start-of-turn draw (AI, parallel model): draw 1 cosmetic card from
+    // AI deck into AI hand. aiPlayScripted() consumed hand[0] this turn,
+    // dropping hand count by 1; this draw restores it — hand stays at 3→4
+    // and deck shrinks by 1, mirroring the player's draw rhythm.
+    if (G2.aiDeck.length > 0) {
+      G2.aiHand.push(G2.aiDeck.shift());
+      if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') {
+        SOG.ui.updateOppHand();
+      }
+    }
   }
 
-  /* ── End battle: tally + show victory or defeat ─────────────── */
+  /* ── End battle: tally scores, play SFX, run post-battle flow ── */
   function endBattle() {
     var G = SOG.state.G;
     var camp = G.locations[0];
@@ -1038,28 +1561,124 @@ window.SOG.Adventure.Prehistory = (function () {
     G.aiSlots[camp.id].forEach(function (s) {
       if (s && s.revealed) aIP += SOG.board.effectiveIP(s);
     });
-    var playerWon = pIP >= aIP;  // tie = player wins (spec)
+    var playerWon = pIP > aIP;
+    var tied      = pIP === aIP;
     log('Phase F — battle complete: player ' + pIP + ' vs AI ' + aIP +
-        ' → ' + (playerWon ? 'VICTORY' : 'DEFEAT'));
+        ' → ' + (playerWon ? 'VICTORY' : tied ? 'TIE' : 'DEFEAT'));
+
     if (playerWon) {
       markBattleComplete();
-      showVictoryScreen();
+      // Play victory fanfare immediately after the reveal settles
+      if (typeof SFX !== 'undefined' && typeof SFX.gameWon === 'function') SFX.gameWon();
+      // Brief pause for fanfare to land, then dialogue → card reveal → scoreboard
+      setTimeout(function () {
+        runPostBattleDialogue(WIN_DIALOGUE, function () {
+          var neanderthalCard = (typeof CARDS !== 'undefined') &&
+                                CARDS.find(function (c) { return c.id === 34; });
+          showCardAcquisition(
+            neanderthalCard || { id: 34, name: 'Neanderthal', image: 'images/prehistorycards/neanderthalcard.jpg', ip: 4, ability: null, abilityName: null },
+            playCardAcquire,
+            function () { showVictoryScreen(pIP, aIP); }
+          );
+        });
+      }, 600);
+    } else if (tied) {
+      // Tie: same progression treatment as loss (no card, node stays active)
+      // TODO: replace with custom loss sound
+      if (typeof SFX !== 'undefined' && typeof SFX.gameLost === 'function') SFX.gameLost();
+      setTimeout(function () {
+        runPostBattleDialogue(TIE_DIALOGUE, function () {
+          showTieScreen(pIP, aIP);
+        });
+      }, 600);
     } else {
-      showDefeatScreen();
+      // TODO: replace with custom loss sound
+      if (typeof SFX !== 'undefined' && typeof SFX.gameLost === 'function') SFX.gameLost();
+      // Brief pause for loss sound, then dialogue → scoreboard
+      setTimeout(function () {
+        runPostBattleDialogue(LOSS_DIALOGUE, function () {
+          showDefeatScreen(pIP, aIP);
+        });
+      }, 600);
+    }
+  }
+
+  /* ── Build a single result-loc-row element (Arcadium pattern) ── */
+  function buildAdvResultRow(locName, pIP, aIP, winner) {
+    var row = document.createElement('div'); row.className = 'result-loc-row';
+    var nm  = document.createElement('div'); nm.className  = 'result-loc-name'; nm.textContent = locName;
+    var sc  = document.createElement('div'); sc.className  = 'result-loc-scores';
+    var yu  = document.createElement('span');
+    yu.className   = 'result-loc-you' + (winner === 'player' ? ' result-loc-winner' : '');
+    yu.textContent = 'You: ' + pIP;
+    var vs  = document.createElement('span'); vs.className = 'result-loc-vs'; vs.textContent = 'vs';
+    var op  = document.createElement('span');
+    op.className   = 'result-loc-opp' + (winner === 'ai' ? ' result-loc-winner' : '');
+    op.textContent = 'Opp: ' + aIP;
+    sc.appendChild(yu); sc.appendChild(vs); sc.appendChild(op);
+    var bd = document.createElement('div');
+    bd.className   = 'result-loc-badge result-loc-badge-' + winner;
+    bd.textContent = winner === 'player' ? 'YOU' : winner === 'ai' ? 'OPP' : 'TIE';
+    row.appendChild(nm); row.appendChild(sc); row.appendChild(bd);
+    return row;
+  }
+
+  /* ── Shared helpers for result-screen buttons ──────────────── */
+
+  // Shared replay handler — used by both Play Again buttons and the
+  // defeat Try Again button. Tears down the finished battle and starts
+  // a fresh one from turn 1, skipping the walk / dialogue / wipe.
+  function replayBattle(overlayEl) {
+    overlayEl.style.display = 'none';
+    teardownBattle();
+    setupBattleBoard();
+    document.body.classList.remove('prehistory-pre-coaching');
+    popLucyIn();
+    startTurnLoop();
+    log('Phase F — replay: re-entering battle from gameboard');
+  }
+
+  // "Game Board" button — hides the result overlay so the player can
+  // inspect the final board state. Shows the adv-specific "← Results"
+  // button (mirrors Arcadium's btn-back-results pattern but scoped to
+  // the adventure module so it doesn't fire the Arcadium handler).
+  function showBoardFromResult(overlayEl) {
+    overlayEl.style.display = 'none';
+    var backBtn = document.getElementById('adv-btn-back-results');
+    if (backBtn) {
+      backBtn.style.display = '';
+      backBtn.onclick = function () {
+        backBtn.style.display = 'none';
+        overlayEl.style.display = 'flex';
+      };
     }
   }
 
   /* ── Victory / defeat screens ─────────────────────────────── */
-  function showVictoryScreen() {
+  function showVictoryScreen(pIP, aIP) {
     var el = document.getElementById('adv-result-victory');
     if (!el) return;
+
+    // Populate score row
+    var subEl  = document.getElementById('adv-result-victory-subline');
+    var locsEl = document.getElementById('adv-result-victory-locs');
+    if (subEl)  subEl.textContent = 'You conquered The Camp';
+    if (locsEl) { locsEl.innerHTML = ''; locsEl.appendChild(buildAdvResultRow('The Camp', pIP, aIP, 'player')); }
+
     el.style.display = 'flex';
-    var btn = document.getElementById('adv-result-victory-continue');
-    if (btn) {
-      btn.onclick = function () {
+
+    // SFX already played in endBattle() before the dialogue sequence.
+
+    // Game Board — inspect the final board, then ← Results to return
+    var boardBtn = document.getElementById('adv-result-victory-board');
+    if (boardBtn) boardBtn.onclick = function () { showBoardFromResult(el); };
+
+    // Continue — mark win + return to overworld
+    // TODO: Lucy overworld pop-up triggers here
+    var contBtn = document.getElementById('adv-result-victory-continue');
+    if (contBtn) {
+      contBtn.onclick = function () {
         el.style.display = 'none';
-        // Mark the Prehistory node as completed before returning to
-        // the overworld so the checkmark renders on the next paint.
         markPrehistoryNodeCompleteFlag = true;
         exitBattleToOverworld();
       };
@@ -1070,25 +1689,68 @@ window.SOG.Adventure.Prehistory = (function () {
   // class to the Prehistory node. Set in showVictoryScreen's Continue handler.
   var markPrehistoryNodeCompleteFlag = false;
 
-  function showDefeatScreen() {
+  function showDefeatScreen(pIP, aIP) {
     var el = document.getElementById('adv-result-defeat');
     if (!el) return;
+
+    // Populate score row
+    var subEl  = document.getElementById('adv-result-defeat-subline');
+    var locsEl = document.getElementById('adv-result-defeat-locs');
+    if (subEl)  subEl.textContent = 'Neanderthal won The Camp';
+    if (locsEl) { locsEl.innerHTML = ''; locsEl.appendChild(buildAdvResultRow('The Camp', pIP, aIP, 'ai')); }
+
     el.style.display = 'flex';
-    var btn = document.getElementById('adv-result-defeat-retry');
-    if (btn) {
-      btn.onclick = function () {
+
+    // SFX already played in endBattle() before the dialogue sequence.
+
+    // Game Board — inspect the final board, then ← Results to return
+    var boardBtn = document.getElementById('adv-result-defeat-board');
+    if (boardBtn) boardBtn.onclick = function () { showBoardFromResult(el); };
+
+    // Play Again — start a fresh battle from turn 1
+    var againBtn = document.getElementById('adv-result-defeat-again');
+    if (againBtn) againBtn.onclick = function () { replayBattle(el); };
+
+    // Back to Map — return to overworld without marking the node complete.
+    // The Prehistory node stays active so the player can re-enter and retry.
+    var mapBtn = document.getElementById('adv-result-defeat-backtomap');
+    if (mapBtn) {
+      mapBtn.onclick = function () {
         el.style.display = 'none';
-        // Replay from step 4 (gameboard appears). Per spec: do NOT
-        // replay steps 1-3 (overworld walk, dialogue, radial wipe).
-        // neanderthalIntroSeenThisSession is already true from the
-        // first run this session, so the skipIntro path is taken.
-        // We call setupBattleBoard directly to skip the wipe-fade.
-        teardownBattle();
-        setupBattleBoard();
-        document.body.classList.remove('prehistory-pre-coaching');
-        popLucyIn();
-        installEndTurnHook();
-        log('Phase F — defeat replay: re-entering battle from gameboard');
+        // markPrehistoryNodeCompleteFlag stays false — no progress recorded.
+        exitBattleToOverworld();
+      };
+    }
+  }
+
+  function showTieScreen(pIP, aIP) {
+    var el = document.getElementById('adv-result-tie');
+    if (!el) return;
+
+    // Populate score row — 'tie' badge on both sides
+    var subEl  = document.getElementById('adv-result-tie-subline');
+    var locsEl = document.getElementById('adv-result-tie-locs');
+    if (subEl)  subEl.textContent = 'The Camp ended in a draw';
+    if (locsEl) { locsEl.innerHTML = ''; locsEl.appendChild(buildAdvResultRow('The Camp', pIP, aIP, 'tie')); }
+
+    el.style.display = 'flex';
+
+    // SFX already played in endBattle() before the dialogue sequence.
+
+    // Game Board — inspect the final board, then ← Results to return
+    var boardBtn = document.getElementById('adv-result-tie-board');
+    if (boardBtn) boardBtn.onclick = function () { showBoardFromResult(el); };
+
+    // Play Again — start a fresh battle from turn 1
+    var againBtn = document.getElementById('adv-result-tie-again');
+    if (againBtn) againBtn.onclick = function () { replayBattle(el); };
+
+    // Back to Map — no progress; node stays active for another attempt
+    var mapBtn = document.getElementById('adv-result-tie-backtomap');
+    if (mapBtn) {
+      mapBtn.onclick = function () {
+        el.style.display = 'none';
+        exitBattleToOverworld();
       };
     }
   }
@@ -1113,6 +1775,9 @@ window.SOG.Adventure.Prehistory = (function () {
     hideAllBubbles();
     // Remove End Turn hook
     removeEndTurnHook();
+    // Hide the adventure "← Results" back button (only shown during board review)
+    var advBack = document.getElementById('adv-btn-back-results');
+    if (advBack) { advBack.style.display = 'none'; advBack.onclick = null; }
     // Clear prehistoryMode so subsequent standard battles work
     if (SOG.state && SOG.state.G) SOG.state.G.prehistoryMode = false;
     _hasPlayedThisTurn = false;
@@ -1123,14 +1788,20 @@ window.SOG.Adventure.Prehistory = (function () {
     if (typeof window.showScreen === 'function') {
       window.showScreen('screen-overworld');
     }
-    // Apply node-complete badge if needed.
     if (markPrehistoryNodeCompleteFlag) {
       markPrehistoryNodeCompleteFlag = false;
-      // Defer one frame so the overworld DOM has settled.
+      // 500 ms settling beat (spec §1): let the overworld screen finish
+      // rendering before we apply the badge and start the dialogue.
       setTimeout(function () {
         var nodeEl = document.querySelector('#overworld-overlay [data-id="prehistory"]');
         if (nodeEl) nodeEl.classList.add('overworld-node-complete');
-      }, 50);
+        // Trigger the post-victory overworld dialogue + Lucy card reveal.
+        // Gated inside startPostVictorySequence() by localStorage flag so
+        // it only runs once per player.
+        if (window.Overworld && typeof window.Overworld.startPostVictorySequence === 'function') {
+          window.Overworld.startPostVictorySequence();
+        }
+      }, 500);
     }
   }
 
@@ -1140,10 +1811,14 @@ window.SOG.Adventure.Prehistory = (function () {
   function startTurnLoop() {
     log('Phase F — starting turn loop (turn 1)');
     _hasPlayedThisTurn = false;
+    SOG.state.G.prehistoryHasPlayed = false;
     installEndTurnHook();
-    // End Turn starts disabled — player must place a card first.
+    installResetHook();
+    // Both action buttons start disabled — player must place a card first.
     var endTurnBtn = document.getElementById('battle-end-turn');
+    var resetBtn   = document.getElementById('battle-reset-turn');
     if (endTurnBtn) endTurnBtn.disabled = true;
+    if (resetBtn)   resetBtn.disabled   = true;
   }
 
   /* ── Exit back to overworld (devtools / temporary escape) ──── */
@@ -1247,9 +1922,12 @@ window.SOG.Adventure.Prehistory = (function () {
     isBattleComplete:       isBattleComplete,
     markBattleComplete:     markBattleComplete,
     resetBattleComplete:    resetBattleComplete,
-    // Devtools escape — call from console while testing Phase D-E
-    // (the player can't progress past the board until Phase F wires
-    // the turn loop). Returns to overworld and clears the context class.
+    // Called by input.js commitPlay when G.prehistoryMode is true.
+    notifyPlayerPlayed:     notifyPlayerPlayed,
+    // Shared card-acquisition component — called by overworld.js for the
+    // Lucy reveal (and any future card unlocks that use the same flow).
+    showCardAcquisition:    showCardAcquisition,
+    // Devtools escape
     exitToOverworld:        exitToOverworld
   };
 

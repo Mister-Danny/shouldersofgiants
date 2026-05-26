@@ -20,6 +20,8 @@ var Overworld = (function () {
   var KEY_VISITED       = 'sog_overworld_visited_maps';
   var KEY_ADVENTURE_INTRO = 'sog_adventure_intro_complete';
   var KEY_ADVENTURER    = 'sog_selected_adventurer';
+  var KEY_POST_NEANDERTHAL_DIALOGUE = 'sog_post_neanderthal_overworld_complete';
+  var KEY_CARD_LUCY_UNLOCKED        = 'sog_card_lucy_unlocked';
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -39,6 +41,20 @@ var Overworld = (function () {
     { who: 'explorer', text: 'But where are all the people?' }
   ];
 
+  /* Post-Neanderthal-victory overworld dialogue \u2014 8 lines, click-to-advance.
+     Fires once after the player wins the Neanderthal battle and returns to
+     the overworld.  Ends with Lucy handing the player her card. */
+  var POST_NEANDERTHAL_DIALOGUE = [
+    { who: 'explorer', text: 'Wow, I can\u2019t believe I just interacted with a real Neanderthal.' },
+    { who: 'lucy',     text: 'That\u2019s an interesting way to describe a near-death experience.'  },
+    { who: 'explorer', text: 'I couldn\u2019t have done it without you.'                            },
+    { who: 'lucy',     text: 'Nobody could.'                                                       },
+    { who: 'explorer', text: 'I can\u2019t wait to see the rest of the Ancient World.'             },
+    { who: 'lucy',     text: 'About that. I can walk, but these old bones don\u2019t travel.'      },
+    { who: 'explorer', text: 'I guess this is goodbye?'                                            },
+    { who: 'lucy',     text: 'Take this.'                                                          }
+  ];
+
   var PHASE2_DIALOGUE = [
     { who: 'lucy',     text: 'Mmmhm\u2026 I\u2019m standing right here.' },
     { who: 'explorer', text: 'Woah, you can talk? I thought you were an ape?' },
@@ -48,8 +64,8 @@ var Overworld = (function () {
     { who: 'explorer', text: 'That doesn\u2019t explain why you can talk.' },
     { who: 'lucy',     text: 'Nothing will. Don\u2019t over think it.' },
     { who: 'explorer', text: 'Fair enough. But that must mean I traveled back in time. Like way back.' },
-    { who: 'lucy',     text: 'I wouldn\u2019t over think that either.' },
-    { who: 'explorer', text: 'Well, I\u2019m going to get going. See you later.' }
+    { who: 'lucy',     text: 'Like I said, don\u2019t over think it.' },
+    { who: 'explorer', text: 'Well then, I guess I better get going.' }
   ];
 
   var TYPE_SPEED_MS      = 28;      // ms per character
@@ -673,6 +689,49 @@ var Overworld = (function () {
     });
   }
 
+  /* ── Post-victory overworld sequence ────────────────────────
+     Called by SOG.Adventure.Prehistory's exitBattleToOverworld()
+     after a Neanderthal win.  Gated by localStorage so it only
+     runs once.  Runs the 8-line dialogue, then triggers the Lucy
+     card-acquisition reveal via the shared component in
+     sog-adventure-prehistory.js.                               */
+  function startPostVictorySequence() {
+    try {
+      if (localStorage.getItem(KEY_POST_NEANDERTHAL_DIALOGUE) === 'true') return;
+    } catch (e) {}
+
+    if (!lucyBoxEl || !explorerBoxEl) {
+      log('[PostVictory] dialogue boxes missing — skipping');
+      return;
+    }
+
+    resetBox(lucyBoxEl);
+    resetBox(explorerBoxEl);
+    isDialogueLocked = true;
+    cancelIdle();
+
+    runDialogue(POST_NEANDERTHAL_DIALOGUE, function () {
+      isDialogueLocked = false;
+      // runDialogue already faded out the boxes — now show Lucy's card.
+      var lucyCard = (typeof CARDS !== 'undefined') &&
+                     CARDS.find(function (c) { return c.id === 33; });
+      var preh = window.SOG && window.SOG.Adventure && window.SOG.Adventure.Prehistory;
+      if (lucyCard && preh && typeof preh.showCardAcquisition === 'function') {
+        preh.showCardAcquisition(lucyCard, null, _completePostVictorySequence);
+      } else {
+        _completePostVictorySequence();
+      }
+    });
+  }
+
+  function _completePostVictorySequence() {
+    try { localStorage.setItem(KEY_POST_NEANDERTHAL_DIALOGUE, 'true'); } catch (e) {}
+    try { localStorage.setItem(KEY_CARD_LUCY_UNLOCKED, 'true'); } catch (e) {}
+    // TODO: Otzi region unlocks here, Lucy departure animation
+    log('[PostVictory] complete — Lucy card unlocked');
+    scheduleIdle();
+  }
+
   /* ── Generic dialogue runner (used by both phases) ────────── */
   function runDialogue(lines, onDone) {
     dlgRunning  = true;
@@ -956,6 +1015,9 @@ var Overworld = (function () {
         if (onDone) onDone();
       });
     },
+    // Post-victory sequence — called by sog-adventure-prehistory.js after
+    // the player wins the Neanderthal battle and returns to the overworld.
+    startPostVictorySequence: startPostVictorySequence,
     // Devtools helpers
     goToMap: function (mapId) {
       if (!MAPS[mapId]) { console.warn('No such map:', mapId); return; }

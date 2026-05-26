@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <!-- Responsive viewport — scales to device width on phones/tablets,
        preserves 1280px layout on Chromebooks via CSS transform         -->
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=1280, initial-scale=1">
   <title>Shoulders of Giants</title>
 
   <!-- Cinzel: historical serif headings | Crimson Text: card names/flavour | Source Sans 3: UI/ability text -->
@@ -24,6 +24,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
+
+  <div id="sog-stage">
 
   <!-- ═══════════════════════════════════════════════════════════════
        HOME SCREEN — Welcome / "Are you ready?" screen
@@ -47,7 +49,7 @@
 
         <!-- State 2 buttons (hidden initially) -->
         <button class="btn-snes btn-home-uniform btn-home-arcadium"     id="btn-arcadium">Arcadium</button>
-        <button class="btn-snes btn-home-uniform btn-home-adventure-new" id="btn-adventure-new">Adventure</button>
+        <button class="btn-snes btn-home-uniform btn-home-adventure-new adventure-mode-in-development" id="btn-adventure-new">Adventure</button>
         <button class="btn-snes btn-home-uniform btn-home-versus"       id="btn-versus">&#9876; Multiplayer</button>
 
         <!-- State 2 back arrow — returns to State 1 -->
@@ -71,6 +73,21 @@
     </div>
 
     <p class="home-byline">By Mr. Shutler-Ojeda</p>
+
+    <!-- Adventure Mode in-development warning popup -->
+    <div id="adv-dev-warning-backdrop" class="popup-backdrop">
+      <div class="card-popup adv-dev-warning-popup">
+        <div class="popup-card-name">Adventure Mode</div>
+        <div class="popup-divider"></div>
+        <div class="popup-ability-text adv-dev-warning-body">
+          This section of the game is in active development. Proceed at your own risk. You will encounter bugs and eventually get stuck.
+        </div>
+        <div class="popup-actions adv-dev-warning-actions">
+          <button class="btn-snes" id="adv-dev-proceed">Proceed</button>
+          <button class="btn-snes btn-snes-close" id="adv-dev-goback">Go Back</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Coming Soon popup -->
     <div id="coming-soon-backdrop" class="popup-backdrop">
@@ -248,25 +265,31 @@
       </div>
     </div>
 
-    <!-- ── Card Detail Popup — SNES dialogue box style ─────────── -->
+    <!-- ── Card Detail Popup — redesigned focal-ability layout ─── -->
     <!-- Clicking the backdrop (outside the panel) closes it       -->
     <div id="card-popup-backdrop" class="popup-backdrop">
       <div class="card-popup" id="card-popup">
 
-        <!-- Card name header -->
-        <div class="popup-card-name" id="popup-name"></div>
-        <div class="popup-card-type" id="popup-type"></div>
+        <!-- X close button — top-right corner -->
+        <button class="popup-close-x" id="popup-close-btn" aria-label="Close">&#x2715;</button>
+
+        <!-- Header row: name  ·  type icon + label -->
+        <div class="popup-header-row">
+          <span class="popup-card-name" id="popup-name"></span>
+          <span class="popup-card-type" id="popup-type"></span>
+        </div>
 
         <div class="popup-divider"></div>
 
-        <!-- Ability name (italic label) + full ability text -->
+        <!-- Ability section (focal point) -->
         <div class="popup-ability-name" id="popup-ability-name"></div>
         <div class="popup-ability-text" id="popup-ability-text"></div>
 
-        <!-- Double-click hint + close button -->
-        <div class="popup-actions">
+        <div class="popup-divider"></div>
+
+        <!-- Footer row: hint text -->
+        <div class="popup-footer-row">
           <span class="popup-hint"></span>
-          <button class="btn-snes btn-snes-close" id="popup-close-btn">CLOSE</button>
         </div>
 
       </div>
@@ -294,7 +317,8 @@
         <span class="battle-timer-label">TIME</span>
         <span id="battle-timer-val" class="battle-timer-val">60</span>
       </div>
-      <button class="btn-back-results" id="btn-back-results" style="display:none">&#8592; Results</button>
+      <button class="btn-back-results" id="btn-back-results"     style="display:none">&#8592; Results</button>
+      <button class="btn-back-results" id="adv-btn-back-results" style="display:none">&#8592; Results</button>
       <button class="btn-reset-turn"   id="battle-reset-turn"   disabled>RESET</button>
       <button class="btn-end-turn"     id="battle-end-turn"     disabled>END TURN</button>
       <button class="btn-undo-endturn" id="battle-undo-endturn" style="display:none">UNDO (4)</button>
@@ -326,19 +350,33 @@
       </div>
     </div>
 
-    <!-- ── Card info popup (click any hand card to open) ───────── -->
+    <!-- ── Card info popup (click any hand/board card to open) ─── -->
     <div id="battle-popup-backdrop" class="popup-backdrop">
       <div class="card-popup">
-        <div class="popup-card-name"    id="battle-popup-name"></div>
-        <div class="popup-card-type"    id="battle-popup-type"></div>
+
+        <!-- X close button — top-right corner -->
+        <button class="popup-close-x" id="battle-popup-close" aria-label="Close">&#x2715;</button>
+
+        <!-- Header row: name  type icon + label -->
+        <div class="popup-header-row">
+          <span class="popup-card-name" id="battle-popup-name"></span>
+          <span class="popup-card-type"  id="battle-popup-type"></span>
+        </div>
+
         <div class="popup-divider"></div>
+
+        <!-- Ability section (focal point) -->
         <div class="popup-ability-name" id="battle-popup-ability-name"></div>
         <div class="popup-ability-text" id="battle-popup-ability-text"></div>
-        <div class="popup-ip-breakdown" id="battle-popup-ip-breakdown" style="display:none"></div>
-        <div class="popup-actions">
+
+        <div class="popup-divider"></div>
+
+        <!-- Footer row: IP breakdown (board) or hint (hand) -->
+        <div class="popup-footer-row">
+          <div class="popup-ip-breakdown" id="battle-popup-ip-breakdown" style="display:none"></div>
           <span class="popup-hint" id="battle-popup-hint">DRAG CARD TO A SLOT TO PLAY</span>
-          <button class="btn-snes btn-snes-close" id="battle-popup-close">CLOSE</button>
         </div>
+
       </div>
     </div>
 
@@ -384,7 +422,7 @@
          overworld interaction. Portrait on the right (adv-dialogue-top). -->
     <div id="adv-dialogue-neanderthal" class="adv-dialogue adv-dialogue-top">
       <div class="adv-dialogue-text"></div>
-      <img class="adv-dialogue-portrait" src="images/prehistorycards/neanderthalcard@sm.jpg" alt="">
+      <img class="adv-dialogue-portrait" src="images/portraits/neanderthalportait.jpeg" alt="" style="transform:scaleX(-1)">
       <div class="adv-dialogue-hint">&#9654; Click to continue</div>
     </div>
 
@@ -404,7 +442,7 @@
        Positioned with .adv-bubble-tr (top-right, Neanderthal)
        and .adv-bubble-bl (bottom-left, Explorer). -->
   <div id="adv-bubble-neanderthal" class="adv-bubble adv-bubble-tr">
-    <img class="adv-bubble-portrait" src="images/prehistorycards/neanderthalcard@sm.jpg" alt="">
+    <img class="adv-bubble-portrait" src="images/portraits/neanderthalportait.jpeg" alt="" style="transform:scaleX(-1)">
     <div class="adv-bubble-text"></div>
     <div class="adv-bubble-hint">&#9654; Click to continue</div>
   </div>
@@ -430,31 +468,60 @@
   <div id="adv-radial-wipe"></div>
 
   <!-- ═══════════════════════════════════════════════════════════════
+       ADVENTURE MODE — Post-battle dim overlay + card reveal (win)
+       #adv-post-battle-dim: 80% black layer above gameboard.
+       #adv-card-reveal: banner + rising Neanderthal card centered on
+       stage. Both sit inside #sog-stage so they scale with the stage
+       transform. JS (sog-adventure-prehistory.js) drives GSAP animations.
+  ════════════════════════════════════════════════════════════════ -->
+  <!-- NOTE: these elements are injected inside #sog-stage by JS at
+       runtime so they inherit the stage transform. The placeholders
+       below sit at body level and are moved by initPostBattleElements(). -->
+  <div id="adv-post-battle-dim"    style="display:none"></div>
+  <div id="adv-card-reveal"        style="display:none">
+    <div id="adv-card-reveal-banner">New Card Acquired</div>
+    <img id="adv-card-reveal-img"  src="images/prehistorycards/neanderthalcard.jpg" alt="Neanderthal card">
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
        ADVENTURE MODE — Neanderthal battle result screens (phase F)
-       Placeholder victory / defeat overlays shown when the battle ends.
-       Sit at body level so they cover the battle screen entirely.
-       The card-reveal celebration animation (Neanderthal + Lucy +
-       Hunter companion) is a separate, follow-up prompt.
+       Victory: Game Board + Continue (no Play Again on win).
+       Defeat:  Game Board + Play Again + Back to Map.
   ════════════════════════════════════════════════════════════════ -->
   <div id="adv-result-victory" class="adv-result" style="display:none">
-    <div class="adv-result-panel">
-      <div class="adv-result-title">YOU WIN!</div>
-      <div class="adv-result-message">
-        You sent the Neanderthal back to whatever came before the Stone Age.
+    <div class="result-wrap">
+      <div class="result-headline result-player">VICTORY</div>
+      <div class="result-subline" id="adv-result-victory-subline"></div>
+      <div class="result-locs"   id="adv-result-victory-locs"></div>
+      <div class="result-actions">
+        <button class="btn-primary" id="adv-result-victory-board">GAME BOARD</button>
+        <button class="btn-primary" id="adv-result-victory-continue">CONTINUE</button>
       </div>
-      <!-- TODO follow-up: card reveal animation (Neanderthal + Lucy +
-           Hunter companion) goes inside this panel before the Continue
-           button. Implemented in a separate prompt. -->
-      <button class="btn-snes" id="adv-result-victory-continue">CONTINUE</button>
     </div>
   </div>
   <div id="adv-result-defeat" class="adv-result" style="display:none">
-    <div class="adv-result-panel">
-      <div class="adv-result-title">DEFEATED</div>
-      <div class="adv-result-message">
-        The Neanderthal grunts in triumph. Try again?
+    <div class="result-wrap">
+      <div class="result-headline result-ai">DEFEATED</div>
+      <div class="result-subline" id="adv-result-defeat-subline"></div>
+      <div class="result-locs"   id="adv-result-defeat-locs"></div>
+      <div class="result-actions">
+        <button class="btn-primary" id="adv-result-defeat-board">GAME BOARD</button>
+        <button class="btn-primary" id="adv-result-defeat-again">PLAY AGAIN</button>
+        <button class="btn-primary" id="adv-result-defeat-backtomap">BACK TO MAP</button>
       </div>
-      <button class="btn-snes" id="adv-result-defeat-retry">TRY AGAIN</button>
+    </div>
+  </div>
+  <!-- Tie screen — same buttons as defeat; no card reward, node stays active -->
+  <div id="adv-result-tie" class="adv-result" style="display:none">
+    <div class="result-wrap">
+      <div class="result-headline result-tie">A TIE</div>
+      <div class="result-subline" id="adv-result-tie-subline"></div>
+      <div class="result-locs"   id="adv-result-tie-locs"></div>
+      <div class="result-actions">
+        <button class="btn-primary" id="adv-result-tie-board">GAME BOARD</button>
+        <button class="btn-primary" id="adv-result-tie-again">PLAY AGAIN</button>
+        <button class="btn-primary" id="adv-result-tie-backtomap">BACK TO MAP</button>
+      </div>
     </div>
   </div>
 
@@ -1391,6 +1458,11 @@
       <input type="range" id="music-volume-slider" class="music-volume-slider" min="0" max="100" value="10">
     </div>
   </div>
+
+  </div><!-- /#sog-stage -->
+
+  <!-- Stage scaling — must be first so SOG.Stage exists before any module -->
+  <script src="js/sog-stage.js"></script>
 
   <!-- ── Multi-deck save layer (must load before any deck consumer) ── -->
   <script src="js/decks.js"></script>

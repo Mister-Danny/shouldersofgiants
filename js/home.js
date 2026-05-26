@@ -17,6 +17,7 @@ var HomeFlow = (function () {
 
   var KEY_FIRST_VISIT       = 'sog_first_visit_complete';
   var KEY_ADVENTURER        = 'sog_selected_adventurer';
+  var KEY_ADV_WARNING       = 'sog_adventure_warning_seen';
 
   var SPRITE_PATH  = 'images/metaworld/character sprites/female/';
 
@@ -27,6 +28,7 @@ var HomeFlow = (function () {
   /* ── Elements ──────────────────────────────────────────────── */
   var screenHomeEl, homeContentEl, adventureStageEl;
   var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback;
+  var advDevWarningEl, advDevProceedBtn, advDevGoBackBtn;
   var subtitleIntroEl, subtitlePathEl, subtitleAdventurerEl;
   var charFemaleEl, charMaleEl;
   var backBtn, doorEl, irisEl;
@@ -197,6 +199,20 @@ var HomeFlow = (function () {
     ensureFootsteps();
 
     // Wire buttons
+    advDevWarningEl  = document.getElementById('adv-dev-warning-backdrop');
+    advDevProceedBtn = document.getElementById('adv-dev-proceed');
+    advDevGoBackBtn  = document.getElementById('adv-dev-goback');
+
+    if (advDevProceedBtn) advDevProceedBtn.addEventListener('click', function () {
+      localStorage.setItem(KEY_ADV_WARNING, 'true');
+      hideAdvDevWarning();
+      enterAdventureFlow();   // proceed into Adventure Mode
+    });
+    if (advDevGoBackBtn) advDevGoBackBtn.addEventListener('click', function () {
+      localStorage.setItem(KEY_ADV_WARNING, 'true');
+      hideAdvDevWarning();    // stay on home screen — no further action
+    });
+
     if (btnReady)        btnReady.addEventListener('click', onReadyClick);
     if (btnArcadium)     btnArcadium.addEventListener('click', onArcadiumClick);
     if (btnAdventureNew) btnAdventureNew.addEventListener('click', onAdventureClick);
@@ -353,9 +369,28 @@ var HomeFlow = (function () {
     if (!dbWillRun && typeof window.playDeckMusic === 'function') window.playDeckMusic();
   }
 
+  /* ── Adventure in-development warning ───────────────────────── */
+  function showAdvDevWarning() {
+    if (advDevWarningEl) advDevWarningEl.classList.add('visible');
+  }
+  function hideAdvDevWarning() {
+    if (advDevWarningEl) advDevWarningEl.classList.remove('visible');
+  }
+
   /* ── STATE 2 → 3: Adventure clicked ────────────────────────── */
   function onAdventureClick() {
-    // Fade out Arcadium + Online Versus, keep Adventure briefly, then show stage
+    // Show the in-development warning the first time; after that go straight through.
+    if (!localStorage.getItem(KEY_ADV_WARNING)) {
+      showAdvDevWarning();
+      return;
+    }
+    enterAdventureFlow();
+  }
+
+  /* Performs the actual transition into Adventure Mode (fade out other
+     buttons → adventurer selection stage). Split out so both the direct
+     click path and the "Proceed" button in the warning popup share it. */
+  function enterAdventureFlow() {
     if (typeof gsap === 'undefined') { enterAdventureStage(); return; }
 
     gsap.to([btnArcadium, btnVersus, btnAdventureNew, btnState2Back], {
@@ -400,17 +435,19 @@ var HomeFlow = (function () {
 
   /* ── Walk a character in from off-screen to a centered stop ── */
   function walkCharacterIn(el, which, dirIn) {
-    var vw = window.innerWidth;
+    // Use fixed stage width (1280px) so characters stop at the same stage
+    // positions regardless of the browser viewport size.
+    var vw = 1280;
     var startXpx, endXpx, spriteDir;
     if (dirIn === 'from-left') {
-      // Female — comes in from left, walks right, stops at 38% of viewport
+      // Female — comes in from left, walks right, stops at 38% of stage
       startXpx  = -100;
-      endXpx    = vw * 0.38;
+      endXpx    = vw * 0.38;   /* 486px — 154px left of centre */
       spriteDir = 'right';
     } else {
-      // Male — comes in from right, walks left, stops at 62% of viewport
+      // Male — comes in from right, walks left, stops at 62% of stage
       startXpx  = vw + 100;
-      endXpx    = vw * 0.62;
+      endXpx    = vw * 0.62;   /* 794px — 154px right of centre */
       spriteDir = 'left';
     }
 
@@ -516,10 +553,15 @@ var HomeFlow = (function () {
     gsap.to([subtitleAdventurerEl, backBtn], { opacity: 0, duration: 0.3 });
     subtitleAdventurerEl.classList.remove('is-visible');
 
-    // Build a secret door on the character's horizontal plane
-    var selRect = selected.getBoundingClientRect();
-    var doorCenterY = selRect.top + selRect.height / 2;
-    var doorCenterX = window.innerWidth / 2;
+    // Build a secret door on the character's horizontal plane.
+    // doorCenterX/Y must be in stage coordinates (0–1280 × 0–720) because
+    // doorEl is position:absolute inside the stage.
+    var selRect  = selected.getBoundingClientRect();
+    var scale    = (window.SOG && window.SOG.Stage) ? window.SOG.Stage.getScale() : 1;
+    var stageEl  = document.getElementById('sog-stage');
+    var stageTop = stageEl ? stageEl.getBoundingClientRect().top : 0;
+    var doorCenterX = 640;   /* always open at horizontal centre of 1280px stage */
+    var doorCenterY = (selRect.top - stageTop + selRect.height / 2) / scale;
 
     doorEl.style.left   = doorCenterX + 'px';
     doorEl.style.top    = doorCenterY + 'px';
@@ -544,9 +586,15 @@ var HomeFlow = (function () {
     // as she arrives (z-index stays high until she fades into the door).
     el.style.zIndex = '45';
 
-    // Compute walk direction toward door
+    // Compute walk direction toward door.
+    // el is inside the stage (position:absolute), so its left is already
+    // a stage coordinate.  getBoundingClientRect() returns viewport coords;
+    // divide by the CSS transform scale to convert back to stage coords.
+    var scale = (window.SOG && window.SOG.Stage) ? window.SOG.Stage.getScale() : 1;
+    var stageEl  = document.getElementById('sog-stage');
+    var stageLeft = stageEl ? stageEl.getBoundingClientRect().left : 0;
     var rect = el.getBoundingClientRect();
-    var charX = rect.left + rect.width / 2;
+    var charX = (rect.left - stageLeft + rect.width / 2) / scale;
     var dir = (doorX > charX) ? 'right' : 'left';
     startWalkAnim(el, dir);
 
@@ -585,15 +633,16 @@ var HomeFlow = (function () {
   function startIrisWipe(cx, cy) {
     irisEl.classList.add('active');
 
-    // Convert center to percentages for CSS clip-path
-    var vw = window.innerWidth;
-    var vh = window.innerHeight;
+    // cx/cy are stage coordinates (0–1280, 0–720).
+    // #home-iris-wipe is position:absolute; inset:0 inside the stage, so
+    // clip-path percentages are relative to the stage dimensions (1280×720).
+    var vw = 1280;
+    var vh = 720;
     var cxPct = (cx / vw) * 100;
     var cyPct = (cy / vh) * 100;
 
-    // Start: iris fully open (reveals everything → black covers nothing)
-    // End of close: iris closed (tiny point at door → black everywhere)
-    var maxRadius = Math.max(vw, vh) * 1.4;
+    // Radius large enough to cover the entire 1280×720 stage.
+    var maxRadius = Math.max(vw, vh) * 1.4;   /* 1792px > diagonal 1473px */
 
     // We use inverse clip-path: the DIV is black, and clip-path cuts a
     // circle HOLE out of it. As the hole shrinks to 0, the screen becomes
