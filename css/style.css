@@ -8539,6 +8539,7 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
    battle so the numeral doesn't overpower the card art at this card size. */
 body.prehistory-battle .db-overlay-ip {
   font-size: 21cqw;
+  top: calc(3cqw + 3px);
   text-shadow:
     -1px -1px 0 #fff,  1px -1px 0 #fff,
     -1px  1px 0 #fff,  1px  1px 0 #fff;
