@@ -852,13 +852,20 @@ window.SOG.Adventure.Prehistory = (function () {
 
     var dimEl    = document.getElementById('adv-post-battle-dim');
     var revealEl = document.getElementById('adv-card-reveal');
+    var wrapEl   = document.getElementById('adv-card-reveal-card-wrap');
     var imgEl    = document.getElementById('adv-card-reveal-img');
+    var ipEl     = document.getElementById('adv-card-reveal-ip');
     var bannerEl = document.getElementById('adv-card-reveal-banner');
 
-    if (!revealEl || !imgEl) { if (onComplete) onComplete(); return; }
+    // wrapEl is preferred GSAP target (img + IP overlay move together);
+    // fall back to imgEl if wrapper isn't in DOM yet (old HTML).
+    var animTarget = wrapEl || imgEl;
 
-    // Point the image at this card
+    if (!revealEl || !animTarget) { if (onComplete) onComplete(); return; }
+
+    // Point the image at this card and stamp the IP number
     imgEl.src = card.image || '';
+    if (ipEl) ipEl.textContent = card.ip != null ? String(card.ip) : '';
 
     // Show and fade-in the dim overlay
     if (dimEl) {
@@ -868,7 +875,7 @@ window.SOG.Adventure.Prehistory = (function () {
 
     // Prepare card: start off below stage, transparent
     revealEl.style.display = 'flex';
-    gsap.set(imgEl, { y: 380, opacity: 0 });
+    gsap.set(animTarget, { y: 380, opacity: 0 });
     if (bannerEl) {
       bannerEl.style.transition = '';
       bannerEl.style.opacity    = '0';
@@ -876,7 +883,7 @@ window.SOG.Adventure.Prehistory = (function () {
     }
 
     // Card rises into centre
-    gsap.to(imgEl, {
+    gsap.to(animTarget, {
       y:        0,
       opacity:  1,
       duration: 1.5,
@@ -896,7 +903,7 @@ window.SOG.Adventure.Prehistory = (function () {
         // Wire up interactions after a short guard (so the click that
         // advanced the last dialogue line doesn't instantly fire).
         setTimeout(function () {
-          _wireCardAcquisitionInteractions(card, dimEl, revealEl, imgEl, bannerEl, onComplete);
+          _wireCardAcquisitionInteractions(card, dimEl, revealEl, animTarget, bannerEl, onComplete);
         }, 80);
       }
     });
@@ -904,7 +911,9 @@ window.SOG.Adventure.Prehistory = (function () {
 
   /* Attaches the click-to-popup / click-outside-to-dismiss handlers
      for a live card-acquisition reveal.  Called once per reveal.     */
-  function _wireCardAcquisitionInteractions(card, dimEl, revealEl, imgEl, bannerEl, onComplete) {
+  /* wrapEl is the GSAP / click-detection target (#adv-card-reveal-card-wrap).
+     It contains both the img and the IP overlay, so they move together.    */
+  function _wireCardAcquisitionInteractions(card, dimEl, revealEl, wrapEl, bannerEl, onComplete) {
     var _dismissed = false;
 
     function dismiss() {
@@ -913,7 +922,7 @@ window.SOG.Adventure.Prehistory = (function () {
       revealEl.removeEventListener('click', onRevealAreaClick);
 
       if (bannerEl) bannerEl.style.transition = '';
-      gsap.to(imgEl, { opacity: 0, duration: 0.3 });
+      gsap.to(wrapEl, { opacity: 0, duration: 0.3 });
       if (bannerEl) gsap.to(bannerEl, { opacity: 0, duration: 0.3 });
 
       var dimTarget = dimEl || revealEl;
@@ -923,7 +932,7 @@ window.SOG.Adventure.Prehistory = (function () {
         onComplete: function () {
           revealEl.style.display = 'none';
           if (dimEl) { dimEl.style.display = 'none'; dimEl.style.opacity = ''; }
-          gsap.set(imgEl, { clearProps: 'all' });
+          gsap.set(wrapEl, { clearProps: 'all' });
           if (bannerEl) { bannerEl.style.opacity = ''; bannerEl.style.transform = ''; }
           if (onComplete) onComplete();
         }
@@ -935,8 +944,8 @@ window.SOG.Adventure.Prehistory = (function () {
       var popupEl = document.getElementById('battle-popup-backdrop');
       if (popupEl && popupEl.classList.contains('visible')) return;
 
-      // Click on the card image → open the card-info popup
-      if (e.target === imgEl) {
+      // Click anywhere on the card wrapper (img or IP overlay) → open popup
+      if (wrapEl.contains(e.target)) {
         var minimalSd = {
           cardId: card.id,  ip: card.ip,
           ipMod: 0, contMod: 0,

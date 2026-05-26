@@ -8598,18 +8598,27 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
   z-index: 5200;
 }
 
-/* Card acquisition image — clicking opens the card-info popup */
-#adv-card-reveal-img {
+/* Card acquisition wrapper — sized container for the img + IP overlay.
+   container-type:inline-size makes cqw units resolve against card width
+   so .db-overlay-ip scales exactly as it does on in-game hand cards.  */
+#adv-card-reveal-card-wrap {
+  position: relative;
   width: 320px;
+  container-type: inline-size;
+  cursor: pointer;
+}
+
+/* Card acquisition image — fills wrapper; sizing/cursor live on wrapper */
+#adv-card-reveal-img {
+  width: 100%;
   height: auto;
   border-radius: 4px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.75),
               0 0 0 2px rgba(212, 170, 80, 0.5);
   display: block;
-  cursor: pointer;
   transition: box-shadow 0.2s ease, transform 0.15s ease;
 }
-#adv-card-reveal-img:hover {
+#adv-card-reveal-card-wrap:hover #adv-card-reveal-img {
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.75),
               0 0 0 3px rgba(248, 208, 0, 0.85);
   transform: scale(1.02);
