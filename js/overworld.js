@@ -50,7 +50,7 @@ var Overworld = (function () {
     { who: 'explorer', text: 'I couldn\u2019t have done it without you.'                            },
     { who: 'lucy',     text: 'Nobody could.'                                                       },
     { who: 'explorer', text: 'I can\u2019t wait to see the rest of the Ancient World.'             },
-    { who: 'lucy',     text: 'About that. I can walk, but these old bones don\u2019t travel.'      },
+    { who: 'lucy',     text: 'About that. I can walk, but these old bones don\u2019t migrate.'    },
     { who: 'explorer', text: 'I guess this is goodbye?'                                            },
     { who: 'lucy',     text: 'Take this.'                                                          }
   ];
