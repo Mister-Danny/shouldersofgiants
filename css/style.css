@@ -7738,7 +7738,7 @@ body.tut-locked #battle-reset-turn {
    one class removal restores the full-colour appearance instantly. */
 .adventure-mode-in-development {
   opacity: 0.6;
-  filter: grayscale(50%);
+  filter: grayscale(100%);
 }
 /* Suppress the hover glow so the button doesn't look fully active */
 .adventure-mode-in-development:hover {
@@ -7746,6 +7746,7 @@ body.tut-locked #battle-reset-turn {
   color: #f0cf6c;               /* reset to base text colour */
   box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000;  /* no halo */
   background: linear-gradient(180deg, #4a8540 0%, #2c5224 100%);
+  filter: grayscale(100%);      /* keep fully greyscale on hover */
 }
 /* Suppress the press animation */
 .adventure-mode-in-development:active {
