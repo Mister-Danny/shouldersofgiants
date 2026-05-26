@@ -669,7 +669,7 @@ window.SOG.Adventure.Prehistory = (function () {
   /* ── Dialogue line arrays ───────────────────────────────────── */
   var WIN_DIALOGUE = [
     { who: 'neanderthal', text: 'Hey, you not so bad.'        },
-    { who: 'lucy',        text: 'No, you were awesome.'       },
+    { who: 'lucy',        text: 'You really know your stuff.'  },
     { who: 'neanderthal', text: 'You join my tribe?'          },
     { who: 'lucy',        text: "Don't let him get any ideas." },
     { who: 'neanderthal', text: 'Oh fine, can I join yours?'  }

@@ -8535,6 +8535,15 @@ body.prehistory-battle.prehistory-pre-coaching .battle-hud-topleft {
   visibility: hidden;
 }
 
+/* IP overlay: 1 unit smaller font and thinner stroke in the Neanderthal
+   battle so the numeral doesn't overpower the card art at this card size. */
+body.prehistory-battle .db-overlay-ip {
+  font-size: 21cqw;
+  text-shadow:
+    -1px -1px 0 #fff,  1px -1px 0 #fff,
+    -1px  1px 0 #fff,  1px  1px 0 #fff;
+}
+
 /* IP gold ring injected during the "See that number?" coaching beat.
    JS creates a <div.adv-ip-ring> directly on #sog-stage (bypassing the
    card's overflow:hidden) and positions it via getBoundingClientRect().
