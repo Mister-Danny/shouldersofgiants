@@ -647,7 +647,48 @@ SOG.OtziBattle = (function () {
         }
       });
     };
-    next(0);
+
+    // Before the sequential flip begins, ensure every unrevealed card is
+    // showing face-down. Player cards were placed face-up during the select
+    // phase (commitPlay → 'face-up unplayed') and Lucy's move destination
+    // has 'queued-dest'. Mirror game.js lines 824-853: GSAP-squish them to
+    // face-down so the whole board shows a uniform face-down state, then
+    // start the reveal sequence.
+    var faceUpEls = [];
+    toFlip.forEach(function (item) {
+      var slotEl = SOG.board && typeof SOG.board.getSlotEl === 'function'
+                   ? SOG.board.getSlotEl(item.owner, item.locId, item.idx) : null;
+      if (slotEl && !slotEl.classList.contains('face-down')) {
+        faceUpEls.push(slotEl);
+      }
+    });
+
+    function startReveal() {
+      setTimeout(function () { next(0); }, 400);
+    }
+
+    if (faceUpEls.length && typeof gsap !== 'undefined') {
+      gsap.to(faceUpEls, {
+        scaleX: 0, duration: 0.15, ease: 'power2.in',
+        onComplete: function () {
+          faceUpEls.forEach(function (el) {
+            el.classList.remove('face-up', 'unplayed', 'queued-dest');
+            el.classList.add('face-down');
+            el.innerHTML = '';
+          });
+          gsap.to(faceUpEls, { scaleX: 1, duration: 0.12, ease: 'power2.out',
+            onComplete: startReveal
+          });
+        }
+      });
+    } else {
+      faceUpEls.forEach(function (el) {
+        el.classList.remove('face-up', 'unplayed', 'queued-dest');
+        el.classList.add('face-down');
+        el.innerHTML = '';
+      });
+      startReveal();
+    }
   }
 
   /* Fallback reveal with no animation */
