@@ -940,6 +940,7 @@
         var card = CARDS.find(function (x) { return x.id === s.cardId; });
         var mv = (s.cardId === 24 && !G.movedThisTurn[24]) ||   // Magellan
                  (s.cardId === 25 && !G.columbusMoved)    ||    // Columbus
+                 (s.cardId === 33 && !G.movedThisTurn[33]) ||   // Lucy — First Steps: can move once
                  // Scandinavia: Military cards can move away for free (once per turn)
                  (scandinaviaLoc && loc.id === scandinaviaLoc.id && card && card.type === 'Military' && !G.movedThisTurn[s.cardId]) ||
                  // Timbuktu: Cultural cards elsewhere can move to Timbuktu for free (once per turn)

@@ -8511,7 +8511,19 @@ body.otzi-battle .battle-loc-ability { display: none; }
 body.otzi-battle .battle-hand-card { margin-left: 8px; }
 body.otzi-battle .battle-player-hand .battle-hand-card:first-child { margin-left: 0; }
 
-/* Fix nameplate outline clipping (overflow:hidden clips box-shadow rings) */
+/* Remove purple double-ring from location nameplate; cap its height */
+body.otzi-battle .battle-location {
+  border-color: transparent;
+  box-shadow: none;
+  max-height: 80px;
+}
+
+/* Remove purple occupied-slot border on played cards */
+body.otzi-battle .battle-card-slot.occupied {
+  border-color: transparent;
+}
+
+/* overflow:visible no longer needed — rings are gone — but keep for safety */
 body.otzi-battle .battle-col { overflow: visible; }
 
 /* Otzi avatar portrait: zoom out 20% more and raise */
