@@ -8122,6 +8122,21 @@ body.tut-locked #battle-reset-turn {
 }
 .adv-dialogue.is-visible { opacity: 1; visibility: visible; }
 
+/* Otzi + Explorer boxes are narrower and offset so they don't overlap
+   the characters standing on the map during their conversation.
+   25% narrower than the shared width (64.5% → 48%), centred on a point
+   15% to the right / left of the viewport midpoint. */
+#adv-dialogue-otzi {
+  width: 48%;
+  max-width: 619px;
+  left: 65%;
+}
+#adv-dialogue-explorer {
+  width: 48%;
+  max-width: 619px;
+  left: 35%;
+}
+
 .adv-dialogue-top    { top:    24px; }
 .adv-dialogue-bottom { bottom: 24px; }
 
