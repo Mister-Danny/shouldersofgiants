@@ -616,8 +616,10 @@ var Overworld = (function () {
     if (isEgyptSignpost) {
       var otziBattle = window.SOG && window.SOG.OtziBattle;
       if (otziBattle && otziBattle.isBattleComplete()) {
-        // TODO (Phase 5): route to Egypt map rather than encounter
-        log('Egypt signpost — Otzi already defeated; TODO: transition to Egypt map');
+        walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+          log('Egypt signpost — Otzi defeated, transitioning to Egypt map');
+          transitionToMap('egypt', { x: 10, y: 85 });
+        });
         return;
       }
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
@@ -665,6 +667,15 @@ var Overworld = (function () {
   /* ── Exit click — walk then transition ─────────────────────── */
   function onExitClick(exit) {
     if (isMoving || isTransitioning || isDialogueLocked) return;
+    // Gate: the "To Egypt" exit zone on East Africa requires Otzi to be defeated first.
+    // The egypt-signpost node is the intended path; this prevents bypassing via the zone.
+    if (exit.id === 'to-egypt' && currentMapId === 'eastafrica') {
+      var otziBattle = window.SOG && window.SOG.OtziBattle;
+      if (!otziBattle || !otziBattle.isBattleComplete()) {
+        log('to-egypt exit blocked — Otzi not yet defeated');
+        return;
+      }
+    }
     walkPath([exit.walkTo], function () {
       transitionToMap(exit.target, exit.entryAt);
     });
