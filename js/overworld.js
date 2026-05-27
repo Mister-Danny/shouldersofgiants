@@ -163,11 +163,11 @@ var Overworld = (function () {
         {
           id:     'egypt-signpost',
           name:   'To Egypt',
-          label:  'To Egypt',
+          // No label — the separate To Egypt box (visible post-victory) handles navigation.
           image:  NODE_PATH + 'toegypt.png',
           x: 20, y: 20,
           // Always visible — the signpost is a fixture of the landscape.
-          // Before Otzi is beaten it triggers the encounter; after, it routes to Egypt.
+          // Clicking triggers the Otzi encounter (pre-victory) or skips to battle (post-victory).
           // Short northwest walk from the Prehistory node area to the signpost.
           path: [
             { x: 28, y: 28 },
