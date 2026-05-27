@@ -37,8 +37,8 @@ var Overworld = (function () {
     { who: 'explorer', text: 'Huh\u2026 That was strange.' },
     { who: 'explorer', text: 'I should probably be more careful about going through dark doorways.' },
     { who: 'explorer', text: 'At least this place looks familiar\u2026' },
-    { who: 'explorer', text: 'That looks like Mount Kilimanjaro to the east and Lake Victoria to the north.' },
-    { who: 'explorer', text: 'That means I\u2019m in East Africa!' },
+    { who: 'explorer', text: 'I\u2019m at Mount Kilimanjaro! And I think that\u2019s Lake Victoria.' },
+    { who: 'explorer', text: 'That means I\u2019m in East Africa. So cool!' },
     { who: 'explorer', text: 'But where are all the people?' }
   ];
 
@@ -144,9 +144,9 @@ var Overworld = (function () {
   var MAPS = {
     'eastafrica': {
       image: MAP_PATH + 'eastafrica.jpeg',
-      // Spawn: well south of Lake Victoria, directly below the node's X.
-      // Node is at (38, 35); spawn at (38, 95).
-      spawn: { x: 38, y: 95 },
+      // Spawn: at the foot of Kilimanjaro — right of the explorer dialogue box
+      // (box is at left:35% viewport; character at x:65 puts her clearly east of it).
+      spawn: { x: 65, y: 75 },
       startsFogged: false,
       nodes: [
         {
@@ -155,10 +155,8 @@ var Overworld = (function () {
           label:  'To Egypt',
           image:  NODE_PATH + 'toegypt.png',
           x: 20, y: 20,
-          // Only visible after the post-Neanderthal overworld sequence completes.
-          showIf: function () {
-            return localStorage.getItem(KEY_POST_NEANDERTHAL_DIALOGUE) === 'true';
-          },
+          // Always visible — the signpost is a fixture of the landscape.
+          // Before Otzi is beaten it triggers the encounter; after, it routes to Egypt.
           // Short northwest walk from the Prehistory node area to the signpost.
           path: [
             { x: 28, y: 28 },
@@ -178,24 +176,16 @@ var Overworld = (function () {
           //   wp4: approach the node from below
           //   wp5: arrive at the node
           path: [
-            { x: 28, y: 85 },   // turn left early, well south of the lake
-            { x: 20, y: 55 },   // far west — clear of all western lakes
+            { x: 45, y: 72 },   // step left and slightly up from Kilimanjaro
+            { x: 28, y: 65 },   // continue northwest
+            { x: 20, y: 50 },   // far west — clear of all western lakes
             { x: 22, y: 40 },   // northwest corner of the arc
             { x: 32, y: 38 },   // curve east, south of the mountains
             { x: 38, y: 35 }    // arrive at the node
           ]
         }
       ],
-      exits: [
-        {
-          id:       'to-egypt',
-          label:    'To Egypt \u2192',
-          zone:     { x: 80, y:  5, w: 20, h: 30 },
-          walkTo:   { x: 88, y: 15 },
-          target:   'egypt',
-          entryAt:  { x: 10, y: 85 }  // where you arrive in Egypt
-        }
-      ]
+      exits: []   // no exit zones \u2014 Egypt is accessed via the signpost node
     },
 
     'egypt': {
@@ -667,15 +657,6 @@ var Overworld = (function () {
   /* ── Exit click — walk then transition ─────────────────────── */
   function onExitClick(exit) {
     if (isMoving || isTransitioning || isDialogueLocked) return;
-    // Gate: the "To Egypt" exit zone on East Africa requires Otzi to be defeated first.
-    // The egypt-signpost node is the intended path; this prevents bypassing via the zone.
-    if (exit.id === 'to-egypt' && currentMapId === 'eastafrica') {
-      var otziBattle = window.SOG && window.SOG.OtziBattle;
-      if (!otziBattle || !otziBattle.isBattleComplete()) {
-        log('to-egypt exit blocked — Otzi not yet defeated');
-        return;
-      }
-    }
     walkPath([exit.walkTo], function () {
       transitionToMap(exit.target, exit.entryAt);
     });

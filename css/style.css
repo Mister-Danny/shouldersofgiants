@@ -8119,11 +8119,7 @@ body.tut-locked #battle-reset-turn {
   background: linear-gradient(180deg, #241a3c 0%, #120a22 100%);
   border: 3px solid #f8d000;
   border-radius: 4px;
-  box-shadow:
-    0 0 0 2px #000,
-    0 0 0 5px #f8d000,
-    0 0 0 7px #000,
-    0 8px 24px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
   color: #ffffff;
   font-family: 'Source Sans 3', sans-serif;
   font-size: 22px;
@@ -8140,11 +8136,13 @@ body.tut-locked #battle-reset-turn {
 }
 .adv-dialogue.is-visible { opacity: 1; visibility: visible; }
 
-/* Otzi + Explorer boxes are narrower, shorter, and offset so they don't
-   overlap the characters standing on the map during their conversation.
-   25% narrower (64.5% → 48%), 15% shorter (padding 18px → 6px),
-   centred 15% to the right / left of the viewport midpoint. */
-#adv-dialogue-otzi {
+/* All four character boxes share the same compact size: 48% wide,
+   offset left or right so they don't crowd each other or the map.
+   Lucy + Neanderthal sit top-right; Explorer + Otzi sit in
+   their own dedicated positions. */
+#adv-dialogue-otzi,
+#adv-dialogue-lucy,
+#adv-dialogue-neanderthal {
   width: 48%;
   max-width: 619px;
   left: 65%;
