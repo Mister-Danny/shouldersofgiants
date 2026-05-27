@@ -62,12 +62,12 @@ var Overworld = (function () {
   var OTZI_PRE_BATTLE_DIALOGUE = [
     { who: 'otzi',     text: 'Where do you think you’re going?'                              },
     { who: 'explorer', text: 'I’m ready to see the rest of the world.'                       },
-    { who: 'otzi',     text: 'Ha! You look like you’re ready to take an arrowhead to the back.' },
-    { who: 'explorer', text: 'That’s not very nice.'                                          },
-    { who: 'otzi',     text: 'The world isn’t very nice.'                                    },
-    { who: 'explorer', text: 'So, how do I get you to let me pass?'                               },
-    { who: 'otzi',     text: 'You face me. Right here. Right now.'                                },
-    { who: 'explorer', text: '…of course I do.'                                              }
+    { who: ‘otzi’,     text: ‘You look like you’re ready to take an arrowhead to the back.’ },
+    { who: ‘explorer’, text: ‘That’s not very nice.’                                          },
+    { who: ‘otzi’,     text: ‘The world isn’t very nice.’                                    },
+    { who: ‘explorer’, text: ‘So, how do I get you to let me pass?’                               },
+    { who: ‘otzi’,     text: ‘You face me. Right here. Right now.’                                },
+    { who: ‘explorer’, text: ‘Really? Again?’                                                 }
   ];
 
   var PHASE2_DIALOGUE = [
