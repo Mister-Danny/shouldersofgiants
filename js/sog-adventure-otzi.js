@@ -708,6 +708,14 @@ SOG.OtziBattle = (function () {
     G.reservedSlotsPerLoc = {};
     G.deferredPlays       = {};
 
+    // Re-evaluate moveable affordances now that movedThisTurn has been reset.
+    // Without this, Lucy (card 33) and other movement cards never show their
+    // moveable ring on turns 2-4 because refreshMoveableCards isn't called
+    // anywhere else in the Otzi turn-advance path.
+    if (SOG.input && typeof SOG.input.refreshMoveableCards === 'function') {
+      SOG.input.refreshMoveableCards();
+    }
+
     // Buttons: disabled until player places a card
     var endTurnBtn = document.getElementById('battle-end-turn');
     var resetBtn   = document.getElementById('battle-reset-turn');
