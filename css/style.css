@@ -8448,6 +8448,157 @@ body.prehistory-battle .battle-player-hand .battle-hand-card:first-child {
   margin-left: 0;
 }
 
+/* ════════════════════════════════════════════════════════════
+   OTZI BATTLE — CSS context class mirrors prehistory-battle.
+   Applied by SOG.OtziBattle.start(); removed on teardown.
+   ════════════════════════════════════════════════════════════ */
+
+/* Avatar positioning */
+body.otzi-battle .battle-avatar-otzi {
+  top: 36px;
+  right: 36px;
+}
+
+/* Face zoom on Otzi's avatar circle (matches dialogue portrait) */
+body.otzi-battle .battle-avatar-otzi .battle-avatar-frame img {
+  object-position: 50% 22%;
+  transform: scale(2.0);
+  transform-origin: 50% 22%;
+}
+
+/* Explorer avatar (bottom-left) — starts hidden, pops in via adv-active */
+body.otzi-battle .battle-avatar-lucy {
+  bottom: 36px;
+  left:   36px;
+  opacity: 0;
+  transform: scale(0.3);
+  transform-origin: center bottom;
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+body.otzi-battle .battle-avatar-lucy.adv-active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Turn counter in the CC box; standard turn-info hidden */
+body.otzi-battle .battle-turn-info { display: none; }
+body.otzi-battle .battle-capital-info {
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  padding: 6px 14px;
+}
+
+/* Hide CC numerals (spec: no CC numbers shown in this battle) */
+body.otzi-battle .db-overlay-cc { display: none; }
+
+/* Pre-deal: hand, opp hand, and action buttons invisible until the
+   card deal animation fires. visibility:hidden preserves layout so
+   GSAP can measure bounding rects for the fly-in animation. */
+body.otzi-battle.otzi-pre-deal .battle-player-hand,
+body.otzi-battle.otzi-pre-deal .battle-opp-hand,
+body.otzi-battle.otzi-pre-deal .battle-hud-bottomright {
+  visibility: hidden;
+}
+
+/* ── Otzi battle speech bubbles (comic-book style, same as prehistory) ── */
+
+/* Otzi: top-right, bubble sits to the LEFT of the Otzi avatar circle.
+   Avatar: top:36px right:36px frame 120×120px
+   Avatar centre Y = 36+60 = 96px from stage top.
+   right = 1280 − (avatar left 1124px − 12px gap) = 168px.             */
+body.otzi-battle #adv-bubble-otzi {
+  top: 96px;
+  transform: translateY(-50%);
+  right: 168px;
+  left: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 270px;
+  gap: 0;
+  background: #f0ebe0;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: -4px 4px 0 #111;
+}
+/* Tail → right toward Otzi avatar */
+body.otzi-battle #adv-bubble-otzi::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-left-color: #111;
+}
+body.otzi-battle #adv-bubble-otzi::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-left-color: #f0ebe0;
+}
+
+/* Explorer: bottom-left, bubble sits to the RIGHT of the Explorer avatar.
+   Avatar: bottom:36px left:36px frame 120×120px
+   Avatar centre Y = 720−36−60 = 624px from stage top.
+   left = avatar right (36+120=156px) + 12px gap = 168px.              */
+body.otzi-battle #adv-bubble-explorer {
+  top: 624px;
+  transform: translateY(-50%);
+  left: 168px;
+  right: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 230px;
+  gap: 0;
+  background: #fffef5;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: 4px 4px 0 #111;
+}
+/* Tail → left toward Explorer avatar */
+body.otzi-battle #adv-bubble-explorer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-right-color: #111;
+}
+body.otzi-battle #adv-bubble-explorer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-right-color: #fffef5;
+}
+
+/* In battle context: portrait is handled by the avatar circle — hide the
+   inline portrait inside the bubble itself. */
+body.otzi-battle .adv-bubble .adv-bubble-portrait { display: none; }
+
+/* Match tutorial text size/colour in battle context */
+body.otzi-battle .adv-bubble .adv-bubble-text {
+  font-size: 18px;
+  line-height: 1.45;
+  color: #111;
+  text-shadow: none;
+  min-height: 28px;
+}
+body.otzi-battle .adv-bubble .adv-bubble-hint {
+  color: #666;
+  margin-top: 6px;
+}
+
 /* Radial wipe — fullscreen black, clipped to an expanding circle.
    Inline clip-path style is set by JS each frame during the GSAP
    tween. .active toggles visibility; opacity stays at 1 throughout

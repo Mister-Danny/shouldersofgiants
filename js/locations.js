@@ -99,5 +99,23 @@ const LOCATIONS = [
     // Travelers-on-the-camels region: centre of the image.
     // Adjust bgPos after reviewing the image.
     thumbnailCrop: { bgSize: '200%', bgPos: '50% 45%' }
+  },
+  {
+    id: 7,
+    name: "The Savannah",
+    region: "Heart of Africa",
+    abilityText: "",
+    abilityKey: null,
+    image: "images/locations/savannah.jpg",
+    thumbnailCrop: null
+  },
+  {
+    id: 8,
+    name: "The Desert",
+    region: "Ancient Sands",
+    abilityText: "",
+    abilityKey: null,
+    image: "images/locations/desert.jpg",
+    thumbnailCrop: null
   }
 ];
