@@ -430,7 +430,11 @@
          path — browsers are fine either way but keeps the URL spec-clean. -->
     <div id="adv-dialogue-otzi" class="adv-dialogue adv-dialogue-top">
       <div class="adv-dialogue-text"></div>
-      <img class="adv-dialogue-portrait" src="images/Otzi.jpg" alt="">
+      <!-- Wrapper takes the grid-placement + border/shadow from adv-dialogue-portrait;
+           overflow:hidden clips the scaled inner img to 128×128. -->
+      <div class="adv-dialogue-portrait adv-portrait-zoom">
+        <img src="images/Otzi.jpg" alt="">
+      </div>
       <div class="adv-dialogue-hint">&#9654; Click to continue</div>
     </div>
 

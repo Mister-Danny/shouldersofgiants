@@ -8147,6 +8147,28 @@ body.tut-locked #battle-reset-turn {
   pointer-events: none;
 }
 
+/* Zoom-crop wrapper — used for portraits that need a tighter face crop.
+   The div inherits grid placement + visual frame from .adv-dialogue-portrait;
+   overflow:hidden clips the scaled inner img back to the 128×128 box.
+   border-radius on the wrapper rounds the clip correctly. */
+.adv-portrait-zoom {
+  overflow: hidden;
+  display: block;
+  padding: 0;
+  line-height: 0;      /* kills the inline-baseline gap under the img */
+}
+.adv-portrait-zoom img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: 50% 10%;   /* anchor near the top where the face is */
+  transform: scale(2.2);
+  transform-origin: 50% 10%;  /* zoom centred on the same focal point */
+  user-select: none;
+  pointer-events: none;
+}
+
 .adv-dialogue-text {
   font-family: 'Source Sans 3', sans-serif;
   color: #ffffff;
