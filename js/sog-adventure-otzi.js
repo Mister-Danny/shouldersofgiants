@@ -658,11 +658,11 @@ SOG.OtziBattle = (function () {
     G.otziCardsPlayed  = 0;
     G.prehistoryHasPlayed = false;
 
-    // Draw 1 card for player and for AI if decks allow
-    if (G.playerDeck.length > 0 && G.playerHand.length < 4) {
+    // Draw up to hand-cap (4) for player; draw up to 4 for AI
+    while (G.playerDeck.length > 0 && G.playerHand.length < 4) {
       G.playerHand.push(G.playerDeck.shift());
     }
-    if (G.aiDeck.length > 0) {
+    while (G.aiDeck.length > 0 && G.aiHand.length < 4) {
       G.aiHand.push(G.aiDeck.shift());
     }
 

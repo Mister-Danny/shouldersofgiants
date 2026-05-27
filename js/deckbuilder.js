@@ -341,7 +341,7 @@
     popupCardId = card.id;
     popupNameEl.textContent = card.name;
 
-    // Category-type label (single-type for now; expand to type2 here).
+    // Header row: type label.
     if (popupTypeEl) {
       if (card.type) {
         var iconCls = TYPE_ICON_CLASS[card.type];

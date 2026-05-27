@@ -8471,10 +8471,10 @@ body.prehistory-battle .battle-player-hand .battle-hand-card:first-child {
    Applied by SOG.OtziBattle.start(); removed on teardown.
    ════════════════════════════════════════════════════════════ */
 
-/* Avatar positioning */
+/* Avatar positioning — centred in the 160 px opp-hand zone: (160−120)/2 = 20 px each side */
 body.otzi-battle .battle-avatar-otzi {
-  top: 36px;
-  right: 36px;
+  top: 20px;
+  right: 20px;
 }
 
 /* Face zoom on Otzi's avatar circle (matches dialogue portrait) — see override below */
@@ -8533,13 +8533,13 @@ body.otzi-battle.otzi-pre-deal .battle-hud-bottomright {
 /* ── Otzi battle speech bubbles (comic-book style, same as prehistory) ── */
 
 /* Otzi: top-right, bubble sits to the LEFT of the Otzi avatar circle.
-   Avatar: top:36px right:36px frame 120×120px
-   Avatar centre Y = 36+60 = 96px from stage top.
-   right = 1280 − (avatar left 1124px − 12px gap) = 168px.             */
+   Avatar: top:20px right:20px frame 120×120px
+   Avatar centre Y = 20+60 = 80px from stage top.
+   Avatar left edge = 1280 − 20 − 120 = 1140px. Bubble right = 1280 − (1140 − 12) = 152px. */
 body.otzi-battle #adv-bubble-otzi {
-  top: 96px;
+  top: 80px;
   transform: translateY(-50%);
-  right: 168px;
+  right: 152px;
   left: auto;
   bottom: auto;
   flex-direction: column;

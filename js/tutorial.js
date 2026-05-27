@@ -633,7 +633,11 @@
       '<div id="tut-otzi-text" class="tut-bubble-text"></div>' +
       '<div class="tut-bubble-hint" id="tut-otzi-hint">\u25b6 Click to continue</div>';
     otziBoxEl.style.display = 'none';
-    document.body.appendChild(otziBoxEl);
+    // Append inside #sog-stage so that position:fixed resolves against the
+    // 1280×720 stage (the CSS-transform containing block) rather than the
+    // viewport — this keeps the bubble at the correct stage coordinates
+    // regardless of how the stage is scaled to fit the browser window.
+    (document.getElementById('sog-stage') || document.body).appendChild(otziBoxEl);
     otziTextEl = document.getElementById('tut-otzi-text');
     otziBoxEl.addEventListener('click', function () { advanceOtzi(); });
 
@@ -3383,17 +3387,22 @@
 
     var el = document.createElement('div');
     el.className = 'tut-num-highlight';
-    document.body.appendChild(el);
+    // Inside #sog-stage so position:fixed resolves against the 1280×720 stage
+    // coordinate space rather than the viewport.
+    (document.getElementById('sog-stage') || document.body).appendChild(el);
     numHighlightEl = el;
 
     var animId;
     function track() {
       if (!numHighlightEl) return; // removed
-      var r = overlayEl.getBoundingClientRect();
-      el.style.left   = r.left + 'px';
-      el.style.top    = r.top  + 'px';
-      el.style.width  = r.width  + 'px';
-      el.style.height = r.height + 'px';
+      var scale    = (window.SOG && window.SOG.Stage) ? window.SOG.Stage.getScale() : 1;
+      var stageEl  = document.getElementById('sog-stage');
+      var sr       = stageEl ? stageEl.getBoundingClientRect() : { top: 0, left: 0 };
+      var r        = overlayEl.getBoundingClientRect();
+      el.style.left   = ((r.left   - sr.left) / scale) + 'px';
+      el.style.top    = ((r.top    - sr.top)  / scale) + 'px';
+      el.style.width  = (r.width   / scale) + 'px';
+      el.style.height = (r.height  / scale) + 'px';
       animId = requestAnimationFrame(track);
     }
     track();

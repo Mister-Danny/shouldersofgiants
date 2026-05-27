@@ -196,7 +196,7 @@
 
       frameEl = document.createElement('div');
       frameEl.id = 'db-tut-frame';
-      document.body.appendChild(frameEl);
+      (document.getElementById('sog-stage') || document.body).appendChild(frameEl);
 
       skipEl = document.createElement('button');
       skipEl.id = 'db-tut-skip';
@@ -259,7 +259,8 @@
     var el = document.createElement('div');
     el.className = 'db-tut-dim';
     el.id = 'db-tut-dim-' + suffix;
-    document.body.appendChild(el);
+    // Inside #sog-stage so position:fixed uses stage coordinate space.
+    (document.getElementById('sog-stage') || document.body).appendChild(el);
     return el;
   }
 
@@ -394,23 +395,27 @@
      padded rect. */
   function repositionFrame() {
     if (!active || !currentTargetEl) return;
-    var pad = 8;
-    var r = currentTargetEl.getBoundingClientRect();
-    var vw = window.innerWidth;
-    var vh = window.innerHeight;
+    var pad    = 8;
+    var scale  = (window.SOG && window.SOG.Stage) ? window.SOG.Stage.getScale() : 1;
+    var stageEl = document.getElementById('sog-stage');
+    var sr      = stageEl ? stageEl.getBoundingClientRect() : { top: 0, left: 0 };
+    var r       = currentTargetEl.getBoundingClientRect();
+    // Stage coordinate space (1280×720 — dim rects live inside #sog-stage).
+    var vw = 1280;
+    var vh = 720;
 
-    var top    = Math.max(0,  r.top    - pad);
-    var bottom = Math.min(vh, r.bottom + pad);
-    var left   = Math.max(0,  r.left   - pad);
-    var right  = Math.min(vw, r.right  + pad);
+    var top    = Math.max(0,  (r.top    - sr.top)  / scale - pad);
+    var bottom = Math.min(vh, (r.bottom - sr.top)  / scale + pad);
+    var left   = Math.max(0,  (r.left   - sr.left) / scale - pad);
+    var right  = Math.min(vw, (r.right  - sr.left) / scale + pad);
 
-    // Top rect: spans full width, from viewport top down to the cutout top.
+    // Top rect: spans full stage width, from stage top down to the cutout top.
     setRect(dimTopEl,    0,       0,            vw,         top);
-    // Bottom rect: spans full width, from cutout bottom to viewport bottom.
+    // Bottom rect: spans full stage width, from cutout bottom to stage bottom.
     setRect(dimBottomEl, 0,       bottom,       vw,         Math.max(0, vh - bottom));
-    // Left rect: between the cutout's vertical span, from viewport left to cutout left.
+    // Left rect: between the cutout's vertical span, from stage left to cutout left.
     setRect(dimLeftEl,   0,       top,          left,       Math.max(0, bottom - top));
-    // Right rect: between the cutout's vertical span, from cutout right to viewport right.
+    // Right rect: between the cutout's vertical span, from cutout right to stage right.
     setRect(dimRightEl,  right,   top,          Math.max(0, vw - right), Math.max(0, bottom - top));
 
     // Gold frame matches the padded cutout.
