@@ -3450,8 +3450,8 @@ img    { display: block; }
 
 /* Continuous ability glow — persistent blue-cyan border */
 .anim-cont-glow {
-  box-shadow: 0 0 0 2px rgba(64, 224, 224, 0.85),
-              0 0 10px 2px rgba(64, 224, 224, 0.4);
+  box-shadow: 0 0 0 2px rgba(64, 224, 224, 0.43),
+              0 0 10px 2px rgba(64, 224, 224, 0.2);
 }
 
 /* Location tile win flash */

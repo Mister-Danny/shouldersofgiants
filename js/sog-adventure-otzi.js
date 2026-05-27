@@ -702,7 +702,11 @@ SOG.OtziBattle = (function () {
     G.playerActionLog     = [];
     G.aiActionLog         = [];
     G.moveLog             = [];
-    G.movedThisTurn       = {};   // allow movement cards (e.g. Lucy) to move again
+    // Preserve Lucy's move flag across turns: she gets one move per battle, not per turn.
+    // All other movement cards (Magellan etc.) reset normally.
+    var lucyAlreadyMoved = G.movedThisTurn && G.movedThisTurn[33];
+    G.movedThisTurn       = {};
+    if (lucyAlreadyMoved) G.movedThisTurn[33] = true;
     G.aiMovedThisTurn     = {};
     G.locationSnapshots   = {};
     G.reservedSlotsPerLoc = {};

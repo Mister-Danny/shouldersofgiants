@@ -267,7 +267,7 @@ var Anim = (function () {
       gsap.killTweensOf(el, 'boxShadow');  // scope kill — do NOT touch opacity/scale/transform
       if (on) {
         gsap.to(el, {
-          boxShadow: '0 0 0 2px rgba(64,224,224,0.9), 0 0 14px 4px rgba(64,224,224,0.65)',
+          boxShadow: '0 0 0 2px rgba(64,224,224,0.45), 0 0 14px 4px rgba(64,224,224,0.33)',
           duration:  0.75,
           repeat:    -1,
           yoyo:      true,
