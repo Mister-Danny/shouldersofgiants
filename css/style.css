@@ -8134,7 +8134,7 @@ body.tut-locked #battle-reset-turn {
   z-index: 9999;
   pointer-events: auto;
   display: grid;
-  grid-template-columns: 109px 1fr;
+  grid-template-columns: 98px 1fr;
   align-items: center;
   gap: 18px;
 }
@@ -8170,14 +8170,14 @@ body.tut-locked #battle-reset-turn {
 
 /* Lucy box: portrait RIGHT, text LEFT — reverse the columns */
 .adv-dialogue-top {
-  grid-template-columns: 1fr 109px;
+  grid-template-columns: 1fr 98px;
 }
 .adv-dialogue-top .adv-dialogue-text     { grid-column: 1; grid-row: 1; text-align: left; }
 .adv-dialogue-top .adv-dialogue-portrait { grid-column: 2; grid-row: 1; }
 
 .adv-dialogue-portrait {
-  width: 109px;
-  height: 109px;
+  width: 98px;
+  height: 98px;
   object-fit: cover;
   border: 3px solid #000;
   box-shadow: 0 0 0 2px #f8d000;
@@ -8188,7 +8188,7 @@ body.tut-locked #battle-reset-turn {
 
 /* Zoom-crop wrapper — used for portraits that need a tighter face crop.
    The div inherits grid placement + visual frame from .adv-dialogue-portrait;
-   overflow:hidden clips the scaled inner img back to the 109×109 box.
+   overflow:hidden clips the scaled inner img back to the 98×98 box.
    border-radius on the wrapper rounds the clip correctly. */
 .adv-portrait-zoom {
   overflow: hidden;
