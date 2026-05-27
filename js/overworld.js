@@ -153,9 +153,7 @@ var Overworld = (function () {
           id:     'egypt-signpost',
           name:   'To Egypt',
           label:  'To Egypt',
-          // URL-encode the space in 'civilization nodes' — %20 keeps the
-          // src spec-clean; browsers accept either form.
-          image:  'images/civilization%20nodes/toegypt.png',
+          image:  NODE_PATH + 'toegypt.png',
           x: 20, y: 20,
           // Only visible after the post-Neanderthal overworld sequence completes.
           showIf: function () {

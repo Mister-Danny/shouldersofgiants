@@ -8030,8 +8030,10 @@ body.tut-locked #battle-reset-turn {
 }
 
 /* ── Otzi battle placeholder screen ─────────────────────────────
-   Simple centred layout; styled to match the game's dark palette. */
-#screen-otzi-battle {
+   Simple centred layout; styled to match the game's dark palette.
+   display:none is inherited from .screen; only override to flex when
+   the screen is active so it doesn't bleed through on other screens. */
+#screen-otzi-battle.active {
   display: flex;
   flex-direction: column;
   align-items: center;
