@@ -611,12 +611,14 @@
     if (!G.playerSlots[locId]) return false;
     var firstEmpty   = G.playerSlots[locId].indexOf(null);
     if (firstEmpty === -1) return false;
-    if (!G.prehistoryMode && effectiveCost(card, locId) > G.capital) return false;
+    if (!G.prehistoryMode && !G.otziMode && effectiveCost(card, locId) > G.capital) return false;
     // Prehistory tutorial: only 1 card per turn.
     if (G.prehistoryMode && G.prehistoryHasPlayed) return false;
+    // Otzi battle: max 2 cards per turn
+    if (G.otziMode && (G.otziCardsPlayed || 0) >= 2) return false;
     // Turn-1 first-card-here: first play of turn 1 must go to the Great Rift Valley
     var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
-    if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
+    if (!G.otziMode && riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
       return false;
     }
     return true;
@@ -655,14 +657,14 @@
   function commitPlay(cardId, locId) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return;
-    // In prehistory mode Capital Cost is ignored (all cards are free).
-    var cost = G.prehistoryMode ? 0 : effectiveCost(card, locId);
+    // In prehistory mode or Otzi mode Capital Cost is ignored (all cards are free).
+    var cost = (G.prehistoryMode || G.otziMode) ? 0 : effectiveCost(card, locId);
     if (cost > G.capital) { var d = getSlotEl('player', locId, 0); if (d) SOG.ui.flashDeny(d); return; }
     var si = G.playerSlots[locId].indexOf(null);
     if (si === -1) { var d2 = getSlotEl('player', locId, 0); if (d2) SOG.ui.flashDeny(d2); return; }
     // FIRST_CARD_HERE: first play on Turn 1 must go to the Great Rift Valley
     var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
-    if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
+    if (!G.otziMode && riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
       var d2 = getSlotEl('player', locId, 0); if (d2) SOG.ui.flashDeny(d2); return;
     }
     clearSelection();  // any click/keyboard selection becomes stale after commit
@@ -708,6 +710,14 @@
         SOG.Adventure.Prehistory &&
         typeof SOG.Adventure.Prehistory.notifyPlayerPlayed === 'function') {
       SOG.Adventure.Prehistory.notifyPlayerPlayed(cardId, locId);
+    }
+    // Otzi battle hook
+    if (G.otziMode) {
+      G.otziCardsPlayed = (G.otziCardsPlayed || 0) + 1;
+      if (window.SOG && SOG.OtziBattle &&
+          typeof SOG.OtziBattle.notifyPlayerPlayed === 'function') {
+        SOG.OtziBattle.notifyPlayerPlayed(cardId, locId);
+      }
     }
   }
 

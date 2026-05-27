@@ -2456,6 +2456,24 @@ img    { display: block; }
   z-index: -1;
 }
 
+.battle-col[data-loc-id="7"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/savannah.jpg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+
+.battle-col[data-loc-id="8"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/desert.jpg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+
 .battle-loc-score-opp,
 .battle-loc-score-player {
   display: flex;
@@ -8459,12 +8477,7 @@ body.otzi-battle .battle-avatar-otzi {
   right: 36px;
 }
 
-/* Face zoom on Otzi's avatar circle (matches dialogue portrait) */
-body.otzi-battle .battle-avatar-otzi .battle-avatar-frame img {
-  object-position: 50% 22%;
-  transform: scale(1.7);
-  transform-origin: 50% 22%;
-}
+/* Face zoom on Otzi's avatar circle (matches dialogue portrait) — see override below */
 
 /* Explorer avatar (bottom-left) — starts hidden, pops in via adv-active */
 body.otzi-battle .battle-avatar-lucy {
@@ -8490,6 +8503,23 @@ body.otzi-battle .battle-capital-info {
 
 /* Hide CC numerals (spec: no CC numbers shown in this battle) */
 body.otzi-battle .db-overlay-cc { display: none; }
+
+/* Hide location ability text in Otzi battle */
+body.otzi-battle .battle-loc-ability { display: none; }
+
+/* Spread hand cards with positive gap (4 cards, no heavy overlap) */
+body.otzi-battle .battle-hand-card { margin-left: 8px; }
+body.otzi-battle .battle-player-hand .battle-hand-card:first-child { margin-left: 0; }
+
+/* Fix nameplate outline clipping (overflow:hidden clips box-shadow rings) */
+body.otzi-battle .battle-col { overflow: visible; }
+
+/* Otzi avatar portrait: zoom out 20% more and raise */
+body.otzi-battle .battle-avatar-otzi .battle-avatar-frame img {
+  object-position: 50% 12%;
+  transform: scale(1.36);
+  transform-origin: 50% 12%;
+}
 
 /* Pre-deal: hand, opp hand, and action buttons invisible until the
    card deal animation fires. visibility:hidden preserves layout so

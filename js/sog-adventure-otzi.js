@@ -242,8 +242,11 @@ SOG.OtziBattle = (function () {
     var grv      = locs.find(function (l) { return l.id === 2; }) ||
                    { id: 2, name: 'The Great Rift Valley',region: 'Cradle of Humanity', abilityText: '', abilityKey: null, image: 'images/locations/greatriftvalley.jpg', thumbnailCrop: null };
 
+    // Strip FIRST_CARD_HERE from GRV so any location is valid on turn 1
+    var grvCopy = Object.assign({}, grv, { abilityKey: null, abilityText: '' });
+
     // Order: Desert (left) · Savannah (center) · GRV (right)
-    G.locations = [desert, savannah, grv];
+    G.locations = [desert, savannah, grvCopy];
 
     G.playerSlots = {};
     G.aiSlots     = {};
@@ -267,6 +270,7 @@ SOG.OtziBattle = (function () {
     G.capital               = 0;
     G.turnStartCapital      = 0;
     G.otziMode              = true;
+    G.otziCardsPlayed       = 0;
     G.prehistoryMode        = false;
     G.playerFirst           = true;
     G.bonusCapitalNextTurn  = 0;
@@ -449,12 +453,347 @@ SOG.OtziBattle = (function () {
     setTimeout(function () { if (onDone) onDone(); }, 1000);
   }
 
+  /* ── Phase 3: Turn loop state ─────────────────────────────────── */
+  var _hasPlayedThisTurn   = false;
+  var _otziEndTurnHandler  = null;
+  var _otziResetHandler    = null;
+
+  /* Called by input.js's commitPlay when G.otziMode is true */
+  function notifyPlayerPlayed(cardId, locId) {
+    log('Player played card ' + cardId + ' at loc ' + locId);
+    _hasPlayedThisTurn = true;
+    var endTurnBtn = document.getElementById('battle-end-turn');
+    var resetBtn   = document.getElementById('battle-reset-turn');
+    if (endTurnBtn) endTurnBtn.disabled = false;
+    if (resetBtn)   resetBtn.disabled   = false;
+  }
+
+  /* ── End Turn hook ────────────────────────────────────────────── */
+  function installEndTurnHook() {
+    if (_otziEndTurnHandler) return;
+    var btn = document.getElementById('battle-end-turn');
+    if (!btn) return;
+    _otziEndTurnHandler = function (e) {
+      var G = SOG.state.G;
+      if (!G.otziMode) return;
+      if (btn.disabled) return;
+      if (!_hasPlayedThisTurn) return;
+      e.stopPropagation();
+      onOtziEndTurn();
+    };
+    btn.addEventListener('click', _otziEndTurnHandler, true);
+  }
+
+  function removeEndTurnHook() {
+    if (!_otziEndTurnHandler) return;
+    var btn = document.getElementById('battle-end-turn');
+    if (btn) btn.removeEventListener('click', _otziEndTurnHandler, true);
+    _otziEndTurnHandler = null;
+  }
+
+  /* ── Reset hook ───────────────────────────────────────────────── */
+  function installResetHook() {
+    if (_otziResetHandler) return;
+    var btn = document.getElementById('battle-reset-turn');
+    if (!btn) return;
+    _otziResetHandler = function (e) {
+      var G = SOG.state.G;
+      if (!G.otziMode) return;
+      if (btn.disabled) return;
+      e.stopPropagation();
+      onOtziReset();
+    };
+    btn.addEventListener('click', _otziResetHandler, true);
+  }
+
+  function removeResetHook() {
+    if (!_otziResetHandler) return;
+    var btn = document.getElementById('battle-reset-turn');
+    if (btn) btn.removeEventListener('click', _otziResetHandler, true);
+    _otziResetHandler = null;
+  }
+
+  function onOtziReset() {
+    log('Otzi Reset — returning played cards to hand');
+    var G = SOG.state.G;
+    // Undo ALL unrevealed player plays (up to 2 per turn)
+    var anyRestored = false;
+    G.locations.forEach(function (loc) {
+      var slots = G.playerSlots[loc.id] || [];
+      for (var i = slots.length - 1; i >= 0; i--) {
+        if (slots[i] && !slots[i].revealed) {
+          if (SOG.input && typeof SOG.input.undoPlay === 'function') {
+            SOG.input.undoPlay(loc.id, i);
+            anyRestored = true;
+          }
+        }
+      }
+    });
+    _hasPlayedThisTurn = false;
+    G.otziCardsPlayed  = 0;
+    var endTurnBtn = document.getElementById('battle-end-turn');
+    var resetBtn   = document.getElementById('battle-reset-turn');
+    if (endTurnBtn) endTurnBtn.disabled = true;
+    if (resetBtn)   resetBtn.disabled   = true;
+  }
+
+  /* ── End Turn: AI plays, reveal, next turn or end ─────────────── */
+  function onOtziEndTurn() {
+    log('Otzi End Turn — turn ' + SOG.state.G.turn);
+    var endTurnBtn = document.getElementById('battle-end-turn');
+    var resetBtn   = document.getElementById('battle-reset-turn');
+    if (endTurnBtn) endTurnBtn.disabled = true;
+    if (resetBtn)   resetBtn.disabled   = true;
+
+    // AI plays cards face-down
+    aiPlayCards();
+
+    // Brief pause so the face-down cards appear, then reveal
+    setTimeout(function () {
+      runOtziReveal(function () {
+        var G = SOG.state.G;
+        if (G.turn >= TOTAL_TURNS) {
+          setTimeout(endOtziBattle, 800);
+        } else {
+          advanceOtziTurn();
+        }
+      });
+    }, 600);
+  }
+
+  /* ── AI: play 1–2 random cards from aiHand ──────────────────── */
+  function aiPlayCards() {
+    var G       = SOG.state.G;
+    var numPlay = Math.min(2, G.aiHand.length);
+    for (var p = 0; p < numPlay; p++) {
+      if (!G.aiHand.length) break;
+      var handIdx = Math.floor(Math.random() * G.aiHand.length);
+      var cardId  = G.aiHand.splice(handIdx, 1)[0];
+      // Pick a random location with an open slot
+      var openLocs = G.locations.filter(function (loc) {
+        return (G.aiSlots[loc.id] || []).indexOf(null) !== -1;
+      });
+      if (!openLocs.length) { G.aiHand.unshift(cardId); break; }
+      var loc       = openLocs[Math.floor(Math.random() * openLocs.length)];
+      var slotIndex = G.aiSlots[loc.id].indexOf(null);
+      var card      = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
+      if (!card)    { G.aiHand.unshift(cardId); continue; }
+      G.aiSlots[loc.id][slotIndex] = {
+        cardId: cardId, ip: card.ip, revealed: false,
+        ipMod: 0, contMod: 0, ipModSources: []
+      };
+      G.aiRevealQueue.push(cardId);
+      if (SOG.board && typeof SOG.board.getSlotEl === 'function') {
+        var slotEl = SOG.board.getSlotEl('opp', loc.id, slotIndex);
+        if (slotEl) {
+          slotEl.dataset.cardId = cardId;
+          if (SOG.board.setSlotFaceDown) SOG.board.setSlotFaceDown(slotEl);
+        }
+      }
+    }
+    if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') SOG.ui.updateOppHand();
+  }
+
+  /* ── Reveal all unrevealed slots across 3 locations ─────────── */
+  function runOtziReveal(onDone) {
+    var G        = SOG.state.G;
+    var flipSlot = window.flipSlot || (SOG.game && SOG.game.flipSlot);
+    if (typeof flipSlot !== 'function') flipSlot = _hardReveal;
+
+    // Gather [{ owner, locId, idx }] for all unrevealed slots
+    var toFlip = [];
+    G.locations.forEach(function (loc) {
+      (G.playerSlots[loc.id] || []).forEach(function (sd, i) {
+        if (sd && !sd.revealed) toFlip.push({ owner: 'player', locId: loc.id, idx: i });
+      });
+      (G.aiSlots[loc.id] || []).forEach(function (sd, i) {
+        if (sd && !sd.revealed) toFlip.push({ owner: 'opp', locId: loc.id, idx: i });
+      });
+    });
+
+    var next = function (i) {
+      if (i >= toFlip.length) {
+        // Refresh scores after all flips
+        if (SOG.board && typeof SOG.board.refreshSlotIPDisplays === 'function') SOG.board.refreshSlotIPDisplays();
+        if (SOG.board && typeof SOG.board.updateScores         === 'function') SOG.board.updateScores();
+        setTimeout(function () { if (onDone) onDone(); }, 1100);
+        return;
+      }
+      var item   = toFlip[i];
+      var slotEl = SOG.board && typeof SOG.board.getSlotEl === 'function'
+                   ? SOG.board.getSlotEl(item.owner, item.locId, item.idx) : null;
+      flipSlot(slotEl, function () { next(i + 1); });
+    };
+    next(0);
+  }
+
+  /* Fallback reveal with no animation */
+  function _hardReveal(slotEl, cb) {
+    if (!slotEl) { if (cb) cb(); return; }
+    var cardId    = parseInt(slotEl.dataset.cardId,    10);
+    var locId     = parseInt(slotEl.dataset.locId,     10);
+    var slotIndex = parseInt(slotEl.dataset.slotIndex, 10);
+    var owner     = slotEl.dataset.owner;
+    var G         = SOG.state.G;
+    var slots     = owner === 'player' ? G.playerSlots : G.aiSlots;
+    if (slots[locId] && slots[locId][slotIndex]) slots[locId][slotIndex].revealed = true;
+    slotEl.classList.remove('face-down', 'unplayed');
+    slotEl.classList.add('face-up');
+    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
+    if (card && SOG.board && SOG.board.buildCardFace) {
+      var sd = slots[locId] && slots[locId][slotIndex];
+      var ip = sd ? (SOG.board.effectiveIP ? SOG.board.effectiveIP(sd) : sd.ip) : card.ip;
+      SOG.board.buildCardFace(slotEl, card, ip);
+    }
+    setTimeout(cb || function () {}, 60);
+  }
+
+  /* ── Advance to next turn ─────────────────────────────────────── */
+  function advanceOtziTurn() {
+    var G = SOG.state.G;
+    G.turn++;
+    log('Advancing to turn ' + G.turn);
+    setTurnCounter(G.turn, TOTAL_TURNS);
+    _hasPlayedThisTurn = false;
+    G.otziCardsPlayed  = 0;
+    G.prehistoryHasPlayed = false;
+
+    // Draw 1 card for player and for AI if decks allow
+    if (G.playerDeck.length > 0 && G.playerHand.length < 4) {
+      G.playerHand.push(G.playerDeck.shift());
+    }
+    if (G.aiDeck.length > 0) {
+      G.aiHand.push(G.aiDeck.shift());
+    }
+
+    if (SOG.input && typeof SOG.input.rebuildPlayerHand === 'function') {
+      SOG.input.rebuildPlayerHand();
+    } else if (typeof window.setPlayerHand === 'function') {
+      window.setPlayerHand(G.playerHand, G.playerDeck.length);
+    }
+    if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') SOG.ui.updateOppHand();
+
+    // Reset turn-state in G
+    G.playerRevealQueue = [];
+    G.aiRevealQueue     = [];
+
+    // Buttons: disabled until player places a card
+    var endTurnBtn = document.getElementById('battle-end-turn');
+    var resetBtn   = document.getElementById('battle-reset-turn');
+    if (endTurnBtn) endTurnBtn.disabled = true;
+    if (resetBtn)   resetBtn.disabled   = true;
+  }
+
+  /* ── End battle: tally 3-location scores ──────────────────────── */
+  function endOtziBattle() {
+    var G = SOG.state.G;
+    var playerWins = 0, otziWins = 0;
+
+    G.locations.forEach(function (loc) {
+      var pIP = 0, aIP = 0;
+      (G.playerSlots[loc.id] || []).forEach(function (s) {
+        if (s && s.revealed) pIP += (SOG.board && SOG.board.effectiveIP ? SOG.board.effectiveIP(s) : s.ip || 0);
+      });
+      (G.aiSlots[loc.id] || []).forEach(function (s) {
+        if (s && s.revealed) aIP += (SOG.board && SOG.board.effectiveIP ? SOG.board.effectiveIP(s) : s.ip || 0);
+      });
+      if (pIP > aIP) playerWins++;
+      else if (aIP > pIP) otziWins++;
+    });
+
+    log('Battle over — player wins ' + playerWins + ' locs, Otzi wins ' + otziWins);
+    var won = playerWins >= 2;
+
+    if (won) {
+      try { localStorage.setItem(KEY_BATTLE_OTZI_COMPLETE, 'true'); } catch (e) {}
+      if (typeof SFX !== 'undefined' && typeof SFX.gameWon === 'function') SFX.gameWon();
+    } else {
+      if (typeof SFX !== 'undefined' && typeof SFX.gameLost === 'function') SFX.gameLost();
+    }
+
+    // Show result overlay
+    setTimeout(function () { showOtziResult(won, playerWins, otziWins); }, 500);
+  }
+
+  /* ── Simple result screen overlay ────────────────────────────── */
+  function showOtziResult(won, playerWins, otziWins) {
+    var existing = document.getElementById('otzi-result-overlay');
+    if (existing) existing.parentNode.removeChild(existing);
+
+    var overlay = document.createElement('div');
+    overlay.id = 'otzi-result-overlay';
+    overlay.style.cssText = [
+      'position:fixed;inset:0;background:rgba(0,0,0,0.82)',
+      'display:flex;flex-direction:column;align-items:center;justify-content:center',
+      'z-index:9000;font-family:\'CT Galbite\',monospace;color:#fff'
+    ].join(';');
+
+    var title = document.createElement('div');
+    title.style.cssText = 'font-size:38px;letter-spacing:0.1em;margin-bottom:18px;color:' + (won ? '#f8d000' : '#f04030');
+    title.textContent = won ? 'VICTORY' : 'DEFEAT';
+
+    var sub = document.createElement('div');
+    sub.style.cssText = 'font-size:18px;color:#ccc;margin-bottom:32px;letter-spacing:0.06em';
+    sub.textContent = 'Locations won: You ' + playerWins + '  —  Otzi ' + otziWins;
+
+    var btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:16px';
+
+    var backBtn = document.createElement('button');
+    backBtn.textContent = 'BACK TO MAP';
+    backBtn.style.cssText = [
+      'padding:10px 24px;font-family:\'CT Galbite\',monospace;font-size:16px',
+      'letter-spacing:0.08em;background:#12004a;color:#fff',
+      'border:2px solid #8898ff;cursor:pointer'
+    ].join(';');
+    backBtn.addEventListener('click', function () {
+      overlay.parentNode.removeChild(overlay);
+      teardown();
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+    });
+
+    var retryBtn = document.createElement('button');
+    retryBtn.textContent = 'TRY AGAIN';
+    retryBtn.style.cssText = backBtn.style.cssText;
+    retryBtn.addEventListener('click', function () {
+      overlay.parentNode.removeChild(overlay);
+      removeEndTurnHook();
+      removeResetHook();
+      teardown();
+      if (typeof SOG !== 'undefined' && SOG.OtziBattle) SOG.OtziBattle.start();
+    });
+
+    btnRow.appendChild(retryBtn);
+    btnRow.appendChild(backBtn);
+    overlay.appendChild(title);
+    overlay.appendChild(sub);
+    overlay.appendChild(btnRow);
+    document.body.appendChild(overlay);
+  }
+
+  /* ── Start turn loop (called after dealCards completes) ─────── */
+  function startTurnLoop() {
+    log('Phase 3 — installing turn loop hooks');
+    var G = SOG.state.G;
+    G.otziCardsPlayed  = 0;
+    _hasPlayedThisTurn = false;
+    installEndTurnHook();
+    installResetHook();
+    // Buttons start disabled — enabled after first card placement
+    var endTurnBtn = document.getElementById('battle-end-turn');
+    var resetBtn   = document.getElementById('battle-reset-turn');
+    if (endTurnBtn) endTurnBtn.disabled = true;
+    if (resetBtn)   resetBtn.disabled   = true;
+  }
+
   /* ── Teardown ─────────────────────────────────────────────────── */
   function teardown() {
     document.body.classList.remove('otzi-battle');
     document.body.classList.remove('otzi-pre-deal');
     restoreExplorerAvatar();
     hideBubbles();
+    removeEndTurnHook();
+    removeResetHook();
     var wipeEl = document.getElementById('adv-radial-wipe');
     if (wipeEl) {
       wipeEl.classList.remove('active');
@@ -482,6 +821,11 @@ SOG.OtziBattle = (function () {
   ═══════════════════════════════════════════════════════════════ */
   function start() {
     log('start() — Phase 2 implementation');
+
+    // Prime the Web Audio context (needs a user gesture — the click that
+    // started this encounter counts, so resume here to ensure beeps work).
+    var _ctx = getBleepCtx();
+    if (_ctx && _ctx.state === 'suspended') { try { _ctx.resume(); } catch(e) {} }
 
     // Context classes
     document.body.classList.add('otzi-battle');
@@ -523,9 +867,8 @@ SOG.OtziBattle = (function () {
 
               // Step 7: card deal animation
               dealCards(function () {
-                log('Phase 2 complete — board fully assembled');
-                // Buttons remain disabled (Phase 3 wires the turn loop)
-                // Phase 3 note: set G.otziMode and install End Turn hook here
+                log('Phase 3 — starting turn loop');
+                startTurnLoop();
               });
             });
           });
@@ -541,9 +884,10 @@ SOG.OtziBattle = (function () {
   }
 
   return {
-    start:           start,
-    isBattleComplete: isBattleComplete,
-    teardown:        teardown
+    start:                start,
+    isBattleComplete:     isBattleComplete,
+    teardown:             teardown,
+    notifyPlayerPlayed:   notifyPlayerPlayed
   };
 
 })();
