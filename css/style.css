@@ -8122,19 +8122,23 @@ body.tut-locked #battle-reset-turn {
 }
 .adv-dialogue.is-visible { opacity: 1; visibility: visible; }
 
-/* Otzi + Explorer boxes are narrower and offset so they don't overlap
-   the characters standing on the map during their conversation.
-   25% narrower than the shared width (64.5% → 48%), centred on a point
-   15% to the right / left of the viewport midpoint. */
+/* Otzi + Explorer boxes are narrower, shorter, and offset so they don't
+   overlap the characters standing on the map during their conversation.
+   25% narrower (64.5% → 48%), 15% shorter (padding 18px → 6px),
+   centred 15% to the right / left of the viewport midpoint. */
 #adv-dialogue-otzi {
   width: 48%;
   max-width: 619px;
   left: 65%;
+  padding-top: 6px;
+  padding-bottom: 6px;
 }
 #adv-dialogue-explorer {
   width: 48%;
   max-width: 619px;
   left: 35%;
+  padding-top: 6px;
+  padding-bottom: 6px;
 }
 
 .adv-dialogue-top    { top:    24px; }
@@ -8177,9 +8181,9 @@ body.tut-locked #battle-reset-turn {
   height: 100%;
   display: block;
   object-fit: cover;
-  object-position: 50% 10%;   /* anchor near the top where the face is */
+  object-position: 50% 22%;   /* pan down slightly to centre on the face */
   transform: scale(2.2);
-  transform-origin: 50% 10%;  /* zoom centred on the same focal point */
+  transform-origin: 50% 22%;  /* zoom origin must match object-position */
   user-select: none;
   pointer-events: none;
 }

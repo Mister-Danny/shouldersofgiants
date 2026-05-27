@@ -859,8 +859,8 @@ var Overworld = (function () {
     isDialogueLocked = true;
     cancelIdle();
 
-    _spawnOtziSprite(node);
-
+    // No on-map sprite — the dialogue box portrait is sufficient,
+    // and a real photo looks jarring against the pixel-art world.
     resetBox(otziBoxEl);
     resetBox(explorerBoxEl);
 
