@@ -425,6 +425,14 @@
       <img class="adv-dialogue-portrait" src="images/portraits/neanderthalportait.jpeg" alt="" style="transform:scaleX(-1)">
       <div class="adv-dialogue-hint">&#9654; Click to continue</div>
     </div>
+    <!-- Otzi encounter dialogue. Portrait on the right (adv-dialogue-top),
+         same structure as Neanderthal. Image uses %20 for the space in the
+         path — browsers are fine either way but keeps the URL spec-clean. -->
+    <div id="adv-dialogue-otzi" class="adv-dialogue adv-dialogue-top">
+      <div class="adv-dialogue-text"></div>
+      <img class="adv-dialogue-portrait" src="images/Otzi.jpg" alt="">
+      <div class="adv-dialogue-hint">&#9654; Click to continue</div>
+    </div>
 
     <button id="overworld-back" class="btn-snes btn-snes-close">&#8592; Back to Home</button>
   </div>
@@ -484,6 +492,16 @@
       <img id="adv-card-reveal-img" src="images/prehistorycards/neanderthalcard.jpg" alt="Neanderthal card">
       <div id="adv-card-reveal-ip" class="db-overlay-ip"></div>
     </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ADVENTURE MODE — Otzi battle (Phase 1 stub)
+       sog-adventure-otzi.js drives the real battle (Phase 2+).
+       For now: placeholder text + Back to Map.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="screen-otzi-battle" class="screen">
+    <p class="otzi-placeholder-text">Otzi Battle &mdash; coming in Phase 2</p>
+    <button class="btn-snes" id="otzi-battle-back">&#8592; Back to Map</button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -1499,6 +1517,7 @@
   <script src="js/game/ai.js"></script>
   <script src="js/game/ui.js"></script>
   <script src="js/sog-adventure-prehistory.js"></script>
+  <script src="js/sog-adventure-otzi.js"></script>
   <script src="js/bypass.js"></script>
   <script src="js/welcome.js"></script>
   <script src="js/feedback.js"></script>

@@ -22,6 +22,7 @@ var Overworld = (function () {
   var KEY_ADVENTURER    = 'sog_selected_adventurer';
   var KEY_POST_NEANDERTHAL_DIALOGUE = 'sog_post_neanderthal_overworld_complete';
   var KEY_CARD_LUCY_UNLOCKED        = 'sog_card_lucy_unlocked';
+  var KEY_BATTLE_OTZI_COMPLETE      = 'sog_battle_otzi_complete';
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -55,6 +56,20 @@ var Overworld = (function () {
     { who: 'lucy',     text: 'Take this.'                                                          }
   ];
 
+  /* Otzi encounter dialogue — fires when the player first clicks the
+     Egypt signpost (sog_battle_otzi_complete not yet set). Click-to-
+     advance, portrait boxes, same runner as all other overworld dialogue. */
+  var OTZI_PRE_BATTLE_DIALOGUE = [
+    { who: 'otzi',     text: 'Where do you think you’re going?'                              },
+    { who: 'explorer', text: 'I’m ready to see the rest of the world.'                       },
+    { who: 'otzi',     text: 'Ha! You look like you’re ready to take an arrowhead to the back.' },
+    { who: 'explorer', text: 'That’s not very nice.'                                          },
+    { who: 'otzi',     text: 'The world isn’t very nice.'                                    },
+    { who: 'explorer', text: 'So, how do I get you to let me pass?'                               },
+    { who: 'otzi',     text: 'You face me. Right here. Right now.'                                },
+    { who: 'explorer', text: '…of course I do.'                                              }
+  ];
+
   var PHASE2_DIALOGUE = [
     { who: 'lucy',     text: 'Mmmhm\u2026 I\u2019m standing right here.' },
     { who: 'explorer', text: 'Woah, you can talk? I thought you were an ape?' },
@@ -82,25 +97,39 @@ var Overworld = (function () {
     } catch (e) {}
     return _audioCtx;
   }
-  // who: 'lucy' | 'explorer' — Lucy's bleep is lower/breathier, Explorer higher/brighter
+  // who: 'lucy' | 'explorer' | 'otzi'
+  // Otzi uses the same profile as sog-adventure-prehistory.js: 210 Hz triangle,
+  // peak 0.07, decay 0.07, dur 0.08 — warmer/earthier than the square-wave voices.
   function playBleep(who) {
     var ctx = getAudioCtx();
     if (!ctx) return;
     if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (e) {} }
     var now = ctx.currentTime;
-    var osc = ctx.createOscillator();
+    var osc  = ctx.createOscillator();
     var gain = ctx.createGain();
-    // Slight pitch wobble so consecutive bleeps don't feel robotic
-    var baseFreq = (who === 'lucy') ? 340 : (who === 'neanderthal') ? 160 : 520;
-    var freq = baseFreq + (Math.random() - 0.5) * 30;
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(freq, now);
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.08, now + 0.005);   // quick attack
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05); // fast decay
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.06);
+    if (who === 'otzi') {
+      var freq = 210 + (Math.random() - 0.5) * 20;
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0,     now);
+      gain.gain.linearRampToValueAtTime(0.07,  now + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } else {
+      // Slight pitch wobble so consecutive bleeps don't feel robotic
+      var baseFreq = (who === 'lucy') ? 340 : (who === 'neanderthal') ? 160 : 520;
+      var freq = baseFreq + (Math.random() - 0.5) * 30;
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0,     now);
+      gain.gain.linearRampToValueAtTime(0.08,  now + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.06);
+    }
   }
 
   /* ════════════════════════════════════════════════════════════
@@ -120,6 +149,24 @@ var Overworld = (function () {
       spawn: { x: 38, y: 95 },
       startsFogged: false,
       nodes: [
+        {
+          id:     'egypt-signpost',
+          name:   'To Egypt',
+          label:  'To Egypt',
+          // URL-encode the space in 'civilization nodes' — %20 keeps the
+          // src spec-clean; browsers accept either form.
+          image:  'images/civilization%20nodes/toegypt.png',
+          x: 20, y: 20,
+          // Only visible after the post-Neanderthal overworld sequence completes.
+          showIf: function () {
+            return localStorage.getItem(KEY_POST_NEANDERTHAL_DIALOGUE) === 'true';
+          },
+          // Short northwest walk from the Prehistory node area to the signpost.
+          path: [
+            { x: 28, y: 28 },
+            { x: 20, y: 20 }
+          ]
+        },
         {
           id:    'prehistory',
           name:  'Prehistory',
@@ -236,9 +283,20 @@ var Overworld = (function () {
     if (footstepsHowl && footstepsHowl.playing()) footstepsHowl.stop();
   }
 
+  /* ── Wipe transition SFX (shared by all encounter radial wipes) ── */
+  var _wooshHowl = null;
+  function _ensureWoosh() {
+    if (_wooshHowl || typeof Howl === 'undefined') return;
+    _wooshHowl = new Howl({ src: ['sfx/woosh.m4a'], volume: 0.8, html5: true });
+  }
+  function _playWoosh() {
+    _ensureWoosh();
+    if (_wooshHowl) { try { _wooshHowl.stop(); _wooshHowl.play(); } catch (e) {} }
+  }
+
   /* ── DOM refs + state ──────────────────────────────────────── */
   var mapImgEl, overlayEl, charEl, fogEl, transitionEl, transitionTextEl;
-  var lucyBoxEl, lucyTextEl, explorerBoxEl, explorerTextEl, neanderthalBoxEl;
+  var lucyBoxEl, lucyTextEl, explorerBoxEl, explorerTextEl, neanderthalBoxEl, otziBoxEl;
   var currentMapId   = 'eastafrica';
   var currentPos     = { x: 0, y: 0 };
   var visitedMaps    = [];
@@ -453,6 +511,9 @@ var Overworld = (function () {
 
     // Place nodes
     data.nodes.forEach(function (n) {
+      // Gate: skip nodes that have a showIf predicate that returns false.
+      if (typeof n.showIf === 'function' && !n.showIf()) return;
+
       var nodeEl = document.createElement('div');
       nodeEl.className = 'overworld-node';
       nodeEl.dataset.id = n.id;
@@ -463,13 +524,15 @@ var Overworld = (function () {
       img.alt = n.name;
       img.draggable = false;
       nodeEl.appendChild(img);
-      // (no text label — node image alone)
+      // Optional hover label (e.g. "To Egypt" on the signpost node).
+      if (n.label) {
+        var labelEl = document.createElement('div');
+        labelEl.className = 'overworld-node-label';
+        labelEl.textContent = n.label;
+        nodeEl.appendChild(labelEl);
+      }
       nodeEl.addEventListener('click', function () { onNodeClick(n); });
-      // Adventure Mode completion badge: if this node has a battle
-      // completion flag in localStorage, apply the .overworld-node-complete
-      // class so the gold checkmark badge renders. Adding this directly
-      // here (during build) handles re-entry after victory as well as
-      // initial loads on a new browser session.
+      // Adventure Mode completion badges
       if (n.id === 'prehistory' &&
           window.SOG && SOG.Adventure && SOG.Adventure.Prehistory &&
           SOG.Adventure.Prehistory.isBattleComplete()) {
@@ -547,6 +610,22 @@ var Overworld = (function () {
     if (isPrehistory && preh && preh.isBattleComplete()) {
       log('Prehistory node clicked — battle already won, launching directly (no walk)');
       preh.startNeanderthalBattle();
+      return;
+    }
+
+    // ── Egypt signpost → Otzi encounter ─────────────────────────
+    var isEgyptSignpost = node.id === 'egypt-signpost' && currentMapId === 'eastafrica';
+    if (isEgyptSignpost) {
+      var otziBattle = window.SOG && window.SOG.OtziBattle;
+      if (otziBattle && otziBattle.isBattleComplete()) {
+        // TODO (Phase 5): route to Egypt map rather than encounter
+        log('Egypt signpost — Otzi already defeated; TODO: transition to Egypt map');
+        return;
+      }
+      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+        log('Arrived at Egypt signpost — triggering Otzi encounter');
+        startOtziEncounter(node);
+      });
       return;
     }
 
@@ -727,9 +806,149 @@ var Overworld = (function () {
   function _completePostVictorySequence() {
     try { localStorage.setItem(KEY_POST_NEANDERTHAL_DIALOGUE, 'true'); } catch (e) {}
     try { localStorage.setItem(KEY_CARD_LUCY_UNLOCKED, 'true'); } catch (e) {}
-    // TODO: Otzi region unlocks here, Lucy departure animation
-    log('[PostVictory] complete — Lucy card unlocked');
+    // Signpost is now revealed — reload the node layer so it appears.
+    // We only re-place nodes (not exits/character) to avoid resetting position.
+    _refreshNodes();
+    log('[PostVictory] complete — Lucy card unlocked, Egypt signpost revealed');
     scheduleIdle();
+  }
+
+  /* Tear down and re-place all node elements for the current map.
+     Used after a flag change (e.g. post-victory) so newly-unlocked
+     nodes like the Egypt signpost appear without a full map reload. */
+  function _refreshNodes() {
+    if (!overlayEl) return;
+    overlayEl.querySelectorAll('.overworld-node').forEach(function (el) {
+      el.parentNode.removeChild(el);
+    });
+    var data = MAPS[currentMapId];
+    if (!data) return;
+    data.nodes.forEach(function (n) {
+      if (typeof n.showIf === 'function' && !n.showIf()) return;
+      var nodeEl = document.createElement('div');
+      nodeEl.className = 'overworld-node';
+      nodeEl.dataset.id = n.id;
+      nodeEl.style.left = n.x + '%';
+      nodeEl.style.top  = n.y + '%';
+      var img = document.createElement('img');
+      img.src = n.image;
+      img.alt = n.name;
+      img.draggable = false;
+      nodeEl.appendChild(img);
+      if (n.label) {
+        var labelEl = document.createElement('div');
+        labelEl.className = 'overworld-node-label';
+        labelEl.textContent = n.label;
+        nodeEl.appendChild(labelEl);
+      }
+      nodeEl.addEventListener('click', function () { onNodeClick(n); });
+      if (n.id === 'prehistory' &&
+          window.SOG && SOG.Adventure && SOG.Adventure.Prehistory &&
+          SOG.Adventure.Prehistory.isBattleComplete()) {
+        nodeEl.classList.add('overworld-node-complete');
+      }
+      overlayEl.appendChild(nodeEl);
+    });
+  }
+
+  /* ── Otzi encounter ─────────────────────────────────────────────
+     Fires when the player arrives at the Egypt signpost for the
+     first time (sog_battle_otzi_complete not yet set).
+     1. Otzi pops in near the signpost.
+     2. Click-to-advance dialogue (8 lines, same runner as other phases).
+     3. Radial wipe + whoosh → SOG.OtziBattle.start().              */
+  function startOtziEncounter(node) {
+    isDialogueLocked = true;
+    cancelIdle();
+
+    _spawnOtziSprite(node);
+
+    resetBox(otziBoxEl);
+    resetBox(explorerBoxEl);
+
+    runDialogue(OTZI_PRE_BATTLE_DIALOGUE, function () {
+      isDialogueLocked = false;
+      _fireWipeFromNode('egypt-signpost', function () {
+        var otziBattle = window.SOG && window.SOG.OtziBattle;
+        if (otziBattle && typeof otziBattle.start === 'function') {
+          otziBattle.start();
+        } else {
+          console.warn('[Overworld] SOG.OtziBattle not found — aborting');
+          _clearWipe();
+        }
+      });
+    });
+  }
+
+  /* Inject the Otzi portrait sprite onto the overlay, positioned
+     slightly southeast of the signpost (between explorer and sign). */
+  function _spawnOtziSprite(node) {
+    _removeOtziSprite();
+    var sprite = document.createElement('img');
+    sprite.id        = 'overworld-otzi-sprite';
+    sprite.src       = 'images/Otzi.jpg';
+    sprite.alt       = 'Otzi';
+    sprite.draggable = false;
+    // Nudge 4% right and 7% down from the signpost so he stands
+    // visually between the explorer (arriving from SE) and the sign.
+    sprite.style.left = (node.x + 4) + '%';
+    sprite.style.top  = (node.y + 7) + '%';
+    overlayEl.appendChild(sprite);
+    if (typeof gsap !== 'undefined') {
+      gsap.fromTo(sprite, { opacity: 0, scale: 0.7 },
+                          { opacity: 1, scale: 1, duration: 0.35, ease: 'back.out(1.4)' });
+    } else {
+      sprite.style.opacity = '1';
+    }
+  }
+
+  function _removeOtziSprite() {
+    var existing = document.getElementById('overworld-otzi-sprite');
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+  }
+
+  /* Generic radial wipe centred on a named overworld node element.
+     Replicates the same clip-path GSAP technique used in
+     sog-adventure-prehistory.js without modifying that module.     */
+  function _fireWipeFromNode(nodeId, onComplete) {
+    var nodeEl = overlayEl && overlayEl.querySelector('[data-id="' + nodeId + '"]');
+    var wipeEl = document.getElementById('adv-radial-wipe');
+    if (!wipeEl) { if (onComplete) onComplete(); return; }
+
+    var cx, cy;
+    if (nodeEl) {
+      var rect = nodeEl.getBoundingClientRect();
+      cx = ((rect.left + rect.width  / 2) / window.innerWidth)  * 100;
+      cy = ((rect.top  + rect.height / 2) / window.innerHeight) * 100;
+    } else {
+      cx = 50; cy = 50;
+    }
+
+    var maxR = Math.max(window.innerWidth, window.innerHeight) * 1.4;
+    wipeEl.style.clipPath = 'circle(0px at ' + cx + '% ' + cy + '%)';
+    wipeEl.classList.add('active');
+    _playWoosh();
+
+    if (typeof gsap === 'undefined') {
+      wipeEl.style.clipPath = 'circle(' + maxR + 'px at ' + cx + '% ' + cy + '%)';
+      setTimeout(function () { if (onComplete) onComplete(); }, 1000);
+      return;
+    }
+    var proxy = { r: 0 };
+    gsap.to(proxy, {
+      r: maxR, duration: 1.0, ease: 'power2.inOut',
+      onUpdate: function () {
+        wipeEl.style.clipPath = 'circle(' + proxy.r + 'px at ' + cx + '% ' + cy + '%)';
+      },
+      onComplete: function () { if (onComplete) onComplete(); }
+    });
+  }
+
+  function _clearWipe() {
+    var wipeEl = document.getElementById('adv-radial-wipe');
+    if (!wipeEl) return;
+    wipeEl.classList.remove('active');
+    wipeEl.style.clipPath = '';
   }
 
   /* ── Generic dialogue runner (used by both phases) ────────── */
@@ -759,6 +978,7 @@ var Overworld = (function () {
       fadeBox(explorerBoxEl,    false);
       fadeBox(lucyBoxEl,        false);
       fadeBox(neanderthalBoxEl, false);
+      fadeBox(otziBoxEl,        false);
       dlgRunning = false;
       dlgLines   = null;
       log('dialogue runner finished');
@@ -782,6 +1002,7 @@ var Overworld = (function () {
 
     var activeBox = (line.who === 'lucy')        ? lucyBoxEl
                   : (line.who === 'neanderthal') ? neanderthalBoxEl
+                  : (line.who === 'otzi')        ? otziBoxEl
                   :                                explorerBoxEl;
     ty_activeBox  = activeBox;
     ty_activeText = activeBox.querySelector('.adv-dialogue-text');
@@ -939,6 +1160,7 @@ var Overworld = (function () {
     lucyBoxEl          = document.getElementById('adv-dialogue-lucy');
     explorerBoxEl      = document.getElementById('adv-dialogue-explorer');
     neanderthalBoxEl   = document.getElementById('adv-dialogue-neanderthal');
+    otziBoxEl          = document.getElementById('adv-dialogue-otzi');
     if (!mapImgEl || !overlayEl || !charEl) {
       console.warn('[Overworld] Missing DOM elements');
       return;
@@ -1018,6 +1240,8 @@ var Overworld = (function () {
     // Post-victory sequence — called by sog-adventure-prehistory.js after
     // the player wins the Neanderthal battle and returns to the overworld.
     startPostVictorySequence: startPostVictorySequence,
+    // Otzi encounter — exposed so the battle module can call back if needed
+    startOtziEncounter: startOtziEncounter,
     // Devtools helpers
     goToMap: function (mapId) {
       if (!MAPS[mapId]) { console.warn('No such map:', mapId); return; }
