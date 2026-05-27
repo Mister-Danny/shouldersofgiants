@@ -146,7 +146,7 @@ var Overworld = (function () {
       image: MAP_PATH + 'eastafrica.jpeg',
       // Spawn: at the foot of Kilimanjaro — right of the explorer dialogue box
       // (box is at left:35% viewport; character at x:65 puts her clearly east of it).
-      spawn: { x: 65, y: 75 },
+      spawn: { x: 70, y: 82 },
       startsFogged: false,
       nodes: [
         {

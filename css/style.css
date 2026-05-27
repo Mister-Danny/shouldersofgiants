@@ -8150,15 +8150,15 @@ body.tut-locked #battle-reset-turn {
   width: 48%;
   max-width: 619px;
   left: 65%;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 16px;
+  padding-bottom: 16px;
 }
 #adv-dialogue-explorer {
   width: 48%;
   max-width: 619px;
   left: 35%;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 16px;
+  padding-bottom: 16px;
 }
 
 .adv-dialogue-top    { top:    24px; }
