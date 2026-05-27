@@ -611,18 +611,41 @@ SOG.OtziBattle = (function () {
       });
     });
 
+    // Re-evaluate continuous abilities + refresh displays after each card reveal.
+    // Matches the cadence of the regular game's revealNext → proceed pipeline.
+    function afterCard() {
+      if (SOG.abilities && typeof SOG.abilities.evaluateContinuous === 'function') {
+        SOG.abilities.evaluateContinuous();
+      }
+      if (SOG.board && typeof SOG.board.refreshSlotIPDisplays === 'function') SOG.board.refreshSlotIPDisplays();
+      if (SOG.board && typeof SOG.board.updateScores         === 'function') SOG.board.updateScores();
+    }
+
     var next = function (i) {
       if (i >= toFlip.length) {
-        // Refresh scores after all flips
-        if (SOG.board && typeof SOG.board.refreshSlotIPDisplays === 'function') SOG.board.refreshSlotIPDisplays();
-        if (SOG.board && typeof SOG.board.updateScores         === 'function') SOG.board.updateScores();
+        afterCard();   // final pass once every card is revealed
         setTimeout(function () { if (onDone) onDone(); }, 1100);
         return;
       }
       var item   = toFlip[i];
+      // Capture cardId from slot data before the flip marks it revealed
+      var slots  = item.owner === 'player' ? G.playerSlots : G.aiSlots;
+      var sd     = slots[item.locId] && slots[item.locId][item.idx];
+      var cardId = sd ? sd.cardId : null;
       var slotEl = SOG.board && typeof SOG.board.getSlotEl === 'function'
                    ? SOG.board.getSlotEl(item.owner, item.locId, item.idx) : null;
-      flipSlot(slotEl, function () { next(i + 1); });
+      flipSlot(slotEl, function () {
+        // Fire At Once ability (e.g. Tool → draw a card), then refresh + continue
+        if (cardId && SOG.abilities && typeof SOG.abilities.fireAtOnce === 'function') {
+          SOG.abilities.fireAtOnce(item.owner, cardId, item.locId, function () {
+            afterCard();
+            setTimeout(function () { next(i + 1); }, 500);
+          });
+        } else {
+          afterCard();
+          setTimeout(function () { next(i + 1); }, 500);
+        }
+      });
     };
     next(0);
   }
@@ -673,9 +696,17 @@ SOG.OtziBattle = (function () {
     }
     if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') SOG.ui.updateOppHand();
 
-    // Reset turn-state in G
-    G.playerRevealQueue = [];
-    G.aiRevealQueue     = [];
+    // Reset turn-state in G (mirrors nextTurn() in game.js)
+    G.playerRevealQueue   = [];
+    G.aiRevealQueue       = [];
+    G.playerActionLog     = [];
+    G.aiActionLog         = [];
+    G.moveLog             = [];
+    G.movedThisTurn       = {};   // allow movement cards (e.g. Lucy) to move again
+    G.aiMovedThisTurn     = {};
+    G.locationSnapshots   = {};
+    G.reservedSlotsPerLoc = {};
+    G.deferredPlays       = {};
 
     // Buttons: disabled until player places a card
     var endTurnBtn = document.getElementById('battle-end-turn');
@@ -686,23 +717,46 @@ SOG.OtziBattle = (function () {
 
   /* ── End battle: tally 3-location scores ──────────────────────── */
   function endOtziBattle() {
-    var G = SOG.state.G;
+    var G    = SOG.state.G;
+    var eIP  = SOG.board && SOG.board.effectiveIP;
     var playerWins = 0, otziWins = 0;
 
-    G.locations.forEach(function (loc) {
+    // Tally per-location winners
+    var locResults = G.locations.map(function (loc) {
       var pIP = 0, aIP = 0;
       (G.playerSlots[loc.id] || []).forEach(function (s) {
-        if (s && s.revealed) pIP += (SOG.board && SOG.board.effectiveIP ? SOG.board.effectiveIP(s) : s.ip || 0);
+        if (s && s.revealed) pIP += eIP ? eIP(s) : (s.ip || 0);
       });
       (G.aiSlots[loc.id] || []).forEach(function (s) {
-        if (s && s.revealed) aIP += (SOG.board && SOG.board.effectiveIP ? SOG.board.effectiveIP(s) : s.ip || 0);
+        if (s && s.revealed) aIP += eIP ? eIP(s) : (s.ip || 0);
       });
-      if (pIP > aIP) playerWins++;
-      else if (aIP > pIP) otziWins++;
+      return { loc: loc, playerIP: pIP, aiIP: aIP };
+    });
+
+    locResults.forEach(function (r) {
+      if (r.playerIP > r.aiIP)      playerWins++;
+      else if (r.aiIP > r.playerIP) otziWins++;
     });
 
     log('Battle over — player wins ' + playerWins + ' locs, Otzi wins ' + otziWins);
-    var won = playerWins >= 2;
+
+    // Determine outcome. When neither side wins 2+ locations, tiebreak
+    // on total IP across all 3 locations (same rule as the regular game).
+    var won, usedTiebreaker = false, playerTotal = 0, otziTotal = 0;
+    if (playerWins >= 2) {
+      won = true;
+    } else if (otziWins >= 2) {
+      won = false;
+    } else {
+      usedTiebreaker = true;
+      locResults.forEach(function (r) {
+        playerTotal += r.playerIP;
+        otziTotal   += r.aiIP;
+      });
+      // Challenger must beat Otzi outright; ties go to Otzi.
+      won = playerTotal > otziTotal;
+      log('Tiebreaker — player total IP: ' + playerTotal + ', Otzi total IP: ' + otziTotal);
+    }
 
     if (won) {
       try { localStorage.setItem(KEY_BATTLE_OTZI_COMPLETE, 'true'); } catch (e) {}
@@ -712,11 +766,13 @@ SOG.OtziBattle = (function () {
     }
 
     // Show result overlay
-    setTimeout(function () { showOtziResult(won, playerWins, otziWins); }, 500);
+    setTimeout(function () {
+      showOtziResult(won, playerWins, otziWins, usedTiebreaker, playerTotal, otziTotal);
+    }, 500);
   }
 
   /* ── Simple result screen overlay ────────────────────────────── */
-  function showOtziResult(won, playerWins, otziWins) {
+  function showOtziResult(won, playerWins, otziWins, usedTiebreaker, playerTotal, otziTotal) {
     var existing = document.getElementById('otzi-result-overlay');
     if (existing) existing.parentNode.removeChild(existing);
 
@@ -734,7 +790,9 @@ SOG.OtziBattle = (function () {
 
     var sub = document.createElement('div');
     sub.style.cssText = 'font-size:18px;color:#ccc;margin-bottom:32px;letter-spacing:0.06em';
-    sub.textContent = 'Locations won: You ' + playerWins + '  —  Otzi ' + otziWins;
+    sub.textContent = usedTiebreaker
+      ? 'Tiebreaker — Total IP: You ' + playerTotal + '  vs  Otzi ' + otziTotal
+      : 'Locations won: You ' + playerWins + '  —  Otzi ' + otziWins;
 
     var btnRow = document.createElement('div');
     btnRow.style.cssText = 'display:flex;gap:16px';
