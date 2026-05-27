@@ -7999,6 +7999,7 @@ body.tut-locked #battle-reset-turn {
   animation: overworld-node-pulse 2.2s ease-in-out infinite;
 }
 .overworld-node:hover > img { transform: scale(1.08); }
+[data-id="egypt-signpost"] > img { width: 126px; }
 .overworld-node-label {
   font-family: 'CT Galbite', monospace;
   font-size: 16px;
