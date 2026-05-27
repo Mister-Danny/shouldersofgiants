@@ -546,6 +546,49 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
+       ADVENTURE MODE — Otzi battle result screens
+       Victory: Game Board + Play Again + Back to Map.
+       Defeat:  Game Board + Play Again + Back to Map.
+       Tie:     Game Board + Play Again + Back to Map.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="adv-otzi-result-victory" class="adv-result" style="display:none">
+    <div class="result-wrap">
+      <div class="result-headline result-player">VICTORY</div>
+      <div class="result-subline" id="adv-otzi-result-victory-subline"></div>
+      <div class="result-locs"   id="adv-otzi-result-victory-locs"></div>
+      <div class="result-actions">
+        <button class="btn-primary" id="adv-otzi-result-victory-board">GAME BOARD</button>
+        <button class="btn-primary" id="adv-otzi-result-victory-again">PLAY AGAIN</button>
+        <button class="btn-primary" id="adv-otzi-result-victory-backtomap">BACK TO MAP</button>
+      </div>
+    </div>
+  </div>
+  <div id="adv-otzi-result-defeat" class="adv-result" style="display:none">
+    <div class="result-wrap">
+      <div class="result-headline result-ai">DEFEATED</div>
+      <div class="result-subline" id="adv-otzi-result-defeat-subline"></div>
+      <div class="result-locs"   id="adv-otzi-result-defeat-locs"></div>
+      <div class="result-actions">
+        <button class="btn-primary" id="adv-otzi-result-defeat-board">GAME BOARD</button>
+        <button class="btn-primary" id="adv-otzi-result-defeat-again">PLAY AGAIN</button>
+        <button class="btn-primary" id="adv-otzi-result-defeat-backtomap">BACK TO MAP</button>
+      </div>
+    </div>
+  </div>
+  <div id="adv-otzi-result-tie" class="adv-result" style="display:none">
+    <div class="result-wrap">
+      <div class="result-headline result-tie">A TIE</div>
+      <div class="result-subline" id="adv-otzi-result-tie-subline"></div>
+      <div class="result-locs"   id="adv-otzi-result-tie-locs"></div>
+      <div class="result-actions">
+        <button class="btn-primary" id="adv-otzi-result-tie-board">GAME BOARD</button>
+        <button class="btn-primary" id="adv-otzi-result-tie-again">PLAY AGAIN</button>
+        <button class="btn-primary" id="adv-otzi-result-tie-backtomap">BACK TO MAP</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
        RESULT SCREEN
   ════════════════════════════════════════════════════════════════ -->
   <div id="screen-result" class="screen">
@@ -1517,6 +1560,7 @@
   <script src="js/game/ui.js"></script>
   <script src="js/sog-adventure-prehistory.js"></script>
   <script src="js/sog-adventure-otzi.js"></script>
+  <script src="js/sog-adventure-egypt.js"></script>
   <script src="js/bypass.js"></script>
   <script src="js/welcome.js"></script>
   <script src="js/feedback.js"></script>

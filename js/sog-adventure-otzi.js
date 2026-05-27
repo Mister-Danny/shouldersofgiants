@@ -53,6 +53,29 @@ SOG.OtziBattle = (function () {
     { who: 'otzi',     text: 'But try to gain the most IP at 2 of the 3 locations.'    }
   ];
 
+  /* ── Post-battle dialogue scripts ───────────────────────────────── */
+  var WIN_DIALOGUE = [
+    { who: 'otzi',     text: 'How did you beat me?'                                   },
+    { who: 'explorer', text: 'Hard work and perseverance.'                            },
+    { who: 'otzi',     text: 'Whatever that means.'                                   },
+    { who: 'explorer', text: 'It means a lot.'                                        },
+    { who: 'otzi',     text: 'Right. Take this token of me — frozen in time.'   }
+  ];
+  var LOSS_DIALOGUE = [
+    { who: 'otzi',     text: 'As I said. You're not ready.'                      },
+    { who: 'explorer', text: 'Let me try again.'                                      },
+    { who: 'otzi',     text: 'The world doesn't give second chances. But I will.'},
+    { who: 'explorer', text: '…thanks?'                                          },
+    { who: 'otzi',     text: 'Don't waste it.'                                   }
+  ];
+  var TIE_DIALOGUE = [
+    { who: 'otzi',     text: 'A stalemate. Curious.'         },
+    { who: 'explorer', text: 'Does that mean I can pass?'   },
+    { who: 'otzi',     text: 'No. It means we go again.'    }
+  ];
+
+  var KEY_CARD_OTZI_UNLOCKED = 'sog_card_otzi_unlocked';
+
   /* ── Timing ──────────────────────────────────────────────────── */
   var TYPE_SPEED_MS = 32;
   var TOTAL_TURNS   = 4;
@@ -793,9 +816,9 @@ SOG.OtziBattle = (function () {
 
     log('Battle over — player wins ' + playerWins + ' locs, Otzi wins ' + otziWins);
 
-    // Determine outcome. When neither side wins 2+ locations, tiebreak
-    // on total IP across all 3 locations (same rule as the regular game).
-    var won, usedTiebreaker = false, playerTotal = 0, otziTotal = 0;
+    // Determine outcome. True tie = 1-1-1 split with equal total IP.
+    var won = false, isTie = false, usedTiebreaker = false;
+    var playerTotal = 0, otziTotal = 0;
     if (playerWins >= 2) {
       won = true;
     } else if (otziWins >= 2) {
@@ -806,8 +829,12 @@ SOG.OtziBattle = (function () {
         playerTotal += r.playerIP;
         otziTotal   += r.aiIP;
       });
-      // Challenger must beat Otzi outright; ties go to Otzi.
-      won = playerTotal > otziTotal;
+      if (playerTotal === otziTotal) {
+        isTie = true;   // exact tie — treated as loss for progression
+        won   = false;
+      } else {
+        won = playerTotal > otziTotal;
+      }
       log('Tiebreaker — player total IP: ' + playerTotal + ', Otzi total IP: ' + otziTotal);
     }
 
@@ -818,66 +845,193 @@ SOG.OtziBattle = (function () {
       if (typeof SFX !== 'undefined' && typeof SFX.gameLost === 'function') SFX.gameLost();
     }
 
-    // Show result overlay
     setTimeout(function () {
-      showOtziResult(won, playerWins, otziWins, usedTiebreaker, playerTotal, otziTotal);
-    }, 500);
+      _routePostBattle(won, isTie, locResults, usedTiebreaker, playerTotal, otziTotal);
+    }, 600);
   }
 
-  /* ── Simple result screen overlay ────────────────────────────── */
-  function showOtziResult(won, playerWins, otziWins, usedTiebreaker, playerTotal, otziTotal) {
-    var existing = document.getElementById('otzi-result-overlay');
-    if (existing) existing.parentNode.removeChild(existing);
+  /* ── Post-battle dialogue → card reveal → scoreboard ──────────── */
 
+  /* Route outcome to the correct dialogue then scoreboard. */
+  function _routePostBattle(won, isTie, locResults, usedTiebreaker, playerTotal, otziTotal) {
+    var lines = won ? WIN_DIALOGUE : (isTie ? TIE_DIALOGUE : LOSS_DIALOGUE);
+    runLines(lines, function () {
+      hideBubbles();
+      if (won) {
+        var cardAlreadyOwned = false;
+        try { cardAlreadyOwned = localStorage.getItem(KEY_CARD_OTZI_UNLOCKED) === 'true'; } catch (e) {}
+        if (cardAlreadyOwned) {
+          _showOtziScoreboard('win', locResults, usedTiebreaker, playerTotal, otziTotal);
+        } else {
+          var otziCard = (typeof CARDS !== 'undefined') &&
+                        CARDS.find(function (c) { return c.id === 35; });
+          var preh = window.SOG && window.SOG.Adventure && window.SOG.Adventure.Prehistory;
+          if (otziCard && preh && typeof preh.showCardAcquisition === 'function') {
+            preh.showCardAcquisition(otziCard, null, function () {
+              try { localStorage.setItem(KEY_CARD_OTZI_UNLOCKED, 'true'); } catch (e) {}
+              _showOtziScoreboard('win', locResults, usedTiebreaker, playerTotal, otziTotal);
+            });
+          } else {
+            _showOtziScoreboard('win', locResults, usedTiebreaker, playerTotal, otziTotal);
+          }
+        }
+      } else {
+        _showOtziScoreboard(isTie ? 'tie' : 'loss', locResults, usedTiebreaker, playerTotal, otziTotal);
+      }
+    });
+  }
+
+  /* Build a single location result row (Desert / Savannah / Great Rift Valley). */
+  function _buildLocRow(locName, pIP, aIP) {
+    var winner = pIP > aIP ? 'player' : aIP > pIP ? 'ai' : 'tie';
+    var row = document.createElement('div'); row.className = 'result-loc-row';
+    var nm  = document.createElement('div'); nm.className  = 'result-loc-name'; nm.textContent = locName;
+    var sc  = document.createElement('div'); sc.className  = 'result-loc-scores';
+    var yu  = document.createElement('span');
+    yu.className   = 'result-loc-you'  + (winner === 'player' ? ' result-loc-winner' : '');
+    yu.textContent = 'You: ' + pIP;
+    var vs  = document.createElement('span'); vs.className = 'result-loc-vs'; vs.textContent = 'vs';
+    var op  = document.createElement('span');
+    op.className   = 'result-loc-opp'  + (winner === 'ai'     ? ' result-loc-winner' : '');
+    op.textContent = 'Otzi: ' + aIP;
+    sc.appendChild(yu); sc.appendChild(vs); sc.appendChild(op);
+    var bd = document.createElement('div');
+    bd.className   = 'result-loc-badge result-loc-badge-' + winner;
+    bd.textContent = winner === 'player' ? 'YOU' : winner === 'ai' ? 'OTZI' : 'TIE';
+    row.appendChild(nm); row.appendChild(sc); row.appendChild(bd);
+    return row;
+  }
+
+  /* Helpers shared by all three scoreboard paths. */
+  function _replayOtziBattle(overlayEl) {
+    overlayEl.style.display = 'none';
+    removeEndTurnHook();
+    removeResetHook();
+    teardown();
+    if (typeof SOG !== 'undefined' && SOG.OtziBattle) SOG.OtziBattle.start();
+  }
+
+  function _showBoardFromResult(overlayEl) {
+    overlayEl.style.display = 'none';
+    var backBtn = document.getElementById('adv-btn-back-results');
+    if (backBtn) {
+      backBtn.style.display = '';
+      backBtn.onclick = function () {
+        backBtn.style.display = 'none';
+        overlayEl.style.display = 'flex';
+      };
+    }
+  }
+
+  function _exitOtziBattleToOverworld(wonBattle) {
+    teardown();
+    if (typeof showScreen === 'function') showScreen('screen-overworld');
+    if (wonBattle) {
+      // 500 ms settle — let the overworld screen finish rendering before
+      // applying the badge and triggering the post-victory dialogue.
+      setTimeout(function () {
+        var nodeEl = document.querySelector('#overworld-overlay [data-id="egypt-signpost"]');
+        if (nodeEl) nodeEl.classList.add('overworld-node-complete');
+        if (window.Overworld && typeof window.Overworld.startPostOtziVictorySequence === 'function') {
+          window.Overworld.startPostOtziVictorySequence();
+        }
+      }, 500);
+    }
+  }
+
+  /* Display the HTML scoreboard for the given outcome. */
+  function _showOtziScoreboard(outcome, locResults, usedTiebreaker, playerTotal, otziTotal) {
+    var elId, subId, locsId, boardBtnId, againBtnId, mapBtnId;
+    if (outcome === 'win') {
+      elId = 'adv-otzi-result-victory'; subId = 'adv-otzi-result-victory-subline';
+      locsId = 'adv-otzi-result-victory-locs';
+      boardBtnId = 'adv-otzi-result-victory-board'; againBtnId = 'adv-otzi-result-victory-again';
+      mapBtnId   = 'adv-otzi-result-victory-backtomap';
+    } else if (outcome === 'tie') {
+      elId = 'adv-otzi-result-tie'; subId = 'adv-otzi-result-tie-subline';
+      locsId = 'adv-otzi-result-tie-locs';
+      boardBtnId = 'adv-otzi-result-tie-board'; againBtnId = 'adv-otzi-result-tie-again';
+      mapBtnId   = 'adv-otzi-result-tie-backtomap';
+    } else {
+      elId = 'adv-otzi-result-defeat'; subId = 'adv-otzi-result-defeat-subline';
+      locsId = 'adv-otzi-result-defeat-locs';
+      boardBtnId = 'adv-otzi-result-defeat-board'; againBtnId = 'adv-otzi-result-defeat-again';
+      mapBtnId   = 'adv-otzi-result-defeat-backtomap';
+    }
+
+    var el      = document.getElementById(elId);
+    var subEl   = document.getElementById(subId);
+    var locsEl  = document.getElementById(locsId);
+    var boardBtn= document.getElementById(boardBtnId);
+    var againBtn= document.getElementById(againBtnId);
+    var mapBtn  = document.getElementById(mapBtnId);
+
+    if (!el) {
+      log('scoreboard element #' + elId + ' not found — falling back to plain overlay');
+      _fallbackScoreboard(outcome, locResults, usedTiebreaker, playerTotal, otziTotal);
+      return;
+    }
+
+    // Populate subline
+    if (subEl) {
+      if (usedTiebreaker) {
+        subEl.textContent = 'Tiebreaker — Total IP: You ' + playerTotal + '  vs  Otzi ' + otziTotal;
+      } else if (outcome === 'win') {
+        subEl.textContent = 'You conquered Otzi at 2 of 3 locations';
+      } else if (outcome === 'tie') {
+        subEl.textContent = 'A stalemate — every location tied';
+      } else {
+        subEl.textContent = 'Otzi won 2 of 3 locations';
+      }
+    }
+
+    // Populate 3-location rows
+    if (locsEl) {
+      locsEl.innerHTML = '';
+      locResults.forEach(function (r) {
+        locsEl.appendChild(_buildLocRow(r.loc.name, r.playerIP, r.aiIP));
+      });
+    }
+
+    el.style.display = 'flex';
+
+    if (boardBtn) boardBtn.onclick = function () { _showBoardFromResult(el); };
+    if (againBtn) againBtn.onclick = function () { _replayOtziBattle(el); };
+    if (mapBtn)   mapBtn.onclick   = function () {
+      el.style.display = 'none';
+      _exitOtziBattleToOverworld(outcome === 'win');
+    };
+  }
+
+  /* Plain-text fallback if HTML elements are missing (shouldn't happen). */
+  function _fallbackScoreboard(outcome, locResults, usedTiebreaker, playerTotal, otziTotal) {
     var overlay = document.createElement('div');
-    overlay.id = 'otzi-result-overlay';
     overlay.style.cssText = [
       'position:fixed;inset:0;background:rgba(0,0,0,0.82)',
       'display:flex;flex-direction:column;align-items:center;justify-content:center',
-      'z-index:9000;font-family:\'CT Galbite\',monospace;color:#fff'
+      'z-index:9000;font-family:\'CT Galbite\',monospace;color:#fff;gap:16px'
     ].join(';');
 
     var title = document.createElement('div');
-    title.style.cssText = 'font-size:38px;letter-spacing:0.1em;margin-bottom:18px;color:' + (won ? '#f8d000' : '#f04030');
-    title.textContent = won ? 'VICTORY' : 'DEFEAT';
-
-    var sub = document.createElement('div');
-    sub.style.cssText = 'font-size:18px;color:#ccc;margin-bottom:32px;letter-spacing:0.06em';
-    sub.textContent = usedTiebreaker
-      ? 'Tiebreaker — Total IP: You ' + playerTotal + '  vs  Otzi ' + otziTotal
-      : 'Locations won: You ' + playerWins + '  —  Otzi ' + otziWins;
+    title.style.cssText = 'font-size:32px;color:' + (outcome === 'win' ? '#f8d000' : '#f04030');
+    title.textContent = outcome === 'win' ? 'VICTORY' : outcome === 'tie' ? 'A TIE' : 'DEFEATED';
+    overlay.appendChild(title);
 
     var btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;gap:16px';
+    btnRow.style.cssText = 'display:flex;gap:12px;margin-top:16px';
 
-    var backBtn = document.createElement('button');
-    backBtn.textContent = 'BACK TO MAP';
-    backBtn.style.cssText = [
-      'padding:10px 24px;font-family:\'CT Galbite\',monospace;font-size:16px',
-      'letter-spacing:0.08em;background:#12004a;color:#fff',
-      'border:2px solid #8898ff;cursor:pointer'
-    ].join(';');
-    backBtn.addEventListener('click', function () {
-      overlay.parentNode.removeChild(overlay);
-      teardown();
-      if (typeof showScreen === 'function') showScreen('screen-overworld');
-    });
+    var againBtn = document.createElement('button');
+    againBtn.textContent = 'PLAY AGAIN';
+    againBtn.style.cssText = 'padding:10px 20px;font-family:\'CT Galbite\',monospace;font-size:14px;background:#12004a;color:#fff;border:2px solid #8898ff;cursor:pointer';
+    againBtn.onclick = function () { overlay.parentNode.removeChild(overlay); removeEndTurnHook(); removeResetHook(); teardown(); SOG.OtziBattle.start(); };
 
-    var retryBtn = document.createElement('button');
-    retryBtn.textContent = 'TRY AGAIN';
-    retryBtn.style.cssText = backBtn.style.cssText;
-    retryBtn.addEventListener('click', function () {
-      overlay.parentNode.removeChild(overlay);
-      removeEndTurnHook();
-      removeResetHook();
-      teardown();
-      if (typeof SOG !== 'undefined' && SOG.OtziBattle) SOG.OtziBattle.start();
-    });
+    var mapBtn = document.createElement('button');
+    mapBtn.textContent = 'BACK TO MAP';
+    mapBtn.style.cssText = againBtn.style.cssText;
+    mapBtn.onclick = function () { overlay.parentNode.removeChild(overlay); _exitOtziBattleToOverworld(outcome === 'win'); };
 
-    btnRow.appendChild(retryBtn);
-    btnRow.appendChild(backBtn);
-    overlay.appendChild(title);
-    overlay.appendChild(sub);
+    btnRow.appendChild(againBtn);
+    btnRow.appendChild(mapBtn);
     overlay.appendChild(btnRow);
     document.body.appendChild(overlay);
   }

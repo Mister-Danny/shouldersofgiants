@@ -23,6 +23,7 @@ var Overworld = (function () {
   var KEY_POST_NEANDERTHAL_DIALOGUE = 'sog_post_neanderthal_overworld_complete';
   var KEY_CARD_LUCY_UNLOCKED        = 'sog_card_lucy_unlocked';
   var KEY_BATTLE_OTZI_COMPLETE      = 'sog_battle_otzi_complete';
+  var KEY_POST_OTZI_DIALOGUE = 'sog_post_otzi_overworld_complete';
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -68,6 +69,16 @@ var Overworld = (function () {
     { who: "explorer", text: "So, how do I get you to let me pass?"                               },
     { who: "otzi",     text: "You face me. Right here. Right now."                                },
     { who: "explorer", text: "Again?"                                                               }
+  ];
+
+  /* Post-Otzi-victory overworld monologue — Explorer only, 4 lines.
+     Fires once after winning the Otzi battle and returning to the overworld.
+     After the last line: yellow checkmark on Otzi node + To Egypt box fades in. */
+  var POST_OTZI_VICTORY_DIALOGUE = [
+    { who: ‘explorer’, text: ‘Who knew history would have so much conflict?’  },
+    { who: ‘explorer’, text: ‘At least, now, I’m ready for whatever’s next.’ },
+    { who: ‘explorer’, text: ‘I think the sign says Egypt.’                   },
+    { who: ‘explorer’, text: ‘Heigh ho and away we go!’                       }
   ];
 
   var PHASE2_DIALOGUE = [
@@ -526,8 +537,18 @@ var Overworld = (function () {
           SOG.Adventure.Prehistory.isBattleComplete()) {
         nodeEl.classList.add('overworld-node-complete');
       }
+      if (n.id === 'egypt-signpost') {
+        try {
+          if (localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true') {
+            nodeEl.classList.add('overworld-node-complete');
+          }
+        } catch (e) {}
+      }
       overlayEl.appendChild(nodeEl);
     });
+
+    // Inject the To Egypt navigation box if Otzi has been beaten
+    _refreshToEgyptBox(false);
 
     // Place exit zones
     data.exits.forEach(function (e) {
@@ -601,14 +622,21 @@ var Overworld = (function () {
       return;
     }
 
-    // ── Egypt signpost → Otzi encounter ─────────────────────────
+    // ── Egypt signpost → Otzi encounter / replay ─────────────────
     var isEgyptSignpost = node.id === 'egypt-signpost' && currentMapId === 'eastafrica';
     if (isEgyptSignpost) {
       var otziBattle = window.SOG && window.SOG.OtziBattle;
       if (otziBattle && otziBattle.isBattleComplete()) {
+        // Post-victory: skip pre-battle dialogue, go straight into the battle
         walkPath(node.path || [{ x: node.x, y: node.y }], function () {
-          log('Egypt signpost — Otzi defeated, transitioning to Egypt map');
-          transitionToMap('egypt', { x: 10, y: 85 });
+          log('Egypt signpost post-victory — launching Otzi battle directly (skip intro)');
+          _fireWipeFromNode('egypt-signpost', function () {
+            if (otziBattle && typeof otziBattle.start === 'function') {
+              otziBattle.start();
+            } else {
+              _clearWipe();
+            }
+          });
         });
         return;
       }
@@ -803,6 +831,96 @@ var Overworld = (function () {
     scheduleIdle();
   }
 
+  /* ── Post-Otzi-victory overworld sequence ───────────────────────
+     Called by sog-adventure-otzi.js after the player wins the Otzi
+     battle and clicks "Back to Map".  Gated by localStorage so it
+     only runs once.  Runs a solo Explorer monologue, then reveals the
+     "To Egypt" navigation box and marks the sequence complete.       */
+  function startPostOtziVictorySequence() {
+    try {
+      if (localStorage.getItem(KEY_POST_OTZI_DIALOGUE) === 'true') return;
+    } catch (e) {}
+
+    if (!explorerBoxEl) {
+      log('[PostOtziVictory] explorer box missing — skipping');
+      return;
+    }
+
+    resetBox(explorerBoxEl);
+    isDialogueLocked = true;
+    cancelIdle();
+
+    runDialogue(POST_OTZI_VICTORY_DIALOGUE, function () {
+      isDialogueLocked = false;
+      _completePostOtziVictorySequence();
+    });
+  }
+
+  function _completePostOtziVictorySequence() {
+    try { localStorage.setItem(KEY_POST_OTZI_DIALOGUE, 'true'); } catch (e) {}
+    _refreshNodes();
+    _refreshToEgyptBox(true);   // animate fade-in
+    log('[PostOtziVictory] complete — To Egypt box revealed');
+    scheduleIdle();
+  }
+
+  /* ── "To Egypt" navigation box ──────────────────────────────────
+     A vertical strip to the right of the egypt-signpost node.
+     Visible when sog_battle_otzi_complete === 'true'.
+     Click routes to the Egypt stub (SOG.Egypt.start()).            */
+  function _refreshToEgyptBox(animate) {
+    // Remove any existing box
+    if (overlayEl) {
+      var existing = overlayEl.querySelector('.overworld-to-egypt-box');
+      if (existing) existing.parentNode.removeChild(existing);
+    }
+
+    // Only show on east africa + only after Otzi is beaten
+    if (currentMapId !== 'eastafrica') return;
+    try {
+      if (localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) !== 'true') return;
+    } catch (e) { return; }
+    if (!overlayEl) return;
+
+    // egypt-signpost node is at x:20, y:20 in map-percentage coords.
+    // Box: immediately right of the node, extending from top (0%) down to
+    // just past the node centre (~22%).
+    var box = document.createElement('div');
+    box.className = 'overworld-to-egypt-box';
+    // Position expressed as % of the overlay (which fills the map area).
+    box.style.left   = '25%';
+    box.style.top    = '0';
+    box.style.width  = '8%';
+    box.style.height = '22%';
+    if (animate) box.style.opacity = '0';
+
+    var label = document.createElement('div');
+    label.className = 'overworld-to-egypt-label';
+    label.textContent = 'To Egypt';
+    box.appendChild(label);
+
+    box.addEventListener('click', function () {
+      if (isMoving || isTransitioning || isDialogueLocked) return;
+      log('To Egypt box clicked — launching Egypt module');
+      cancelIdle();
+      var egypt = window.SOG && window.SOG.Egypt;
+      if (egypt && typeof egypt.start === 'function') {
+        egypt.start();
+      } else {
+        // Fallback: transition to egypt map
+        transitionToMap('egypt', { x: 10, y: 85 });
+      }
+    });
+
+    overlayEl.appendChild(box);
+
+    if (animate && typeof gsap !== 'undefined') {
+      gsap.to(box, { opacity: 1, duration: 0.8, ease: 'power2.out' });
+    } else if (animate) {
+      box.style.opacity = '1';
+    }
+  }
+
   /* Tear down and re-place all node elements for the current map.
      Used after a flag change (e.g. post-victory) so newly-unlocked
      nodes like the Egypt signpost appear without a full map reload. */
@@ -837,8 +955,17 @@ var Overworld = (function () {
           SOG.Adventure.Prehistory.isBattleComplete()) {
         nodeEl.classList.add('overworld-node-complete');
       }
+      if (n.id === 'egypt-signpost') {
+        try {
+          if (localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true') {
+            nodeEl.classList.add('overworld-node-complete');
+          }
+        } catch (e) {}
+      }
       overlayEl.appendChild(nodeEl);
     });
+    // Keep the To Egypt box in sync with node refreshes
+    _refreshToEgyptBox(false);
   }
 
   /* ── Otzi encounter ─────────────────────────────────────────────
@@ -1232,6 +1359,8 @@ var Overworld = (function () {
     startPostVictorySequence: startPostVictorySequence,
     // Otzi encounter — exposed so the battle module can call back if needed
     startOtziEncounter: startOtziEncounter,
+    // Post-Otzi-victory sequence — called by sog-adventure-otzi.js after win + Back to Map
+    startPostOtziVictorySequence: startPostOtziVictorySequence,
     // Devtools helpers
     goToMap: function (mapId) {
       if (!MAPS[mapId]) { console.warn('No such map:', mapId); return; }

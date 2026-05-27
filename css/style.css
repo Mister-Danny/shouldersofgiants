@@ -9125,3 +9125,32 @@ body.prehistory-battle .db-overlay-ip {
 #tut-box.db-tut-positioned #tut-hint {
   padding: 0 14px 6px;
 }
+
+/* ── "To Egypt" navigation box (overworld — East Africa) ───────────
+   Vertical strip to the right of the egypt-signpost node.
+   Only rendered when sog_battle_otzi_complete === 'true'.           */
+.overworld-to-egypt-box {
+  position: absolute;
+  border: 3px dashed #f8d000;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: border-style 0.15s ease, box-shadow 0.15s ease;
+  pointer-events: auto;
+}
+.overworld-to-egypt-box:hover {
+  border-style: solid;
+  box-shadow: 0 0 12px rgba(248, 208, 0, 0.45);
+}
+.overworld-to-egypt-label {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: #f8d000;
+  font-family: 'CT Galbite', monospace;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
