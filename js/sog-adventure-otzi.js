@@ -62,11 +62,11 @@ SOG.OtziBattle = (function () {
     { who: 'otzi',     text: 'Right. Take this token of me — frozen in time.'   }
   ];
   var LOSS_DIALOGUE = [
-    { who: 'otzi',     text: 'As I said. You're not ready.'                      },
-    { who: 'explorer', text: 'Let me try again.'                                      },
-    { who: 'otzi',     text: 'The world doesn't give second chances. But I will.'},
-    { who: 'explorer', text: '…thanks?'                                          },
-    { who: 'otzi',     text: 'Don't waste it.'                                   }
+    { who: 'otzi',     text: "As I said. You’re not ready."                      },
+    { who: 'explorer', text: 'Let me try again.'                                       },
+    { who: 'otzi',     text: "The world doesn’t give second chances. But I will." },
+    { who: 'explorer', text: '…thanks?'                                           },
+    { who: 'otzi',     text: "Don’t waste it."                                    }
   ];
   var TIE_DIALOGUE = [
     { who: 'otzi',     text: 'A stalemate. Curious.'         },

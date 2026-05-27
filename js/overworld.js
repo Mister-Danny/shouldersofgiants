@@ -75,10 +75,10 @@ var Overworld = (function () {
      Fires once after winning the Otzi battle and returning to the overworld.
      After the last line: yellow checkmark on Otzi node + To Egypt box fades in. */
   var POST_OTZI_VICTORY_DIALOGUE = [
-    { who: ‘explorer’, text: ‘Who knew history would have so much conflict?’  },
-    { who: ‘explorer’, text: ‘At least, now, I’m ready for whatever’s next.’ },
-    { who: ‘explorer’, text: ‘I think the sign says Egypt.’                   },
-    { who: ‘explorer’, text: ‘Heigh ho and away we go!’                       }
+    { who: 'explorer', text: 'Who knew history would have so much conflict?'          },
+    { who: 'explorer', text: "At least, now, I'm ready for whatever's next." },
+    { who: 'explorer', text: 'I think the sign says Egypt.'                            },
+    { who: 'explorer', text: 'Heigh ho and away we go!'                               }
   ];
 
   var PHASE2_DIALOGUE = [
