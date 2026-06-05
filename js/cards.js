@@ -217,73 +217,179 @@ const CARDS = [
     type: "Scientific", type2: null, era: "Prehistory",
     abilityName: "Ancient Tech",
     ability: "At Once: Tool draws 1 card.",
-    image: "images/prehistorycards/toolcard.jpg", locked: true
+    image: "images/cards/prehistorycards/toolcard.jpg", locked: true
   },
   {
     id: 27, name: "Hunter", cc: 2, ip: 2,
     type: "Military", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
-    image: "images/prehistorycards/huntercard.jpg", locked: true
+    image: "images/cards/prehistorycards/huntercard.jpg", locked: true
   },
   {
     id: 28, name: "Gatherer", cc: 2, ip: 2,
     type: "Cultural", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
-    image: "images/prehistorycards/gatherercard.jpg", locked: true
+    image: "images/cards/prehistorycards/gatherercard.jpg", locked: true
   },
   {
     id: 29, name: "Fire", cc: 2, ip: 1,
     type: "Scientific", type2: null, era: "Prehistory",
     abilityName: "Cooked",
     ability: "Continuous: Cards played after Fire here gain +1 IP.",
-    image: "images/prehistorycards/firecard.jpg", locked: true
+    image: "images/cards/prehistorycards/firecard.jpg", locked: true
   },
   {
     id: 30, name: "Cave Art", cc: 2, ip: 1,
     type: "Cultural", type2: null, era: "Prehistory",
     abilityName: "Ancient Storytelling",
     ability: "Continuous: Cards played before Cave Art here gain +1 IP.",
-    image: "images/prehistorycards/caveartcard.jpg", locked: true
+    image: "images/cards/prehistorycards/caveartcard.jpg", locked: true
   },
   {
     id: 31, name: "Megalith", cc: 2, ip: 3,
     type: "Cultural", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
-    image: "images/prehistorycards/megalithcard.jpg", locked: true
+    image: "images/cards/prehistorycards/megalithcard.jpg", locked: true
   },
   {
     id: 32, name: "Domesticated Animal", cc: 2, ip: 1,
     type: "Scientific", type2: null, era: "Prehistory",
     abilityName: "Man's Best Friend",
     ability: "Continuous: Cards in adjacent slots here gain +1 IP.",
-    image: "images/prehistorycards/domesticatedanimalcard.jpg", locked: true
+    image: "images/cards/prehistorycards/domesticatedanimalcard.jpg", locked: true
   },
   {
     id: 33, name: "Lucy", cc: 4, ip: 4,
     type: "Scientific", type2: null, era: "Prehistory",
     abilityName: "First Steps",
     ability: "Lucy can move once.",
-    image: "images/prehistorycards/lucycard.jpg", locked: true
+    image: "images/cards/prehistorycards/lucycard.jpg", locked: true
   },
   {
     id: 34, name: "Neanderthal", cc: 4, ip: 4,
     type: "Scientific", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
-    image: "images/prehistorycards/neanderthalcard.jpg", locked: true
+    image: "images/cards/prehistorycards/neanderthalcard.jpg", locked: true
   },
   {
     id: 35, name: "Otzi", cc: 4, ip: 4,
     type: "Exploration", type2: null, era: "Prehistory",
     abilityName: "Migrate",
     ability: "When a card is played here, Otzi moves to a random location.",
-    image: "images/prehistorycards/otzicard.jpg", locked: true
+    image: "images/cards/prehistorycards/otzicard.jpg", locked: true
   },
   {
     id: 36, name: "Tribe", cc: 2, ip: 2,
     type: "Political", type2: null, era: "Prehistory",
     abilityName: "Strength In Numbers",
     ability: "At Once: If you play a card here next turn, Tribe gains +1 IP.",
-    image: "images/prehistorycards/tribecard.jpg", locked: true
+    image: "images/cards/prehistorycards/tribecard.jpg", locked: true
+  },
+
+  /* ── Mesopotamia era (ids 37–50) ─────────────────────────────────
+     Art lives at images/mesopotamiacards/[name]@0.5x.jpg.
+     @0.5x files used for all render contexts; the @sm thumbnail
+     fallback in buildCardImg will gracefully fall back to the @0.5x
+     file when no @sm variant exists.
+     Abilities are stubbed in Phase A — no gameplay logic yet.       */
+  {
+    id: 37, name: "Sargon", cc: 5, ip: 2,
+    type: "Political", type2: null, era: "Mesopotamia",
+    abilityName: "The Empire State",
+    ability: "Continuous: Sargon grants +3 IP to adjacent location(s).",
+    image: "images/mesopotamiacards/sargon@0.5x.jpg", locked: true
+  },
+  {
+    id: 38, name: "Priest", cc: 1, ip: 2,
+    type: "Religious", type2: null, era: "Mesopotamia",
+    abilityName: "Spiritual Sacrifice",
+    ability: "At Once: Discard the card in your hand with lowest CC.",
+    image: "images/mesopotamiacards/priest@0.5x.jpg", locked: true
+  },
+  {
+    id: 39, name: "Farmer", cc: 1, ip: 1,
+    type: "Labor", type2: null, era: "Mesopotamia",
+    abilityName: null, ability: null,
+    image: "images/mesopotamiacards/farmer@0.5x.jpg", locked: true
+  },
+  {
+    id: 40, name: "Scribe", cc: 2, ip: 1,
+    type: "Cultural", type2: null, era: "Mesopotamia",
+    abilityName: "Record Keeper",
+    ability: "Continuous: The cards you've played before Scribe here gain +1 IP.",
+    image: "images/mesopotamiacards/scribe@0.5x.jpg", locked: true
+  },
+  {
+    id: 41, name: "Canals", cc: 1, ip: 1,
+    type: "Scientific", type2: null, era: "Mesopotamia",
+    abilityName: "Irrigation",
+    ability: "Continuous: Boosts all Labor cards here by +1 IP.",
+    image: "images/mesopotamiacards/canals@0.5x.jpg", locked: true
+  },
+  {
+    id: 42, name: "Soldier", cc: 1, ip: 1,
+    type: "Military", type2: null, era: "Mesopotamia",
+    abilityName: "Military Service",
+    ability: "At Once: Strike one of your opponent's cards here and reduce it by -1 IP.",
+    image: "images/mesopotamiacards/soldier@0.5x.jpg", locked: true
+  },
+  {
+    id: 43, name: "Gilgamesh", cc: 5, ip: 5,
+    type: "Cultural", type2: null, era: "Mesopotamia",
+    abilityName: "Epic Hero",
+    ability: "Continuous: Gains +1 IP for each Cultural card you've played.",
+    image: "images/mesopotamiacards/gilgamesh@0.5x.jpg", locked: true
+  },
+  {
+    id: 44, name: "Enkidu", cc: 3, ip: 3,
+    type: "Cultural", type2: null, era: "Mesopotamia",
+    abilityName: "Wild Ally",
+    ability: "Continuous: Cards next to Enkidu gain +1 IP.",
+    image: "images/mesopotamiacards/enkidu@0.5x.jpg", locked: true
+  },
+  {
+    id: 45, name: "Ziggurat", cc: 3, ip: 3,
+    type: "Religious", type2: null, era: "Mesopotamia",
+    abilityName: "Sacred Space",
+    ability: "Continuous: Provides +1 IP to other Religious cards at this location.",
+    image: "images/mesopotamiacards/ziggurat@0.5x.jpg", locked: true
+  },
+  {
+    /* Filename on disk is misspelled "cunieform" — to be renamed in a later pass */
+    id: 46, name: "Cuneiform", cc: 1, ip: 1,
+    type: "Cultural", type2: null, era: "Mesopotamia",
+    abilityName: "Beyond Prehistory",
+    ability: "At Once: Attaches itself to the next card you play here.",
+    image: "images/mesopotamiacards/cunieform@0.5x.jpg", locked: true
+  },
+  {
+    id: 47, name: "Hammurabi", cc: 5, ip: 5,
+    type: "Political", type2: null, era: "Mesopotamia",
+    abilityName: "Eye For An Eye",
+    ability: "At Once: Destroy you and your opponent's lowest Capital card at this location.",
+    image: "images/mesopotamiacards/hammurabi@0.5x.jpg", locked: true
+  },
+  {
+    id: 48, name: "Chariot", cc: 2, ip: 2,
+    type: "Military", type2: null, era: "Mesopotamia",
+    abilityName: "Wheels of Conquest",
+    ability: "Can move once on its own. When it arrives at a new location, strike one of your opponent's cards there and reduce it by -1 IP.",
+    image: "images/mesopotamiacards/chariot@0.5x.jpg", locked: true
+  },
+  {
+    /* Display name includes the article; filename does not */
+    id: 49, name: "The Phoenicians", cc: 3, ip: 3,
+    type: "Cultural", type2: null, era: "Mesopotamia",
+    abilityName: "Alphabet",
+    ability: "At Once: Attaches itself to one of your Cultural cards here.",
+    image: "images/mesopotamiacards/phoenicians@0.5x.jpg", locked: true
+  },
+  {
+    id: 50, name: "Nebuchadnezzar", cc: 5, ip: 5,
+    type: "Political", type2: null, era: "Mesopotamia",
+    abilityName: "Builder of Babylon",
+    ability: "Continuous: Mesopotamia cards cost -1 CC to play.",
+    image: "images/mesopotamiacards/nebuchadnezzar@0.5x.jpg", locked: true
   }
 
 ];

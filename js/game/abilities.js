@@ -236,6 +236,13 @@
       });
     });
 
+    // Rebuild per-location external boost table (cleared and rebuilt each cycle).
+    // Generic structure: any future card that boosts a remote location registers here.
+    G.locationBoosts = {};
+    G.locations.forEach(function (loc) {
+      G.locationBoosts[loc.id] = { player: [], opp: [] };
+    });
+
     G.locations.forEach(function (loc) {
       // Juvenal (id 18): -2 IP to all CC≥4 cards here (both sides)
       ['player','opp'].forEach(function (own) {
@@ -380,7 +387,116 @@
           }
         });
       });
+
+      // ── Mesopotamia continuous abilities ────────────────────────
+
+      // Enkidu (id 44): +1 IP to the slots adjacent (index ±1) here
+      // (same owner, revealed). Mirror of Domesticated Animal (id 32).
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        sl[loc.id].forEach(function (enkidu, enkiduIdx) {
+          if (!enkidu || !enkidu.revealed || enkidu.cardId !== 44) return;
+          [enkiduIdx - 1, enkiduIdx + 1].forEach(function (adjIdx) {
+            var s = sl[loc.id][adjIdx];
+            if (s && s.revealed) {
+              s.contMod = (s.contMod || 0) + 1;
+              s.contModSources.push({ source: 'Enkidu', delta: 1 });
+              addBonus(s, 1, 'card', 44, nextEventId(), 'A', true);
+            }
+          });
+        });
+      });
+
+      // Canals (id 41): +1 IP to all Labor-type cards here (same owner).
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        if (!sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 41; })) return;
+        sl[loc.id].forEach(function (s) {
+          if (!s || !s.revealed) return;
+          var c = CARDS.find(function (x) { return x.id === s.cardId; });
+          if (c && c.type === 'Labor') {
+            s.contMod = (s.contMod || 0) + 1;
+            s.contModSources.push({ source: 'Canals', delta: 1 });
+            addBonus(s, 1, 'card', 41, nextEventId(), 'A', true);
+          }
+        });
+      });
+
+      // Ziggurat (id 45): +1 IP to OTHER Religious-type cards here (same
+      // owner). Ziggurat does not boost its own IP.
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        if (!sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 45; })) return;
+        sl[loc.id].forEach(function (s) {
+          if (!s || !s.revealed || s.cardId === 45) return;  // exclude Ziggurat itself
+          var c = CARDS.find(function (x) { return x.id === s.cardId; });
+          if (c && c.type === 'Religious') {
+            s.contMod = (s.contMod || 0) + 1;
+            s.contModSources.push({ source: 'Ziggurat', delta: 1 });
+            addBonus(s, 1, 'card', 45, nextEventId(), 'A', true);
+          }
+        });
+      });
+
+      // Scribe (id 40): +1 IP to each card at this location that was played from hand
+      // here (originalLocId === this location) BEFORE Scribe was played here
+      // (playTime < Scribe.playTime).  Each Scribe in the slot array is its own
+      // independent boost source.
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        sl[loc.id].forEach(function (scribe, scribeIdx) {
+          if (!scribe || !scribe.revealed || scribe.cardId !== 40) return;
+          var scribeTime = scribe.playTime;
+          if (scribeTime === undefined) return;   // metadata not yet set — skip
+          sl[loc.id].forEach(function (s, si) {
+            if (!s || !s.revealed || si === scribeIdx) return;
+            if (s.originalLocId !== loc.id) return;   // not originally played here
+            if ((s.playTime || 0) >= scribeTime) return;  // played same time or after Scribe
+            s.contMod = (s.contMod || 0) + 1;
+            s.contModSources.push({ source: 'Scribe', delta: 1 });
+            addBonus(s, 1, 'card', 40, nextEventId(), 'A', true);
+          });
+        });
+      });
+
+      // Gilgamesh (id 43): +1 IP for each Cultural card the owner has played
+      // this game. Counter persists through destruction — "you've played" is
+      // all-time.  Self-portrait attribution (source id === 43).
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        sl[loc.id].forEach(function (s) {
+          if (!s || !s.revealed || s.cardId !== 43) return;
+          var bonus = (G.culturalCount && G.culturalCount[own]) || 0;
+          if (bonus <= 0) return;
+          s.contMod = (s.contMod || 0) + bonus;
+          s.contModSources.push({ source: 'Gilgamesh', delta: bonus });
+          addBonus(s, bonus, 'card', 43, nextEventId(), 'A', true);
+        });
+      });
+
+      // Sargon (id 37): grants +3 IP to each adjacent location for Sargon's owner.
+      // This is a LOCATION-LEVEL bonus (not a card modifier) — written to
+      // G.locationBoosts so updateScores and tallyResult can include it in
+      // win-condition math, and the location popup can visualise it.
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        if (!sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 37; })) return;
+        var adjIds = getAdjacentLocIds(loc.id);
+        adjIds.forEach(function (adjId) {
+          if (!G.locationBoosts[adjId]) return;
+          G.locationBoosts[adjId][own].push({
+            sourceCardId: 37,
+            sourceOwner:  own,
+            sourceLocId:  loc.id,
+            amount:       3
+          });
+        });
+      });
+
     });
+    // Note: Cuneiform (id 46) attachment is NOT resolved here.
+    // It fires from the play-event hook in revealNext (game.js), which guarantees
+    // it only triggers on an explicit play-from-hand action, never on a card move.
 
     // Fire Voltaire animation + sound when his bonus transitions 0 → +4
     G.locations.forEach(function (loc) {
@@ -1078,6 +1194,218 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     MESOPOTAMIA ABILITY IMPLEMENTATIONS  (Phase B)
+  ═══════════════════════════════════════════════════════════════ */
+
+  // Priest (id 38) — At Once: Discard the card in your hand with the
+  // lowest CC.  Ties resolved by first-in-hand order.
+  function abilityPriest(owner, locId, done) {
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    if (hand.length === 0) { done(); return; }
+    var lowestCC = Infinity, lowestId = null;
+    hand.forEach(function (id) {
+      var c = CARDS.find(function (x) { return x.id === id; });
+      if (c && c.cc < lowestCC) { lowestCC = c.cc; lowestId = id; }
+    });
+    if (lowestId === null) { done(); return; }
+    discardFromHand(owner, lowestId, done);
+  }
+
+  // Soldier (id 42) — At Once: Strike one of your opponent's cards here
+  // and reduce it by -1 IP.  Player gets a chooser; AI auto-picks
+  // the highest-IP opponent card.
+  function abilitySoldier(owner, locId, done) {
+    var oppSide  = owner === 'player' ? 'opp' : 'player';
+    var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
+    var targets  = [];
+    oppSlots[locId].forEach(function (s) {
+      if (s && s.revealed) targets.push(s);
+    });
+    if (targets.length === 0) { done(); return; }
+
+    function applyStrike(targetSd) {
+      addIPMod(targetSd, -1, 'Soldier');
+      SOG.ui.showIPFloat(oppSide, targetSd.cardId, -1);
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+      setTimeout(done, 400);
+    }
+
+    if (owner === 'opp') {
+      // AI: pick the highest-IP player card
+      var best = targets.reduce(function (a, b) {
+        return effectiveIP(a) >= effectiveIP(b) ? a : b;
+      });
+      applyStrike(best);
+      return;
+    }
+    // Player: chooser over opponent's revealed cards at this location
+    var targetIds = targets.map(function (t) { return t.cardId; });
+    showDiscardChooser('Choose a card to strike (-1 IP)', targetIds, function (chosenId) {
+      if (chosenId === null) { done(); return; }
+      var target = targets.find(function (t) { return t.cardId === chosenId; });
+      if (!target) { done(); return; }
+      applyStrike(target);
+    });
+  }
+
+  // Hammurabi (id 47) — At Once: Destroy you and your opponent's lowest
+  // CC card at this location.  Hammurabi himself is excluded from the
+  // search on the owner's side.
+  function abilityHammurabi(owner, locId, done) {
+    var mySlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var oppSide  = owner === 'player' ? 'opp' : 'player';
+    var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
+
+    function findLowestCCIndex(slots, skipCardId) {
+      var lowestCC = Infinity, lowestIdx = -1;
+      slots[locId].forEach(function (s, si) {
+        if (!s || !s.revealed) return;
+        if (skipCardId !== undefined && s.cardId === skipCardId) return;
+        var c = CARDS.find(function (x) { return x.id === s.cardId; });
+        if (c && c.cc < lowestCC) { lowestCC = c.cc; lowestIdx = si; }
+      });
+      return lowestIdx;
+    }
+
+    var myIdx  = findLowestCCIndex(mySlots,  47);  // skip Hammurabi himself
+    var oppIdx = findLowestCCIndex(oppSlots);        // include all opponent cards
+
+    if (myIdx  !== -1) destroyCard(owner,   locId, myIdx);
+    if (oppIdx !== -1) destroyCard(oppSide, locId, oppIdx);
+
+    evaluateContinuous();
+    refreshSlotIPDisplays();
+    updateScores();
+    setTimeout(done, 600);
+  }
+
+  // Cuneiform (id 46) — At Once: Attaches itself to the next card you
+  // play here.  Sets a pending flag; the actual attachment is resolved
+  // by resolveCuneiformAttachment(), called from revealNext in game.js
+  // immediately after the host card's own At Once ability fires.
+  function abilityCuneiform(owner, locId, done) {
+    if (!G.cuneiformPending) G.cuneiformPending = {};
+    G.cuneiformPending[owner + ':' + locId] = true;
+    done();
+  }
+
+  /**
+   * Called by game.js's revealNext for every play-from-hand action.
+   * If Cuneiform is pending at owner:locId and the just-played card is
+   * not Cuneiform itself, attaches: removes Cuneiform from its slot and
+   * applies +1 permanent ipMod to the host card.
+   *
+   * Deliberately NOT called on move actions (executeMoveAnimated),
+   * Otzi migrations, or any non-play transition.
+   */
+  function resolveCuneiformAttachment(owner, hostCardId, locId) {
+    if (hostCardId === 46) return;          // Cuneiform can't attach to itself
+    if (!G.cuneiformPending) return;
+    var key = owner + ':' + locId;
+    if (!G.cuneiformPending[key]) return;
+
+    var sl = owner === 'player' ? G.playerSlots : G.aiSlots;
+
+    // Find Cuneiform's slot at this location
+    var cIdx = -1;
+    sl[locId].forEach(function (s, si) {
+      if (s && s.revealed && s.cardId === 46) cIdx = si;
+    });
+    if (cIdx === -1) { G.cuneiformPending[key] = false; return; }  // gone — clean up
+
+    // Find the host card's slot data
+    var hostSd = null;
+    sl[locId].forEach(function (s) {
+      if (s && s.cardId === hostCardId) hostSd = s;
+    });
+    if (!hostSd) return;
+
+    // Permanently boost the host (+1 ipMod, Pattern A — Cuneiform portrait as thumbnail)
+    addIPMod(hostSd, 1, 'Cuneiform');
+    SOG.ui.showIPFloat(owner, hostCardId, 1);
+
+    // Remove Cuneiform from its slot
+    sl[locId][cIdx] = null;
+    clearSlotDOM(owner, locId, cIdx);
+    if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
+    else                    { compactOppSlots(locId);    syncOppSlots(locId);    }
+
+    G.cuneiformPending[key] = false;
+  }
+
+  // The Phoenicians (id 49) — At Once: Attaches itself to one of your
+  // Cultural cards here, granting it +3 IP permanently.
+  // Player gets a chooser; AI auto-picks the highest-IP Cultural card.
+  function abilityPhoenicians(owner, locId, done) {
+    var mySlots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var culturalTargets = [];
+    mySlots[locId].forEach(function (s, si) {
+      if (!s || !s.revealed || s.cardId === 49) return;
+      var c = CARDS.find(function (x) { return x.id === s.cardId; });
+      if (c && c.type === 'Cultural') culturalTargets.push({ sd: s, si: si });
+    });
+    if (culturalTargets.length === 0) { done(); return; }
+
+    function attach(hostSd) {
+      // Remove Phoenicians from its slot
+      var phoenIdx = mySlots[locId].findIndex(function (s) { return s && s.cardId === 49; });
+      if (phoenIdx !== -1) {
+        mySlots[locId][phoenIdx] = null;
+        clearSlotDOM(owner, locId, phoenIdx);
+        if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
+        else                    { compactOppSlots(locId);    syncOppSlots(locId);    }
+      }
+      // Permanently boost the host (+3 ipMod)
+      addIPMod(hostSd, 3, 'The Phoenicians');
+      SOG.ui.showIPFloat(owner, hostSd.cardId, 3);
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+      setTimeout(done, 400);
+    }
+
+    if (owner === 'opp') {
+      var best = culturalTargets.reduce(function (a, b) {
+        return effectiveIP(a.sd) >= effectiveIP(b.sd) ? a : b;
+      });
+      attach(best.sd);
+      return;
+    }
+    var targetIds = culturalTargets.map(function (t) { return t.sd.cardId; });
+    showDiscardChooser('Choose a Cultural card for The Phoenicians to attach to', targetIds, function (chosenId) {
+      if (chosenId === null) { done(); return; }
+      var target = culturalTargets.find(function (t) { return t.sd.cardId === chosenId; });
+      if (!target) { done(); return; }
+      attach(target.sd);
+    });
+  }
+
+  // Chariot (id 48) — arrival strike: when the Chariot moves to a new
+  // location it strikes the highest-IP opponent card there for -1 IP.
+  // Called via opts.onLand from executeMoveAnimated (wired in queueMove).
+  function chariotArrival(owner, toLocId, sd, done) {
+    var oppSide  = owner === 'player' ? 'opp' : 'player';
+    var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
+    var best = null;
+    oppSlots[toLocId].forEach(function (s) {
+      if (!s || !s.revealed) return;
+      if (!best || effectiveIP(s) > effectiveIP(best)) best = s;
+    });
+    if (!best) {
+      evaluateContinuous(); refreshSlotIPDisplays(); updateScores();
+      done(); return;
+    }
+    addIPMod(best, -1, 'Chariot');
+    SOG.ui.showIPFloat(oppSide, best.cardId, -1);
+    evaluateContinuous();
+    refreshSlotIPDisplays();
+    updateScores();
+    setTimeout(done, 400);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      CONDITIONAL TRIGGERS  (fired by destroyCard / discardFromHand)
   ═══════════════════════════════════════════════════════════════ */
 
@@ -1439,7 +1767,24 @@
     9:  { onAtOnce: abilityErasmus          },
     13: { onAtOnce: abilityCortes           },
     23: { onAtOnce: abilityZhengHe          },
-    26: { onAtOnce: abilityTool             }   // Prehistory tutorial
+    26: { onAtOnce: abilityTool             },  // Prehistory tutorial
+
+    /* ── Mesopotamia era ───────────────────────────────────────────
+       Phase C cards (37 Sargon, 40 Scribe, 43 Gilgamesh) remain
+       stubbed.  Farmer (39) has no ability — no entry.           */
+    37: {},  // Sargon — Continuous only; handled in evaluateContinuous via G.locationBoosts
+    38: { onAtOnce: abilityPriest       },
+    40: {},  // Scribe    — Continuous only; handled in evaluateContinuous
+    41: { onAtOnce: function (o, l, done) { done(); } },  // Canals   — Continuous only
+    42: { onAtOnce: abilitySoldier      },
+    43: {},  // Gilgamesh — Continuous only; handled in evaluateContinuous
+    44: { onAtOnce: function (o, l, done) { done(); } },  // Enkidu   — Continuous only
+    45: { onAtOnce: function (o, l, done) { done(); } },  // Ziggurat — Continuous only
+    46: { onAtOnce: abilityCuneiform    },
+    47: { onAtOnce: abilityHammurabi    },
+    48: { onAtOnce: function (o, l, done) { done(); } },  // Chariot  — movement ability
+    49: { onAtOnce: abilityPhoenicians  },
+    50: { onAtOnce: function (o, l, done) { done(); } }   // Nebuchadnezzar — Continuous only
   };
 
   /* ═══════════════════════════════════════════════════════════════
@@ -1452,7 +1797,7 @@
     // Cards with actual At Once abilities: play sound + pulse animation.
     // Cards 2, 3, 5, 13 have custom sfx — skip the generic 8-bit chime for those.
     // Tool (26) joins the generic-chime list: no custom SFX yet, simple draw effect.
-    var hasAtOnce = [4, 8, 9, 23, 26].indexOf(cardId) !== -1;
+    var hasAtOnce = [4, 8, 9, 23, 26, 38, 42, 46, 47, 49].indexOf(cardId) !== -1;
     if (hasAtOnce) {
       if (typeof SFX !== 'undefined') SFX.atOnce();
       var atSlotEl = findSlotEl(owner, cardId);
@@ -1486,7 +1831,9 @@
     showRevealFirstHighlight:  showRevealFirstHighlight,
     hideRevealFirstHighlight:  hideRevealFirstHighlight,
     /* Helpers */
-    getAdjacentLocIds:         getAdjacentLocIds,
+    getAdjacentLocIds:              getAdjacentLocIds,
+    chariotArrival:                 chariotArrival,
+    resolveCuneiformAttachment:     resolveCuneiformAttachment,
     /* The registry itself — exposed so future passes / pro devs can
        extend it without touching this file. */
     CARD_ABILITIES:            CARD_ABILITIES

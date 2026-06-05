@@ -1585,7 +1585,7 @@ window.SOG.Adventure.Prehistory = (function () {
           var neanderthalCard = (typeof CARDS !== 'undefined') &&
                                 CARDS.find(function (c) { return c.id === 34; });
           showCardAcquisition(
-            neanderthalCard || { id: 34, name: 'Neanderthal', image: 'images/prehistorycards/neanderthalcard.jpg', ip: 4, ability: null, abilityName: null },
+            neanderthalCard || { id: 34, name: 'Neanderthal', image: 'images/cards/prehistorycards/neanderthalcard.jpg', ip: 4, ability: null, abilityName: null },
             playCardAcquire,
             function () { showVictoryScreen(pIP, aIP); }
           );
@@ -1926,6 +1926,14 @@ window.SOG.Adventure.Prehistory = (function () {
   }
 
   /* ── Public surface ────────────────────────────────────────── */
+  /**
+   * Returns true while the in-game coaching runner OR post-battle
+   * dialogue is active. Used by game/input.js to block card placement.
+   */
+  function isCoachingActive() {
+    return co_lines !== null || postBattleDialogueActive;
+  }
+
   return {
     startNeanderthalBattle: startNeanderthalBattle,
     isBattleComplete:       isBattleComplete,
@@ -1937,7 +1945,9 @@ window.SOG.Adventure.Prehistory = (function () {
     // Lucy reveal (and any future card unlocks that use the same flow).
     showCardAcquisition:    showCardAcquisition,
     // Devtools escape
-    exitToOverworld:        exitToOverworld
+    exitToOverworld:        exitToOverworld,
+    // Input guard: true while coaching or post-battle dialogue is running.
+    isCoachingActive:       isCoachingActive
   };
 
 })();

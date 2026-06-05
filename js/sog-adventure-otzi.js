@@ -489,6 +489,52 @@ SOG.OtziBattle = (function () {
     var resetBtn   = document.getElementById('battle-reset-turn');
     if (endTurnBtn) endTurnBtn.disabled = false;
     if (resetBtn)   resetBtn.disabled   = false;
+
+    // Otzi's flee ability is triggered at reveal time (runOtziReveal), not here.
+  }
+
+  // delayMs: 350 when triggered by a player play (lets card-drop animation settle);
+  //           0 when triggered by an AI play (synchronous path, no animation to wait for).
+  function _maybeOtziFlees(triggeredLocId, delayMs) {
+    var G = SOG.state.G;
+    if (!G) return;
+    if (delayMs === undefined) delayMs = 350;
+
+    // Check both sides — Otzi card (id 35) may be owned by player or AI.
+    var owner = null;
+    var sideSlots;
+    var sides = ['player', 'opp'];
+    for (var s = 0; s < sides.length; s++) {
+      sideSlots = (sides[s] === 'player' ? G.playerSlots : G.aiSlots);
+      var locSlots = (sideSlots && sideSlots[triggeredLocId]) || [];
+      for (var i = 0; i < locSlots.length; i++) {
+        if (locSlots[i] && locSlots[i].cardId === 35 && locSlots[i].revealed) {
+          owner = sides[s];
+          break;
+        }
+      }
+      if (owner) break;
+    }
+    if (!owner) return;  // Otzi not here (or face-down)
+
+    // Find eligible destinations: another location with an open slot on the same side
+    var ownerSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var candidates = G.locations.filter(function (loc) {
+      if (loc.id === triggeredLocId) return false;
+      return ownerSlots[loc.id] && ownerSlots[loc.id].indexOf(null) !== -1;
+    });
+    if (!candidates.length) return;  // nowhere to flee
+
+    var dest      = candidates[Math.floor(Math.random() * candidates.length)];
+    var gameOwner = owner === 'player' ? 'player' : 'opp';
+
+    setTimeout(function () {
+      if (window.SOG && SOG.game && typeof SOG.game.executeMoveAnimated === 'function') {
+        SOG.game.executeMoveAnimated(gameOwner, 35, triggeredLocId, dest.id, {}, function () {
+          log('Otzi card (' + gameOwner + ') fled from loc ' + triggeredLocId + ' to loc ' + dest.id);
+        });
+      }
+    }, delayMs);
   }
 
   /* ── End Turn hook ────────────────────────────────────────────── */
@@ -523,7 +569,7 @@ SOG.OtziBattle = (function () {
       var G = SOG.state.G;
       if (!G.otziMode) return;
       if (btn.disabled) return;
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       onOtziReset();
     };
     btn.addEventListener('click', _otziResetHandler, true);
@@ -613,6 +659,7 @@ SOG.OtziBattle = (function () {
           if (SOG.board.setSlotFaceDown) SOG.board.setSlotFaceDown(slotEl);
         }
       }
+      // Otzi's flee ability is triggered at reveal time (runOtziReveal), not here.
     }
     if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') SOG.ui.updateOppHand();
   }
@@ -658,15 +705,18 @@ SOG.OtziBattle = (function () {
       var slotEl = SOG.board && typeof SOG.board.getSlotEl === 'function'
                    ? SOG.board.getSlotEl(item.owner, item.locId, item.idx) : null;
       flipSlot(slotEl, function () {
-        // Fire At Once ability (e.g. Tool → draw a card), then refresh + continue
-        if (cardId && SOG.abilities && typeof SOG.abilities.fireAtOnce === 'function') {
-          SOG.abilities.fireAtOnce(item.owner, cardId, item.locId, function () {
-            afterCard();
-            setTimeout(function () { next(i + 1); }, 500);
-          });
-        } else {
+        // Fire At Once ability (e.g. Tool → draw a card), then check Otzi flee,
+        // refresh + continue.  Otzi's ability fires here — at reveal time — for
+        // both player and AI cards, for both the fireAtOnce and fallback paths.
+        function afterReveal() {
+          _maybeOtziFlees(item.locId, 0);
           afterCard();
           setTimeout(function () { next(i + 1); }, 500);
+        }
+        if (cardId && SOG.abilities && typeof SOG.abilities.fireAtOnce === 'function') {
+          SOG.abilities.fireAtOnce(item.owner, cardId, item.locId, afterReveal);
+        } else {
+          afterReveal();
         }
       });
     };
@@ -928,12 +978,22 @@ SOG.OtziBattle = (function () {
     if (typeof showScreen === 'function') showScreen('screen-overworld');
     if (wonBattle) {
       // 500 ms settle — let the overworld screen finish rendering before
-      // applying the badge and triggering the post-victory dialogue.
+      // triggering the post-victory sequence.
       setTimeout(function () {
-        var nodeEl = document.querySelector('#overworld-overlay [data-id="egypt-signpost"]');
-        if (nodeEl) nodeEl.classList.add('overworld-node-complete');
-        if (window.Overworld && typeof window.Overworld.startPostOtziVictorySequence === 'function') {
-          window.Overworld.startPostOtziVictorySequence();
+        var mesArrivalDone = false;
+        try { mesArrivalDone = localStorage.getItem('sog_mesopotamia_arrival_complete') === 'true'; } catch (e) {}
+
+        if (!mesArrivalDone) {
+          // First victory: play the full Phase D1 Otzi→Mesopotamia travel cinematic.
+          if (window.Overworld && typeof window.Overworld.startMesopotamiaArrival === 'function') {
+            window.Overworld.startMesopotamiaArrival();
+          }
+        } else {
+          // Subsequent victories (replay): just apply the victory checkmark and return.
+          // The full D1 cinematic only plays once.
+          // TODO (future phase): add replay-specific overworld dialogue here.
+          var nodeEl = document.querySelector('#overworld-overlay [data-id="egypt-signpost"]');
+          if (nodeEl) nodeEl.classList.add('overworld-node-complete');
         }
       }, 500);
     }

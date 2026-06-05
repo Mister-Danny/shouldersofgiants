@@ -84,12 +84,13 @@
      calls fireAtOnce + evaluateContinuous repeatedly; the avatar
      reveal-first highlight is shown/hidden by nextTurn and other
      turn-boundary helpers. */
-  var fireAtOnce                = SOG.abilities.fireAtOnce;
-  var evaluateContinuous        = SOG.abilities.evaluateContinuous;
-  var isKenteProtected          = SOG.abilities.isKenteProtected;
-  var showRevealFirstHighlight  = SOG.abilities.showRevealFirstHighlight;
-  var hideRevealFirstHighlight  = SOG.abilities.hideRevealFirstHighlight;
-  var getAdjacentLocIds         = SOG.abilities.getAdjacentLocIds;
+  var fireAtOnce                    = SOG.abilities.fireAtOnce;
+  var evaluateContinuous            = SOG.abilities.evaluateContinuous;
+  var isKenteProtected              = SOG.abilities.isKenteProtected;
+  var showRevealFirstHighlight      = SOG.abilities.showRevealFirstHighlight;
+  var hideRevealFirstHighlight      = SOG.abilities.hideRevealFirstHighlight;
+  var getAdjacentLocIds             = SOG.abilities.getAdjacentLocIds;
+  var resolveCuneiformAttachment    = SOG.abilities.resolveCuneiformAttachment;
 
   /* ── Drag state (game.js no longer needs its own — owned by input.js) ── */
   /* dragInfo, selectedCardId/Source/FromLocId/FromSlotIndex, pendingPopupTimer,
@@ -162,6 +163,10 @@
     G.playerRevealQueue = [];
     G.aiRevealQueue     = [];
     G.aiActionLog       = [];   // bug 16: unified action log mirroring playerActionLog
+
+    G.locationBoosts         = {};   // { locId: { player: [...], opp: [...] } } — rebuilt by evaluateContinuous
+    G.playOrderCounter       = 0;   // increments on every play-from-hand; stored on each sd.playTime
+    G.culturalCount          = { player: 0, opp: 0 };  // cumulative Cultural plays per owner (Gilgamesh)
 
     G.bonusCapitalNextTurn   = 0;
     G.aiBonusCapitalNextTurn = 0;
@@ -725,6 +730,12 @@
       // Custom on-land callback (e.g. Empress Wu routes through here)
       if (opts.onLand) { opts.onLand(sd, done); return; }
 
+      // Chariot (id 48): on arrival, strike the highest-IP opponent card at the destination
+      if (cardId === 48 && SOG.abilities && typeof SOG.abilities.chariotArrival === 'function') {
+        SOG.abilities.chariotArrival(owner, toLocId, sd, done);
+        return;
+      }
+
       // Columbus: apply -1 IP, play bell, shake affected cards, then proceed
       if (cardId === 25) {
         var oppOwner = owner === 'player' ? 'opp' : 'player';
@@ -946,9 +957,27 @@
         slotEl.classList.add('face-down');
         slotEl.innerHTML = '';
       }
-      // Wait for reveal animation + per-card SFX to finish, then fire ability
+      // Wait for reveal animation + per-card SFX to finish, then fire ability.
+      // After the card's own At Once resolves, run the three play-from-hand hooks
+      // (in order): Cuneiform attachment, play-order metadata, Cultural counter.
       flipSlot(slotEl, function () {
-        fireAtOnce(item.owner, item.cardId, rLocId, proceed);
+        fireAtOnce(item.owner, item.cardId, rLocId, function () {
+          // (a) Cuneiform attachment — only fires when a Cuneiform is pending here
+          resolveCuneiformAttachment(item.owner, item.cardId, rLocId);
+          // (b) Per-slot play metadata (Scribe needs this on every revealed card)
+          if (rSd && rLocId !== null) {
+            rSd.playTime      = ++G.playOrderCounter;
+            rSd.originalLocId = rLocId;
+          }
+          // (c) Cultural counter increment (Gilgamesh reads this)
+          if (rLocId !== null) {
+            var _pc = CARDS.find(function (c) { return c.id === item.cardId; });
+            if (_pc && _pc.type === 'Cultural') {
+              G.culturalCount[item.owner] = (G.culturalCount[item.owner] || 0) + 1;
+            }
+          }
+          proceed();
+        });
       });
     } else {
       proceed();
@@ -1119,6 +1148,11 @@
     var locResults = G.locations.map(function (loc) {
       var pIP = G.playerSlots[loc.id].reduce(function (s, x) { return s + (x ? effectiveIP(x) : 0); }, 0);
       var aIP = G.aiSlots[loc.id].reduce(    function (s, x) { return s + (x ? effectiveIP(x) : 0); }, 0);
+      // Include per-location external boosts (e.g., Sargon's adjacent-location bonus)
+      if (G.locationBoosts && G.locationBoosts[loc.id]) {
+        G.locationBoosts[loc.id].player.forEach(function (b) { pIP += b.amount; });
+        G.locationBoosts[loc.id].opp.forEach(    function (b) { aIP += b.amount; });
+      }
       return { loc: loc, playerIP: pIP, aiIP: aIP,
                winner: pIP > aIP ? 'player' : aIP > pIP ? 'ai' : 'tie' };
     });

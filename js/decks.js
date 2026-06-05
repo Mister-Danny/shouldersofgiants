@@ -2,10 +2,11 @@
  * decks.js
  * Multi-deck save system for Shoulders of Giants.
  *
- * Stores up to 3 decks under localStorage key `sog_decks`, plus an
+ * Stores up to 5 decks under localStorage key `sog_decks`, plus an
  * active-slot pointer in `sog_active_deck_slot`. Migrates the legacy
  * single-deck `sog_saved_deck` key into Slot 1 on first load, then
- * deletes it.
+ * deletes it. Also migrates existing 3-slot saves to 5-slot on first
+ * load after this version deployed (Phase H1).
  *
  * All deck reads and writes across the codebase go through window.Decks.
  * This is the only module that touches deck-related localStorage keys.
@@ -16,7 +17,7 @@
   var DECKS_KEY  = 'sog_decks';
   var ACTIVE_KEY = 'sog_active_deck_slot';
   var LEGACY_KEY = 'sog_saved_deck';
-  var SLOT_COUNT = 3;
+  var SLOT_COUNT = 6;  // Phase H1: expanded from 3 → 5; Phase H1.1: 5 → 6
   var NAME_MAX   = 20;
   var DECK_SIZE  = 15;
 
@@ -45,15 +46,26 @@
       var s = localStorage.getItem(DECKS_KEY);
       if (s) {
         var parsed = JSON.parse(s);
-        if (Array.isArray(parsed) && parsed.length === SLOT_COUNT) {
-          // Validate shape — fall back to empty if malformed
-          var ok = parsed.every(function (d, i) {
-            return d && typeof d === 'object'
-                && d.id === (i + 1)
-                && typeof d.name === 'string'
-                && Array.isArray(d.cards);
-          });
-          if (ok) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Migration: pad saves from a previous (smaller) slot count up to SLOT_COUNT.
+          // Phase H1 expands 3 → 5; slots 4-5 are appended as empty.
+          if (parsed.length < SLOT_COUNT) {
+            for (var mi = parsed.length + 1; mi <= SLOT_COUNT; mi++) {
+              parsed.push({ id: mi, name: defaultName(mi), cards: [] });
+            }
+            // Persist the migrated layout immediately
+            try { localStorage.setItem(DECKS_KEY, JSON.stringify(parsed)); } catch (e2) {}
+          }
+          if (parsed.length === SLOT_COUNT) {
+            // Validate shape — fall back to empty if malformed
+            var ok = parsed.every(function (d, i) {
+              return d && typeof d === 'object'
+                  && d.id === (i + 1)
+                  && typeof d.name === 'string'
+                  && Array.isArray(d.cards);
+            });
+            if (ok) return parsed;
+          }
         }
       }
     } catch (e) {}

@@ -202,6 +202,13 @@
     if (loc && loc.abilityKey === 'RELIGIOUS_DISCOUNT' && card.type === 'Religious') {
       cc = Math.max(1, cc - 1);
     }
+    // Nebuchadnezzar (id=50): reduces Mesopotamia-era cc while he is on the AI's board
+    if (card.era === 'Mesopotamia' && cardId !== 50) {
+      var nebOnBoard = G.locations.some(function (l) {
+        return G.aiSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 50; });
+      });
+      if (nebOnBoard) cc = Math.max(1, cc - 1);
+    }
     return cc;
   }
 
@@ -435,6 +442,22 @@
     G.locations.forEach(function (loc) {
       G.aiSlots[loc.id].forEach(function (s, si) {
         if (!s || !s.revealed) return;
+
+        // ── Chariot (id=48) — move toward highest player-IP location ─
+        if (s.cardId === 48 && !G.aiMovedThisTurn[48]) {
+          var charBest = null, charBestScore = -Infinity;
+          G.locations.forEach(function (l) {
+            if (l.id === loc.id || availableAt(l.id) <= 0) return;
+            var score = G.playerSlots[l.id].reduce(function (sum, ps) {
+              return sum + (ps && ps.revealed ? helpers.effectiveIP(ps) : 0);
+            }, 0);
+            if (score > charBestScore) { charBestScore = score; charBest = l.id; }
+          });
+          if (charBest !== null && charBestScore > 0) {
+            recordMove(48, loc.id, si, charBest);
+            G.aiMovedThisTurn[48] = true;
+          }
+        }
 
         // ── Magellan (id=24) ──────────────────────────────────────
         if (s.cardId === 24 && !G.aiMovedThisTurn[24]) {

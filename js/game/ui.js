@@ -57,6 +57,9 @@
     var playBtn = document.getElementById('music-play-btn');
     if (nameEl)  nameEl.textContent  = _musicTracks[_musicIdx].name;
     if (playBtn) playBtn.textContent = (_musicHowl && _musicHowl.playing()) ? '\u258c\u258c' : '\u25b6';
+    // Notify HUD to refresh its compact play button (Phase H1)
+    var hudMusic = window.SOG && window.SOG.music;
+    if (hudMusic && typeof hudMusic.onUpdate === 'function') hudMusic.onUpdate();
   }
 
   function _musicLoadTrack(idx, autoplay) {
@@ -128,6 +131,12 @@
           window.toggleDeckMusic();
         }
         _musicUpdateUI();
+      } else if (screen === 'overworld') {
+        // Adventure Mode overworld — route to the shared _musicHowl playlist
+        if (!_musicHowl) { _musicLoadTrack(_musicIdx, true); return; }
+        if (_musicHowl.playing()) _musicHowl.pause();
+        else { _musicHowl.volume(_bgMusicVol); _musicHowl.play(); }
+        _musicUpdateUI();
       }
       // Other screens (about, result, video, etc.) don't have music
     }
@@ -141,6 +150,56 @@
       localStorage.setItem('sog_music_volume', slider.value);
       applyVolumeToAll();
     });
+
+    /* ── SOG.music — public API consumed by HUD and future modules ──
+       Defined inside this IIFE so it has closure access to
+       applyVolumeToAll, togglePlayPauseForCurrentScreen, and the
+       private music state variables. Phase H1. */
+    window.SOG = window.SOG || {};
+    SOG.music = {
+      /** Toggle play/pause for the current screen's audio source. */
+      toggle: function () { togglePlayPauseForCurrentScreen(); },
+
+      /**
+       * Set volume (0–100 integer). Updates localStorage, all active
+       * Howl sources, and keeps the floating widget slider in sync.
+       */
+      setVolume: function (pct) {
+        var v = Math.max(0, Math.min(100, Math.round(pct)));
+        _bgMusicVol = v / 100;
+        localStorage.setItem('sog_music_volume', String(v));
+        slider.value = v;
+        applyVolumeToAll();
+        _musicUpdateUI();
+      },
+
+      /** Return current volume as integer 0–100. */
+      getVolume: function () { return Math.round(_bgMusicVol * 100); },
+
+      /** Return true if the shared music Howl is currently playing. */
+      isPlaying: function () { return !!(_musicHowl && _musicHowl.playing()); },
+
+      /**
+       * Return the current track's display metadata.
+       * The track name field uses the convention "Title — Artist".
+       * @returns {{ title: string, artist: string, full: string }}
+       */
+      getCurrentTrack: function () {
+        var t = _musicTracks[_musicIdx];
+        if (!t) return { title: '—', artist: '', full: '—' };
+        // Split on " — " (em-dash with spaces) to separate title from attribution
+        var sep   = t.name.indexOf(' — ');
+        var title  = sep !== -1 ? t.name.slice(0, sep) : t.name;
+        var artist = sep !== -1 ? t.name.slice(sep + 3) : '';
+        return { title: title, artist: artist, full: t.name };
+      },
+
+      /**
+       * Callback invoked by _musicUpdateUI whenever play state changes.
+       * Set by SOG.HUD to refresh its compact play/pause button icon.
+       */
+      onUpdate: null
+    };
   }());
 
   /* ═══════════════════════════════════════════════════════════════
@@ -421,16 +480,209 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     LOCATION NAMEPLATE POPUP
+  ═══════════════════════════════════════════════════════════════ */
+
+  /**
+   * Open the location popup for a given location.
+   * Shows both sides' contributor rows (cards at the location + external boosts
+   * such as Sargon's adjacent-location bonus), with the enlarged location nameplate
+   * in the centre.  Thumbnails are clickable and drill down to openBattlePopup.
+   */
+  function openLocationPopup(locId) {
+    closeLocationPopup();   // dismiss any existing instance first
+
+    var loc = G.locations.find(function (l) { return l.id === locId; });
+    if (!loc) return;
+
+    // ── Collect contributor entries for each side ────────────────
+    // Each entry: { cardId, owner, sd, ipDisplay, isExternal, sourceLocId }
+    function buildContributors(owner) {
+      var slots   = owner === 'player' ? G.playerSlots : G.aiSlots;
+      var entries = [];
+      // Cards physically at this location (slot order)
+      slots[locId].forEach(function (s) {
+        if (!s || !s.revealed) return;
+        entries.push({
+          cardId:      s.cardId,
+          owner:       owner,
+          sd:          s,
+          ipDisplay:   helpers.effectiveIP(s),
+          isExternal:  false,
+          sourceLocId: null
+        });
+      });
+      // External boosts targeting this location
+      if (G.locationBoosts && G.locationBoosts[locId]) {
+        G.locationBoosts[locId][owner].forEach(function (boost) {
+          entries.push({
+            cardId:      boost.sourceCardId,
+            owner:       boost.sourceOwner,
+            sd:          null,   // looked up lazily at click time
+            ipDisplay:   boost.amount,
+            isExternal:  true,
+            sourceLocId: boost.sourceLocId
+          });
+        });
+      }
+      return entries;
+    }
+
+    var oppEntries    = buildContributors('opp');
+    var playerEntries = buildContributors('player');
+
+    function sideTotal(entries) {
+      return entries.reduce(function (sum, e) { return sum + e.ipDisplay; }, 0);
+    }
+    var oppTotal    = sideTotal(oppEntries);
+    var playerTotal = sideTotal(playerEntries);
+
+    // ── Build DOM ────────────────────────────────────────────────
+    var overlay = document.createElement('div');
+    overlay.id        = 'location-popup-overlay';
+    overlay.className = 'location-popup-overlay';
+
+    var popup = document.createElement('div');
+    popup.className = 'location-popup';
+
+    // Close button (×)
+    var closeBtn = document.createElement('button');
+    closeBtn.className   = 'location-popup-close';
+    closeBtn.innerHTML   = '&#x2715;';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.addEventListener('click', closeLocationPopup);
+    popup.appendChild(closeBtn);
+
+    // Build a contributor row (array of entries → div)
+    function buildRow(entries, side) {
+      var row = document.createElement('div');
+      row.className = 'location-popup-contributors location-popup-contributors-' + side;
+
+      entries.forEach(function (e) {
+        var card = CARDS.find(function (c) { return c.id === e.cardId; });
+        var thumb = document.createElement('div');
+        thumb.className  = 'location-popup-thumb';
+        thumb.tabIndex   = 0;
+        thumb.setAttribute('role', 'button');
+
+        if (card) {
+          var img = document.createElement('div');
+          img.className          = 'location-popup-thumb-img';
+          img.style.backgroundImage = "url('" + card.image.replace(/'/g, '%27') + "')";
+          thumb.appendChild(img);
+        }
+
+        var ipLabel = document.createElement('div');
+        ipLabel.className   = 'location-popup-thumb-ip';
+        ipLabel.textContent = (e.ipDisplay >= 0 ? '+' : '') + e.ipDisplay;
+        thumb.appendChild(ipLabel);
+
+        // Click → drill down into existing card popup
+        function openDrill() {
+          if (!card) return;
+          var sd    = e.sd;
+          var owner = e.owner;
+          // External boost: find the source card's sd at its source location
+          if (e.isExternal && e.sourceLocId !== null) {
+            var srcSlots = (owner === 'player') ? G.playerSlots : G.aiSlots;
+            (srcSlots[e.sourceLocId] || []).forEach(function (s) {
+              if (s && s.cardId === e.cardId) sd = s;
+            });
+          }
+          closeLocationPopup();
+          openBattlePopup(card, sd, owner, true);
+        }
+        thumb.addEventListener('click', openDrill);
+        thumb.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openDrill(); }
+        });
+
+        row.appendChild(thumb);
+      });
+
+      return row;
+    }
+
+    // Side label builder
+    function sideLabel(text, total) {
+      var lbl = document.createElement('div');
+      lbl.className = 'location-popup-side-label';
+      var span = document.createElement('span');
+      span.textContent = text;
+      var tot = document.createElement('span');
+      tot.className   = 'location-popup-side-total';
+      tot.textContent = total;
+      lbl.appendChild(span);
+      lbl.appendChild(tot);
+      return lbl;
+    }
+
+    // Opponent section (top)
+    popup.appendChild(sideLabel('OPPONENT', oppTotal));
+    popup.appendChild(buildRow(oppEntries, 'opp'));
+
+    // Enlarged location nameplate
+    var nameplate = document.createElement('div');
+    nameplate.className = 'location-popup-nameplate';
+    var nameLarge = document.createElement('div');
+    nameLarge.className   = 'location-popup-name';
+    nameLarge.textContent = loc.name;
+    nameplate.appendChild(nameLarge);
+    if (loc.abilityText) {
+      var abilEl = document.createElement('div');
+      abilEl.className   = 'location-popup-abilitytext';
+      abilEl.textContent = loc.abilityText;
+      nameplate.appendChild(abilEl);
+    }
+    popup.appendChild(nameplate);
+
+    // Player section (bottom)
+    popup.appendChild(buildRow(playerEntries, 'player'));
+    popup.appendChild(sideLabel('YOU', playerTotal));
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    // Dismiss on backdrop click
+    overlay.addEventListener('click', function (ev) {
+      if (ev.target === overlay) closeLocationPopup();
+    });
+    // ESC key
+    var escHandler = function (ev) {
+      if (ev.key === 'Escape') closeLocationPopup();
+    };
+    document.addEventListener('keydown', escHandler);
+    overlay._escHandler = escHandler;
+
+    // Animate in (next tick so CSS transition fires)
+    requestAnimationFrame(function () {
+      overlay.classList.add('active');
+    });
+  }
+
+  function closeLocationPopup() {
+    var el = document.getElementById('location-popup-overlay');
+    if (!el) return;
+    if (el._escHandler) document.removeEventListener('keydown', el._escHandler);
+    el.classList.remove('active');
+    setTimeout(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, 280);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      PUBLIC EXPORTS
   ═══════════════════════════════════════════════════════════════ */
   SOG.ui = {
-    openBattlePopup: openBattlePopup,
-    updateOppHand:   updateOppHand,
-    showIPFloat:     showIPFloat,
-    flashScore:      flashScore,
-    flashDeny:       flashDeny,
-    startBgMusic:    startBgMusic,
-    stopBgMusic:     stopBgMusic
+    openBattlePopup:    openBattlePopup,
+    openLocationPopup:  openLocationPopup,
+    closeLocationPopup: closeLocationPopup,
+    updateOppHand:      updateOppHand,
+    showIPFloat:        showIPFloat,
+    flashScore:         flashScore,
+    flashDeny:          flashDeny,
+    startBgMusic:       startBgMusic,
+    stopBgMusic:        stopBgMusic
   };
 
   // Legacy global export — preserved for backwards compat. Nothing

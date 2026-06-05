@@ -23,7 +23,8 @@ var Overworld = (function () {
   var KEY_POST_NEANDERTHAL_DIALOGUE = 'sog_post_neanderthal_overworld_complete';
   var KEY_CARD_LUCY_UNLOCKED        = 'sog_card_lucy_unlocked';
   var KEY_BATTLE_OTZI_COMPLETE      = 'sog_battle_otzi_complete';
-  var KEY_POST_OTZI_DIALOGUE = 'sog_post_otzi_overworld_complete';
+  var KEY_MESOPOTAMIA_ARRIVAL       = 'sog_mesopotamia_arrival_complete';
+  var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set in future when battle is won
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -71,14 +72,72 @@ var Overworld = (function () {
     { who: "explorer", text: "Again?"                                                               }
   ];
 
-  /* Post-Otzi-victory overworld monologue — Explorer only, 4 lines.
-     Fires once after winning the Otzi battle and returning to the overworld.
-     After the last line: yellow checkmark on Otzi node + To Egypt box fades in. */
-  var POST_OTZI_VICTORY_DIALOGUE = [
-    { who: 'explorer', text: 'Who knew history would have so much conflict?'          },
-    { who: 'explorer', text: "At least, now, I'm ready for whatever's next." },
-    { who: 'explorer', text: 'I think the sign says Egypt.'                            },
-    { who: 'explorer', text: 'Heigh ho and away we go!'                               }
+  /* ── Phase D1 — Otzi→Mesopotamia travel dialogue ───────────────────
+     Three scenes: East Africa (12 lines) → Egypt (11 lines) → Mesopotamia (5 lines).
+     After each scene the Explorer walks off the right edge; a "Traveling…" transition
+     swaps the map. Triggered once from the Otzi-victory "Back to Map" button when
+     sog_mesopotamia_arrival_complete is not yet set.                              */
+  var D1_SCENE1_DIALOGUE = [
+    { who: 'explorer', text: 'History seems to have a lot of conflict.'                                       },
+    { who: 'hunter',   text: 'Tell me about it.'                                                               },
+    { who: 'explorer', text: 'Oh, hey Hunter, why is that?'                                                    },
+    { who: 'hunter',   text: "Don't you see these other tribes butting in on my territory?"                    },
+    { who: 'explorer', text: 'Not really.'                                                                     },
+    { who: 'hunter',   text: "How am I supposed to feed my tribe with these outlanders killing all my antelope?" },
+    { who: 'explorer', text: 'Share?'                                                                          },
+    { who: 'hunter',   text: 'Yeah, right.'                                                                    },
+    { who: 'explorer', text: "Well, I'm going to travel east."                                                 },
+    { who: 'explorer', text: 'Maybe you can settle somewhere new?'                                             },
+    { who: 'hunter',   text: "That's so crazy, it just might work."                                           },
+    { who: 'explorer', text: "Let's go!"                                                                       }
+  ];
+
+  var D1_SCENE2_DIALOGUE = [
+    { who: 'explorer', text: 'Wow, that huge river there must be the Nile!'                                   },
+    { who: 'hunter',   text: 'Ah, I see Kemet, the black land. I could never settle here.'                    },
+    { who: 'explorer', text: "What's that supposed to mean?"                                                   },
+    { who: 'hunter',   text: "Look at the soil, it's black."                                                  },
+    { who: 'explorer', text: 'Oh okay.'                                                                        },
+    { who: 'hunter',   text: 'But these people and their gods, Ptah…'                                   },
+    { who: 'hunter',   text: 'Not for me.'                                                                     },
+    { who: 'explorer', text: "It is early. I don't see any pyramids yet."                                     },
+    { who: 'hunter',   text: "What's a pyramid?"                                                               },
+    { who: 'explorer', text: "We'll come back later during the Old Kingdom and I'll show you."                },
+    { who: 'hunter',   text: 'Whatever you say stranger.'                                                      }
+  ];
+
+  var D1_SCENE3_DIALOGUE = [
+    { who: 'explorer', text: 'Wow! What a cool place…'                                                    },
+    { who: 'hunter',   text: 'Mesopotomia!'                                                                    },  // spelling preserved verbatim
+    { who: 'explorer', text: 'Hey, yeah, that is what its called. How did you know?'                          },
+    { who: 'hunter',   text: "There's two rivers. Mesopotamia means the land between the rivers."             },
+    { who: 'explorer', text: 'It looks so green.'                                                              }
+  ];
+
+  /* ── Phase D2a — Mesopotamia extended arrival dialogue ─────────────
+     Continues immediately after D1 Scene 3 ("It looks so green.").
+     River walk → Hunter transformation → farming dialectic → Walls of
+     Uruk node → Farmer departure → player regains control.           */
+  var D2A_FARMING_DIALOGUE = [
+    { who: 'explorer', text: 'You look different.'                                                             },
+    { who: 'farmer',   text: 'I feel different.'                                                               },
+    { who: 'farmer',   text: "Maybe I don't need to hunt animals all of the time."                            },
+    { who: 'explorer', text: 'What will you do instead?'                                                       },
+    { who: 'farmer',   text: 'On this land, I can grow it.'                                                    },
+    { who: 'explorer', text: "And if you grow more than you need, you'll have a surplus."                     },
+    { who: 'farmer',   text: 'And with a surplus, people can specialize in different jobs.'                    },
+    { who: 'explorer', text: 'And with specialization, comes…'                                           }
+  ];
+
+  /* \u2500\u2500 Phase D2b \u2014 Gilgamesh encounter dialogue \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+  var D2B_GILGAMESH_DIALOGUE = [
+    { who: 'gilgamesh', text: 'Welcome to my city, Uruk.'                          },
+    { who: 'explorer',  text: 'Oh hi! You must be the mayor.'                      },
+    { who: 'gilgamesh', text: 'How dare you compare me to some civil servant?!'    },
+    { who: 'explorer',  text: 'What?'                                              },
+    { who: 'gilgamesh', text: 'I am Gilgamesh. King of this state.'               },
+    { who: 'explorer',  text: 'Oh, I\u2019m sorry\u2026'                          },
+    { who: 'gilgamesh', text: 'You will be.'                                       }
   ];
 
   var PHASE2_DIALOGUE = [
@@ -94,54 +153,7 @@ var Overworld = (function () {
     { who: 'explorer', text: 'Well then, I guess I better get going.' }
   ];
 
-  var TYPE_SPEED_MS      = 28;      // ms per character
-  var PHASE1_WAIT_MS     = 3000;    // 3s arrival pause before Phase 1 fires
-  var BLEEP_EVERY_CHARS  = 2;       // bleep every N non-space chars
-
-  /* ── Web Audio text bleep (no asset, synth tone) ──────────── */
-  var _audioCtx = null;
-  function getAudioCtx() {
-    if (_audioCtx) return _audioCtx;
-    try {
-      var Ctx = window.AudioContext || window.webkitAudioContext;
-      if (Ctx) _audioCtx = new Ctx();
-    } catch (e) {}
-    return _audioCtx;
-  }
-  // who: 'lucy' | 'explorer' | 'otzi'
-  // Otzi uses the same profile as sog-adventure-prehistory.js: 210 Hz triangle,
-  // peak 0.07, decay 0.07, dur 0.08 — warmer/earthier than the square-wave voices.
-  function playBleep(who) {
-    var ctx = getAudioCtx();
-    if (!ctx) return;
-    if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (e) {} }
-    var now = ctx.currentTime;
-    var osc  = ctx.createOscillator();
-    var gain = ctx.createGain();
-    if (who === 'otzi') {
-      var freq = 210 + (Math.random() - 0.5) * 20;
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, now);
-      gain.gain.setValueAtTime(0,     now);
-      gain.gain.linearRampToValueAtTime(0.07,  now + 0.005);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.08);
-    } else {
-      // Slight pitch wobble so consecutive bleeps don't feel robotic
-      var baseFreq = (who === 'lucy') ? 340 : (who === 'neanderthal') ? 160 : 520;
-      var freq = baseFreq + (Math.random() - 0.5) * 30;
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(freq, now);
-      gain.gain.setValueAtTime(0,     now);
-      gain.gain.linearRampToValueAtTime(0.08,  now + 0.005);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.06);
-    }
-  }
+  var PHASE1_WAIT_MS = 3000;    // 3s arrival pause before Phase 1 fires
 
   /* ════════════════════════════════════════════════════════════
      MAP DATA — easy to extend for new regions
@@ -157,7 +169,7 @@ var Overworld = (function () {
       image: MAP_PATH + 'eastafrica.jpeg',
       // Spawn: at the foot of Kilimanjaro — right of the explorer dialogue box
       // (box is at left:35% viewport; character at x:65 puts her clearly east of it).
-      spawn: { x: 70, y: 82 },
+      spawn: { x: 70, y: 90 },
       startsFogged: false,
       nodes: [
         {
@@ -166,8 +178,14 @@ var Overworld = (function () {
           // No label — the separate To Egypt box (visible post-victory) handles navigation.
           image:  NODE_PATH + 'toegypt.png',
           x: 20, y: 20,
-          // Always visible — the signpost is a fixture of the landscape.
-          // Clicking triggers the Otzi encounter (pre-victory) or skips to battle (post-victory).
+          // Hidden until the player completes the Neanderthal battle and the
+          // post-victory overworld sequence plays (_completePostVictorySequence
+          // sets this flag then immediately calls _refreshNodes so the node appears).
+          showIf: function () {
+            try {
+              return localStorage.getItem(KEY_POST_NEANDERTHAL_DIALOGUE) === 'true';
+            } catch (e) { return false; }
+          },
           // Short northwest walk from the Prehistory node area to the signpost.
           path: [
             { x: 28, y: 28 },
@@ -233,13 +251,33 @@ var Overworld = (function () {
           id:    'winged-akkad',
           name:  'Akkad',
           image: NODE_PATH + 'winged akkad node.png',
-          x: 42, y: 52
+          x: 42, y: 52,
+          // TODO (Phase D3+): remove this gate when Akkad content is ready
+          showIf: function () {
+            try { return localStorage.getItem('sog_full_mesopotamia_unlock') === 'true'; } catch (e) { return false; }
+          }
         },
         {
           id:    'hammurabi',
           name:  'Hammurabi\u2019s Code',
           image: NODE_PATH + 'hammurabi code node.png',
-          x: 58, y: 60
+          x: 58, y: 60,
+          // TODO (Phase D3+): remove this gate when Hammurabi content is ready
+          showIf: function () {
+            try { return localStorage.getItem('sog_full_mesopotamia_unlock') === 'true'; } catch (e) { return false; }
+          }
+        },
+        {
+          // Phase D2a: visible after sog_mesopotamia_arrival_complete is set.
+          // Click handler is a stub \u2014 the Gilgamesh encounter lives in Phase D2b.
+          id:    'walls-of-uruk',
+          name:  'Walls of Uruk',
+          image: NODE_PATH + 'wallsofuruk@0.33x.png',
+          x: 72, y: 82,
+          scale: 1.35,
+          showIf: function () {
+            try { return localStorage.getItem(KEY_MESOPOTAMIA_ARRIVAL) === 'true'; } catch (e) { return false; }
+          }
         }
       ],
       exits: [
@@ -295,7 +333,6 @@ var Overworld = (function () {
 
   /* ── DOM refs + state ──────────────────────────────────────── */
   var mapImgEl, overlayEl, charEl, fogEl, transitionEl, transitionTextEl;
-  var lucyBoxEl, lucyTextEl, explorerBoxEl, explorerTextEl, neanderthalBoxEl, otziBoxEl;
   var currentMapId   = 'eastafrica';
   var currentPos     = { x: 0, y: 0 };
   var visitedMaps    = [];
@@ -305,16 +342,6 @@ var Overworld = (function () {
   var walkInterval   = null;
   var idleTimer      = null;
   var idleRoutineTimer = null;
-
-  // Dialogue typewriter state
-  var dlgIndex = 0;
-  var dlgTypingTimer = null;
-  var dlgIsTyping = false;
-  var dlgFullText = '';
-  var dlgTypedLen = 0;
-  var dlgActiveBox = null;      // current visible box el
-  var dlgActiveTextEl = null;   // current text element
-  var dlgAdvanceHandler = null;
 
   // Urgent-pulse idle timer (30s after dialogue end → brighten prehistory node)
   var urgentPulseTimer = null;
@@ -500,13 +527,14 @@ var Overworld = (function () {
     if (!data) { console.warn('[Overworld] Unknown map:', mapId); return; }
 
     currentMapId = mapId;
+    // Fix 4: toggle body class so Explorer dialogue box can be re-centred on foreign maps
+    document.body.classList.toggle('overworld-away-from-home', mapId !== 'eastafrica');
     mapImgEl.src = data.image;
 
-    // Clear overlay (keep character element though)
-    var prevChar = charEl;
+    // Clear overlay. Character is re-appended LAST (after nodes and exits)
+    // so it always paints on top in DOM order — prevents node images from
+    // covering the character when she stands at the same position as a node.
     overlayEl.innerHTML = '';
-    overlayEl.appendChild(prevChar);
-    charEl = prevChar;
 
     // Place nodes
     data.nodes.forEach(function (n) {
@@ -518,6 +546,7 @@ var Overworld = (function () {
       nodeEl.dataset.id = n.id;
       nodeEl.style.left = n.x + '%';
       nodeEl.style.top  = n.y + '%';
+      if (n.scale) nodeEl.style.transform = 'translate(-50%,-50%) scale(' + n.scale + ')';
       var img = document.createElement('img');
       img.src = n.image;
       img.alt = n.name;
@@ -547,9 +576,6 @@ var Overworld = (function () {
       overlayEl.appendChild(nodeEl);
     });
 
-    // Inject the To Egypt navigation box if Otzi has been beaten
-    _refreshToEgyptBox(false);
-
     // Place exit zones
     data.exits.forEach(function (e) {
       var exitEl = document.createElement('div');
@@ -565,6 +591,9 @@ var Overworld = (function () {
       exitEl.addEventListener('click', function () { onExitClick(e); });
       overlayEl.appendChild(exitEl);
     });
+
+    // Re-append character last so it sits on top of all nodes/exits in DOM order
+    overlayEl.appendChild(charEl);
 
     // Position character
     var startPos = opts.entryAt || (opts.useSaved ? currentPos : data.spawn);
@@ -608,6 +637,35 @@ var Overworld = (function () {
     if (isMoving || isTransitioning || isDialogueLocked) return;
     // Clicking the Prehistory node ends the urgent idle pulse if active
     clearUrgentPulse();
+
+    // ── Walls of Uruk — Phase D2b: Gilgamesh encounter ──────────
+    if (node.id === 'walls-of-uruk' && currentMapId === 'mesopotamia') {
+      var gilgBattleDone = false;
+      try { gilgBattleDone = localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; } catch (e) {}
+
+      if (gilgBattleDone) {
+        // Post-victory replay: walk + skip directly to battle (no dialogue)
+        isDialogueLocked = true;
+        cancelIdle();
+        walkPath([{ x: node.x, y: node.y }], function () {
+          log('[D2b] Gilgamesh battle complete — skipping dialogue, firing wipe');
+          _fireWipeFromNode('walls-of-uruk', function () {
+            var gb = window.SOG && window.SOG.GilgameshBattle;
+            if (gb && typeof gb.start === 'function') {
+              gb.start();
+            } else {
+              console.warn('[Overworld] SOG.GilgameshBattle not found — aborting');
+              isDialogueLocked = false;
+              _clearWipe();
+              scheduleIdle();
+            }
+          });
+        });
+      } else {
+        _d2bSequence(node);
+      }
+      return;
+    }
 
     // Adventure Mode handoff: the Prehistory node launches the Neanderthal
     // tutorial battle. If the player has already won it, skip the walk
@@ -728,29 +786,43 @@ var Overworld = (function () {
      ADVENTURE INTRO DIALOGUE — SNES-style typewriter
      ════════════════════════════════════════════════════════════ */
 
-  /* Current dialogue runner state */
-  var dlgRunning     = false;
-  var dlgLines       = null;    // array of lines for active phase
-  var dlgLineIdx     = 0;
-  var dlgAdvanceHandler = null;
-
   function log(step) { console.log('[Adventure Intro] ' + step); }
+
+  /* ── Thin HUD delegation ──────────────────────────────────────
+     All overworld dialogue now routes through SOG.HUD.
+     runDialogue and _d2aRunLinesNoFade are kept as local
+     helpers so call-sites throughout this file don't need
+     to be restructured.                                       */
+
+  function runDialogue(lines, onDone) {
+    var hud = window.SOG && window.SOG.HUD;
+    if (hud && typeof hud.runDialogue === 'function') {
+      hud.runDialogue(lines, onDone);
+    } else {
+      // HUD not available — fall back gracefully (skip dialogue)
+      log('WARNING: SOG.HUD not available, skipping dialogue');
+      if (onDone) setTimeout(onDone, 0);
+    }
+  }
+
+  function _runLinesKeepOpen(lines, onDone) {
+    var hud = window.SOG && window.SOG.HUD;
+    if (hud && typeof hud.runLines === 'function') {
+      hud.runLines(lines, onDone);
+    } else {
+      if (onDone) setTimeout(onDone, 0);
+    }
+  }
 
   /* ── Phase 1: 3s wait → Explorer monologue ────────────────── */
   function maybePlayAdventureIntro() {
     var introDone    = localStorage.getItem(KEY_ADVENTURE_INTRO) === 'true';
     var isEastAfrica = currentMapId === 'eastafrica';
 
-    log('check | introAlreadyDone=' + introDone + ' currentMap=' + currentMapId +
-        ' boxes={explorer:' + !!explorerBoxEl + ', lucy:' + !!lucyBoxEl + '}');
+    log('check | introAlreadyDone=' + introDone + ' currentMap=' + currentMapId);
 
     if (introDone)     { log('SKIP: intro flag already set'); return false; }
     if (!isEastAfrica) { log('SKIP: not on East Africa'); return false; }
-    if (!lucyBoxEl || !explorerBoxEl) { log('SKIP: dialogue box DOM missing'); return false; }
-
-    // Reset any stale CSS state on both boxes (display:none etc. from prior runs)
-    resetBox(lucyBoxEl);
-    resetBox(explorerBoxEl);
 
     isDialogueLocked = true;
     cancelIdle();
@@ -773,7 +845,7 @@ var Overworld = (function () {
 
   /* ── Phase 2: Explorer + Lucy exchange (on Prehistory click) ─ */
   function playPhase2Then(onFullyDone) {
-    if (dlgRunning) { log('Phase 2 requested while already running — ignoring'); return; }
+    if (isDialogueLocked) { log('Phase 2 requested while dialogue active — ignoring'); return; }
     log('Phase 2 starting');
     isDialogueLocked = true;
     cancelIdle();
@@ -797,13 +869,6 @@ var Overworld = (function () {
       if (localStorage.getItem(KEY_POST_NEANDERTHAL_DIALOGUE) === 'true') return;
     } catch (e) {}
 
-    if (!lucyBoxEl || !explorerBoxEl) {
-      log('[PostVictory] dialogue boxes missing — skipping');
-      return;
-    }
-
-    resetBox(lucyBoxEl);
-    resetBox(explorerBoxEl);
     isDialogueLocked = true;
     cancelIdle();
 
@@ -831,94 +896,317 @@ var Overworld = (function () {
     scheduleIdle();
   }
 
-  /* ── Post-Otzi-victory overworld sequence ───────────────────────
+  /* ════════════════════════════════════════════════════════════
+     PHASE D1 — Otzi → Mesopotamia travel sequence
+     ════════════════════════════════════════════════════════════
      Called by sog-adventure-otzi.js after the player wins the Otzi
-     battle and clicks "Back to Map".  Gated by localStorage so it
-     only runs once.  Runs a solo Explorer monologue, then reveals the
-     "To Egypt" navigation box and marks the sequence complete.       */
-  function startPostOtziVictorySequence() {
-    try {
-      if (localStorage.getItem(KEY_POST_OTZI_DIALOGUE) === 'true') return;
-    } catch (e) {}
+     battle and clicks "Back to Map" for the first time (i.e. when
+     sog_mesopotamia_arrival_complete is not yet set).
 
-    if (!explorerBoxEl) {
-      log('[PostOtziVictory] explorer box missing — skipping');
-      return;
-    }
+     Three scenes separated by "Traveling…" loading-screen transitions:
+       Scene 1: East Africa  — Hunter + Explorer, 12 lines, then walk-off right
+       Travel 1: East Africa → Egypt   (existing transitionToMap pattern)
+       Scene 2: Egypt        — Hunter + Explorer, 11 lines + ummelqaab decoration, walk-off right
+       Travel 2: Egypt → Mesopotamia
+       Scene 3: Mesopotamia  — Hunter + Explorer, 5 lines, phase complete
 
-    resetBox(explorerBoxEl);
+     Sets sog_mesopotamia_arrival_complete = 'true' on completion.
+     TODO (future phase): add re-entry behaviour when the player returns to East
+     Africa after Mesopotamia arrival is already complete.                     */
+  function startMesopotamiaArrival() {
+    log('[D1] Starting Otzi→Mesopotamia transition sequence');
+
     isDialogueLocked = true;
     cancelIdle();
 
-    runDialogue(POST_OTZI_VICTORY_DIALOGUE, function () {
-      isDialogueLocked = false;
-      _completePostOtziVictorySequence();
+    // Apply the victory checkmark to the egypt-signpost node in-place
+    // (the node DOM is already rendered since the player was just on East Africa).
+    var nodeEl = overlayEl && overlayEl.querySelector('[data-id="egypt-signpost"]');
+    if (nodeEl) nodeEl.classList.add('overworld-node-complete');
+
+    // Place Explorer at the egypt-signpost node position — that's where she was
+    // standing when the Otzi encounter was triggered (the walk-to-node path ends
+    // at the node coords). Falls back to spawn if the node data is somehow absent.
+    var _signpost = null;
+    MAPS.eastafrica.nodes.forEach(function (n) { if (n.id === 'egypt-signpost') _signpost = n; });
+    currentPos.x = _signpost ? _signpost.x : MAPS.eastafrica.spawn.x;
+    currentPos.y = _signpost ? _signpost.y : MAPS.eastafrica.spawn.y;
+    positionChar(currentPos.x, currentPos.y);
+    setStanding();
+
+    // === SCENE 1: East Africa ===
+    runDialogue(D1_SCENE1_DIALOGUE, function () {
+      // After "Let's go!" — Explorer walks off the right edge
+      walkPath([{ x: currentPos.x + 96, y: currentPos.y - 96 }], function () {
+        // Travel transition 1: East Africa → Egypt
+        _d1TravelTo('egypt', { x: 10, y: 85 }, function () {
+          // === SCENE 2: Egypt ===
+          _d1PlaceUmmelqaab();
+          runDialogue(D1_SCENE2_DIALOGUE, function () {
+            // Remove Egypt decoration before walk-off
+            var dec = overlayEl && overlayEl.querySelector('.d1-ummelqaab-decoration');
+            if (dec && dec.parentNode) dec.parentNode.removeChild(dec);
+            // Explorer walks off the right edge
+            walkPath([{ x: 115, y: currentPos.y }], function () {
+              // Travel transition 2: Egypt → Mesopotamia
+              _d1TravelTo('mesopotamia', { x: 10, y: 85 }, function () {
+                // === SCENE 3: Mesopotamia ===
+                runDialogue(D1_SCENE3_DIALOGUE, function () {
+                  // D1 Scene 3 done — continue immediately into D2a river walk.
+                  // sog_mesopotamia_arrival_complete is set at the END of D2a.
+                  _d2aSequence();
+                });
+              });
+            });
+          });
+        });
+      });
     });
   }
 
-  function _completePostOtziVictorySequence() {
-    try { localStorage.setItem(KEY_POST_OTZI_DIALOGUE, 'true'); } catch (e) {}
-    _refreshNodes();
-    _refreshToEgyptBox(true);   // animate fade-in
-    log('[PostOtziVictory] complete — To Egypt box revealed');
-    scheduleIdle();
+  /* Place the Umm el-Qaab necropolis decoration on the Egypt map overlay.
+     Non-interactive visual only — no click handler, no hover label. */
+  function _d1PlaceUmmelqaab() {
+    if (!overlayEl) return;
+    // Remove any stale decoration from a previous D1 run (shouldn't happen,
+    // but be defensive about it).
+    var existing = overlayEl.querySelector('.d1-ummelqaab-decoration');
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+    var dec = document.createElement('img');
+    dec.className = 'd1-ummelqaab-decoration';
+    dec.src = 'images/metaworld/topography/ummelqaab@0.25x.png';
+    dec.alt = '';
+    dec.draggable = false;
+    // Position along the Nile — left side of the Egypt map
+    dec.style.cssText = [
+      'position:absolute',
+      'left:16%',
+      'top:42%',
+      'transform:translate(-50%,-50%) scale(0.5)',
+      'transform-origin:center center',
+      'pointer-events:none',
+      'user-select:none'
+    ].join(';');
+    overlayEl.insertBefore(dec, charEl);
   }
 
-  /* ── "To Egypt" navigation box ──────────────────────────────────
-     A vertical strip to the right of the egypt-signpost node.
-     Visible when sog_battle_otzi_complete === 'true'.
-     Click routes to the Egypt stub (SOG.Egypt.start()).            */
-  function _refreshToEgyptBox(animate) {
-    // Remove any existing box
-    if (overlayEl) {
-      var existing = overlayEl.querySelector('.overworld-to-egypt-box');
-      if (existing) existing.parentNode.removeChild(existing);
+  /* Map-swap with "Traveling…" loading screen — mirrors transitionToMap()
+     but accepts an onComplete callback so the D1 sequence can chain scenes. */
+  function _d1TravelTo(targetMapId, entryAt, onComplete) {
+    if (isTransitioning) { if (onComplete) setTimeout(onComplete, 0); return; }
+    isTransitioning = true;
+    cancelIdle();
+    stopFootsteps();
+
+    if (typeof gsap === 'undefined') {
+      loadMap(targetMapId, { entryAt: entryAt });
+      isTransitioning = false;
+      if (onComplete) onComplete();
+      return;
     }
 
-    // Only show on east africa + only after Otzi is beaten
-    if (currentMapId !== 'eastafrica') return;
-    try {
-      if (localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) !== 'true') return;
-    } catch (e) { return; }
-    if (!overlayEl) return;
-
-    // egypt-signpost node is at x:20, y:20 in map-percentage coords.
-    // Box: immediately right of the node, extending from top (0%) down to
-    // just past the node centre (~22%).
-    var box = document.createElement('div');
-    box.className = 'overworld-to-egypt-box';
-    // Position expressed as % of the overlay (which fills the map area).
-    box.style.left   = '25%';
-    box.style.top    = '0';
-    box.style.width  = '8%';
-    box.style.height = '22%';
-    if (animate) box.style.opacity = '0';
-
-    var label = document.createElement('div');
-    label.className = 'overworld-to-egypt-label';
-    label.textContent = 'To Egypt';
-    box.appendChild(label);
-
-    box.addEventListener('click', function () {
-      if (isMoving || isTransitioning || isDialogueLocked) return;
-      log('To Egypt box clicked — launching Egypt module');
-      cancelIdle();
-      var egypt = window.SOG && window.SOG.Egypt;
-      if (egypt && typeof egypt.start === 'function') {
-        egypt.start();
-      } else {
-        // Fallback: transition to egypt map
-        transitionToMap('egypt', { x: 10, y: 85 });
+    var tl = gsap.timeline({
+      onComplete: function () {
+        isTransitioning = false;
+        if (onComplete) onComplete();
       }
     });
 
-    overlayEl.appendChild(box);
+    // Identical timing to transitionToMap: fade-in 1s, hold 0.5s, fade-out 1s
+    tl.set(transitionEl, { visibility: 'visible' })
+      .to(transitionEl, { opacity: 1, duration: 1, ease: 'power2.inOut' })
+      .to(transitionTextEl, { opacity: 1, duration: 0.3 }, '-=0.2')
+      .call(function () { loadMap(targetMapId, { entryAt: entryAt }); })
+      .to({}, { duration: 0.5 })
+      .to(transitionTextEl, { opacity: 0, duration: 0.3 })
+      .to(transitionEl, { opacity: 0, duration: 1, ease: 'power2.inOut' })
+      .set(transitionEl, { visibility: 'hidden' });
+  }
 
-    if (animate && typeof gsap !== 'undefined') {
-      gsap.to(box, { opacity: 1, duration: 0.8, ease: 'power2.out' });
-    } else if (animate) {
-      box.style.opacity = '1';
+  /* ════════════════════════════════════════════════════════════
+     PHASE D2a — Mesopotamia extended arrival
+     ════════════════════════════════════════════════════════════
+     Continues directly after D1 Scene 3 ("It looks so green.").
+     Flow:
+       1. Explorer walks east to a stop between the two rivers
+       2. Hunter: "I feel different…" (box stays visible)
+       3. Hunter portrait crossfades → Farmer portrait (~800ms)
+       4. Farming dialectic (8 click-to-advance lines)
+       5. After line 8 — Walls of Uruk node fades in (~1s)
+       6. "Cities!" + "Bye!" → Farmer portrait fades out
+       7. "Lets go check out that city!" → all boxes fade out
+       8. sog_mesopotamia_arrival_complete = 'true', player unlocked
+     ════════════════════════════════════════════════════════════ */
+
+  /* River-walk stop: central between the Tigris and Euphrates on the
+     Mesopotamia map. Chosen to clear the southwest exit zone
+     (x:0-20, y:70-100) and the existing nodes (Akkad 42,52; Hammurabi
+     58,60) while leaving the Walls of Uruk node (40,72) unobscured. */
+  var D2A_RIVER_STOP = { x: 54, y: 65 };
+
+  function _d2aSequence() {
+    log('[D2a] River walk beginning');
+    walkPath([D2A_RIVER_STOP], function () {
+      log('[D2a] Explorer at river stop — entering dialogue mode for full D2a sequence');
+      var hud = window.SOG && window.SOG.HUD;
+      if (!hud) { log('[D2a] HUD unavailable — skipping'); isDialogueLocked = false; scheduleIdle(); return; }
+
+      hud.enterDialogueMode(null, function () {
+        // Hunter "I feel different…" — HUD stays open for crossfade next
+        _runLinesKeepOpen([{ who: 'hunter', text: 'I feel different…' }], function () {
+          // Portrait crossfade: Hunter → Farmer (~800ms, NPC slot stays visible)
+          hud.swapNpcPortrait({ character: 'farmer', transitionMs: 800 }, function () {
+            log('[D2a] Crossfade to Farmer complete — starting farming dialectic');
+            _runLinesKeepOpen(D2A_FARMING_DIALOGUE, function () {
+              // After last farming line — fade in Walls of Uruk node
+              _d2aFadeInUrukNode(function () {
+                _d2aClosingSequence(hud);
+              });
+            });
+          });
+        });
+      });
+    });
+  }
+
+  /* Fade in the Walls of Uruk node element on the current map overlay.
+     The node is inserted before charEl so the Explorer sprite stays on top.
+     Position: x:72%, y:82% — deep south of Mesopotamia, below the Explorer spawn. */
+  function _d2aFadeInUrukNode(onDone) {
+    if (!overlayEl) { if (onDone) onDone(); return; }
+
+    // Don't duplicate if already present (e.g. reload guard)
+    if (overlayEl.querySelector('[data-id="walls-of-uruk"]')) {
+      if (onDone) onDone();
+      return;
     }
+
+    var nodeEl = document.createElement('div');
+    nodeEl.className = 'overworld-node';
+    nodeEl.dataset.id = 'walls-of-uruk';
+    nodeEl.style.left = '72%';
+    nodeEl.style.top  = '82%';
+    nodeEl.style.transform = 'translate(-50%,-50%) scale(1.35)';
+
+    var img = document.createElement('img');
+    img.src = NODE_PATH + 'wallsofuruk@0.33x.png';
+    img.alt = 'Walls of Uruk';
+    img.draggable = false;
+    nodeEl.appendChild(img);
+
+    // Wire click to the same node data used by onNodeClick
+    var nodeData = null;
+    var mesNodes = MAPS.mesopotamia && MAPS.mesopotamia.nodes;
+    if (mesNodes) {
+      for (var ni = 0; ni < mesNodes.length; ni++) {
+        if (mesNodes[ni].id === 'walls-of-uruk') { nodeData = mesNodes[ni]; break; }
+      }
+    }
+    if (nodeData) {
+      nodeEl.addEventListener('click', (function (nd) {
+        return function () { onNodeClick(nd); };
+      })(nodeData));
+    }
+
+    nodeEl.style.opacity = '0';
+    // Insert before charEl so Explorer sprite paints above the node
+    overlayEl.insertBefore(nodeEl, charEl);
+
+    if (typeof gsap !== 'undefined') {
+      gsap.to(nodeEl, {
+        opacity: 1,
+        duration: 1,
+        ease: 'power2.out',
+        onComplete: function () {
+          log('[D2a] Walls of Uruk node faded in');
+          if (onDone) onDone();
+        }
+      });
+    } else {
+      nodeEl.style.opacity = '1';
+      if (onDone) setTimeout(onDone, 0);
+    }
+  }
+
+  /* Closing sequence: "Cities!" + Farmer departure + Explorer's final line. */
+  function _d2aClosingSequence(hud) {
+    hud = hud || (window.SOG && window.SOG.HUD);
+    if (!hud) { isDialogueLocked = false; scheduleIdle(); return; }
+
+    // "Cities!" and "Bye!" — Farmer still visible
+    _runLinesKeepOpen([
+      { who: 'explorer', text: 'Cities!' },
+      { who: 'farmer',   text: "Great, but the land isn't going to farm itself. Bye!" }
+    ], function () {
+      // Farmer slides down — NPC gone, but dialogue mode stays active
+      hud.slideOutNpc(function () {
+        // Explorer delivers the final line alone
+        _runLinesKeepOpen([
+          { who: 'explorer', text: "Lets go check out that city!" }
+        ], function () {
+          // Exit dialogue mode (fades back to resting state)
+          hud.exitDialogueMode(function () {
+            try { localStorage.setItem(KEY_MESOPOTAMIA_ARRIVAL, 'true'); } catch (e) {}
+            isDialogueLocked = false;
+            log('[D2a] Complete — sog_mesopotamia_arrival_complete set, player unlocked');
+            scheduleIdle();
+          });
+        });
+      });
+    });
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     PHASE D2b — Gilgamesh encounter
+     ════════════════════════════════════════════════════════════
+     Flow:
+       1. Explorer walks to the Walls of Uruk node (72, 82)
+       2. 300 ms settle
+       3. Gilgamesh portrait slides up, 7-line encounter dialogue
+       4. After "You will be." is dismissed: skip HUD exit animation,
+          fire radial wipe + whoosh straight into battle
+       5. SOG.GilgameshBattle.start()
+     ════════════════════════════════════════════════════════════ */
+
+  function _d2bSequence(node) {
+    isDialogueLocked = true;
+    cancelIdle();
+    log('[D2b] Walking to Walls of Uruk');
+
+    walkPath([{ x: node.x, y: node.y }], function () {
+      log('[D2b] Explorer arrived at Walls of Uruk — settling before dialogue');
+      setTimeout(function () {
+        var hud = window.SOG && window.SOG.HUD;
+        if (!hud) {
+          log('[D2b] HUD unavailable — aborting');
+          isDialogueLocked = false;
+          scheduleIdle();
+          return;
+        }
+
+        hud.enterDialogueMode(null, function () {
+          log('[D2b] Dialogue mode entered — running Gilgamesh encounter lines');
+          _runLinesKeepOpen(D2B_GILGAMESH_DIALOGUE, function () {
+            // "You will be." dismissed — skip exit animation, fire wipe immediately
+            log('[D2b] Dialogue complete — firing radial wipe to battle');
+            _fireWipeFromNode('walls-of-uruk', function () {
+              // HUD dialogue mode can be cleaned up silently after wipe covers screen
+              hud.exitDialogueMode(null);
+              isDialogueLocked = false;
+              var gb = window.SOG && window.SOG.GilgameshBattle;
+              if (gb && typeof gb.start === 'function') {
+                gb.start();
+              } else {
+                console.warn('[Overworld] SOG.GilgameshBattle not found — aborting');
+                _clearWipe();
+                scheduleIdle();
+              }
+            });
+          });
+        });
+      }, 300);
+    });
   }
 
   /* Tear down and re-place all node elements for the current map.
@@ -938,6 +1226,7 @@ var Overworld = (function () {
       nodeEl.dataset.id = n.id;
       nodeEl.style.left = n.x + '%';
       nodeEl.style.top  = n.y + '%';
+      if (n.scale) nodeEl.style.transform = 'translate(-50%,-50%) scale(' + n.scale + ')';
       var img = document.createElement('img');
       img.src = n.image;
       img.alt = n.name;
@@ -964,8 +1253,6 @@ var Overworld = (function () {
       }
       overlayEl.appendChild(nodeEl);
     });
-    // Keep the To Egypt box in sync with node refreshes
-    _refreshToEgyptBox(false);
   }
 
   /* ── Otzi encounter ─────────────────────────────────────────────
@@ -977,11 +1264,6 @@ var Overworld = (function () {
   function startOtziEncounter(node) {
     isDialogueLocked = true;
     cancelIdle();
-
-    // No on-map sprite — the dialogue box portrait is sufficient,
-    // and a real photo looks jarring against the pixel-art world.
-    resetBox(otziBoxEl);
-    resetBox(explorerBoxEl);
 
     runDialogue(OTZI_PRE_BATTLE_DIALOGUE, function () {
       isDialogueLocked = false;
@@ -1068,186 +1350,9 @@ var Overworld = (function () {
     wipeEl.style.clipPath = '';
   }
 
-  /* ── Generic dialogue runner (used by both phases) ────────── */
-  function runDialogue(lines, onDone) {
-    dlgRunning  = true;
-    dlgLines    = lines;
-    dlgLineIdx  = 0;
-    dlgAdvanceHandler = function (e) {
-      if (e.type === 'keydown' && e.key !== ' ' && e.key !== 'Spacebar' && e.key !== 'Enter') return;
-      if (e.type === 'keydown') e.preventDefault();
-      advanceLine();
-    };
-    // Defer listener attachment so we don't catch the same click that
-    // triggered this dialogue (e.g. the Prehistory-node click that fires
-    // Phase 2). Without this, the click bubbles to document, hits
-    // dlgAdvanceHandler, and skips line 1 before typing has even started.
-    setTimeout(function () {
-      document.addEventListener('click',   dlgAdvanceHandler);
-      document.addEventListener('keydown', dlgAdvanceHandler);
-    }, 0);
-
-    showLine(function () {
-      // called when all lines done
-      document.removeEventListener('click',   dlgAdvanceHandler);
-      document.removeEventListener('keydown', dlgAdvanceHandler);
-      dlgAdvanceHandler = null;
-      fadeBox(explorerBoxEl,    false);
-      fadeBox(lucyBoxEl,        false);
-      fadeBox(neanderthalBoxEl, false);
-      fadeBox(otziBoxEl,        false);
-      dlgRunning = false;
-      dlgLines   = null;
-      log('dialogue runner finished');
-      if (onDone) onDone();
-    });
-  }
-
-  /* Per-line typewriter state */
-  var ty_fullText = '';
-  var ty_shownLen = 0;
-  var ty_timer    = null;
-  var ty_isTyping = false;
-  var ty_activeBox = null;
-  var ty_activeText = null;
-  var ty_onLineDone = null;
-
-  function showLine(onAllLinesDone) {
-    var line = dlgLines[dlgLineIdx];
-    if (!line) { if (onAllLinesDone) onAllLinesDone(); return; }
-    log('line ' + (dlgLineIdx + 1) + '/' + dlgLines.length + ' [' + line.who + '] "' + line.text + '"');
-
-    var activeBox = (line.who === 'lucy')        ? lucyBoxEl
-                  : (line.who === 'neanderthal') ? neanderthalBoxEl
-                  : (line.who === 'otzi')        ? otziBoxEl
-                  :                                explorerBoxEl;
-    ty_activeBox  = activeBox;
-    ty_activeText = activeBox.querySelector('.adv-dialogue-text');
-
-    // Fade box in if not visible, then start typing
-    if (!activeBox.classList.contains('is-visible')) {
-      fadeBox(activeBox, true, function () { typeLine(line, onAllLinesDone); });
-    } else {
-      typeLine(line, onAllLinesDone);
-    }
-  }
-
-  function typeLine(line, onAllLinesDone) {
-    ty_fullText = line.text;
-    ty_shownLen = 0;
-    ty_isTyping = true;
-    ty_activeText.textContent = '';
-    ty_activeBox.classList.remove('is-ready');
-    ty_onLineDone = onAllLinesDone;
-
-    if (ty_timer) clearInterval(ty_timer);
-    var bleepCount = 0;
-    ty_timer = setInterval(function () {
-      ty_shownLen++;
-      ty_activeText.textContent = ty_fullText.slice(0, ty_shownLen);
-      var c = ty_fullText.charAt(ty_shownLen - 1);
-      if (c && c !== ' ' && c !== '\n') {
-        bleepCount++;
-        if (bleepCount >= BLEEP_EVERY_CHARS) { bleepCount = 0; playBleep(line.who); }
-      }
-      if (ty_shownLen >= ty_fullText.length) {
-        clearInterval(ty_timer); ty_timer = null;
-        ty_isTyping = false;
-        ty_activeBox.classList.add('is-ready');
-      }
-    }, TYPE_SPEED_MS);
-  }
-
-  function advanceLine() {
-    if (ty_isTyping) {
-      // Skip typewriter — show full text immediately
-      if (ty_timer) { clearInterval(ty_timer); ty_timer = null; }
-      ty_shownLen = ty_fullText.length;
-      ty_activeText.textContent = ty_fullText;
-      ty_activeBox.classList.add('is-ready');
-      ty_isTyping = false;
-      return;
-    }
-    dlgLineIdx++;
-    if (dlgLineIdx >= dlgLines.length) {
-      if (ty_onLineDone) ty_onLineDone();
-      return;
-    }
-    showLine(ty_onLineDone);
-  }
-
-  /* ── Dialogue box visibility helpers ──────────────────────── */
-  function resetBox(el) {
-    if (!el) return;
-    el.classList.remove('is-visible', 'is-ready');
-    el.style.opacity    = '';
-    el.style.visibility = '';
-    el.style.display    = '';
-    var t = el.querySelector('.adv-dialogue-text');
-    if (t) t.textContent = '';
-  }
-
-  function fadeBox(el, show, onComplete) {
-    if (!el) { if (onComplete) onComplete(); return; }
-    if (show) {
-      el.classList.add('is-visible');
-      // Nuke any stale inline style that could be blocking visibility
-      el.style.display    = 'grid';
-      el.style.visibility = 'visible';
-      el.style.zIndex     = '9999';
-    }
-    if (typeof gsap === 'undefined') {
-      el.style.opacity = show ? 1 : 0;
-      if (!show) el.classList.remove('is-visible', 'is-ready');
-      if (onComplete) onComplete();
-      return;
-    }
-    if (show) {
-      gsap.fromTo(el, { opacity: 0 }, {
-        opacity: 1, duration: 0.35, ease: 'power2.out',
-        onComplete: function () {
-          // Diagnostic: prove the box is actually rendered on screen
-          var rect  = el.getBoundingClientRect();
-          var style = window.getComputedStyle(el);
-          console.log('[Adventure Intro] box fade-in complete:', {
-            id:         el.id,
-            rect:       { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
-            display:    style.display,
-            visibility: style.visibility,
-            opacity:    style.opacity,
-            zIndex:     style.zIndex,
-            position:   style.position,
-            onScreen:   rect.width > 0 && rect.height > 0 &&
-                        rect.bottom > 0 && rect.right > 0 &&
-                        rect.top < window.innerHeight && rect.left < window.innerWidth
-          });
-          // Also verify the portrait image actually loaded
-          var portrait = el.querySelector('.adv-dialogue-portrait');
-          if (portrait) {
-            console.log('[Adventure Intro] portrait "' + portrait.src + '" loaded=' +
-              portrait.complete + ' naturalW=' + portrait.naturalWidth);
-            if (!portrait.complete || portrait.naturalWidth === 0) {
-              portrait.addEventListener('error', function () {
-                console.warn('[Adventure Intro] portrait FAILED to load:', portrait.src);
-              });
-              portrait.addEventListener('load', function () {
-                console.log('[Adventure Intro] portrait loaded (late):', portrait.src);
-              });
-            }
-          }
-          if (onComplete) onComplete();
-        }
-      });
-    } else {
-      gsap.to(el, {
-        opacity: 0, duration: 0.3, ease: 'power2.in',
-        onComplete: function () {
-          el.classList.remove('is-visible', 'is-ready');
-          if (onComplete) onComplete();
-        }
-      });
-    }
-  }
+  /* runDialogue and _runLinesKeepOpen are defined earlier as thin
+     HUD delegation wrappers. The old box-based engine has been
+     removed — all dialogue now routes through SOG.HUD (Phase H2). */
 
   /* ── Prehistory node urgent-pulse escalation ───────────────── */
   function scheduleUrgentPulse() {
@@ -1274,10 +1379,6 @@ var Overworld = (function () {
     fogEl            = document.getElementById('overworld-fog-full');
     transitionEl     = document.getElementById('overworld-transition');
     transitionTextEl = document.getElementById('overworld-transition-text');
-    lucyBoxEl          = document.getElementById('adv-dialogue-lucy');
-    explorerBoxEl      = document.getElementById('adv-dialogue-explorer');
-    neanderthalBoxEl   = document.getElementById('adv-dialogue-neanderthal');
-    otziBoxEl          = document.getElementById('adv-dialogue-otzi');
     if (!mapImgEl || !overlayEl || !charEl) {
       console.warn('[Overworld] Missing DOM elements');
       return;
@@ -1326,7 +1427,6 @@ var Overworld = (function () {
       localStorage.removeItem(KEY_ADVENTURE_INTRO);
       isDialogueLocked = true;
       cancelIdle();
-      resetBox(lucyBoxEl); resetBox(explorerBoxEl);
       runDialogue(PHASE1_DIALOGUE, function () {
         isDialogueLocked = false;
         console.log('[Adventure Intro] Phase 1 ended (Phase 2 will fire when you click Prehistory)');
@@ -1337,7 +1437,6 @@ var Overworld = (function () {
     playPhase2: function () {
       console.log('[Adventure Intro] Force-triggering Phase 2');
       localStorage.removeItem(KEY_ADVENTURE_INTRO);
-      resetBox(lucyBoxEl); resetBox(explorerBoxEl);
       playPhase2Then(function () {
         console.log('[Adventure Intro] Phase 2 ended (character would now walk to node)');
       });
@@ -1346,8 +1445,6 @@ var Overworld = (function () {
     // the Neanderthal/Explorer pre-battle lines in the same .adv-dialogue
     // style as the Lucy/Explorer intro conversation.
     runPreBattleLines: function (lines, onDone) {
-      resetBox(neanderthalBoxEl);
-      resetBox(explorerBoxEl);
       isDialogueLocked = true;
       runDialogue(lines, function () {
         isDialogueLocked = false;
@@ -1359,12 +1456,29 @@ var Overworld = (function () {
     startPostVictorySequence: startPostVictorySequence,
     // Otzi encounter — exposed so the battle module can call back if needed
     startOtziEncounter: startOtziEncounter,
-    // Post-Otzi-victory sequence — called by sog-adventure-otzi.js after win + Back to Map
-    startPostOtziVictorySequence: startPostOtziVictorySequence,
+    // Phase D1 — Otzi→Mesopotamia travel cinematic. Called by sog-adventure-otzi.js
+    // after the player wins the Otzi battle and clicks "Back to Map" for the first time.
+    startMesopotamiaArrival: startMesopotamiaArrival,
     // Devtools helpers
     goToMap: function (mapId) {
       if (!MAPS[mapId]) { console.warn('No such map:', mapId); return; }
       transitionToMap(mapId, MAPS[mapId].spawn);
+    },
+    // Force-trigger Phase D1 for testing (bypasses the Mesopotamia arrival gate)
+    playD1: function () {
+      console.log('[D1] Force-triggering Mesopotamia arrival sequence');
+      startMesopotamiaArrival();
+    },
+    // Called by battle stubs / battle modules when returning to the overworld.
+    // Re-engages idle walk and refreshes the HUD without a full map reload.
+    resumeAfterBattle: function () {
+      isDialogueLocked = false;
+      isTransitioning  = false;
+      _clearWipe();
+      var hud = window.SOG && window.SOG.HUD;
+      if (hud) { hud.show(); }
+      scheduleIdle();
+      log('resumeAfterBattle() — player control restored');
     }
   };
 })();

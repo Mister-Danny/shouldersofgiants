@@ -406,37 +406,6 @@
       <span id="overworld-transition-text">Traveling&hellip;</span>
     </div>
 
-    <!-- Adventure Mode scripted dialogue boxes ─ SNES style -->
-    <div id="adv-dialogue-lucy" class="adv-dialogue adv-dialogue-top">
-      <div class="adv-dialogue-text"></div>
-      <img class="adv-dialogue-portrait" src="images/Lucy.png" alt="">
-      <div class="adv-dialogue-hint">&#9654; Click to continue</div>
-    </div>
-    <div id="adv-dialogue-explorer" class="adv-dialogue adv-dialogue-bottom">
-      <img class="adv-dialogue-portrait" src="images/femaleexplorer portrait.jpeg" alt="">
-      <div class="adv-dialogue-text"></div>
-      <div class="adv-dialogue-hint">&#9654; Click to continue</div>
-    </div>
-    <!-- Neanderthal pre-battle line (Phase C). Uses the same .adv-dialogue
-         style as Lucy/Explorer so the format is consistent throughout the
-         overworld interaction. Portrait on the right (adv-dialogue-top). -->
-    <div id="adv-dialogue-neanderthal" class="adv-dialogue adv-dialogue-top">
-      <div class="adv-dialogue-text"></div>
-      <img class="adv-dialogue-portrait" src="images/portraits/neanderthalportait.jpeg" alt="" style="transform:scaleX(-1)">
-      <div class="adv-dialogue-hint">&#9654; Click to continue</div>
-    </div>
-    <!-- Otzi encounter dialogue. Portrait on the right (adv-dialogue-top),
-         same structure as Neanderthal. Image uses %20 for the space in the
-         path — browsers are fine either way but keeps the URL spec-clean. -->
-    <div id="adv-dialogue-otzi" class="adv-dialogue adv-dialogue-top">
-      <div class="adv-dialogue-text"></div>
-      <!-- Wrapper takes the grid-placement + border/shadow from adv-dialogue-portrait;
-           overflow:hidden clips the scaled inner img to 128×128. -->
-      <div class="adv-dialogue-portrait adv-portrait-zoom">
-        <img src="images/Otzi.jpg" alt="">
-      </div>
-      <div class="adv-dialogue-hint">&#9654; Click to continue</div>
-    </div>
 
     <button id="overworld-back" class="btn-snes btn-snes-close">&#8592; Back to Home</button>
   </div>
@@ -498,7 +467,7 @@
   <div id="adv-card-reveal"        style="display:none">
     <div id="adv-card-reveal-banner">New Card Acquired</div>
     <div id="adv-card-reveal-card-wrap">
-      <img id="adv-card-reveal-img" src="images/prehistorycards/neanderthalcard.jpg" alt="Neanderthal card">
+      <img id="adv-card-reveal-img" src="images/cards/prehistorycards/neanderthalcard.jpg" alt="Neanderthal card">
       <div id="adv-card-reveal-ip" class="db-overlay-ip"></div>
     </div>
   </div>
@@ -1509,6 +1478,51 @@
     <div id="bypass-toast" class="bypass-toast"></div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════════
+       ADVENTURE MODE HUD — Phase H1
+       Persistent bottom bar, 1280×96px, pinned to the bottom of
+       #sog-stage. Visible only on overworld screens (CSS rule +
+       SOG.HUD.show/hide API). Three zones left→right:
+         LEFT  (96px)  — Explorer portrait, future avatar customisation
+         CENTER (flex) — 5 deck slots (top) + compact music strip (bottom)
+         RIGHT (128px) — Deck Builder + Options utility buttons
+       Z-index 150: above map/nodes (z30), below travel transition (z200)
+       and dialogue boxes (z9999).
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="adv-hud">
+    <!-- LEFT: Explorer portrait -->
+    <div id="adv-hud-portrait" title="Avatar — future customisation">
+      <img src="images/femaleexplorer%20portrait.jpeg" alt="Explorer" draggable="false">
+    </div>
+    <!-- CENTER: Resting state (deck slots + music) OR State B (dialogue text) -->
+    <div id="adv-hud-center">
+      <div id="adv-hud-decks"><!-- 6 slot tiles injected by SOG.HUD.refreshDecks() --></div>
+      <div id="adv-hud-music"><!-- Play/Pause + Volume injected by SOG.HUD --></div>
+      <!-- State B: dialogue text area — hidden in resting state, shown in dialogue mode -->
+      <div id="adv-hud-dialogue">
+        <!-- Left half: player/Explorer lines -->
+        <div id="adv-hud-dlg-player" class="adv-hud-dlg-zone">
+          <div id="adv-hud-dialogue-text"></div>
+          <span class="adv-hud-dlg-arrow">&#9654;</span>
+        </div>
+        <!-- Right half: NPC lines -->
+        <div id="adv-hud-dlg-npc" class="adv-hud-dlg-zone adv-hud-dlg-zone--npc">
+          <div id="adv-hud-dialogue-text-npc"></div>
+          <span class="adv-hud-dlg-arrow adv-hud-dlg-arrow--npc">&#9654;</span>
+        </div>
+      </div>
+    </div>
+    <!-- RIGHT: Utility buttons (resting) OR NPC portrait (dialogue mode) -->
+    <div id="adv-hud-util">
+      <button id="adv-hud-btn-deckbuilder" class="adv-hud-util-btn">Deck Builder</button>
+      <button id="adv-hud-btn-options"     class="adv-hud-util-btn">Options</button>
+      <!-- State B: NPC portrait slot — hidden in resting state, slides up on dialogue enter -->
+      <div id="adv-hud-npc-slot">
+        <img id="adv-hud-npc-img" src="" alt="" draggable="false">
+      </div>
+    </div>
+  </div>
+
   <!-- ── Global Music player (always-visible, contextually adapts) ──────────────────
        Must be in the DOM before the scripts below, so game/ui.js's IIFE can wire
        its event handlers via getElementById at script-load time. -->
@@ -1561,6 +1575,9 @@
   <script src="js/sog-adventure-prehistory.js"></script>
   <script src="js/sog-adventure-otzi.js"></script>
   <script src="js/sog-adventure-egypt.js"></script>
+  <script src="js/sog-adventure-gilgamesh.js"></script>
+  <!-- Adventure Mode HUD — loads after game/ui.js (SOG.music) is available -->
+  <script src="js/sog-adventure-hud.js"></script>
   <script src="js/bypass.js"></script>
   <script src="js/welcome.js"></script>
   <script src="js/feedback.js"></script>

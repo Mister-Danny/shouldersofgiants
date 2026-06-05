@@ -160,7 +160,13 @@
     scoreOpp.id          = 'loc-score-opp-' + loc.id;
 
     var info = document.createElement('div');
-    info.className = 'battle-loc-info';
+    info.className = 'battle-loc-info battle-loc-info--clickable';
+    // Lazily delegate to SOG.ui.openLocationPopup (loaded after ui.js)
+    info.addEventListener('click', function () {
+      if (SOG.ui && typeof SOG.ui.openLocationPopup === 'function') {
+        SOG.ui.openLocationPopup(loc.id);
+      }
+    });
 
     var name = document.createElement('div');
     name.className   = 'battle-loc-name';

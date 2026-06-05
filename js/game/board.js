@@ -345,7 +345,19 @@
     'Fire':                  { type: 'card',     id: 29, pattern: 'A' },
     'Cave Art':              { type: 'card',     id: 30, pattern: 'A' },
     'Domesticated Animal':   { type: 'card',     id: 32, pattern: 'A' },
-    'Tribe':                 { type: 'card',     id: 36, pattern: 'A' }
+    'Tribe':                 { type: 'card',     id: 36, pattern: 'A' },
+    'Sargon':                { type: 'card',     id: 37, pattern: 'A' },
+    'Scribe':                { type: 'card',     id: 40, pattern: 'A' },
+    'Gilgamesh':             { type: 'card',     id: 43, pattern: 'A' },
+    'Canals':                { type: 'card',     id: 41, pattern: 'A' },
+    'Soldier':               { type: 'card',     id: 42, pattern: 'A' },
+    'Enkidu':                { type: 'card',     id: 44, pattern: 'A' },
+    'Ziggurat':              { type: 'card',     id: 45, pattern: 'A' },
+    'Cuneiform':             { type: 'card',     id: 46, pattern: 'A' },
+    'Hammurabi':             { type: 'card',     id: 47, pattern: 'A' },
+    'Chariot':               { type: 'card',     id: 48, pattern: 'A' },
+    'The Phoenicians':       { type: 'card',     id: 49, pattern: 'A' },
+    'Nebuchadnezzar':        { type: 'card',     id: 50, pattern: 'A' }
   };
 
   /**
@@ -404,6 +416,12 @@
           return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 22; });
         }))
       cost = Math.max(0, cost - 1);
+    // Nebuchadnezzar (id 50): Mesopotamia cards cost -1 CC while he is on the board
+    if (card.era === 'Mesopotamia' &&
+        G.locations.some(function (l) {
+          return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 50; });
+        }))
+      cost = Math.max(0, cost - 1);
     return cost;
   }
 
@@ -440,6 +458,11 @@
       var pIP = 0, aIP = 0;
       G.playerSlots[loc.id].forEach(function (s) { if (s && s.revealed) pIP += effectiveIP(s); });
       G.aiSlots[loc.id].forEach(    function (s) { if (s && s.revealed) aIP += effectiveIP(s); });
+      // Add per-location external boosts (e.g., Sargon's adjacent-location bonus)
+      if (G.locationBoosts && G.locationBoosts[loc.id]) {
+        G.locationBoosts[loc.id].player.forEach(function (b) { pIP += b.amount; });
+        G.locationBoosts[loc.id].opp.forEach(    function (b) { aIP += b.amount; });
+      }
       var pEl = document.getElementById('loc-score-player-' + loc.id);
       var aEl = document.getElementById('loc-score-opp-'    + loc.id);
       if (pEl) { var o = parseInt(pEl.textContent,10)||0; pEl.textContent=pIP; if(pIP!==o)SOG.ui.flashScore(pEl); }

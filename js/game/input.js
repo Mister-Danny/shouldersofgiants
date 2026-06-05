@@ -76,6 +76,19 @@
   var pendingPopupTimer     = null;   // setTimeout id for click → popup race
   var DBLCLICK_MS           = 350;    // matches deckbuilder.js
 
+  /* ── Dialogue guard ─────────────────────────────────────────── */
+  /* Returns true when ANY dialogue system is active — card placement
+     is disabled until ALL dialogue finishes.
+     Covers two separate systems:
+       1. SOG.HUD          — overworld adventure HUD dialogue
+       2. SOG.Adventure.Prehistory — in-game coaching / post-battle bubbles */
+  function _dialogueActive() {
+    if (window.SOG && window.SOG.HUD && window.SOG.HUD.isDialogueActive()) return true;
+    var P = window.SOG && window.SOG.Adventure && window.SOG.Adventure.Prehistory;
+    if (P && P.isCoachingActive()) return true;
+    return false;
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      HAND EVENTS
   ═══════════════════════════════════════════════════════════════ */
@@ -167,7 +180,7 @@
   }
 
   function onHandCardDragStart(e) {
-    if (G.phase !== 'select') { e.preventDefault(); return; }
+    if (G.phase !== 'select' || _dialogueActive()) { e.preventDefault(); return; }
     var id   = parseInt(this.dataset.id, 10);
     var card = CARDS.find(function (c) { return c.id === id; });
     if (!card) return;
@@ -411,6 +424,7 @@
      handled separately. */
   boardEl.addEventListener('click', function (e) {
     if (window.tutorialActive) return;     // tutorial owns its own flow
+    if (_dialogueActive()) return;         // HUD dialogue in progress — no placement
     // Allow 'over' phase through for board review popups; block all other non-select phases
     if (G.phase !== 'select' && G.phase !== 'over') return;
     if (dragInfo) return;                  // mid-drag
@@ -544,6 +558,7 @@
      to Enter on a focused element and global Escape. */
   document.addEventListener('keydown', function (e) {
     if (window.tutorialActive) return;
+    if (_dialogueActive()) return;         // HUD dialogue in progress — no placement
     if (G.phase !== 'select') return;
     if (e.key === 'Escape') {
       if (selectedSource !== null) { clearSelection(); e.preventDefault(); }
@@ -856,6 +871,12 @@
     G.moveLog           = [];
     G.playerActionLog   = [];
 
+    // Otzi battle: reset the per-turn play counter so the player can play
+    // again after a reset. The Otzi capture handler (onOtziReset) normally
+    // handles this, but resetTurn() is the fallback path if that handler
+    // hasn't been installed yet (e.g. early in the intro sequence).
+    if (G.otziMode) G.otziCardsPlayed = 0;
+
     rebuildPlayerHand();
     updateHeader();
   }
@@ -886,18 +907,22 @@
    * Cosimo de'Medici (id 19): global -1 CC for all Cultural cards.
    */
   function refreshHandCostDisplays() {
-    var henryOnBoard  = G.locations.some(function (l) {
+    var henryOnBoard          = G.locations.some(function (l) {
       return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 22; });
     });
-    var cosimoOnBoard = G.locations.some(function (l) {
+    var cosimoOnBoard         = G.locations.some(function (l) {
       return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 19; });
+    });
+    var nebuchadnezzarOnBoard = G.locations.some(function (l) {
+      return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 50; });
     });
     G.playerHand.forEach(function (cardId) {
       var card = CARDS.find(function (c) { return c.id === cardId; });
       if (!card) return;
       var displayCC = card.cc;
-      if (card.type === 'Exploration' && henryOnBoard)  displayCC = Math.max(0, displayCC - 1);
-      if (card.type === 'Cultural'    && cosimoOnBoard) displayCC = Math.max(0, displayCC - 1);
+      if (card.type === 'Exploration' && henryOnBoard)           displayCC = Math.max(0, displayCC - 1);
+      if (card.type === 'Cultural'    && cosimoOnBoard)          displayCC = Math.max(0, displayCC - 1);
+      if (card.era  === 'Mesopotamia' && nebuchadnezzarOnBoard)  displayCC = Math.max(0, displayCC - 1);
       var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"] .db-overlay-cc');
       if (hEl) hEl.textContent = displayCC;
     });
@@ -941,6 +966,7 @@
         var mv = (s.cardId === 24 && !G.movedThisTurn[24]) ||   // Magellan
                  (s.cardId === 25 && !G.columbusMoved)    ||    // Columbus
                  (s.cardId === 33 && !G.movedThisTurn[33]) ||   // Lucy — First Steps: can move once
+                 (s.cardId === 48 && !G.movedThisTurn[48]) ||   // Chariot — can move once per turn
                  // Scandinavia: Military cards can move away for free (once per turn)
                  (scandinaviaLoc && loc.id === scandinaviaLoc.id && card && card.type === 'Military' && !G.movedThisTurn[s.cardId]) ||
                  // Timbuktu: Cultural cards elsewhere can move to Timbuktu for free (once per turn)
@@ -1049,6 +1075,7 @@
     /* Find the draggable element (if any) under an initial touch target */
     function findSource(el) {
       if (window.tutorialActive) return null;  // tutorial handles its own touch drag
+      if (_dialogueActive())     return null;  // HUD dialogue in progress — no placement
       if (G.phase !== 'select') return null;
       var hc = el.closest('.battle-hand-card');
       if (hc) return { type: 'hand', el: hc };
