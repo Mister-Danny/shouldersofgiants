@@ -121,7 +121,10 @@ window.SOG.Adventure.Prehistory = (function () {
   }
 
   var BLEEP_PROFILES = {
-    lucy:        { freq: 340, wobble: 30, wave: 'square',   peak: 0.08, decay: 0.05, dur: 0.06, every: 2 },
+    // Lucy's sound is handled by the canonical special-case in playBleep()
+    // (sine 480 Hz — matches the original tutorial battle); only `every` is
+    // read here, for the every-3rd-char cadence.
+    lucy:        { freq: 480, wobble: 0,  wave: 'sine',     peak: 0.10, decay: 0.035, dur: 0.04, every: 3 },
     otzi:        { freq: 210, wobble: 20, wave: 'triangle', peak: 0.07, decay: 0.07, dur: 0.08, every: 2 },
     neanderthal: { freq: 185, wobble: 20, wave: 'triangle', peak: 0.07, decay: 0.09, dur: 0.10, every: 3 }
   };
@@ -130,8 +133,22 @@ window.SOG.Adventure.Prehistory = (function () {
     var ctx = _getBleepCtx();
     if (!ctx) return;
     if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (e) {} }
-    var p   = BLEEP_PROFILES[who] || BLEEP_PROFILES.otzi;
     var now = ctx.currentTime;
+    if (who === 'lucy') {
+      // Lucy's canonical bleep — identical to the original tutorial battle
+      // (tutorial.js playBlip): sine, 480 Hz, fast linear attack + linear decay.
+      var losc  = ctx.createOscillator();
+      var lgain = ctx.createGain();
+      losc.type = 'sine';
+      losc.frequency.setValueAtTime(480, now);
+      lgain.gain.setValueAtTime(0,    now);
+      lgain.gain.linearRampToValueAtTime(0.10, now + 0.005);
+      lgain.gain.linearRampToValueAtTime(0,    now + 0.035);
+      losc.connect(lgain).connect(ctx.destination);
+      losc.start(now); losc.stop(now + 0.04);
+      return;
+    }
+    var p   = BLEEP_PROFILES[who] || BLEEP_PROFILES.otzi;
     var osc  = ctx.createOscillator();
     var gain = ctx.createGain();
     var freq = p.freq + (Math.random() - 0.5) * p.wobble;

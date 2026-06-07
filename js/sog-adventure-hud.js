@@ -39,7 +39,7 @@ SOG.HUD = (function () {
 
   var CHARACTERS = {
     explorer:    { portrait: 'images/femaleexplorer portrait.jpeg', bleepHz: 520, side: 'player' },
-    lucy:        { portrait: 'images/Lucy.png',                     bleepHz: 340, side: 'npc'    },
+    lucy:        { portrait: 'images/Lucy.png',                     bleepHz: 480, side: 'npc'    },
     neanderthal: { portrait: 'images/portraits/neanderthalportait.jpeg', bleepHz: 160, side: 'npc' },
     otzi:        { portrait: 'images/portraits/otzi.jpg',           bleepHz: 280, side: 'npc', frame: 'otzi' },
     hunter:      { portrait: 'images/portraits/hunterportrait.jpg', bleepHz: 380, side: 'npc'    },
@@ -100,7 +100,18 @@ SOG.HUD = (function () {
     var now  = ctx.currentTime;
     var osc  = ctx.createOscillator();
     var gain = ctx.createGain();
-    if (who === 'otzi') {
+    if (who === 'lucy') {
+      // Lucy's canonical bleep — identical to the original tutorial battle
+      // (tutorial.js playBlip): sine, 480 Hz, fast linear attack + linear
+      // decay. Kept in sync everywhere Lucy speaks.
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(480, now);
+      gain.gain.setValueAtTime(0,    now);
+      gain.gain.linearRampToValueAtTime(0.10, now + 0.005);
+      gain.gain.linearRampToValueAtTime(0,    now + 0.035);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now); osc.stop(now + 0.04);
+    } else if (who === 'otzi') {
       var freq = 210 + (Math.random() - 0.5) * 20;
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, now);
@@ -634,7 +645,10 @@ SOG.HUD = (function () {
       var c = _tyFullText.charAt(_tyShownLen - 1);
       if (c && c !== ' ' && c !== '\n') {
         _tyBleepCount++;
-        if (_tyBleepCount >= BLEEP_EVERY_N) {
+        // Lucy bleeps every 3rd char to match the original tutorial battle;
+        // all other speakers use the default cadence.
+        var bleepEvery = (_tySpeaker === 'lucy') ? 3 : BLEEP_EVERY_N;
+        if (_tyBleepCount >= bleepEvery) {
           _tyBleepCount = 0;
           _playBleep(_tySpeaker);
         }
