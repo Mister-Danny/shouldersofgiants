@@ -25,7 +25,7 @@
   /* ── Constants ───────────────────────────────────────────────── */
   var DECK_SIZE  = (window.Decks && window.Decks.DECK_SIZE) || 15;
   var SLOT_COUNT = (window.Decks && window.Decks.SLOT_COUNT) || 3;
-  var TYPE_ORDER = ['Political', 'Religious', 'Military', 'Cultural', 'Exploration', 'Scientific'];
+  var TYPE_ORDER = ['Prehistory', 'Political', 'Religious', 'Military', 'Cultural', 'Exploration', 'Scientific', 'Labor', 'Economic'];
 
   /* ── State ───────────────────────────────────────────────────── */
   var popupCardId = null;       // ID of card currently shown in popup
@@ -72,15 +72,44 @@
   function activeCards()         { return window.Decks.getActiveCards(); }
   function activeCardCount()     { return activeCards().length; }
 
+  /* Lane detection (Phase D2d-a). The presence of window.adventureBattleTarget
+     means the deck builder was opened from Adventure Mode (its value names the
+     target battle, e.g. 'gilgamesh'). Absent → Arcadium. */
+  function isAdventureMode()     { return !!window.adventureBattleTarget; }
+  function laneOf(card)          { return (window.SOG && SOG.Cards && SOG.Cards.laneOf) ? SOG.Cards.laneOf(card) : 'arcadium'; }
+  function isCardUnlocked(id)    { return !!(window.SOG && SOG.Cards && SOG.Cards.isUnlocked && SOG.Cards.isUnlocked(id)); }
+
+  /* Cards available to pick, per current lane:
+       Adventure — adventure-lane cards granted via sog_unlocked_cards. No
+                   type-locks (always selectable).
+       Arcadium  — arcadium-lane cards that aren't locked (existing behavior),
+                   with Progression type-locks still applied at render time.   */
+  function isCardAvailable(card) {
+    if (!card) return false;
+    if (isAdventureMode()) {
+      return laneOf(card) === 'adventure' && isCardUnlocked(card.id);
+    }
+    return laneOf(card) === 'arcadium' && !card.locked;
+  }
+
   /* ── Entry point ─────────────────────────────────────────────── */
 
   function initDeckBuilder() {
-    // Drop any saved cards in any slot that belong to locked types now
-    if (typeof Progression !== 'undefined') {
+    // Drop any saved cards in any slot that don't belong in the current lane.
+    if (isAdventureMode()) {
+      // Adventure lane: keep only granted adventure-lane cards (prevents an
+      // Arcadium-built deck from carrying over into the Adventure deck view).
+      window.Decks.filterAllCards(function (id) {
+        var card = CARDS.find(function (c) { return c.id === id; });
+        return !!card && laneOf(card) === 'adventure' && isCardUnlocked(id);
+      });
+    } else if (typeof Progression !== 'undefined') {
+      // Arcadium lane: drop locked-type cards (existing behavior) and any
+      // adventure-lane cards that leaked in (they live in the other lane).
       var unlocked = Progression.getUnlockedTypes();
       window.Decks.filterAllCards(function (id) {
         var card = CARDS.find(function (c) { return c.id === id; });
-        return !card || unlocked.indexOf(card.type) !== -1;
+        return !card || (laneOf(card) === 'arcadium' && unlocked.indexOf(card.type) !== -1);
       });
     }
     renderSlotRow();
@@ -151,8 +180,34 @@
 
   function renderAllGroups() {
     mainEl.innerHTML = '';
+    if (isAdventureMode()) {
+      renderAdventureFlat();
+    } else {
+      renderArcadiumGroups();
+    }
+  }
+
+  /* Adventure Mode: one continuous, sorted flow — no type group headers.
+     Sort: Capital Cost ascending, then IP ascending, then name A–Z. */
+  function renderAdventureFlat() {
+    var cards = CARDS.filter(function (c) { return isCardAvailable(c); });
+    cards.sort(function (a, b) {
+      if (a.cc !== b.cc) return a.cc - b.cc;
+      if (a.ip !== b.ip) return a.ip - b.ip;
+      return a.name.localeCompare(b.name);
+    });
+    var row = document.createElement('div');
+    row.className = 'db-card-row';
+    cards.forEach(function (card) { row.appendChild(buildCardEl(card, false)); });
+    mainEl.appendChild(row);
+  }
+
+  /* Arcadium Mode: existing type-grouped layout with section headers and
+     Progression type-locks (unchanged behavior). */
+  function renderArcadiumGroups() {
     TYPE_ORDER.forEach(function (type) {
-      var cards = CARDS.filter(function (c) { return c.type === type && !c.locked; });
+      var cards = CARDS.filter(function (c) { return c.type === type && isCardAvailable(c); });
+      // Empty groups never render.
       if (!cards.length) return;
 
       var locked = typeof Progression !== 'undefined' && !Progression.isTypeUnlocked(type);
@@ -285,7 +340,9 @@
    * or when the card type is locked.
    */
   function toggleCard(id) {
-    if (typeof Progression !== 'undefined') {
+    // Arcadium type-locks gate selection by card type; Adventure Mode has no
+    // type-locks (lane separation, D2d-a) so every shown card is selectable.
+    if (!isAdventureMode() && typeof Progression !== 'undefined') {
       var card = CARDS.find(function (c) { return c.id === id; });
       if (card && !Progression.isTypeUnlocked(card.type)) return false;
     }
@@ -479,6 +536,24 @@
         typeof window.DeckBuilderTutorial.notifyLetsPlay === 'function') {
       window.DeckBuilderTutorial.notifyLetsPlay(activeCardCount());
     }
+    // Adventure Mode: route Let's Play to the battle named by the flag.
+    // Future battles reuse the same flag with different values ('sargon', …).
+    var advTarget = window.adventureBattleTarget;
+    if (advTarget) {
+      window.adventureBattleTarget = null;
+      if (advTarget === 'gilgamesh') {
+        stopDeckMusic();
+        var gb = window.SOG && window.SOG.GilgameshBattle;
+        if (gb && typeof gb.start === 'function') {
+          gb.start();
+        } else {
+          console.warn('[DeckBuilder] SOG.GilgameshBattle not found — cannot start battle');
+        }
+        return;
+      }
+      // Unknown target (not yet wired) — defensive fall-through to Arcadium.
+      console.warn('[DeckBuilder] Unknown adventureBattleTarget "' + advTarget + '" — falling back to Arcadium flow');
+    }
     if (window.versusStudentMode) {
       stopDeckMusic();
       if (window.BattleLobby && typeof window.BattleLobby.onLockInDeck === 'function') {
@@ -546,6 +621,17 @@
   backBtn.addEventListener('click', function () {
     if (window.DeckBuilderTutorial && typeof window.DeckBuilderTutorial.notifyExit === 'function') {
       window.DeckBuilderTutorial.notifyExit();
+    }
+    // Adventure Mode: Back returns to the Mesopotamia overworld (player can
+    // re-click Walls of Uruk to re-enter the battle path).
+    if (window.adventureBattleTarget) {
+      window.adventureBattleTarget = null;
+      stopDeckMusic();
+      showScreen('screen-overworld');
+      if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') {
+        window.Overworld.resumeAfterBattle();
+      }
+      return;
     }
     stopDeckMusic();
     showScreen('screen-home');

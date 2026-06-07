@@ -214,73 +214,73 @@ const CARDS = [
   // ─── PREHISTORY (Adventure Mode — locked) ────────────────────────────────
   {
     id: 26, name: "Tool", cc: 1, ip: 1,
-    type: "Scientific", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Ancient Tech",
     ability: "At Once: Tool draws 1 card.",
     image: "images/cards/prehistorycards/toolcard.jpg", locked: true
   },
   {
     id: 27, name: "Hunter", cc: 2, ip: 2,
-    type: "Military", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
     image: "images/cards/prehistorycards/huntercard.jpg", locked: true
   },
   {
     id: 28, name: "Gatherer", cc: 2, ip: 2,
-    type: "Cultural", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
     image: "images/cards/prehistorycards/gatherercard.jpg", locked: true
   },
   {
     id: 29, name: "Fire", cc: 2, ip: 1,
-    type: "Scientific", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Cooked",
     ability: "Continuous: Cards played after Fire here gain +1 IP.",
     image: "images/cards/prehistorycards/firecard.jpg", locked: true
   },
   {
     id: 30, name: "Cave Art", cc: 2, ip: 1,
-    type: "Cultural", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Ancient Storytelling",
     ability: "Continuous: Cards played before Cave Art here gain +1 IP.",
     image: "images/cards/prehistorycards/caveartcard.jpg", locked: true
   },
   {
     id: 31, name: "Megalith", cc: 2, ip: 3,
-    type: "Cultural", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
     image: "images/cards/prehistorycards/megalithcard.jpg", locked: true
   },
   {
     id: 32, name: "Domesticated Animal", cc: 2, ip: 1,
-    type: "Scientific", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Man's Best Friend",
     ability: "Continuous: Cards in adjacent slots here gain +1 IP.",
     image: "images/cards/prehistorycards/domesticatedanimalcard.jpg", locked: true
   },
   {
     id: 33, name: "Lucy", cc: 4, ip: 4,
-    type: "Scientific", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "First Steps",
     ability: "Lucy can move once.",
     image: "images/cards/prehistorycards/lucycard.jpg", locked: true
   },
   {
     id: 34, name: "Neanderthal", cc: 4, ip: 4,
-    type: "Scientific", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
     image: "images/cards/prehistorycards/neanderthalcard.jpg", locked: true
   },
   {
     id: 35, name: "Otzi", cc: 4, ip: 4,
-    type: "Exploration", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Migrate",
     ability: "When a card is played here, Otzi moves to a random location.",
     image: "images/cards/prehistorycards/otzicard.jpg", locked: true
   },
   {
     id: 36, name: "Tribe", cc: 2, ip: 2,
-    type: "Political", type2: null, era: "Prehistory",
+    type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Strength In Numbers",
     ability: "At Once: Tribe gains +1 IP for every card you play here next turn.",
     image: "images/cards/prehistorycards/tribecard.jpg", locked: true

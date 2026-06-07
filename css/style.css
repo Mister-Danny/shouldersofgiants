@@ -45,6 +45,9 @@
   --c-cultural:     #30d898;
   --c-exploration:  #30a8ff;
   --c-scientific:   #e0c040;
+  --c-labor:        #b5742e;  /* earthy burnt-orange — soil, agriculture, manual work */
+  --c-economic:     #ffcf33;  /* bright coin-gold — commerce, prosperity */
+  --c-prehistory:   #c8a878;  /* warm tan/beige — cave painting, ancient stone, parchment */
 
   /* Text */
   --text-white:     #ffffff;
@@ -878,27 +881,29 @@ img    { display: block; }
 
 .db-slot-row {
   display: grid;
-  /* Three equal slots; designed to scale to 4+ via auto-fit */
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  /* Six card-shaped tiles in a single horizontal row (D2d-b) */
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
   width: 100%;
 }
 
 .db-slot-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 12px 10px;
+  /* Portrait card proportions (matches the card faces) */
+  aspect-ratio: 3 / 4;
   /* Light goldish-brown — distinct from the dark wood panel behind it */
   background: linear-gradient(180deg, #b8945a 0%, #a78648 100%);
   border: 2px solid #6a4418;
-  border-radius: 3px;
+  border-radius: 5px;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.08s;
   position: relative;
   overflow: hidden;
-  min-height: 46px;
   box-sizing: border-box;
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
 }
@@ -919,14 +924,14 @@ img    { display: block; }
 }
 
 .db-slot-name {
-  flex: 1;
+  max-width: 100%;
   font-family: var(--font);
   font-size: 14px;
   color: #2a1608;                         /* dark-brown text on light tan */
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-shadow: 1px 1px 0 rgba(255, 235, 180, 0.35);
-  text-align: left;
+  text-align: center;
   /* Truncate long custom names cleanly */
   overflow: hidden;
   text-overflow: ellipsis;
@@ -939,14 +944,17 @@ img    { display: block; }
 
 /* Pencil/edit icon — dark brown to read against the gold-tan slot fill */
 .db-slot-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
   flex-shrink: 0;
   width: 26px;
   height: 26px;
   padding: 0;
-  background: transparent;
+  background: rgba(184, 148, 90, 0.55);
   border: 1px solid rgba(42, 22, 8, 0.35);
   border-radius: 2px;
-  color: rgba(42, 22, 8, 0.65);
+  color: rgba(42, 22, 8, 0.75);
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
@@ -1078,6 +1086,9 @@ img    { display: block; }
 .type-cultural   .db-type-header { border-left-color: var(--c-cultural);    }
 .type-exploration .db-type-header{ border-left-color: var(--c-exploration); }
 .type-scientific .db-type-header { border-left-color: var(--c-scientific); }
+.type-labor      .db-type-header { border-left-color: var(--c-labor);      }
+.type-economic   .db-type-header { border-left-color: var(--c-economic);   }
+.type-prehistory .db-type-header { border-left-color: var(--c-prehistory); }
 
 .db-type-pip {
   width: 8px;
@@ -1093,6 +1104,9 @@ img    { display: block; }
 .type-cultural   .db-type-pip { background: var(--c-cultural);    }
 .type-exploration .db-type-pip{ background: var(--c-exploration); }
 .type-scientific .db-type-pip { background: var(--c-scientific); }
+.type-labor      .db-type-pip { background: var(--c-labor);      }
+.type-economic   .db-type-pip { background: var(--c-economic);   }
+.type-prehistory .db-type-pip { background: var(--c-prehistory); }
 
 /* Label: warm gold, consistent across all types */
 .db-type-label {
@@ -1148,6 +1162,9 @@ img    { display: block; }
 .db-card.type-cultural:not(.selected):hover    { border-color: var(--c-cultural);    }
 .db-card.type-exploration:not(.selected):hover { border-color: var(--c-exploration); }
 .db-card.type-scientific:not(.selected):hover  { border-color: var(--c-scientific); }
+.db-card.type-labor:not(.selected):hover       { border-color: var(--c-labor);      }
+.db-card.type-economic:not(.selected):hover    { border-color: var(--c-economic);   }
+.db-card.type-prehistory:not(.selected):hover  { border-color: var(--c-prehistory); }
 
 /* Selected: bright yellow SNES-style highlight */
 .db-card.selected {
