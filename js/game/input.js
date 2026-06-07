@@ -740,6 +740,11 @@
     var sd = G.playerSlots[locId][slotIndex];
     if (!sd || sd.revealed) return;
     clearSelection();  // any click/keyboard selection becomes stale after undo
+    // Otzi battle: returning a played card to hand frees up one of the two
+    // plays-per-turn. commitPlay increments G.otziCardsPlayed, so undoPlay
+    // must decrement it (clamped at 0) — otherwise the >=2 gate in
+    // isLegalPlayTarget keeps blocking new plays even with an empty board.
+    if (G.otziMode) G.otziCardsPlayed = Math.max(0, (G.otziCardsPlayed || 0) - 1);
     var card = CARDS.find(function (c) { return c.id === sd.cardId; });
     if (card) G.capital += effectiveCost(card, locId);
     // Cap to this turn's starting capital — preserves bonus capital
