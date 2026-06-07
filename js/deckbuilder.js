@@ -56,7 +56,10 @@
     Religious:   'religious',
     Military:    'military',
     Cultural:    'cultural',
-    Exploration: 'exploration'
+    Exploration: 'exploration',
+    Scientific:  'scientific'
+    // Labor / Economic / Prehistory have no symbol art yet — omitted so the
+    // popup shows a text-only type (no empty icon slot) until art is added.
   };
 
   // Rename modal

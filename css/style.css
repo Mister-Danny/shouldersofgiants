@@ -1443,6 +1443,10 @@ img    { display: block; }
   width: 0.80em;
   height: 0.80em;
 }
+.popup-card-type .cat-icon--scientific {
+  -webkit-mask-image: url('../images/symbols/scientific.svg');
+          mask-image: url('../images/symbols/scientific.svg');
+}
 
 /* Horizontal rule between name and ability */
 .popup-divider {

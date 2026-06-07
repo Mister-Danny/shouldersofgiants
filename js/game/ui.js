@@ -347,7 +347,8 @@
     Religious:   'religious',
     Military:    'military',
     Cultural:    'cultural',
-    Exploration: 'exploration'
+    Exploration: 'exploration',
+    Scientific:  'scientific'
   };
 
   /**
