@@ -25,6 +25,9 @@ var Overworld = (function () {
   var KEY_BATTLE_OTZI_COMPLETE      = 'sog_battle_otzi_complete';
   var KEY_MESOPOTAMIA_ARRIVAL       = 'sog_mesopotamia_arrival_complete';
   var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set in future when battle is won
+  // Phase D2c
+  var KEY_MET_GILGAMESH             = 'sog_met_gilgamesh';              // set after the "You will be." line
+  var KEY_MESO_STARTER_GRANTED      = 'sog_mesopotamia_starter_granted'; // set after all 5 card grants complete
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -139,6 +142,40 @@ var Overworld = (function () {
     { who: 'explorer',  text: 'Oh, I\u2019m sorry\u2026'                          },
     { who: 'gilgamesh', text: 'You will be.'                                       }
   ];
+
+  /* ── Phase D2c — Farmer return + 5 card grants ───────────────────
+     Runs after the Gilgamesh encounter. Dialogue is split into segments
+     so card acquisitions fire at the specified beats (see _d2cFarmerSequence).
+       Seg A → grant Farmer(39)
+       Seg B → grant Canals(41)
+       Seg C → grant Soldier(42), Scribe(40), Priest(38)  (3 in a row)
+       Seg D → end                                                     */
+  var D2C_FARMER_SEG_A = [
+    { who: 'farmer',   text: 'I hear you’re going up against Gilgamesh.' },
+    { who: 'explorer', text: 'Unfortunately…'                            },
+    { who: 'farmer',   text: 'Well, I think I can help.'                      }
+  ];
+  var D2C_FARMER_SEG_B = [
+    { who: 'explorer', text: 'Wow, thanks.'                                                   },
+    { who: 'farmer',   text: 'Cultivating food here is so much easier with this cool new invention.' }
+  ];
+  var D2C_FARMER_SEG_C = [
+    { who: 'explorer', text: 'You’re so generous.'                                       },
+    { who: 'farmer',   text: 'Yeah, and in a city-state, people specialize in different jobs.' }
+  ];
+  var D2C_FARMER_SEG_D = [
+    { who: 'explorer', text: 'You’ve been busy.'                    },
+    { who: 'farmer',   text: 'Not as busy as you’re about to be.'   }
+  ];
+  // Card ids granted at each beat (Farmer 39, Canals 41, then the 3-in-a-row).
+  var D2C_GRANT_A = 39;                 // Farmer
+  var D2C_GRANT_B = 41;                 // Canals
+  var D2C_GRANT_C = [42, 40, 38];       // Soldier, Scribe, Priest
+  // The prehistory deck (ids 26–36) is unlocked silently at this point so the
+  // Deck Builder shows the player's full earned collection (11 Prehistory +
+  // 5 Mesopotamia). See _d2cGrantStarters().
+  var D2C_PREHISTORY_IDS = [26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36];
+  var D2C_AUTO_DISMISS_MS = 1500;
 
   var PHASE2_DIALOGUE = [
     { who: 'lucy',     text: 'Mmmhm\u2026 I\u2019m standing right here.' },
@@ -662,7 +699,10 @@ var Overworld = (function () {
           });
         });
       } else {
-        _d2bSequence(node);
+        // First run → full Farmer sequence; replay (starter granted) → skip it.
+        var starterGranted = false;
+        try { starterGranted = localStorage.getItem(KEY_MESO_STARTER_GRANTED) === 'true'; } catch (e) {}
+        _d2bSequence(node, starterGranted);
       }
       return;
     }
@@ -1172,7 +1212,241 @@ var Overworld = (function () {
        5. SOG.GilgameshBattle.start()
      ════════════════════════════════════════════════════════════ */
 
-  function _d2bSequence(node) {
+  /* ── Phase D2c helpers ─────────────────────────────────────────── */
+
+  /* ── Iris primitive (#adv-radial-wipe) ───────────────────────────
+     Shared close: grows the black clip-circle to cover the screen and
+     calls onClosed() at full black. Reused by _d2cIris and the candle
+     transition below. */
+  function _irisClose(onClosed) {
+    var wipeEl = document.getElementById('adv-radial-wipe');
+    var cx = 50, cy = 50;
+    var maxR = Math.max(window.innerWidth, window.innerHeight) * 1.4;
+    if (typeof gsap === 'undefined' || !wipeEl) { if (onClosed) onClosed(); return; }
+    wipeEl.style.opacity  = '1';
+    wipeEl.style.clipPath = 'circle(0px at ' + cx + '% ' + cy + '%)';
+    wipeEl.classList.add('active');
+    var proxy = { r: 0 };
+    gsap.to(proxy, {
+      r: maxR, duration: 0.7, ease: 'power2.inOut',
+      onUpdate: function () { wipeEl.style.clipPath = 'circle(' + proxy.r + 'px at ' + cx + '% ' + cy + '%)'; },
+      onComplete: function () { if (onClosed) onClosed(); }
+    });
+  }
+
+  /* Iris transition: close → onClosed(reveal) at full black → reveal reopens
+     and calls onOpened(). (D2c primitive; retained for reuse.) */
+  function _d2cIris(onClosed, onOpened) {
+    var wipeEl = document.getElementById('adv-radial-wipe');
+    var cx = 50, cy = 50;
+    var maxR = Math.max(window.innerWidth, window.innerHeight) * 1.4;
+
+    function reveal() {
+      if (typeof gsap === 'undefined' || !wipeEl) { _clearWipe(); if (onOpened) onOpened(); return; }
+      var p = { r: maxR };
+      gsap.to(p, {
+        r: 0, duration: 0.7, ease: 'power2.inOut', delay: 0.2,
+        onUpdate: function () { wipeEl.style.clipPath = 'circle(' + p.r + 'px at ' + cx + '% ' + cy + '%)'; },
+        onComplete: function () { _clearWipe(); if (onOpened) onOpened(); }
+      });
+    }
+
+    if (typeof gsap === 'undefined' || !wipeEl) {
+      if (onClosed) onClosed(function () { if (onOpened) onOpened(); });
+      else if (onOpened) onOpened();
+      return;
+    }
+    _irisClose(function () {
+      if (onClosed) onClosed(reveal);
+      else reveal();
+    });
+  }
+
+  /* Candle-color ramp for the transition: white → warm yellow → orange →
+     orange-red as t goes 0→1. Returns [r,g,b]. */
+  function _candleColor(t) {
+    var stops = [
+      [0.00, 255, 255, 255],   // bright white
+      [0.35, 255, 228, 150],   // warm yellow
+      [0.70, 255, 150,  70],   // orange
+      [1.00, 255,  95,  45]    // orange-red
+    ];
+    for (var i = 1; i < stops.length; i++) {
+      if (t <= stops[i][0]) {
+        var a = stops[i - 1], b = stops[i];
+        var f = (t - a[0]) / (b[0] - a[0]);
+        return [
+          Math.round(a[1] + (b[1] - a[1]) * f),
+          Math.round(a[2] + (b[2] - a[2]) * f),
+          Math.round(a[3] + (b[3] - a[3]) * f)
+        ];
+      }
+    }
+    return [255, 95, 45];
+  }
+
+  /* Candle transition (Phase D2d-b). Extends the iris primitive:
+       iris closes to black → ~1.2s silent hold (portrait swap happens here)
+       → matchstrike SFX + a white point of light blooms center-screen,
+       shifting white→orange-red and growing → the black wipe fades out so the
+       scene returns lit by a warm radial glow → ~0.5s after the candle settles
+       onDialogueReady() fires (HUD dialogue with Farmer) → the warm glow fades
+       to normal so nothing lingers into the deck builder.
+     onBlackHold(done) runs during the black hold (swap the portrait).        */
+  function _d2cCandleTransition(onBlackHold, onDialogueReady) {
+    var wipeEl = document.getElementById('adv-radial-wipe');
+
+    if (typeof gsap === 'undefined' || !wipeEl) {
+      if (onBlackHold) onBlackHold(function () {});
+      _clearWipe();
+      if (onDialogueReady) onDialogueReady();
+      return;
+    }
+
+    _irisClose(function () {
+      // Fully black. Swap the portrait now (hidden), hold ~1.2s in silence.
+      if (onBlackHold) onBlackHold(function () {});
+      gsap.delayedCall(1.2, function () { _runCandle(wipeEl, onDialogueReady); });
+    });
+  }
+
+  function _runCandle(wipeEl, onDialogueReady) {
+    try { var ms = new Audio('sfx/matchstrike.m4a'); ms.play(); } catch (e) {}
+
+    var existing = document.getElementById('adv-candle');
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    var candle = document.createElement('div');
+    candle.id = 'adv-candle';
+    candle.style.cssText = 'position:fixed;inset:0;z-index:10002;pointer-events:none;opacity:0;';
+    document.body.appendChild(candle);
+
+    function setGlow(t, sizePct) {
+      var c    = _candleColor(t);
+      var core = 'rgb('  + c[0] + ',' + c[1] + ',' + c[2] + ')';
+      var warm = 'rgba(' + c[0] + ',' + Math.round(c[1] * 0.5) + ',' + Math.round(c[2] * 0.3) + ',0.55)';
+      // Transparent edges — the room's darkness is the black wipe BEHIND this
+      // layer, so the warm glow never obscures the HUD at the screen edges.
+      candle.style.background =
+        'radial-gradient(circle at 50% 48%, ' + core + ' 0%, ' + warm + ' ' + sizePct + '%, transparent ' + (sizePct * 2.2) + '%)';
+    }
+
+    setGlow(0, 5);
+    gsap.to(candle, { opacity: 1, duration: 0.4, ease: 'power1.out' });
+
+    // Color + size bloom: white point → warm orange-red, expanding (~2.6s).
+    var p = { t: 0, size: 5 };
+    gsap.to(p, {
+      t: 1, size: 24, duration: 2.6, ease: 'power1.inOut',
+      onUpdate: function () { setGlow(p.t, p.size); }
+    });
+
+    // Scene returns: fade the black wipe out so the room is lit by the glow.
+    gsap.to(wipeEl, {
+      opacity: 0, duration: 1.8, delay: 0.9, ease: 'power1.inOut',
+      onComplete: function () { _clearWipe(); wipeEl.style.opacity = '1'; }
+    });
+
+    // ~0.5s after the candle settles → dialogue; then the warm glow fades to
+    // normal (removed) so no tint lingers into the deck builder / battle stub.
+    gsap.delayedCall(3.1, function () {
+      if (onDialogueReady) onDialogueReady();
+      gsap.to(candle, {
+        opacity: 0, duration: 1.6, ease: 'power1.inOut',
+        onComplete: function () { if (candle.parentNode) candle.parentNode.removeChild(candle); }
+      });
+    });
+  }
+
+  /* Grant a single card: unlock (idempotent) + card-acquisition reveal that
+     auto-dismisses after ~1.5s (player can still click early). */
+  function _d2cGrantCard(id, cb) {
+    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') {
+      SOG.Cards.unlock(id);   // locked:false + persist to sog_unlocked_cards
+    }
+    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === id; });
+    var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
+    if (card && preh && typeof preh.showCardAcquisition === 'function') {
+      preh.showCardAcquisition(card, null, function () { if (cb) cb(); },
+                               { autoDismissMs: D2C_AUTO_DISMISS_MS });
+    } else {
+      if (cb) cb();
+    }
+  }
+
+  /* Grant several cards back-to-back (the Soldier/Scribe/Priest cluster):
+     each auto-shows ~1.5s, dismisses, then the next appears immediately. */
+  function _d2cGrantCards(ids, cb) {
+    var i = 0;
+    (function next() {
+      if (i >= ids.length) { if (cb) cb(); return; }
+      _d2cGrantCard(ids[i++], next);
+    })();
+  }
+
+  /* Full Farmer return sequence: candle transition (portrait swap behind the
+     black hold) → dialogue with the 5 interleaved card grants → sets the
+     starter-granted flag. */
+  function _d2cFarmerSequence(done) {
+    var hud = window.SOG && window.SOG.HUD;
+
+    // Unlock the earned Prehistory deck (ids 26–36) silently — no reveal — so
+    // the Deck Builder shows the full collection (11 Prehistory + 5 Mesopotamia).
+    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') {
+      SOG.Cards.unlock(D2C_PREHISTORY_IDS);
+    }
+
+    _d2cCandleTransition(function () {
+      // During the black hold: swap Gilgamesh → Farmer (hidden behind black).
+      if (hud && typeof hud.swapNpcPortrait === 'function') {
+        hud.swapNpcPortrait({ character: 'farmer' });
+      }
+    }, function () {
+      // Candle lit, scene warm: Farmer now occupies the NPC slot. Run the beats.
+      _runLinesKeepOpen(D2C_FARMER_SEG_A, function () {
+        _d2cGrantCard(D2C_GRANT_A, function () {
+          _runLinesKeepOpen(D2C_FARMER_SEG_B, function () {
+            _d2cGrantCard(D2C_GRANT_B, function () {
+              _runLinesKeepOpen(D2C_FARMER_SEG_C, function () {
+                _d2cGrantCards(D2C_GRANT_C, function () {
+                  _runLinesKeepOpen(D2C_FARMER_SEG_D, function () {
+                    try { localStorage.setItem(KEY_MESO_STARTER_GRANTED, 'true'); } catch (e) {}
+                    log('[D2c] All 5 starter cards granted');
+                    if (done) done();
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+  }
+
+  /* Exit dialogue cleanly (Farmer slides down, player portrait stays) and
+     route into the Deck Builder in Adventure/pre-Gilgamesh-battle context. */
+  function _openGilgameshDeckBuilder() {
+    var hud = window.SOG && window.SOG.HUD;
+    function go() {
+      isDialogueLocked = false;
+      // Context flag: names the target battle. Its presence routes the Deck
+      // Builder's "Let's Play" to that battle and "Back" to the Mesopotamia
+      // overworld (see deckbuilder.js). Future battles reuse this flag.
+      window.adventureBattleTarget = 'gilgamesh';
+      if (typeof window.showScreen === 'function') window.showScreen('screen-deckbuilder');
+      if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
+      if (typeof window.playDeckMusic === 'function') window.playDeckMusic();
+    }
+    if (hud && typeof hud.exitDialogueMode === 'function') {
+      hud.exitDialogueMode(go);
+    } else {
+      go();
+    }
+  }
+
+  /* Walls of Uruk encounter. skipFarmer=true on replay once the starter cards
+     have already been granted: Gilgamesh dialogue still plays (narrative
+     context) but the Farmer card sequence is skipped — straight to Deck Builder. */
+  function _d2bSequence(node, skipFarmer) {
     isDialogueLocked = true;
     cancelIdle();
     log('[D2b] Walking to Walls of Uruk');
@@ -1191,21 +1465,18 @@ var Overworld = (function () {
         hud.enterDialogueMode(null, function () {
           log('[D2b] Dialogue mode entered — running Gilgamesh encounter lines');
           _runLinesKeepOpen(D2B_GILGAMESH_DIALOGUE, function () {
-            // "You will be." dismissed — skip exit animation, fire wipe immediately
-            log('[D2b] Dialogue complete — firing radial wipe to battle');
-            _fireWipeFromNode('walls-of-uruk', function () {
-              // HUD dialogue mode can be cleaned up silently after wipe covers screen
-              hud.exitDialogueMode(null);
-              isDialogueLocked = false;
-              var gb = window.SOG && window.SOG.GilgameshBattle;
-              if (gb && typeof gb.start === 'function') {
-                gb.start();
-              } else {
-                console.warn('[Overworld] SOG.GilgameshBattle not found — aborting');
-                _clearWipe();
-                scheduleIdle();
-              }
-            });
+            // "You will be." dismissed — record that we've met Gilgamesh.
+            try { localStorage.setItem(KEY_MET_GILGAMESH, 'true'); } catch (e) {}
+
+            if (skipFarmer) {
+              log('[D2c] Starter cards already granted — skipping Farmer sequence');
+              _openGilgameshDeckBuilder();
+            } else {
+              log('[D2c] Starting Farmer return sequence (iris + 5 card grants)');
+              _d2cFarmerSequence(function () {
+                _openGilgameshDeckBuilder();
+              });
+            }
           });
         });
       }, 300);

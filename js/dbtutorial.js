@@ -59,6 +59,10 @@
      35ms duration, every 3rd character so it doesn't get spammy. */
   var _audioCtx  = null;
   var _blipCount = 0;
+  // Typewriter blip pitch. Default 480Hz (Lucy / Arcadium). Swapped to the
+  // Farmer's HUD-registry pitch (360Hz) when the tutorial runs in Adventure
+  // Mode — see applySpeaker().
+  var _blipHz    = 480;
   function getAudioCtx() {
     if (!_audioCtx) {
       try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
@@ -77,7 +81,7 @@
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.type = 'sine';
-      osc.frequency.value = 480;
+      osc.frequency.value = _blipHz;
       var t = ctx.currentTime;
       gain.gain.setValueAtTime(0, t);
       gain.gain.linearRampToValueAtTime(0.10, t + 0.005);
@@ -267,9 +271,29 @@
   /* ═══════════════════════════════════════════════════════════════
      PUBLIC API
   ═══════════════════════════════════════════════════════════════ */
+  /* Swap the tutorial speaker's assets based on context. Adventure Mode
+     (window.adventureBattleTarget present) → Farmer; otherwise Lucy. Only the
+     portrait, name/subtitle, and blip pitch change — all dialogue text,
+     layout, animation, and dismiss behavior are identical. Both branches set
+     explicitly so a later Arcadium run resets cleanly after an Adventure run. */
+  function applySpeaker() {
+    var adventure = !!window.adventureBattleTarget;
+    var speakerEl = boxEl ? boxEl.querySelector('.tut-speaker') : null;
+    if (adventure) {
+      if (lucyImgEl) { lucyImgEl.src = 'images/portraits/farmerportrait.jpg'; lucyImgEl.alt = 'Farmer'; }
+      if (speakerEl) speakerEl.innerHTML = 'Farmer';   // no subtitle line
+      _blipHz = 360;                                   // Farmer (HUD registry)
+    } else {
+      if (lucyImgEl) { lucyImgEl.src = 'images/Lucy.png'; lucyImgEl.alt = 'Lucy'; }
+      if (speakerEl) speakerEl.innerHTML = 'Lucy<br><span class="tut-speaker-sub">The Ancient One</span>';
+      _blipHz = 480;                                   // Lucy (unchanged default)
+    }
+  }
+
   function start() {
     initRefs();
     if (!boxEl || !textEl) return;             // Lucy box missing — fail silent
+    applySpeaker();                            // pick Lucy vs Farmer for this run
     if (window.tutorialActive) return;         // in-game tutorial running — defer
     active                = true;
     stepIdx               = -1;

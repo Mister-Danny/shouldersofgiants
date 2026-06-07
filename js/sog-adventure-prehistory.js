@@ -847,7 +847,8 @@ window.SOG.Adventure.Prehistory = (function () {
        • Closing the popup      → returns to the reveal; card still showing
        Re-entrant safe: only one reveal is active at a time because
        each caller waits for onComplete before triggering the next.    */
-  function showCardAcquisition(card, sfxFn, onComplete) {
+  function showCardAcquisition(card, sfxFn, onComplete, opts) {
+    opts = opts || {};
     _ensureRevealInStage();
 
     var dimEl    = document.getElementById('adv-post-battle-dim');
@@ -903,7 +904,7 @@ window.SOG.Adventure.Prehistory = (function () {
         // Wire up interactions after a short guard (so the click that
         // advanced the last dialogue line doesn't instantly fire).
         setTimeout(function () {
-          _wireCardAcquisitionInteractions(card, dimEl, revealEl, animTarget, bannerEl, onComplete);
+          _wireCardAcquisitionInteractions(card, dimEl, revealEl, animTarget, bannerEl, onComplete, opts);
         }, 80);
       }
     });
@@ -913,12 +914,22 @@ window.SOG.Adventure.Prehistory = (function () {
      for a live card-acquisition reveal.  Called once per reveal.     */
   /* wrapEl is the GSAP / click-detection target (#adv-card-reveal-card-wrap).
      It contains both the img and the IP overlay, so they move together.    */
-  function _wireCardAcquisitionInteractions(card, dimEl, revealEl, wrapEl, bannerEl, onComplete) {
+  function _wireCardAcquisitionInteractions(card, dimEl, revealEl, wrapEl, bannerEl, onComplete, opts) {
+    opts = opts || {};
     var _dismissed = false;
+    var _autoTimer = null;
+
+    // Optional auto-dismiss: used by the D2c Farmer grant sequence so cards
+    // advance on their own (~1.5s). The player can still click early to
+    // dismiss — dismiss() clears the timer so it never double-fires.
+    if (typeof opts.autoDismissMs === 'number' && opts.autoDismissMs >= 0) {
+      _autoTimer = setTimeout(function () { dismiss(); }, opts.autoDismissMs);
+    }
 
     function dismiss() {
       if (_dismissed) return;
       _dismissed = true;
+      if (_autoTimer) { clearTimeout(_autoTimer); _autoTimer = null; }
       revealEl.removeEventListener('click', onRevealAreaClick);
 
       if (bannerEl) bannerEl.style.transition = '';
