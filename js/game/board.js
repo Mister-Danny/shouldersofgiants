@@ -164,7 +164,7 @@
     var resBonus  = bonusDict[cardId] || 0;
     var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
     var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
-    var sd     = { cardId: cardId, ip: card.ip, revealed: true, ipMod: (extraIpMod || 0) + resBonus, contMod: 0, ipModSources: resSources, bonuses: [] };
+    var sd     = { cardId: cardId, ip: card.ip, revealed: true, ipMod: (extraIpMod || 0) + resBonus, contMod: 0, ipModSources: resSources, bonuses: [], turnPlayed: G.turn };
     // Populate bonuses[] for the resurrection IP so the popup breakdown shows it.
     // Pattern 'A' (own portrait) is used here since we don't have the original
     // discard-trigger context; abilities.js may add a more accurate 'C' record.

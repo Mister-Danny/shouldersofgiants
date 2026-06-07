@@ -649,7 +649,7 @@ SOG.OtziBattle = (function () {
       if (!card)    { G.aiHand.unshift(cardId); continue; }
       G.aiSlots[loc.id][slotIndex] = {
         cardId: cardId, ip: card.ip, revealed: false,
-        ipMod: 0, contMod: 0, ipModSources: []
+        ipMod: 0, contMod: 0, ipModSources: [], turnPlayed: G.turn
       };
       G.aiRevealQueue.push(cardId);
       if (SOG.board && typeof SOG.board.getSlotEl === 'function') {

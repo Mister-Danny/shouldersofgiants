@@ -282,7 +282,7 @@ const CARDS = [
     id: 36, name: "Tribe", cc: 2, ip: 2,
     type: "Political", type2: null, era: "Prehistory",
     abilityName: "Strength In Numbers",
-    ability: "At Once: If you play a card here next turn, Tribe gains +1 IP.",
+    ability: "At Once: Tribe gains +1 IP for every card you play here next turn.",
     image: "images/cards/prehistorycards/tribecard.jpg", locked: true
   },
 

@@ -370,20 +370,27 @@
         });
       });
 
-      // Tribe (id 36): +1 IP to TRIBE itself if the slot immediately
-      // after Tribe is filled and revealed (same side). Spec frames
-      // this as At Once with a future-state check ("if you play a card
-      // here next turn"); since At Once can't observe future state,
-      // it's implemented continuously with the slot-index proxy.
+      // Tribe (id 36): "At Once — Tribe gains +1 IP for every card you play
+      // here next turn." Each slot carries turnPlayed (the turn it was
+      // committed). Tribe gains +1 for every OTHER same-owner card at this
+      // location played on the turn immediately after Tribe itself
+      // (turnPlayed === tribe.turnPlayed + 1). Recomputed continuously, so
+      // the bonus scales up as each next-turn card is revealed and stops
+      // counting plays from any later turn.
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (tribe, tribeIdx) {
           if (!tribe || !tribe.revealed || tribe.cardId !== 36) return;
-          var nextSlot = sl[loc.id][tribeIdx + 1];
-          if (nextSlot && nextSlot.revealed) {
-            tribe.contMod = (tribe.contMod || 0) + 1;
-            tribe.contModSources.push({ source: 'Tribe', delta: 1 });
-            addBonus(tribe, 1, 'card', 36, nextEventId(), 'A', true);
+          if (typeof tribe.turnPlayed !== 'number') return;
+          var nextTurn = tribe.turnPlayed + 1;
+          var count = 0;
+          sl[loc.id].forEach(function (s, si) {
+            if (s && s.revealed && si !== tribeIdx && s.turnPlayed === nextTurn) count++;
+          });
+          if (count > 0) {
+            tribe.contMod = (tribe.contMod || 0) + count;
+            tribe.contModSources.push({ source: 'Tribe', delta: count });
+            addBonus(tribe, count, 'card', 36, nextEventId(), 'A', true);
           }
         });
       });

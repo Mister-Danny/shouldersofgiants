@@ -116,7 +116,7 @@
                   card.id === 12 ? 'Samurai'                   : 'Bonus';
       sources.push({ source: label, delta: bonus });
     }
-    var sd = { cardId: card.id, ip: card.ip, ipMod: bonus, ipModSources: sources, contMod: 0, contModSources: [], revealed: true, bonuses: bonuses };
+    var sd = { cardId: card.id, ip: card.ip, ipMod: bonus, ipModSources: sources, contMod: 0, contModSources: [], revealed: true, bonuses: bonuses, turnPlayed: G.turn };
     // William (Pattern B): one thumbnail per destroyed card
     if (card.id === 15 && G.destroyedIPTotal > 0) {
       G.destroyedCards.forEach(function (dc) {
@@ -694,7 +694,7 @@
     // Capture hand position so undoPlay can restore the card to the slot it
     // came from rather than appending to the end of the hand.
     var handIndex = G.playerHand.indexOf(cardId);
-    var newSd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources, bonuses: [], handIndex: handIndex };
+    var newSd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources, bonuses: [], handIndex: handIndex, turnPlayed: G.turn };
     if (resBonus > 0) {
       var resInfo = SOURCE_ID_MAP[resLabel];
       if (resInfo) addBonus(newSd, resBonus, resInfo.type, resInfo.id, nextEventId(), resInfo.pattern, false);
