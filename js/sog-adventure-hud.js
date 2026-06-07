@@ -41,7 +41,7 @@ SOG.HUD = (function () {
     explorer:    { portrait: 'images/femaleexplorer portrait.jpeg', bleepHz: 520, side: 'player' },
     lucy:        { portrait: 'images/Lucy.png',                     bleepHz: 340, side: 'npc'    },
     neanderthal: { portrait: 'images/portraits/neanderthalportait.jpeg', bleepHz: 160, side: 'npc' },
-    otzi:        { portrait: 'images/Otzi.jpg',                     bleepHz: 280, side: 'npc', zoom: true },
+    otzi:        { portrait: 'images/portraits/otzi.jpg',           bleepHz: 280, side: 'npc', frame: 'otzi' },
     hunter:      { portrait: 'images/portraits/hunterportrait.jpg', bleepHz: 380, side: 'npc'    },
     farmer:      { portrait: 'images/portraits/farmerportrait.jpg', bleepHz: 360, side: 'npc'    },
     gilgamesh:   { portrait: 'images/portraits/gilgameshportrait.jpeg', bleepHz: 260, side: 'npc' },
@@ -484,10 +484,12 @@ SOG.HUD = (function () {
     var char = CHARACTERS[who];
     if (!char) return;
     _npcImgEl.src = char.portrait;
-    if (char.zoom) {
-      _npcImgEl.classList.add('adv-hud-npc-zoom');
-    } else {
-      _npcImgEl.classList.remove('adv-hud-npc-zoom');
+    // Per-character frame color (e.g. Otzi's icy frame). Square head-and-
+    // shoulders portraits use the same framing as the Explorer; the frame
+    // marker only swaps the border color.
+    _npcImgEl.classList.remove('adv-hud-npc-otzi');
+    if (char.frame === 'otzi') {
+      _npcImgEl.classList.add('adv-hud-npc-otzi');
     }
     _currentNpc = who;
   }

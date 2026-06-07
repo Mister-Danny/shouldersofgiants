@@ -8292,11 +8292,15 @@ body.tut-locked #battle-reset-turn {
   pointer-events: none;
 }
 
-/* Zoom-crop for Otzi portrait (tight face crop) */
-#adv-hud-npc-slot img.adv-hud-npc-zoom {
-  object-position: 50% 18%;
-  transform: scale(1.35);
-  transform-origin: 50% 18%;
+/* Otzi portrait — square head-and-shoulders art (images/portraits/otzi.jpg)
+   frames identically to the Explorer; only the frame color changes to an
+   icy blue to match his alpine theme. Resting border (active-speaker ring
+   handled by the dialogue-mode rule below). */
+#adv-hud-npc-slot img.adv-hud-npc-otzi {
+  border-color: #7fb4d6;
+  box-shadow:
+    inset 0 0 0 1px rgba(200, 232, 255, 0.22),
+    0 2px 6px rgba(0, 0, 0, 0.65);
 }
 
 /* ── Active-speaker gold ring + dimming ──────────────────────── */
@@ -8321,6 +8325,15 @@ body.tut-locked #battle-reset-turn {
   box-shadow:
     0 0 0 2px #f8d000,
     0 0 10px rgba(248, 208, 0, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.65);
+}
+
+/* Otzi active speaker: icy ring instead of the gold one (matches his frame) */
+#adv-hud.dialogue-mode #adv-hud-npc-slot.is-speaker img.adv-hud-npc-otzi {
+  border-color: #bfe4ff;
+  box-shadow:
+    0 0 0 2px #bfe4ff,
+    0 0 10px rgba(150, 210, 255, 0.6),
     0 2px 6px rgba(0, 0, 0, 0.65);
 }
 
