@@ -165,7 +165,8 @@ var Overworld = (function () {
   ];
   var D2C_FARMER_SEG_D = [
     { who: 'explorer', text: 'You’ve been busy.'                    },
-    { who: 'farmer',   text: 'Not as busy as you’re about to be.'   }
+    { who: 'farmer',   text: 'Not as busy as you’re about to be.'   },
+    { who: 'farmer',   text: 'You need to build yourself a deck.'   }
   ];
   // Card ids granted at each beat (Farmer 39, Canals 41, then the 3-in-a-row).
   var D2C_GRANT_A = 39;                 // Farmer
@@ -1318,7 +1319,10 @@ var Overworld = (function () {
     var candle = document.createElement('div');
     candle.id = 'adv-candle';
     candle.style.cssText = 'position:fixed;inset:0;z-index:10002;pointer-events:none;opacity:0;';
-    document.body.appendChild(candle);
+    // Append INSIDE #sog-stage: it's a transformed (scaled) stacking context
+    // holding the wipe/HUD/reveals, so the candle must live there to layer
+    // against them (position:fixed resolves to the stage box).
+    (document.getElementById('sog-stage') || document.body).appendChild(candle);
 
     function setGlow(t, sizePct) {
       var c    = _candleColor(t);
@@ -1340,21 +1344,55 @@ var Overworld = (function () {
       onUpdate: function () { setGlow(p.t, p.size); }
     });
 
-    // Scene returns: fade the black wipe out so the room is lit by the glow.
-    gsap.to(wipeEl, {
-      opacity: 0, duration: 1.8, delay: 0.9, ease: 'power1.inOut',
-      onComplete: function () { _clearWipe(); wipeEl.style.opacity = '1'; }
-    });
-
-    // ~0.5s after the candle settles → dialogue; then the warm glow fades to
-    // normal (removed) so no tint lingers into the deck builder / battle stub.
+    // ~0.5s after the candle settles: hand off to a PERSISTENT dark-room +
+    // candle-glow backdrop that sits BELOW the HUD (z 100 < 150), so the
+    // Farmer/Explorer dialogue shows on top and the warm glow STAYS for the
+    // whole conversation. The bloom candle + black wipe (both above the HUD)
+    // then fade out to reveal it. The backdrop is removed when the deck
+    // builder opens (or on resumeAfterBattle, defensively).
     gsap.delayedCall(3.1, function () {
+      _ensureCandleBackdrop();
       if (onDialogueReady) onDialogueReady();
       gsap.to(candle, {
-        opacity: 0, duration: 1.6, ease: 'power1.inOut',
+        opacity: 0, duration: 0.6, ease: 'power1.inOut',
         onComplete: function () { if (candle.parentNode) candle.parentNode.removeChild(candle); }
       });
+      gsap.to(wipeEl, {
+        opacity: 0, duration: 0.6, ease: 'power1.inOut',
+        onComplete: function () { _clearWipe(); wipeEl.style.opacity = '1'; }
+      });
     });
+  }
+
+  /* Persistent dark-room + candle-glow backdrop shown for the whole Farmer
+     conversation. z 100 keeps it below the HUD (150) and grant reveals
+     (5000+) but above the overworld map (30), so the room reads as candlelit
+     while the dialogue plays on top. Opaque (dark edges) so the map stays
+     hidden. Removed by _removeCandleBackdrop() when the deck builder opens. */
+  function _ensureCandleBackdrop() {
+    var bg = document.getElementById('adv-candle-bg');
+    if (bg) return bg;
+    bg = document.createElement('div');
+    bg.id = 'adv-candle-bg';
+    bg.style.cssText = 'position:fixed;inset:0;z-index:100;pointer-events:none;';
+    var c    = _candleColor(1);
+    var core = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+    var mid  = 'rgb(' + Math.round(c[0] * 0.6) + ',' + Math.round(c[1] * 0.28) + ',' + Math.round(c[2] * 0.12) + ')';
+    // Fully OPAQUE — a candle glow over BLACK, not the map tinted warm. The
+    // overworld stays hidden for the whole conversation.
+    bg.style.background =
+      'radial-gradient(circle at 50% 48%, ' + core + ' 0%, ' + mid + ' 18%, rgb(28,12,4) 40%, #000 72%)';
+    // Inside #sog-stage (transformed stacking context) at z 100 — below the
+    // HUD (150) and grant reveals (5000+), above the overworld map (30).
+    (document.getElementById('sog-stage') || document.body).appendChild(bg);
+    return bg;
+  }
+
+  function _removeCandleBackdrop() {
+    var bg = document.getElementById('adv-candle-bg');
+    if (bg && bg.parentNode) bg.parentNode.removeChild(bg);
+    var c = document.getElementById('adv-candle');
+    if (c && c.parentNode) c.parentNode.removeChild(c);
   }
 
   /* Grant a single card: unlock (idempotent) + card-acquisition reveal that
@@ -1428,6 +1466,7 @@ var Overworld = (function () {
     var hud = window.SOG && window.SOG.HUD;
     function go() {
       isDialogueLocked = false;
+      _removeCandleBackdrop();   // tear down the candlelit room before the deck builder
       // Context flag: names the target battle. Its presence routes the Deck
       // Builder's "Let's Play" to that battle and "Back" to the Mesopotamia
       // overworld (see deckbuilder.js). Future battles reuse this flag.
@@ -1749,6 +1788,7 @@ var Overworld = (function () {
       isDialogueLocked = false;
       isTransitioning  = false;
       _clearWipe();
+      _removeCandleBackdrop();   // defensive: clear any lingering candlelit backdrop
       var hud = window.SOG && window.SOG.HUD;
       if (hud) { hud.show(); }
       scheduleIdle();

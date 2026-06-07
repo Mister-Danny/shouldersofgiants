@@ -47,6 +47,7 @@
   var addedCardIdInDblStep = null;   // card the player added during the dblclick step
   var popupOpen          = false;
   var hiddenForPopup     = false;    // tutorial UI hidden while popup is shown
+  var _anyclickArmed     = false;    // gates 'anyclick' steps (Adventure popup walkthrough)
 
   /* Type-out animation state — self-contained, no TS coupling. */
   var TYPE_SPEED = 28;               // ms per char (matches tutorial.js)
@@ -105,7 +106,7 @@
        'card-dblclick' — gated; any double-click anywhere on a card
        'popup-closed'  — gated; ability popup must open and then close
   ═══════════════════════════════════════════════════════════════ */
-  var STEPS = [
+  var ARCADIUM_STEPS = [
     {
       id:      'welcome',
       resolve: function () { return null; },
@@ -178,6 +179,83 @@
     return document.querySelector('#db-main [data-id]');
   }
 
+  /* The Canals card (id 41) is the Adventure tutorial's worked example. */
+  function canalsTile() {
+    return document.querySelector('#db-main [data-id="41"]') || firstCardTile();
+  }
+
+  /* Adventure Mode deck-builder tutorial — kept SEPARATE from Arcadium's.
+     Same welcome/counter beats, but the card-type walkthrough uses Canals:
+     double-click to add → single-click to open its info popup → circle the
+     type in the popup → drop the popup and circle the type icon on the card. */
+  var ADVENTURE_STEPS = [
+    {
+      id:      'welcome',
+      resolve: function () { return null; },
+      line:    "Welcome to the Deck Builder! Here is where you will create your decks to play with.",
+      advance: 'click'
+    },
+    {
+      id:      'intro-15',
+      resolve: function () { return null; },
+      line:    "You need 15 cards to complete a deck.",
+      advance: 'click'
+    },
+    {
+      id:      'counter',
+      resolve: function () { return document.getElementById('db-counter'); },
+      line:    "This counter tracks how many you have.",
+      advance: 'click'
+    },
+    {
+      id:      'dblclick',
+      resolve: canalsTile,
+      line:    "Double-click any card to add it to your deck. Start with Canals.",
+      advance: 'card-dblclick'
+    },
+    {
+      id:      'just-added',
+      resolve: function () {
+        if (addedCardIdInDblStep !== null) {
+          var el = document.querySelector('#db-main [data-id="' + addedCardIdInDblStep + '"]');
+          if (el) return el;
+        }
+        return canalsTile();
+      },
+      line:    "You're good at this. Double-click it again if you want to remove it.",
+      advance: 'click'
+    },
+    {
+      id:      'single-click',
+      resolve: canalsTile,
+      line:    "Single-click Canals to see what it does.",
+      advance: 'popup-opened'      // advances when the info popup opens (UI stays up)
+    },
+    {
+      id:      'popup-type',
+      resolve: function () { return document.getElementById('popup-type'); },
+      line:    "Each card has a specific type.",
+      advance: 'anyclick'          // popup stays open; circle the type in its corner
+    },
+    {
+      id:      'card-type-icon',
+      resolve: canalsTile,
+      line:    "Card types are also identified by the icon here and their background color.",
+      advance: 'anyclick',
+      closePopup: true             // drop the popup, then circle the card itself
+    },
+    {
+      id:      'lets-play',
+      resolve: function () { return document.getElementById('db-save'); },
+      line:    "When you've added 15 cards, click here to play!",
+      advance: 'click',
+      demoEnabled: true
+    }
+  ];
+
+  // Active step set — chosen per-run in start() based on the lane.
+  var STEPS = ARCADIUM_STEPS;
+
   /* ═══════════════════════════════════════════════════════════════
      DOM SETUP
   ═══════════════════════════════════════════════════════════════ */
@@ -218,6 +296,22 @@
     if (boxEl && !boxEl._dbTutWired) {
       boxEl._dbTutWired = true;
       boxEl.addEventListener('click', onBubbleClick);
+    }
+
+    // 'anyclick' steps (Adventure popup walkthrough) advance on a click
+    // ANYWHERE. Capture-phase + stopPropagation so the click doesn't also
+    // hit the spotlighted card/popup beneath. Bound once per page-load.
+    if (!window._dbTutAnyClickWired) {
+      window._dbTutAnyClickWired = true;
+      document.addEventListener('click', function (e) {
+        if (!active) return;
+        var step = STEPS[stepIdx];
+        if (!step || step.advance !== 'anyclick' || !_anyclickArmed) return;
+        e.stopPropagation();
+        e.preventDefault();
+        if (typing) { finishTyping(); return; }
+        nextStep();
+      }, true);
     }
 
     // Window resize/scroll → re-measure spotlight target.
@@ -294,6 +388,7 @@
     initRefs();
     if (!boxEl || !textEl) return;             // Lucy box missing — fail silent
     applySpeaker();                            // pick Lucy vs Farmer for this run
+    STEPS = (!!window.adventureBattleTarget) ? ADVENTURE_STEPS : ARCADIUM_STEPS;
     if (window.tutorialActive) return;         // in-game tutorial running — defer
     active                = true;
     stepIdx               = -1;
@@ -350,8 +445,21 @@
       return;
     }
     var step = STEPS[stepIdx];
+    if (step.closePopup) closeInfoPopup();   // drop the info popup before spotlighting the card
     setSpotlight(step.resolve());
     setDialogue(step.line);
+    // Arm "click anywhere to advance" steps after a short guard so the click
+    // that entered the step doesn't immediately advance past it.
+    _anyclickArmed = false;
+    if (step.advance === 'anyclick') {
+      setTimeout(function () { _anyclickArmed = true; }, 150);
+    }
+  }
+
+  /* Hide the card-info popup (used by the Adventure card-type-icon step). */
+  function closeInfoPopup() {
+    var p = document.getElementById('card-popup-backdrop');
+    if (p) p.classList.remove('visible');
   }
 
   function setSpotlight(target) {
@@ -368,6 +476,10 @@
     repositionFrame();
     showDimRects();
     frameEl.classList.add('visible');
+    // Re-measure after any open/scale transition settles — e.g. the card-info
+    // popup scales 0.90→1 over 0.16s, so a target inside it (the type badge)
+    // is measured mid-animation on the first pass and the frame lands off.
+    setTimeout(function () { if (active && currentTargetEl === target) repositionFrame(); }, 220);
     // Apply demo-enabled treatment if the current step opted in.
     var step = STEPS[stepIdx];
     if (step && step.demoEnabled) applyDemoEnabled(target);
@@ -485,17 +597,23 @@
     popupOpen = nowVisible;
 
     var step = STEPS[stepIdx];
-    if (!step || step.advance !== 'popup-closed') return;
+    if (!step) return;
 
-    if (nowVisible) {
-      // Popup just opened → hide tutorial UI entirely.
-      hiddenForPopup = true;
-      hideTutorialUI();
-    } else if (hiddenForPopup) {
-      // Popup just closed → show tutorial UI and advance.
-      hiddenForPopup = false;
-      showTutorialUI();
-      nextStep();
+    if (step.advance === 'popup-closed') {
+      if (nowVisible) {
+        // Popup just opened → hide tutorial UI entirely (Arcadium flow).
+        hiddenForPopup = true;
+        hideTutorialUI();
+      } else if (hiddenForPopup) {
+        // Popup just closed → show tutorial UI and advance.
+        hiddenForPopup = false;
+        showTutorialUI();
+        nextStep();
+      }
+    } else if (step.advance === 'popup-opened') {
+      // Adventure flow: advance as soon as the popup opens, keeping the
+      // tutorial box visible so Farmer can talk over the open popup.
+      if (nowVisible) nextStep();
     }
   }
 

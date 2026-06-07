@@ -896,6 +896,10 @@ img    { display: block; }
   padding: 12px 10px;
   /* Portrait card proportions (matches the card faces) */
   aspect-ratio: 3 / 4;
+  /* 33% smaller than the full column width, centered in each equal grid
+     column so spacing between tiles stays even. */
+  width: 67%;
+  justify-self: center;
   /* Light goldish-brown — distinct from the dark wood panel behind it */
   background: linear-gradient(180deg, #b8945a 0%, #a78648 100%);
   border: 2px solid #6a4418;
