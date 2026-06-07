@@ -943,11 +943,14 @@ var Overworld = (function () {
           // === SCENE 2: Egypt ===
           _d1PlaceUmmelqaab();
           runDialogue(D1_SCENE2_DIALOGUE, function () {
-            // Remove Egypt decoration before walk-off
-            var dec = overlayEl && overlayEl.querySelector('.d1-ummelqaab-decoration');
-            if (dec && dec.parentNode) dec.parentNode.removeChild(dec);
-            // Explorer walks off the right edge
+            // Explorer walks off the right edge — keep the Umm el-Qaab
+            // decoration on screen during the walk.
             walkPath([{ x: 115, y: currentPos.y }], function () {
+              // Remove the Egypt decoration only now, as the travel
+              // transition's loading screen comes up, so it doesn't linger
+              // on the Mesopotamia map.
+              var dec = overlayEl && overlayEl.querySelector('.d1-ummelqaab-decoration');
+              if (dec && dec.parentNode) dec.parentNode.removeChild(dec);
               // Travel transition 2: Egypt → Mesopotamia
               _d1TravelTo('mesopotamia', { x: 10, y: 85 }, function () {
                 // === SCENE 3: Mesopotamia ===
@@ -982,8 +985,8 @@ var Overworld = (function () {
     dec.style.cssText = [
       'position:absolute',
       'left:16%',
-      'top:42%',
-      'transform:translate(-50%,-50%) scale(0.5)',
+      'top:37%',
+      'transform:translate(-50%,-50%) scale(0.4)',
       'transform-origin:center center',
       'pointer-events:none',
       'user-select:none'
