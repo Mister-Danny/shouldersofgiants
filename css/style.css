@@ -2561,6 +2561,13 @@ img    { display: block; }
   z-index: -1;
 }
 
+/* Gilgamesh battle — Mesopotamia location art. Reuses loc-ids 8/7/2 (shared
+   with the Otzi battle), so scope to body.gilgamesh-battle to override only
+   here and leave the Otzi battle + standard game untouched. */
+body.gilgamesh-battle .battle-col[data-loc-id="8"]::before { background: url('../images/locations/cedarforest.jpg') center / cover no-repeat; } /* Cedar Forest */
+body.gilgamesh-battle .battle-col[data-loc-id="7"]::before { background: url('../images/locations/uruk.jpg')        center / cover no-repeat; } /* Uruk */
+body.gilgamesh-battle .battle-col[data-loc-id="2"]::before { background: url('../images/locations/mountmashu.jpg')  center / cover no-repeat; } /* Mount Mashu */
+
 .battle-loc-score-opp,
 .battle-loc-score-player {
   display: flex;

@@ -226,11 +226,10 @@ SOG.GilgameshBattle = (function () {
 
     var G = SOG.state.G;
 
-    // Gilgamesh's three locations — no abilities. Placeholder art (reusing
-    // existing biome images) until Mesopotamia battle backgrounds exist.
-    var cedar = { id: 8, name: 'Cedar Forest', region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/scandinavia.jpg',    thumbnailCrop: null };
-    var uruk  = { id: 7, name: 'Uruk',         region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/levant.jpg',         thumbnailCrop: null };
-    var mashu = { id: 2, name: 'Mount Mashu',  region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/capeofgoodhope.jpg', thumbnailCrop: null };
+    // Gilgamesh's three locations — no abilities.
+    var cedar = { id: 8, name: 'Cedar Forest', region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/cedarforest.jpg', thumbnailCrop: null };
+    var uruk  = { id: 7, name: 'Uruk',         region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/uruk.jpg',       thumbnailCrop: null };
+    var mashu = { id: 2, name: 'Mount Mashu',  region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/mountmashu.jpg', thumbnailCrop: null };
 
     // Order: Cedar Forest (left) · Uruk (center) · Mount Mashu (right)
     G.locations = [cedar, uruk, mashu];
@@ -1156,6 +1155,7 @@ SOG.GilgameshBattle = (function () {
   /* ── Teardown ─────────────────────────────────────────────────── */
   function teardown() {
     document.body.classList.remove('otzi-battle');
+    document.body.classList.remove('gilgamesh-battle');
     document.body.classList.remove('otzi-pre-deal');
     restoreExplorerAvatar();
     restoreGilgameshAvatar();
@@ -1201,6 +1201,7 @@ SOG.GilgameshBattle = (function () {
 
     // Context classes
     document.body.classList.add('otzi-battle');
+    document.body.classList.add('gilgamesh-battle');   // scopes Mesopotamia location art
     document.body.classList.add('otzi-pre-deal');
 
     // Build G state + board DOM (all 3 locations; Desert/GRV hidden by GSAP)
