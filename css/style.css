@@ -1394,7 +1394,7 @@ img    { display: block; }
 .rules-popup-prose { white-space: pre-line; }
 
 /* Gilgamesh battle — clickable opponent portrait (opens the rules popup) */
-.battle-avatar-otzi.gilgamesh-clickable { cursor: pointer; }
+.battle-avatar-otzi.gilgamesh-clickable { cursor: pointer; pointer-events: auto; }
 .battle-avatar-otzi.gilgamesh-clickable:hover .battle-avatar-frame {
   filter: brightness(1.15);
   box-shadow: 0 0 12px rgba(248, 208, 0, 0.5);
