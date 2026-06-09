@@ -604,12 +604,15 @@
     var G = SOG.state.G;
     if (!G || !SOG.game || typeof SOG.game.executeMoveAnimated !== 'function') { onDone(); return; }
 
-    // Find the AI's revealed Chariot that hasn't already moved this turn.
+    // Find the AI's revealed Chariot that hasn't moved yet. Chariot "can move
+    // once on its own" — once per BATTLE, not per turn — so the guard is a flag
+    // on the card's slot data (which travels with the card when it moves), not
+    // the per-turn G.aiMovedThisTurn map.
     var found = null;
     G.locations.forEach(function (loc) {
       (G.aiSlots[loc.id] || []).forEach(function (s) {
         if (found || !s || !s.revealed) return;
-        if (s.cardId === 48 && !(G.aiMovedThisTurn && G.aiMovedThisTurn[48])) {
+        if (s.cardId === 48 && !s._advChariotMoved) {
           found = { locId: loc.id, sd: s };
         }
       });
@@ -619,8 +622,7 @@
     var dest = _bestChariotDest(G, found.locId, helpers.effectiveIP(found.sd));
     if (dest === null) { onDone(); return; }
 
-    if (!G.aiMovedThisTurn) G.aiMovedThisTurn = {};
-    G.aiMovedThisTurn[48] = true;
+    found.sd._advChariotMoved = true;   // persists with the card → never moves again
     SOG.game.executeMoveAnimated('opp', 48, found.locId, dest, {}, function () { onDone(); });
   }
 
