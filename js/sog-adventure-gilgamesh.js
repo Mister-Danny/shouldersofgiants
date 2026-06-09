@@ -277,23 +277,17 @@ SOG.GilgameshBattle = (function () {
     G.prehistoryHasPlayed   = false;
     G.playerRevealQueue     = [];
     G.aiRevealQueue         = [];
+    G.culturalCount         = { player: 0, opp: 0 };  // Gilgamesh card reads this
+    G.playOrderCounter      = 0;                       // Scribe play-order metadata
+    G.locationBoosts        = G.locationBoosts || {};  // Sargon (unused here, but safe)
 
     // Build board DOM with all 3 locations
     if (typeof window.initBattleUI === 'function') {
       window.initBattleUI(G.locations);
     }
 
-    // Immediately park Desert and GRV columns off-screen; they slide
-    // in from the edges after the screen shake during dialogue.
-    if (typeof gsap !== 'undefined') {
-      var boardEl = document.getElementById('battle-board');
-      if (boardEl) {
-        var desertCol = boardEl.querySelector('[data-loc-id="8"]');
-        var grvCol    = boardEl.querySelector('[data-loc-id="2"]');
-        if (desertCol) gsap.set(desertCol, { x: -600, opacity: 0 });
-        if (grvCol)    gsap.set(grvCol,    { x:  600, opacity: 0 });
-      }
-    }
+    // D3a.1: all 3 locations render in place immediately (no shake-into-place
+    // intro — that inherited Otzi tutorial beat is cut for Gilgamesh).
 
     // Build player hand DOM (CSS hides it via otzi-pre-deal until card deal)
     if (window.SOG && SOG.input && typeof SOG.input.rebuildPlayerHand === 'function') {
@@ -330,6 +324,131 @@ SOG.GilgameshBattle = (function () {
     if (img.dataset.origSrc) img.src = img.dataset.origSrc;
     var avEl = document.querySelector('.battle-avatar-lucy');
     if (avEl) avEl.classList.remove('adv-active');
+  }
+
+  /* ── Opponent avatar: swap the shared Otzi portrait → Gilgamesh ──── */
+  function _oppAvatarImg() {
+    return document.querySelector('.battle-avatar-otzi .battle-avatar-frame img');
+  }
+  function applyGilgameshAvatar() {
+    var img = _oppAvatarImg();
+    if (!img) return;
+    if (typeof img.dataset.origSrc === 'undefined') img.dataset.origSrc = img.getAttribute('src');
+    img.src = 'images/portraits/gilgameshportrait.jpeg';
+    img.style.display = '';   // un-hide if a prior onerror hid it
+  }
+  function restoreGilgameshAvatar() {
+    var img = _oppAvatarImg();
+    if (!img) return;
+    if (img.dataset.origSrc) img.src = img.dataset.origSrc;
+  }
+
+  /* ── Battle rules popup + opponent-portrait interaction (D3a.1) ──── */
+  var RULES_TITLE = 'The Epic Battle of Gilgamesh';
+  var RULES_BODY  = [
+    '<b>Win Condition</b> — Gain more Influence Points than your opponent at the most locations.',
+    'Draw 2 cards per turn.',
+    '4 turns total.'
+  ];
+  function _opponentAvatarEl() { return document.querySelector('.battle-avatar-otzi'); }
+  function _openRulesPopup(onDismiss) {
+    if (window.SOG && SOG.BattleRulesPopup && typeof SOG.BattleRulesPopup.show === 'function') {
+      SOG.BattleRulesPopup.show({ title: RULES_TITLE, body: RULES_BODY, onDismiss: onDismiss });
+    } else if (onDismiss) { onDismiss(); }
+  }
+
+  var _portraitClickHandler = null;
+  function _wireOpponentPortraitClick() {
+    var el = _opponentAvatarEl();
+    if (!el || _portraitClickHandler) return;
+    el.classList.add('gilgamesh-clickable');
+    _portraitClickHandler = function () { _openRulesPopup(); };
+    el.addEventListener('click', _portraitClickHandler);
+  }
+  function _unwireOpponentPortraitClick() {
+    var el = _opponentAvatarEl();
+    if (el && _portraitClickHandler) el.removeEventListener('click', _portraitClickHandler);
+    if (el) el.classList.remove('gilgamesh-clickable', 'gilgamesh-portrait-glow');
+    _portraitClickHandler = null;
+    _removeClickHereIndicator();
+  }
+
+  function _addClickHereIndicator() {
+    var el = _opponentAvatarEl();
+    if (!el || document.getElementById('gilgamesh-clickhere')) return;
+    var tag = document.createElement('div');
+    tag.id = 'gilgamesh-clickhere';
+    tag.className = 'gilgamesh-clickhere';
+    tag.textContent = 'Click Here';
+    el.appendChild(tag);
+  }
+  function _removeClickHereIndicator() {
+    var t = document.getElementById('gilgamesh-clickhere');
+    if (t && t.parentNode) t.parentNode.removeChild(t);
+  }
+  function _glowOpponentPortrait(on) {
+    var el = _opponentAvatarEl();
+    if (!el) return;
+    if (on) { el.classList.add('gilgamesh-portrait-glow', 'gilgamesh-clickable'); _addClickHereIndicator(); }
+    else    { el.classList.remove('gilgamesh-portrait-glow'); _removeClickHereIndicator(); }
+  }
+
+  /* Show one opponent-bubble line (typewriter + bleep) that stays visible
+     with NO click-to-advance — used for the interactive "Click on me" beat. */
+  function _showOpponentLine(text, onReady) {
+    var el = getBubbleEl('otzi');
+    if (!el) { if (onReady) onReady(); return; }
+    var ex = getBubbleEl('explorer'); if (ex) ex.classList.remove('is-visible', 'is-ready');
+    var textEl = el.querySelector('.adv-bubble-text');
+    if (!textEl) { if (onReady) onReady(); return; }
+    textEl.textContent = '';
+    el.classList.add('is-visible'); el.classList.remove('is-ready');
+    var i = 0, bleepCount = 0;
+    var timer = setInterval(function () {
+      i++; textEl.textContent = text.slice(0, i);
+      var c = text.charAt(i - 1);
+      if (c && c !== ' ' && c !== '\n') { bleepCount++; if (bleepCount >= 2) { bleepCount = 0; playBleep('otzi'); } }
+      if (i >= text.length) { clearInterval(timer); el.classList.add('is-ready'); if (onReady) onReady(); }
+    }, TYPE_SPEED_MS);
+  }
+
+  /* Opening in-battle dialogue (Battle 1 Attempt 1 only). Lines 1-5 advance
+     normally; "Click on me" pauses for a portrait click → rules popup → resume
+     with "Thank you". Skipped on Attempt 2+ / re-entries. */
+  var OPENING_PRE = [
+    { who: 'otzi',     text: 'I am Gilgamesh.' },
+    { who: 'explorer', text: 'Hi.' },
+    { who: 'otzi',     text: 'I will smite you into the great beyond.' },
+    { who: 'explorer', text: 'Gulp.' },
+    { who: 'explorer', text: 'How do you play this, again?' }
+  ];
+  var OPENING_PROMPT = 'Click on me, if you need a reminder.';
+
+  function _runOpeningDialogue(onComplete) {
+    var seen = false, cun = false;
+    try { seen = localStorage.getItem('sog_gilgamesh_opening_seen') === 'true'; } catch (e) {}
+    try { cun  = localStorage.getItem(KEY_CUNEIFORM_GRANTED) === 'true'; } catch (e) {}
+    if (seen || cun) { if (onComplete) onComplete(); return; }
+
+    runLines(OPENING_PRE, function () {
+      _showOpponentLine(OPENING_PROMPT, function () {
+        _glowOpponentPortrait(true);
+        var el = _opponentAvatarEl();
+        var oneShot = function () {
+          if (el) el.removeEventListener('click', oneShot);
+          _openRulesPopup(function () {
+            _glowOpponentPortrait(false);
+            var ot = getBubbleEl('otzi'); if (ot) ot.classList.remove('is-visible', 'is-ready');
+            runLines([{ who: 'explorer', text: 'Thank you.' }], function () {
+              try { localStorage.setItem('sog_gilgamesh_opening_seen', 'true'); } catch (e) {}
+              if (onComplete) onComplete();
+            });
+          });
+        };
+        if (el) el.addEventListener('click', oneShot);
+        else oneShot();
+      });
+    });
   }
 
   /* ── Fade out the radial wipe cover ──────────────────────────── */
@@ -673,6 +792,22 @@ SOG.GilgameshBattle = (function () {
         // refresh + continue.  Otzi's ability fires here — at reveal time — for
         // both player and AI cards, for both the fireAtOnce and fallback paths.
         function afterReveal() {
+          // Replicate game.js revealNext's post-At-Once play-from-hand hooks so
+          // AI (and player) plays behave equivalently to the standard game.
+          // The cloned battle reveal previously skipped these, silently breaking
+          // Scribe (needs play metadata) and the Gilgamesh card (needs the
+          // cumulative Cultural counter).
+          if (sd && item.locId !== null) {
+            G.playOrderCounter = (G.playOrderCounter || 0) + 1;
+            sd.playTime      = G.playOrderCounter;
+            sd.originalLocId = item.locId;
+          }
+          var _pc = (typeof CARDS !== 'undefined') &&
+                    CARDS.find(function (c) { return c.id === cardId; });
+          if (_pc && _pc.type === 'Cultural' && item.locId !== null) {
+            if (!G.culturalCount) G.culturalCount = { player: 0, opp: 0 };
+            G.culturalCount[item.owner] = (G.culturalCount[item.owner] || 0) + 1;
+          }
           _maybeOtziFlees(item.locId, 0);
           afterCard();
           setTimeout(function () { next(i + 1); }, 500);
@@ -924,50 +1059,48 @@ SOG.GilgameshBattle = (function () {
     if (el && el.parentNode) el.parentNode.removeChild(el);
   }
 
+  // Built on the standard adventure scoreboard markup (.adv-result →
+  // .result-wrap → .result-headline / .result-locs / .result-actions) so the
+  // visual treatment (parchment panel, gold double-border, fonts) matches the
+  // Otzi/Arcadium end-game scoreboard. Only the per-battle content differs.
   function _showResultPopup(won, locResults) {
     _removeResultPopup();
-    var el = document.createElement('div');
-    el.id = RESULT_ID;
-    el.style.cssText = [
-      'position:fixed', 'inset:0', 'z-index:11000', 'display:flex',
-      'flex-direction:column', 'align-items:center', 'justify-content:center',
-      'gap:18px', 'background:rgba(8,5,2,0.85)', 'font-family:\'CT Galbite\',monospace'
-    ].join(';');
+    var overlay = document.createElement('div');
+    overlay.id = RESULT_ID;
+    overlay.className = 'adv-result';
 
-    var title = document.createElement('div');
-    title.textContent = won ? 'VICTORY' : 'DEFEAT';
-    title.style.cssText = 'font-size:42px;letter-spacing:0.12em;color:' +
-      (won ? '#f8d000' : '#d46a3a') + ';text-shadow:0 0 18px rgba(248,208,0,0.45)';
-    el.appendChild(title);
+    var wrap = document.createElement('div');
+    wrap.className = 'result-wrap';
 
-    var rows = document.createElement('div');
-    rows.className = 'result-loc-list';
-    rows.style.cssText = 'display:flex;flex-direction:column;gap:6px;min-width:380px';
-    locResults.forEach(function (r) { rows.appendChild(_buildLocRow(r.loc.name, r.playerIP, r.aiIP)); });
-    el.appendChild(rows);
+    var headline = document.createElement('div');
+    headline.className = 'result-headline ' + (won ? 'result-player' : 'result-ai');
+    headline.textContent = won ? 'VICTORY' : 'DEFEAT';
 
-    var btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;gap:18px;margin-top:12px';
+    var locs = document.createElement('div');
+    locs.className = 'result-locs';
+    locResults.forEach(function (r) { locs.appendChild(_buildLocRow(r.loc.name, r.playerIP, r.aiIP)); });
+
+    var actions = document.createElement('div');
+    actions.className = 'result-actions';
     function mkBtn(label, cb) {
       var b = document.createElement('button');
+      b.className = 'btn-primary';
       b.textContent = label;
-      b.style.cssText = [
-        'padding:10px 28px', 'background:transparent', 'border:2px solid #f8d000',
-        'color:#f8d000', 'font-family:\'CT Galbite\',monospace', 'font-size:16px',
-        'letter-spacing:0.08em', 'cursor:pointer', 'border-radius:3px'
-      ].join(';');
       b.addEventListener('click', cb);
       return b;
     }
-
     if (won) {
-      btnRow.appendChild(mkBtn('Continue',  function () { _removeResultPopup(); _exitToOverworld(); }));
+      actions.appendChild(mkBtn('CONTINUE',  function () { _removeResultPopup(); _exitToOverworld(); }));
     } else {
-      btnRow.appendChild(mkBtn('Play Again', function () { _removeResultPopup(); _onPlayAgain(); }));
-      btnRow.appendChild(mkBtn('Gameboard',  function () { _removeResultPopup(); _exitToOverworld(); }));
+      actions.appendChild(mkBtn('PLAY AGAIN', function () { _removeResultPopup(); _onPlayAgain(); }));
+      actions.appendChild(mkBtn('GAMEBOARD',  function () { _removeResultPopup(); _exitToOverworld(); }));
     }
-    el.appendChild(btnRow);
-    document.body.appendChild(el);
+
+    wrap.appendChild(headline);
+    wrap.appendChild(locs);
+    wrap.appendChild(actions);
+    overlay.appendChild(wrap);
+    document.body.appendChild(overlay);
   }
 
   /* "Play Again" after a loss. If Cuneiform is already granted, restart the
@@ -1025,6 +1158,11 @@ SOG.GilgameshBattle = (function () {
     document.body.classList.remove('otzi-battle');
     document.body.classList.remove('otzi-pre-deal');
     restoreExplorerAvatar();
+    restoreGilgameshAvatar();
+    _unwireOpponentPortraitClick();
+    if (window.SOG && SOG.BattleRulesPopup && typeof SOG.BattleRulesPopup.hide === 'function') {
+      SOG.BattleRulesPopup.hide();
+    }
     hideBubbles();
     removeEndTurnHook();
     removeResetHook();
@@ -1068,8 +1206,9 @@ SOG.GilgameshBattle = (function () {
     // Build G state + board DOM (all 3 locations; Desert/GRV hidden by GSAP)
     setupBattleBoard();
 
-    // Swap Lucy avatar slot to show the Explorer
+    // Swap Lucy avatar → Explorer (player), Otzi avatar → Gilgamesh (opponent).
     applyExplorerAvatar();
+    applyGilgameshAvatar();
 
     // Switch to the battle screen
     if (typeof showScreen === 'function') {
@@ -1082,17 +1221,14 @@ SOG.GilgameshBattle = (function () {
     if (endTurnBtn) endTurnBtn.disabled = true;
     if (resetBtn)   resetBtn.disabled   = true;
 
-    // Fade out the radial wipe → board reveals with Uruk (center) only.
-    // No tutorial dialogue — the player already learned the rules vs Otzi;
-    // the Gilgamesh "Welcome"/"challenge again" exchange plays in the overworld
-    // before this battle starts.
+    // Fade out the radial wipe → all 3 locations already in place (no shake
+    // intro). Deal, run the Attempt-1 opening dialogue, then begin turn 1.
     fadeOutCover(function () {
-      shakeCamera(function () {
-        revealSideLocations(function () {
-          dealCards(function () {
-            log('Turn loop starting');
-            startTurnLoop();
-          });
+      dealCards(function () {
+        _runOpeningDialogue(function () {
+          _wireOpponentPortraitClick();   // rules popup stays clickable all battle
+          log('Turn loop starting');
+          startTurnLoop();
         });
       });
     });

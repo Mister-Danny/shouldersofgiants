@@ -1366,6 +1366,68 @@ img    { display: block; }
 
 .popup-backdrop.visible .card-popup { transform: scale(1); }
 
+/* ── Battle Rules popup (SOG.BattleRulesPopup) ──────────────────────
+   Reuses .card-popup dimensions/double-border; warm gold/parchment tint
+   so it reads as "rules" rather than a neutral card-info popup. */
+.rules-popup {
+  background: linear-gradient(180deg, #4a3a14 0%, #342708 100%);
+  border-color: #f8d000;
+  text-align: center;
+}
+.rules-popup-title {
+  font-family: var(--font);
+  font-size: 26px;
+  color: #ffe98a;
+  letter-spacing: 0.04em;
+  text-shadow: 1px 1px 0 #000;
+  margin: 4px 0 16px;
+}
+.rules-popup-body {
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: 1.55;
+  color: #f3e6bd;
+  text-align: left;
+}
+.rules-popup-list { margin: 0 auto; padding-left: 1.3em; max-width: 90%; }
+.rules-popup-list li { margin-bottom: 10px; }
+.rules-popup-prose { white-space: pre-line; }
+
+/* Gilgamesh battle — clickable opponent portrait (opens the rules popup) */
+.battle-avatar-otzi.gilgamesh-clickable { cursor: pointer; }
+.battle-avatar-otzi.gilgamesh-clickable:hover .battle-avatar-frame {
+  filter: brightness(1.15);
+  box-shadow: 0 0 12px rgba(248, 208, 0, 0.5);
+}
+.battle-avatar-otzi.gilgamesh-portrait-glow .battle-avatar-frame {
+  animation: gilg-portrait-glow 1.1s ease-in-out infinite;
+}
+@keyframes gilg-portrait-glow {
+  0%, 100% { box-shadow: 0 0 6px 2px rgba(248, 208, 0, 0.40); }
+  50%      { box-shadow: 0 0 20px 7px rgba(248, 208, 0, 0.90); }
+}
+.gilgamesh-clickhere {
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font);
+  font-size: 13px;
+  color: #f8d000;
+  background: rgba(20, 10, 2, 0.88);
+  border: 1px solid #f8d000;
+  border-radius: 3px;
+  padding: 3px 8px;
+  pointer-events: none;
+  z-index: 5;
+  animation: gilg-clickhere-bob 0.9s ease-in-out infinite;
+}
+@keyframes gilg-clickhere-bob {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%      { transform: translateX(-50%) translateY(-3px); }
+}
+
 /* Card name — displayed as the "NPC speaker" header */
 .popup-card-name {
   font-family: var(--font);
