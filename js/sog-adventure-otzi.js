@@ -694,7 +694,15 @@ SOG.OtziBattle = (function () {
     var next = function (i) {
       if (i >= toFlip.length) {
         afterCard();   // final pass once every card is revealed
-        setTimeout(function () { if (onDone) onDone(); }, 1100);
+        // D3a.2 ST1 (latent fix): the Otzi prehistory deck has no move-capable
+        // cards today, but run the shared movement step so any future clone of
+        // this reveal (or card) relocates correctly. No-op when nothing moves.
+        var finishReveal = function () { setTimeout(function () { if (onDone) onDone(); }, 1100); };
+        if (SOG.ai && typeof SOG.ai.runAdventureMovements === 'function') {
+          SOG.ai.runAdventureMovements(function () { afterCard(); finishReveal(); });
+        } else {
+          finishReveal();
+        }
         return;
       }
       var item   = toFlip[i];

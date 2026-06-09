@@ -712,36 +712,161 @@ SOG.GilgameshBattle = (function () {
     }, 600);
   }
 
-  /* ── AI: play 1–2 random cards from aiHand ──────────────────── */
+  /* ── AI: card-aware play selection (D3a.2 ST2) ────────────────────
+     A modest priority cascade — NOT optimal play. For each of up to 2 plays:
+     pick the highest-value playable card (deferring "hold" cards), then send
+     it to its preferred synergy location, falling back to general location
+     rules. Goal: the AI plays cards where their abilities actually do
+     something. Gilgamesh deck (9): 38 Priest(Rel), 39 Farmer(Labor),
+     40 Scribe(Cul,boost-before), 41 Canals(Sci), 42 Soldier(Mil,strike),
+     43 Gilgamesh(Cul,+1/Cultural), 45 Ziggurat(Rel,+1 Religious),
+     48 Chariot(Mil,move+strike), 49 Phoenicians(Cul,attach-Cultural). */
+
+  function _gAiTypeOf(cardId) {
+    var c = (typeof CARDS !== 'undefined') && CARDS.find(function (x) { return x.id === cardId; });
+    return c ? c.type : null;
+  }
+  function _gAiEffIP(s) {
+    var fn = (SOG.board && SOG.board.effectiveIP) || (SOG.game && SOG.game.effectiveIP);
+    return fn ? fn(s) : (s.ip + (s.ipMod || 0) + (s.contMod || 0));
+  }
+  function _gAiOpenLocs() {
+    var G = SOG.state.G;
+    return G.locations.filter(function (loc) { return (G.aiSlots[loc.id] || []).indexOf(null) !== -1; });
+  }
+  // AI cards present at a loc — includes face-down cards placed earlier THIS
+  // turn (the AI knows its own plays). Used for own-synergy targeting.
+  function _gAiCardsAt(locId) { return (SOG.state.G.aiSlots[locId] || []).filter(Boolean); }
+  function _gAiHasType(locId, type) {
+    return _gAiCardsAt(locId).some(function (s) { return _gAiTypeOf(s.cardId) === type; });
+  }
+  // Player cards the AI can actually see (revealed) — for strike targeting.
+  function _gPlayerRevealedAt(locId) {
+    return (SOG.state.G.playerSlots[locId] || []).filter(function (s) { return s && s.revealed; });
+  }
+  function _gLocIP(slots, locId) {
+    return (slots[locId] || []).reduce(function (sum, s) { return sum + (s && s.revealed ? _gAiEffIP(s) : 0); }, 0);
+  }
+  function _gLocGap(locId) {  // AI minus player (revealed) at a location
+    var G = SOG.state.G;
+    return _gLocIP(G.aiSlots, locId) - _gLocIP(G.playerSlots, locId);
+  }
+  function _gSoldierStrikeValue(locId) {
+    var pr = _gPlayerRevealedAt(locId);
+    if (!pr.length) return -Infinity;
+    var highIP = pr.reduce(function (m, s) { return Math.max(m, _gAiEffIP(s)); }, 0);
+    var gap = _gLocGap(locId);
+    var flips = gap < 0 && (gap + 1) >= 0;        // -1 to player flips/ties the loc
+    return highIP + (flips ? 5 : 0);
+  }
+  function _gAiHasCulturalAnywhere() {
+    return SOG.state.G.locations.some(function (loc) { return _gAiHasType(loc.id, 'Cultural'); });
+  }
+  // "Hold" cards play poorly now and want a later turn / a prerequisite.
+  function _gAiHeld(cardId, turn) {
+    if (cardId === 49) return !_gAiHasCulturalAnywhere(); // Phoenicians: need a Cultural to attach to
+    if (cardId === 43) return turn < 3;                   // Gilgamesh card: play in the back half
+    return false;
+  }
+  // Preferred synergy location for a card (open locs only); null → no preference.
+  function _gPreferredLoc(cardId) {
+    var open = _gAiOpenLocs();
+    if (!open.length) return null;
+    function best(filterFn, scoreFn) {
+      var cands = open.filter(filterFn);
+      if (!cands.length) return null;
+      cands.sort(function (a, b) { return scoreFn(b.id) - scoreFn(a.id); });
+      return cands[0].id;
+    }
+    switch (cardId) {
+      case 49: // Phoenicians → a loc where the AI has a Cultural card to attach to
+        return best(function (l) { return _gAiHasType(l.id, 'Cultural'); },
+                    function (id) { return _gAiCardsAt(id).filter(function (s) { return _gAiTypeOf(s.cardId) === 'Cultural'; }).length; });
+      case 45: // Ziggurat → a loc where the AI has another Religious card (Priest)
+        return best(function (l) { return _gAiHasType(l.id, 'Religious'); },
+                    function (id) { return _gAiCardsAt(id).filter(function (s) { return _gAiTypeOf(s.cardId) === 'Religious'; }).length; });
+      case 42: // Soldier → a loc with a player card; prefer the strongest strike / a flip
+        return best(function (l) { return _gPlayerRevealedAt(l.id).length > 0; }, _gSoldierStrikeValue);
+      case 40: // Scribe → a loc where the AI already has cards (boosts cards played before it)
+        return best(function (l) { return _gAiCardsAt(l.id).length > 0; },
+                    function (id) { return _gAiCardsAt(id).length; });
+      case 43: // Gilgamesh card → contest the location we're most behind at
+        return best(function () { return true; }, function (id) { return -_gLocGap(id); });
+      default:
+        return null; // Chariot/Priest/Farmer/Canals: no strong location context
+    }
+  }
+  // General fallback location rules: spread out, contest losses, don't pile on.
+  function _gLocPlayScore(locId) {
+    var count = _gAiCardsAt(locId).length;
+    var gap   = _gLocGap(locId);
+    var score = 0;
+    if (count >= 3) score -= 6;   // avoid stacking 3+ on one location
+    else if (count >= 2) score -= 2;
+    if (gap >= 3) score -= 3;     // already comfortably won — don't reinforce
+    if (gap < 0)  score += 3;     // contest a location we're losing
+    if (count === 0) score += 1;  // prefer spreading to fresh locations
+    return score;
+  }
+  function _gFallbackLoc() {
+    var open = _gAiOpenLocs();
+    if (!open.length) return null;
+    open.sort(function (a, b) { return _gLocPlayScore(b.id) - _gLocPlayScore(a.id); });
+    return open[0].id;
+  }
+  // How eagerly to play a card this turn (higher = sooner; held → -1).
+  function _gCardPlayScore(cardId, turn) {
+    if (_gAiHeld(cardId, turn)) return -1;
+    var pref = _gPreferredLoc(cardId);
+    switch (cardId) {
+      case 49: return pref !== null ? 5 : 0;     // Phoenicians with a Cultural target ready
+      case 42: return pref !== null ? 3 : 0;     // Soldier with a strike target
+      case 45: return pref !== null ? 3 : 0;     // Ziggurat next to a Religious card
+      case 40: return pref !== null ? 2 : 0;     // Scribe co-located with earlier plays
+      case 43: return turn >= 3 ? 4 : -1;        // Gilgamesh card late = big scorer
+      default: return 0;
+    }
+  }
+
+  function _gAiPlaceCard(cardId, locId) {
+    var G        = SOG.state.G;
+    var slotIndex = G.aiSlots[locId].indexOf(null);
+    if (slotIndex === -1) return false;
+    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
+    if (!card) return false;
+    G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
+    G.aiSlots[locId][slotIndex] = {
+      cardId: cardId, ip: card.ip, revealed: false,
+      ipMod: 0, contMod: 0, ipModSources: [], turnPlayed: G.turn
+    };
+    G.aiRevealQueue.push(cardId);
+    if (SOG.board && typeof SOG.board.getSlotEl === 'function') {
+      var slotEl = SOG.board.getSlotEl('opp', locId, slotIndex);
+      if (slotEl) {
+        slotEl.dataset.cardId = cardId;
+        if (SOG.board.setSlotFaceDown) SOG.board.setSlotFaceDown(slotEl);
+      }
+    }
+    // Otzi's flee ability is triggered at reveal time (runGilgameshReveal), not here.
+    return true;
+  }
+
   function aiPlayCards() {
     var G       = SOG.state.G;
     var numPlay = Math.min(2, G.aiHand.length);
     for (var p = 0; p < numPlay; p++) {
-      if (!G.aiHand.length) break;
-      var handIdx = Math.floor(Math.random() * G.aiHand.length);
-      var cardId  = G.aiHand.splice(handIdx, 1)[0];
-      // Pick a random location with an open slot
-      var openLocs = G.locations.filter(function (loc) {
-        return (G.aiSlots[loc.id] || []).indexOf(null) !== -1;
-      });
-      if (!openLocs.length) { G.aiHand.unshift(cardId); break; }
-      var loc       = openLocs[Math.floor(Math.random() * openLocs.length)];
-      var slotIndex = G.aiSlots[loc.id].indexOf(null);
-      var card      = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
-      if (!card)    { G.aiHand.unshift(cardId); continue; }
-      G.aiSlots[loc.id][slotIndex] = {
-        cardId: cardId, ip: card.ip, revealed: false,
-        ipMod: 0, contMod: 0, ipModSources: [], turnPlayed: G.turn
-      };
-      G.aiRevealQueue.push(cardId);
-      if (SOG.board && typeof SOG.board.getSlotEl === 'function') {
-        var slotEl = SOG.board.getSlotEl('opp', loc.id, slotIndex);
-        if (slotEl) {
-          slotEl.dataset.cardId = cardId;
-          if (SOG.board.setSlotFaceDown) SOG.board.setSlotFaceDown(slotEl);
-        }
-      }
-      // Otzi's flee ability is triggered at reveal time (runGilgameshReveal), not here.
+      if (!G.aiHand.length || !_gAiOpenLocs().length) break;
+      // Rank hand: prefer non-held cards (score >= 0); only release a held card
+      // if nothing else is available this play.
+      var ranked = G.aiHand.map(function (cid) { return { cid: cid, score: _gCardPlayScore(cid, G.turn) }; });
+      var playable = ranked.filter(function (r) { return r.score >= 0; });
+      var pool = playable.length ? playable : ranked;
+      pool.sort(function (a, b) { return b.score - a.score; });
+      var cardId = pool[0].cid;
+      var locId  = _gPreferredLoc(cardId);
+      if (locId === null) locId = _gFallbackLoc();
+      if (locId === null) break;
+      if (!_gAiPlaceCard(cardId, locId)) break;
     }
     if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') SOG.ui.updateOppHand();
   }
@@ -776,7 +901,16 @@ SOG.GilgameshBattle = (function () {
     var next = function (i) {
       if (i >= toFlip.length) {
         afterCard();   // final pass once every card is revealed
-        setTimeout(function () { if (onDone) onDone(); }, 1100);
+        // D3a.2 ST1: process AI movements (Chariot) — the cloned reveal never
+        // ran the canonical runAiMovements path, so move-capable cards never
+        // relocated. runAdventureMovements decides + executes via
+        // executeMoveAnimated (which fires the arrival strike), then we refresh.
+        var finishReveal = function () { setTimeout(function () { if (onDone) onDone(); }, 1100); };
+        if (SOG.ai && typeof SOG.ai.runAdventureMovements === 'function') {
+          SOG.ai.runAdventureMovements(function () { afterCard(); finishReveal(); });
+        } else {
+          finishReveal();
+        }
         return;
       }
       var item   = toFlip[i];

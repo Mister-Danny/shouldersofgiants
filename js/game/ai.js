@@ -543,11 +543,94 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     ADVENTURE-BATTLE MOVEMENTS  (D3a.2)
+
+     The Adventure battles (Otzi / Gilgamesh / D3b Battle 2) run their own
+     cloned reveal pipelines that do NOT go through buildRevealSequence, so
+     they never picked up the canonical runAiMovements()/aiActionLog path —
+     a move-capable AI card (Chariot, id 48) would be played but never moved.
+
+     runAdventureMovements() is the shared, reveal-time movement step those
+     battles call after all cards are revealed. It decides + executes the move
+     directly via executeMoveAnimated (which fires Chariot's arrival strike),
+     then calls onDone. No move-capable card on the board → immediate onDone.
+  ═══════════════════════════════════════════════════════════════ */
+
+  // Sum of revealed effective IP for a side at a location.
+  function _advLocIP(slots, locId) {
+    return (slots[locId] || []).reduce(function (sum, s) {
+      return sum + (s && s.revealed ? helpers.effectiveIP(s) : 0);
+    }, 0);
+  }
+
+  /* Smart Chariot (id 48) destination (D3a.2 ST3). Returns a locId to move to,
+     or null to stay put. Move trigger: the current location is already won
+     comfortably (so the Chariot is wasted here and can leave without losing
+     it), OR a destination's arrival strike would flip a contested location.
+     Among candidates, prefer the most strategic strike (highest-IP victim /
+     a flip). */
+  function _bestChariotDest(G, curLocId, chariotEffIP) {
+    var curGap = _advLocIP(G.aiSlots, curLocId) - _advLocIP(G.playerSlots, curLocId);
+    // Safe to leave only if we'd still hold the current location after it goes.
+    var winningComfortably = curGap >= 2 && (curGap - chariotEffIP) >= 0;
+
+    var best = null;
+    G.locations.forEach(function (loc) {
+      if (loc.id === curLocId) return;
+      if ((G.aiSlots[loc.id] || []).indexOf(null) === -1) return;          // no open slot
+      var pCards = (G.playerSlots[loc.id] || []).filter(function (s) { return s && s.revealed; });
+      if (!pCards.length) return;                                          // nothing to strike
+
+      var highIP = pCards.reduce(function (m, s) { return Math.max(m, helpers.effectiveIP(s)); }, 0);
+      var aiIP   = _advLocIP(G.aiSlots, loc.id);
+      var pIP    = _advLocIP(G.playerSlots, loc.id);
+      var marginBefore = aiIP - pIP;
+      var marginAfter  = (aiIP + chariotEffIP) - (pIP - 1);               // +Chariot, -1 from strike
+      var flips = marginBefore < 0 && marginAfter >= 0;
+
+      var score = highIP                          // strike value (reduce a strong card)
+                + (flips ? 10 : 0)                // flipping a contested location is big
+                + (marginBefore < 0 ? 2 : 0);     // contesting a location we're losing
+      if (!best || score > best.score) best = { locId: loc.id, score: score, flips: flips };
+    });
+
+    if (!best) return null;
+    if (winningComfortably || best.flips) return best.locId;
+    return null;                                  // no move meaningfully improves the board
+  }
+
+  function runAdventureMovements(onDone) {
+    onDone = onDone || function () {};
+    var G = SOG.state.G;
+    if (!G || !SOG.game || typeof SOG.game.executeMoveAnimated !== 'function') { onDone(); return; }
+
+    // Find the AI's revealed Chariot that hasn't already moved this turn.
+    var found = null;
+    G.locations.forEach(function (loc) {
+      (G.aiSlots[loc.id] || []).forEach(function (s) {
+        if (found || !s || !s.revealed) return;
+        if (s.cardId === 48 && !(G.aiMovedThisTurn && G.aiMovedThisTurn[48])) {
+          found = { locId: loc.id, sd: s };
+        }
+      });
+    });
+    if (!found) { onDone(); return; }
+
+    var dest = _bestChariotDest(G, found.locId, helpers.effectiveIP(found.sd));
+    if (dest === null) { onDone(); return; }
+
+    if (!G.aiMovedThisTurn) G.aiMovedThisTurn = {};
+    G.aiMovedThisTurn[48] = true;
+    SOG.game.executeMoveAnimated('opp', 48, found.locId, dest, {}, function () { onDone(); });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      PUBLIC EXPORTS
   ═══════════════════════════════════════════════════════════════ */
   SOG.ai = {
     runAiSelection: runAiSelection,
-    runAiMovements: runAiMovements
+    runAiMovements: runAiMovements,
+    runAdventureMovements: runAdventureMovements
   };
 
 })();
