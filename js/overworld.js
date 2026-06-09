@@ -1383,6 +1383,19 @@ var Overworld = (function () {
     if (c && c.parentNode) c.parentNode.removeChild(c);
   }
 
+  /* Gently fade the candlelit room (flame + dark backdrop) out so the
+     overworld board behind it fades back in, then remove the layers. */
+  function _fadeOutCandleBackdrop(cb) {
+    var targets = ['adv-candle-bg', 'adv-candle']
+      .map(function (id) { return document.getElementById(id); })
+      .filter(Boolean);
+    if (!targets.length || !window.gsap) { _removeCandleBackdrop(); if (cb) cb(); return; }
+    gsap.to(targets, {
+      opacity: 0, duration: 0.6, ease: 'power1.out',
+      onComplete: function () { _removeCandleBackdrop(); if (cb) cb(); }
+    });
+  }
+
   /* Grant a single card: unlock (idempotent) + card-acquisition reveal that
      auto-dismisses after ~1.5s (player can still click early). */
   function _d2cGrantCard(id, cb) {
@@ -1463,19 +1476,18 @@ var Overworld = (function () {
       _runLinesKeepOpen(D3_FARMER_POSTLOSS_A, function () {
         _grantCuneiform(function () {
           _runLinesKeepOpen(D3_FARMER_POSTLOSS_B, function () {
-            function challenge() {
-              _runLinesKeepOpen(D3_GILGAMESH_CHALLENGE_AGAIN, function () {
-                function finish() {
-                  _removeCandleBackdrop();
-                  isDialogueLocked = false;
-                  if (onDone) onDone();
-                }
-                if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(finish);
-                else finish();
+            // "Thank you" done. Slide the Farmer HUD down, fade the flame out so
+            // the overworld board returns, THEN Gilgamesh challenges anew from
+            // the overworld (same encounter helper as the first meeting).
+            function gilgameshChallenge() {
+              _runGilgameshEncounter(D3_GILGAMESH_CHALLENGE_AGAIN, function () {
+                isDialogueLocked = false;
+                if (onDone) onDone();
               });
             }
-            if (hud && typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'gilgamesh' }, challenge);
-            else challenge();
+            function revealBoard() { _fadeOutCandleBackdrop(gilgameshChallenge); }
+            if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(revealBoard);
+            else revealBoard();
           });
         });
       });
