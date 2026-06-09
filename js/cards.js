@@ -246,7 +246,7 @@ const CARDS = [
     image: "images/cards/prehistorycards/caveartcard.jpg", locked: true
   },
   {
-    id: 31, name: "Megalith", cc: 2, ip: 3,
+    id: 31, name: "Megalith", cc: 2, ip: 2,
     type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
     image: "images/cards/prehistorycards/megalithcard.jpg", locked: true
@@ -266,7 +266,7 @@ const CARDS = [
     image: "images/cards/prehistorycards/lucycard.jpg", locked: true
   },
   {
-    id: 34, name: "Neanderthal", cc: 4, ip: 4,
+    id: 34, name: "Neanderthal", cc: 4, ip: 3,
     type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
     image: "images/cards/prehistorycards/neanderthalcard.jpg", locked: true
