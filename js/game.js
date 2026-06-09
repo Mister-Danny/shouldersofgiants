@@ -90,7 +90,6 @@
   var showRevealFirstHighlight      = SOG.abilities.showRevealFirstHighlight;
   var hideRevealFirstHighlight      = SOG.abilities.hideRevealFirstHighlight;
   var getAdjacentLocIds             = SOG.abilities.getAdjacentLocIds;
-  var resolveCuneiformAttachment    = SOG.abilities.resolveCuneiformAttachment;
 
   /* ── Drag state (game.js no longer needs its own — owned by input.js) ── */
   /* dragInfo, selectedCardId/Source/FromLocId/FromSlotIndex, pendingPopupTimer,
@@ -958,13 +957,11 @@
         slotEl.innerHTML = '';
       }
       // Wait for reveal animation + per-card SFX to finish, then fire ability.
-      // After the card's own At Once resolves, run the three play-from-hand hooks
-      // (in order): Cuneiform attachment, play-order metadata, Cultural counter.
+      // After the card's own At Once resolves, run the play-from-hand hooks
+      // (in order): play-order metadata, Cultural counter.
       flipSlot(slotEl, function () {
         fireAtOnce(item.owner, item.cardId, rLocId, function () {
-          // (a) Cuneiform attachment — only fires when a Cuneiform is pending here
-          resolveCuneiformAttachment(item.owner, item.cardId, rLocId);
-          // (b) Per-slot play metadata (Scribe needs this on every revealed card)
+          // (a) Per-slot play metadata (Scribe needs this on every revealed card)
           if (rSd && rLocId !== null) {
             rSd.playTime      = ++G.playOrderCounter;
             rSd.originalLocId = rLocId;

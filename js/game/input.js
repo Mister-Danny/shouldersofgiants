@@ -689,7 +689,11 @@
     // breakdown shows "Base IP: 5  |  Jesus: +3  |  Total: 8" instead of
     // collapsing it into base IP. sd.ip stays at the card's immutable base.
     var resBonus  = G.cardIPBonus[cardId] || 0;
-    var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
+    // Carry-forward bonus attribution: Jesus/Samurai are id-specific; a
+    // Cuneiform hand-boost (G.cardIPBonusSource) attributes to Cuneiform so
+    // the IP breakdown shows its portrait; otherwise a generic "Bonus".
+    var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai'
+                  : (G.cardIPBonusSource && G.cardIPBonusSource[cardId]) || 'Bonus';
     var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
     // Capture hand position so undoPlay can restore the card to the slot it
     // came from rather than appending to the end of the hand.
@@ -726,12 +730,18 @@
         typeof SOG.Adventure.Prehistory.notifyPlayerPlayed === 'function') {
       SOG.Adventure.Prehistory.notifyPlayerPlayed(cardId, locId);
     }
-    // Otzi battle hook
+    // Adventure-battle hook (G.otziMode is shared by the Otzi and Gilgamesh
+    // battles). Notify both modules; only the active battle has its end-turn
+    // hook installed, so the inactive one's notify is a harmless no-op.
     if (G.otziMode) {
       G.otziCardsPlayed = (G.otziCardsPlayed || 0) + 1;
       if (window.SOG && SOG.OtziBattle &&
           typeof SOG.OtziBattle.notifyPlayerPlayed === 'function') {
         SOG.OtziBattle.notifyPlayerPlayed(cardId, locId);
+      }
+      if (window.SOG && SOG.GilgameshBattle &&
+          typeof SOG.GilgameshBattle.notifyPlayerPlayed === 'function') {
+        SOG.GilgameshBattle.notifyPlayerPlayed(cardId, locId);
       }
     }
   }

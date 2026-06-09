@@ -1288,58 +1288,45 @@
     setTimeout(done, 600);
   }
 
-  // Cuneiform (id 46) — At Once: Attaches itself to the next card you
-  // play here.  Sets a pending flag; the actual attachment is resolved
-  // by resolveCuneiformAttachment(), called from revealNext in game.js
-  // immediately after the host card's own At Once ability fires.
+  // Cuneiform (id 46) — "Writing" — At Once: snapshots at its play moment
+  // and grants +1 IP to every Prehistory card (a) in slots at this location
+  // and (b) in the owner's hand. Hand-card boosts persist when those cards
+  // are later played (carried via G.cardIPBonus, re-applied at commit time
+  // with Cuneiform attribution). Prehistory cards drawn AFTER Cuneiform plays
+  // are NOT boosted — the snapshot is taken now, once.
   function abilityCuneiform(owner, locId, done) {
-    if (!G.cuneiformPending) G.cuneiformPending = {};
-    G.cuneiformPending[owner + ':' + locId] = true;
+    var isPlayer  = (owner === 'player');
+    var slots     = isPlayer ? G.playerSlots : G.aiSlots;
+    var hand      = isPlayer ? G.playerHand   : G.aiHand;
+    var bonusMap  = isPlayer ? G.cardIPBonus  : G.aiCardIPBonus;
+
+    function isPrehistory(id) {
+      var c = CARDS.find(function (x) { return x.id === id; });
+      return !!c && c.type === 'Prehistory';
+    }
+
+    // (a) Prehistory cards already placed at this location → permanent +1 now.
+    var eid = nextEventId();
+    (slots[locId] || []).forEach(function (s) {
+      if (s && isPrehistory(s.cardId)) {
+        addIPMod(s, 1, 'Cuneiform', eid);
+        if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
+          SOG.ui.showIPFloat(owner, s.cardId, 1);
+        }
+      }
+    });
+
+    // (b) Prehistory cards in hand → pending +1 that's applied (with Cuneiform
+    // attribution) whenever the card is later played, and persists across replays.
+    if (!G.cardIPBonusSource) G.cardIPBonusSource = {};
+    (hand || []).forEach(function (cardId) {
+      if (isPrehistory(cardId)) {
+        bonusMap[cardId] = (bonusMap[cardId] || 0) + 1;
+        if (isPlayer) G.cardIPBonusSource[cardId] = 'Cuneiform';
+      }
+    });
+
     done();
-  }
-
-  /**
-   * Called by game.js's revealNext for every play-from-hand action.
-   * If Cuneiform is pending at owner:locId and the just-played card is
-   * not Cuneiform itself, attaches: removes Cuneiform from its slot and
-   * applies +1 permanent ipMod to the host card.
-   *
-   * Deliberately NOT called on move actions (executeMoveAnimated),
-   * Otzi migrations, or any non-play transition.
-   */
-  function resolveCuneiformAttachment(owner, hostCardId, locId) {
-    if (hostCardId === 46) return;          // Cuneiform can't attach to itself
-    if (!G.cuneiformPending) return;
-    var key = owner + ':' + locId;
-    if (!G.cuneiformPending[key]) return;
-
-    var sl = owner === 'player' ? G.playerSlots : G.aiSlots;
-
-    // Find Cuneiform's slot at this location
-    var cIdx = -1;
-    sl[locId].forEach(function (s, si) {
-      if (s && s.revealed && s.cardId === 46) cIdx = si;
-    });
-    if (cIdx === -1) { G.cuneiformPending[key] = false; return; }  // gone — clean up
-
-    // Find the host card's slot data
-    var hostSd = null;
-    sl[locId].forEach(function (s) {
-      if (s && s.cardId === hostCardId) hostSd = s;
-    });
-    if (!hostSd) return;
-
-    // Permanently boost the host (+1 ipMod, Pattern A — Cuneiform portrait as thumbnail)
-    addIPMod(hostSd, 1, 'Cuneiform');
-    SOG.ui.showIPFloat(owner, hostCardId, 1);
-
-    // Remove Cuneiform from its slot
-    sl[locId][cIdx] = null;
-    clearSlotDOM(owner, locId, cIdx);
-    if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
-    else                    { compactOppSlots(locId);    syncOppSlots(locId);    }
-
-    G.cuneiformPending[key] = false;
   }
 
   // The Phoenicians (id 49) — At Once: Attaches itself to one of your
@@ -1840,7 +1827,6 @@
     /* Helpers */
     getAdjacentLocIds:              getAdjacentLocIds,
     chariotArrival:                 chariotArrival,
-    resolveCuneiformAttachment:     resolveCuneiformAttachment,
     /* The registry itself — exposed so future passes / pro devs can
        extend it without touching this file. */
     CARD_ABILITIES:            CARD_ABILITIES

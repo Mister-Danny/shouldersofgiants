@@ -143,40 +143,34 @@ var Overworld = (function () {
     { who: 'gilgamesh', text: 'You will be.'                                       }
   ];
 
-  /* ── Phase D2c — Farmer return + 5 card grants ───────────────────
-     Runs after the Gilgamesh encounter. Dialogue is split into segments
-     so card acquisitions fire at the specified beats (see _d2cFarmerSequence).
-       Seg A → grant Farmer(39)
-       Seg B → grant Canals(41)
-       Seg C → grant Soldier(42), Scribe(40), Priest(38)  (3 in a row)
-       Seg D → end                                                     */
-  var D2C_FARMER_SEG_A = [
-    { who: 'farmer',   text: 'I hear you’re going up against Gilgamesh.' },
-    { who: 'explorer', text: 'Unfortunately…'                            },
-    { who: 'farmer',   text: 'Well, I think I can help.'                      }
+  /* ── Phase D3a — Gilgamesh "challenge again" + post-loss Farmer/Cuneiform ──
+     The pre-battle Farmer 5-card-grant + Deck Builder sequence was removed in
+     D3a; the candle + Farmer dialogue helpers are reused for the post-loss
+     Cuneiform intervention (runGilgameshCuneiformIntervention).              */
+  var D3_GILGAMESH_CHALLENGE_AGAIN = [
+    { who: 'gilgamesh', text: 'You dare to challenge me again?!'                 },
+    { who: 'explorer',  text: 'I have learned from my mistakes.'                 },
+    { who: 'gilgamesh', text: 'Prepare to be swept into the dustbin of history.' }
   ];
-  var D2C_FARMER_SEG_B = [
-    { who: 'explorer', text: 'Wow, thanks.'                                                   },
-    { who: 'farmer',   text: 'Cultivating food here is so much easier with this cool new invention.' }
+  // Post-loss intervention dialogue, split around the Cuneiform card grant.
+  var D3_FARMER_POSTLOSS_A = [
+    { who: 'farmer',   text: 'Hey, that was a tough battle you lost.'      },
+    { who: 'explorer', text: 'His cards were so much more advanced.'       },
+    { who: 'farmer',   text: 'Of course. You were playing in Prehistory.'  },
+    { who: 'farmer',   text: "You didn't stand a chance."                  },
+    { who: 'explorer', text: 'What do I do?'                               },
+    { who: 'farmer',   text: 'Bring your cards up to date.'                },
+    { who: 'explorer', text: 'How?'                                        },
+    { who: 'farmer',   text: 'With writing.'                               }
   ];
-  var D2C_FARMER_SEG_C = [
-    { who: 'explorer', text: 'You’re so generous.'                                       },
-    { who: 'farmer',   text: 'Yeah, and in a city-state, people specialize in different jobs.' }
+  // [Cuneiform card acquisition fires here]
+  var D3_FARMER_POSTLOSS_B = [
+    { who: 'farmer',   text: 'With Cuneiform, you give your cards the ability to record what we know and pass it on.' },
+    { who: 'explorer', text: 'Thank you.'                                  }
   ];
-  var D2C_FARMER_SEG_D = [
-    { who: 'explorer', text: 'You’ve been busy.'                    },
-    { who: 'farmer',   text: 'Not as busy as you’re about to be.'   },
-    { who: 'farmer',   text: 'You need to build yourself a deck.'   }
-  ];
-  // Card ids granted at each beat (Farmer 39, Canals 41, then the 3-in-a-row).
-  var D2C_GRANT_A = 39;                 // Farmer
-  var D2C_GRANT_B = 41;                 // Canals
-  var D2C_GRANT_C = [42, 40, 38];       // Soldier, Scribe, Priest
-  // The prehistory deck (ids 26–36) is unlocked silently at this point so the
-  // Deck Builder shows the player's full earned collection (11 Prehistory +
-  // 5 Mesopotamia). See _d2cGrantStarters().
-  var D2C_PREHISTORY_IDS = [26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36];
-  var D2C_AUTO_DISMISS_MS = 1500;
+  var D2C_AUTO_DISMISS_MS    = 1500;
+  var KEY_GILGAMESH_PHASE1   = 'sog_gilgamesh_phase1_complete';
+  var KEY_CUNEIFORM_GRANTED  = 'sog_cuneiform_granted';
 
   var PHASE2_DIALOGUE = [
     { who: 'lucy',     text: 'Mmmhm\u2026 I\u2019m standing right here.' },
@@ -676,35 +670,29 @@ var Overworld = (function () {
     // Clicking the Prehistory node ends the urgent idle pulse if active
     clearUrgentPulse();
 
-    // ── Walls of Uruk — Phase D2b: Gilgamesh encounter ──────────
+    // ── Walls of Uruk — Phase D3a: Gilgamesh Battle 1 ──────────
     if (node.id === 'walls-of-uruk' && currentMapId === 'mesopotamia') {
-      var gilgBattleDone = false;
-      try { gilgBattleDone = localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; } catch (e) {}
+      isDialogueLocked = true;
+      cancelIdle();
+      var battleDone = false, phase1Done = false, hasCuneiform = false;
+      try { battleDone   = localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; } catch (e) {}
+      try { phase1Done   = localStorage.getItem(KEY_GILGAMESH_PHASE1) === 'true'; } catch (e) {}
+      try { hasCuneiform = localStorage.getItem(KEY_CUNEIFORM_GRANTED) === 'true'; } catch (e) {}
 
-      if (gilgBattleDone) {
-        // Post-victory replay: walk + skip directly to battle (no dialogue)
-        isDialogueLocked = true;
-        cancelIdle();
-        walkPath([{ x: node.x, y: node.y }], function () {
-          log('[D2b] Gilgamesh battle complete — skipping dialogue, firing wipe');
-          _fireWipeFromNode('walls-of-uruk', function () {
-            var gb = window.SOG && window.SOG.GilgameshBattle;
-            if (gb && typeof gb.start === 'function') {
-              gb.start();
-            } else {
-              console.warn('[Overworld] SOG.GilgameshBattle not found — aborting');
-              isDialogueLocked = false;
-              _clearWipe();
-              scheduleIdle();
-            }
-          });
-        });
-      } else {
-        // First run → full Farmer sequence; replay (starter granted) → skip it.
-        var starterGranted = false;
-        try { starterGranted = localStorage.getItem(KEY_MESO_STARTER_GRANTED) === 'true'; } catch (e) {}
-        _d2bSequence(node, starterGranted);
-      }
+      walkPath([{ x: node.x, y: node.y }], function () {
+        if (battleDone || phase1Done) {
+          // D3a placeholder — D3b replaces with the Battle 2 flow. For now,
+          // re-enter Battle 1 directly (no encounter dialogue).
+          log('[D3a] phase1/battle complete — placeholder re-entry to Battle 1');
+          _launchGilgameshBattle();
+        } else if (hasCuneiform) {
+          // Attempt 2 re-entry: "challenge again" exchange → battle.
+          _runGilgameshEncounter(D3_GILGAMESH_CHALLENGE_AGAIN, _launchGilgameshBattle);
+        } else {
+          // First run: "Welcome to my city" exchange → Battle 1 Attempt 1.
+          _runGilgameshEncounter(D2B_GILGAMESH_DIALOGUE, _launchGilgameshBattle);
+        }
+      });
       return;
     }
 
@@ -1424,102 +1412,85 @@ var Overworld = (function () {
   /* Full Farmer return sequence: candle transition (portrait swap behind the
      black hold) → dialogue with the 5 interleaved card grants → sets the
      starter-granted flag. */
-  function _d2cFarmerSequence(done) {
-    var hud = window.SOG && window.SOG.HUD;
+  /* ── Phase D3a — Gilgamesh encounter + battle launch ─────────────── */
 
-    // Unlock the earned Prehistory deck (ids 26–36) silently — no reveal — so
-    // the Deck Builder shows the full collection (11 Prehistory + 5 Mesopotamia).
-    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') {
-      SOG.Cards.unlock(D2C_PREHISTORY_IDS);
-    }
+  /* Run a Gilgamesh/Explorer encounter exchange via the HUD, then onDone. */
+  function _runGilgameshEncounter(lines, onDone) {
+    var hud = window.SOG && window.SOG.HUD;
+    if (!hud || typeof hud.enterDialogueMode !== 'function') { if (onDone) onDone(); return; }
+    hud.enterDialogueMode(null, function () {
+      _runLinesKeepOpen(lines, function () {
+        try { localStorage.setItem(KEY_MET_GILGAMESH, 'true'); } catch (e) {}
+        if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+        if (onDone) onDone();
+      });
+    });
+  }
+
+  /* Fire the radial wipe from the node, then start the real Gilgamesh battle. */
+  function _launchGilgameshBattle() {
+    _fireWipeFromNode('walls-of-uruk', function () {
+      var gb = window.SOG && window.SOG.GilgameshBattle;
+      if (gb && typeof gb.start === 'function') {
+        gb.start();   // start() does showScreen('screen-battle') + fadeOutCover
+      } else {
+        console.warn('[Overworld] SOG.GilgameshBattle not found — aborting');
+        _clearWipe();
+        isDialogueLocked = false;
+        scheduleIdle();
+      }
+    });
+  }
+
+  /* Post-loss Cuneiform intervention (D3a sub-task 4). Called by the Gilgamesh
+     battle's "Play Again" when Cuneiform isn't yet granted. Reuses the candle
+     transition + HUD Farmer dialogue. The battle module has already torn itself
+     down; we run on the overworld screen (under the candle cover) so the HUD
+     renders, then onDone() restarts Battle 1 Attempt 2. */
+  function runGilgameshCuneiformIntervention(onDone) {
+    var hud = window.SOG && window.SOG.HUD;
+    isDialogueLocked = true;
+    try { var shh = new Audio('sfx/shh.m4a'); shh.play(); } catch (e) {}
 
     _d2cCandleTransition(function () {
-      // During the black hold: swap Gilgamesh → Farmer (hidden behind black).
-      if (hud && typeof hud.swapNpcPortrait === 'function') {
-        hud.swapNpcPortrait({ character: 'farmer' });
-      }
+      // Black hold: reveal the overworld screen (hidden behind black) so the
+      // HUD can render, and bring Farmer up.
+      if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
+      if (hud && typeof hud.enterDialogueMode === 'function') hud.enterDialogueMode(null, function () {});
+      if (hud && typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'farmer' });
     }, function () {
-      // Candle lit, scene warm: Farmer now occupies the NPC slot. Run the beats.
-      _runLinesKeepOpen(D2C_FARMER_SEG_A, function () {
-        _d2cGrantCard(D2C_GRANT_A, function () {
-          _runLinesKeepOpen(D2C_FARMER_SEG_B, function () {
-            _d2cGrantCard(D2C_GRANT_B, function () {
-              _runLinesKeepOpen(D2C_FARMER_SEG_C, function () {
-                _d2cGrantCards(D2C_GRANT_C, function () {
-                  _runLinesKeepOpen(D2C_FARMER_SEG_D, function () {
-                    try { localStorage.setItem(KEY_MESO_STARTER_GRANTED, 'true'); } catch (e) {}
-                    log('[D2c] All 5 starter cards granted');
-                    if (done) done();
-                  });
-                });
+      // Candle lit: Farmer dialogue → Cuneiform grant → Gilgamesh challenge.
+      _runLinesKeepOpen(D3_FARMER_POSTLOSS_A, function () {
+        _grantCuneiform(function () {
+          _runLinesKeepOpen(D3_FARMER_POSTLOSS_B, function () {
+            function challenge() {
+              _runLinesKeepOpen(D3_GILGAMESH_CHALLENGE_AGAIN, function () {
+                function finish() {
+                  _removeCandleBackdrop();
+                  isDialogueLocked = false;
+                  if (onDone) onDone();
+                }
+                if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(finish);
+                else finish();
               });
-            });
+            }
+            if (hud && typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'gilgamesh' }, challenge);
+            else challenge();
           });
         });
       });
     });
   }
 
-  /* Exit dialogue cleanly (Farmer slides down, player portrait stays) and
-     route into the Deck Builder in Adventure/pre-Gilgamesh-battle context. */
-  function _openGilgameshDeckBuilder() {
-    var hud = window.SOG && window.SOG.HUD;
-    function go() {
-      isDialogueLocked = false;
-      _removeCandleBackdrop();   // tear down the candlelit room before the deck builder
-      // Context flag: names the target battle. Its presence routes the Deck
-      // Builder's "Let's Play" to that battle and "Back" to the Mesopotamia
-      // overworld (see deckbuilder.js). Future battles reuse this flag.
-      window.adventureBattleTarget = 'gilgamesh';
-      if (typeof window.showScreen === 'function') window.showScreen('screen-deckbuilder');
-      if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
-      if (typeof window.playDeckMusic === 'function') window.playDeckMusic();
-    }
-    if (hud && typeof hud.exitDialogueMode === 'function') {
-      hud.exitDialogueMode(go);
-    } else {
-      go();
-    }
-  }
-
-  /* Walls of Uruk encounter. skipFarmer=true on replay once the starter cards
-     have already been granted: Gilgamesh dialogue still plays (narrative
-     context) but the Farmer card sequence is skipped — straight to Deck Builder. */
-  function _d2bSequence(node, skipFarmer) {
-    isDialogueLocked = true;
-    cancelIdle();
-    log('[D2b] Walking to Walls of Uruk');
-
-    walkPath([{ x: node.x, y: node.y }], function () {
-      log('[D2b] Explorer arrived at Walls of Uruk — settling before dialogue');
-      setTimeout(function () {
-        var hud = window.SOG && window.SOG.HUD;
-        if (!hud) {
-          log('[D2b] HUD unavailable — aborting');
-          isDialogueLocked = false;
-          scheduleIdle();
-          return;
-        }
-
-        hud.enterDialogueMode(null, function () {
-          log('[D2b] Dialogue mode entered — running Gilgamesh encounter lines');
-          _runLinesKeepOpen(D2B_GILGAMESH_DIALOGUE, function () {
-            // "You will be." dismissed — record that we've met Gilgamesh.
-            try { localStorage.setItem(KEY_MET_GILGAMESH, 'true'); } catch (e) {}
-
-            if (skipFarmer) {
-              log('[D2c] Starter cards already granted — skipping Farmer sequence');
-              _openGilgameshDeckBuilder();
-            } else {
-              log('[D2c] Starting Farmer return sequence (iris + 5 card grants)');
-              _d2cFarmerSequence(function () {
-                _openGilgameshDeckBuilder();
-              });
-            }
-          });
-        });
-      }, 300);
-    });
+  /* Grant Cuneiform (id 46): idempotent flag + unlock + acquisition reveal. */
+  function _grantCuneiform(cb) {
+    try { localStorage.setItem(KEY_CUNEIFORM_GRANTED, 'true'); } catch (e) {}
+    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') SOG.Cards.unlock([46]);
+    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === 46; });
+    var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
+    if (card && preh && typeof preh.showCardAcquisition === 'function') {
+      preh.showCardAcquisition(card, null, function () { if (cb) cb(); }, { autoDismissMs: D2C_AUTO_DISMISS_MS });
+    } else if (cb) { cb(); }
   }
 
   /* Tear down and re-place all node elements for the current map.
@@ -1772,6 +1743,8 @@ var Overworld = (function () {
     // Phase D1 — Otzi→Mesopotamia travel cinematic. Called by sog-adventure-otzi.js
     // after the player wins the Otzi battle and clicks "Back to Map" for the first time.
     startMesopotamiaArrival: startMesopotamiaArrival,
+    // D3a — post-loss Cuneiform intervention, called by the Gilgamesh battle.
+    runGilgameshCuneiformIntervention: runGilgameshCuneiformIntervention,
     // Devtools helpers
     goToMap: function (mapId) {
       if (!MAPS[mapId]) { console.warn('No such map:', mapId); return; }

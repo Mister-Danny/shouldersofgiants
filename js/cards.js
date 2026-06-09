@@ -358,8 +358,8 @@ const CARDS = [
     /* Filename on disk is misspelled "cunieform" — to be renamed in a later pass */
     id: 46, name: "Cuneiform", cc: 1, ip: 1,
     type: "Cultural", type2: null, era: "Mesopotamia",
-    abilityName: "Beyond Prehistory",
-    ability: "At Once: Attaches itself to the next card you play here.",
+    abilityName: "Writing",
+    ability: "At Once: Grants +1 IP to all Prehistory cards at this location and in your hand. Hand-card boosts persist when those cards are later played.",
     image: "images/mesopotamiacards/cunieform@0.5x.jpg", locked: true
   },
   {
