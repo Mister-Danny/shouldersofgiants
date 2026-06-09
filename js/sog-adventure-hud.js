@@ -338,6 +338,12 @@ SOG.HUD = (function () {
     if (typeof orig !== 'function') return;
     window.showScreen = function (id) {
       orig(id);
+      // HUD visibility is owned by CSS (#adv-hud is display:none by default,
+      // shown only via body[data-screen="overworld"]). show()/hide() set an
+      // INLINE display that would otherwise persist across screen changes and
+      // leak the overworld HUD onto the battle screen. Clear it on every
+      // transition so the data-screen rule stays authoritative.
+      if (_hudEl) _hudEl.style.display = '';
       if (id === 'screen-overworld') {
         refreshDecks();
         _syncMusicUI();
