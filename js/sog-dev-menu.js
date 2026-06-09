@@ -59,8 +59,20 @@ SOG.DevMenu = (function () {
       ids.forEach(function (id) { var c = CARDS.find(function (x) { return x.id === id; }); if (c) c.locked = true; });
     }
   }
+  // Defensive: tear down any in-progress battle before a scene jump so we don't
+  // leave battle DOM / event listeners / stale flags behind. Guarded so a
+  // missing module never throws. Add new battle modules here as they ship.
+  function teardownBattles() {
+    ['GilgameshBattle', 'OtziBattle'].forEach(function (name) {
+      try {
+        if (window.SOG && SOG[name] && typeof SOG[name].teardown === 'function') SOG[name].teardown();
+      } catch (e) { console.warn('[DevMenu] teardown failed for', name, e); }
+    });
+  }
+
   // Land on an overworld map instantly (no travel animation), nodes gated by flags.
   function gotoOverworld(mapId) {
+    teardownBattles();
     try {
       localStorage.setItem('sog_overworld_map', mapId);
       localStorage.removeItem('sog_overworld_pos');   // spawn position
@@ -81,6 +93,7 @@ SOG.DevMenu = (function () {
         ensureAdventurer();
         setFlags(PREREQS_PREHISTORY);
         removeFlags(['sog_mesopotamia_arrival_complete']); // arrival must replay
+        teardownBattles();
         try { localStorage.setItem('sog_overworld_map', 'eastafrica'); localStorage.removeItem('sog_overworld_pos'); } catch (e) {}
         if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
         if (window.Overworld && window.Overworld.init) window.Overworld.init();
@@ -114,6 +127,7 @@ SOG.DevMenu = (function () {
         });
         removeFlags(['sog_gilgamesh_phase1_complete']); // Battle 1 (fixed deck), not the rematch
         hide();
+        teardownBattles();   // clean up any in-progress battle so we start fresh
         if (window.SOG && SOG.GilgameshBattle && SOG.GilgameshBattle.start) SOG.GilgameshBattle.start();
       }
     },
