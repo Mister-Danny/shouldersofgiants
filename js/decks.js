@@ -142,9 +142,17 @@
 
   function _save() { persistDecks(_decks); }
 
+  // Adventure Mode builds a smaller deck (12) than Arcadium/multiplayer (15).
+  // Keyed on the same flag the deck builder uses to detect adventure mode.
+  var ADVENTURE_DECK_SIZE = 12;
+  function effectiveDeckSize() {
+    return (typeof window !== 'undefined' && window.adventureBattleTarget)
+      ? ADVENTURE_DECK_SIZE : DECK_SIZE;
+  }
+
   function addCard(cardId) {
     var d = _decks[_active - 1];
-    if (d.cards.length >= DECK_SIZE) return false;
+    if (d.cards.length >= effectiveDeckSize()) return false;
     if (d.cards.indexOf(cardId) !== -1) return false;
     d.cards.push(cardId);
     _save();
@@ -199,6 +207,7 @@
   window.Decks = {
     SLOT_COUNT:     SLOT_COUNT,
     DECK_SIZE:      DECK_SIZE,
+    effectiveDeckSize: effectiveDeckSize,
     NAME_MAX:       NAME_MAX,
     getActiveSlot:  getActiveSlot,
     setActiveSlot:  setActiveSlot,

@@ -24,6 +24,11 @@
 
   /* ── Constants ───────────────────────────────────────────────── */
   var DECK_SIZE  = (window.Decks && window.Decks.DECK_SIZE) || 15;
+  // Effective target size — Adventure Mode uses 12, Arcadium/multiplayer 15.
+  function deckSize() {
+    return (window.Decks && typeof window.Decks.effectiveDeckSize === 'function')
+      ? window.Decks.effectiveDeckSize() : DECK_SIZE;
+  }
   var SLOT_COUNT = (window.Decks && window.Decks.SLOT_COUNT) || 3;
   var TYPE_ORDER = ['Prehistory', 'Political', 'Religious', 'Military', 'Cultural', 'Exploration', 'Scientific', 'Labor', 'Economic'];
 
@@ -387,9 +392,10 @@
 
   function updateUI() {
     var count = activeCardCount();
-    counterEl.textContent = count + ' / ' + DECK_SIZE;
-    counterEl.classList.toggle('complete', count === DECK_SIZE);
-    saveBtn.disabled    = count !== DECK_SIZE;
+    var size  = deckSize();
+    counterEl.textContent = count + ' / ' + size;
+    counterEl.classList.toggle('complete', count === size);
+    saveBtn.disabled    = count !== size;
     saveBtn.textContent = window.versusStudentMode ? 'Lock In Deck'
                         : window.multiplayerMode    ? 'Enter Lobby'
                         : "Let's Play";
@@ -531,7 +537,7 @@
   var diffBackdropEl = document.getElementById('difficulty-backdrop');
 
   function openDifficultyModal() {
-    if (activeCardCount() !== DECK_SIZE) return;
+    if (activeCardCount() !== deckSize()) return;
     // Notify the deck-builder tutorial that a real Let's Play happened
     // with a complete deck. The tutorial marks completion here — clicking
     // disabled or partial-deck has already been filtered above.
