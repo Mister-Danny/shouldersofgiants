@@ -48,6 +48,7 @@
   var popupOpen          = false;
   var hiddenForPopup     = false;    // tutorial UI hidden while popup is shown
   var _anyclickArmed     = false;    // gates 'anyclick' steps (Adventure popup walkthrough)
+  var _popupOpenedTimer  = null;     // delays the card-type step after the Canals popup opens
 
   /* Type-out animation state — self-contained, no TS coupling. */
   var TYPE_SPEED = 28;               // ms per char (matches tutorial.js)
@@ -198,7 +199,7 @@
     {
       id:      'intro-15',
       resolve: function () { return null; },
-      line:    "You need 15 cards to complete a deck.",
+      line:    "You need 12 cards to complete a deck.",
       advance: 'click'
     },
     {
@@ -247,7 +248,7 @@
     {
       id:      'lets-play',
       resolve: function () { return document.getElementById('db-save'); },
-      line:    "When you've added 15 cards, click here to play!",
+      line:    "When you've added 12 cards, click here to play!",
       advance: 'click',
       demoEnabled: true
     }
@@ -429,7 +430,11 @@
   }
 
   function notifyLetsPlay(deckSize) {
-    if (deckSize === 15) markComplete();
+    // Mark complete on a real Let's Play with a full deck — size is lane-aware
+    // (Adventure 12, Arcadium/multiplayer 15).
+    var full = (window.Decks && typeof window.Decks.effectiveDeckSize === 'function')
+      ? window.Decks.effectiveDeckSize() : 15;
+    if (deckSize === full) markComplete();
     if (active) tearDown();
   }
 
@@ -611,9 +616,19 @@
         nextStep();
       }
     } else if (step.advance === 'popup-opened') {
-      // Adventure flow: advance as soon as the popup opens, keeping the
-      // tutorial box visible so Farmer can talk over the open popup.
-      if (nowVisible) nextStep();
+      // Adventure flow: hold ~3s on the open popup so the player can read it,
+      // THEN advance to circle the card type (tutorial box stays visible so
+      // Farmer can talk over the open popup). Cancel if it closes early.
+      if (nowVisible) {
+        if (_popupOpenedTimer) clearTimeout(_popupOpenedTimer);
+        _popupOpenedTimer = setTimeout(function () {
+          _popupOpenedTimer = null;
+          if (active && STEPS[stepIdx] === step && popupOpen) nextStep();
+        }, 3000);
+      } else if (_popupOpenedTimer) {
+        clearTimeout(_popupOpenedTimer);
+        _popupOpenedTimer = null;
+      }
     }
   }
 
@@ -696,6 +711,7 @@
   function tearDown(opts) {
     active = false;
     stepIdx = -1;
+    if (_popupOpenedTimer) { clearTimeout(_popupOpenedTimer); _popupOpenedTimer = null; }
     if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
     typing = false;
     currentTargetEl = null;

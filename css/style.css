@@ -892,14 +892,12 @@ img    { display: block; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 12px 10px;
-  /* Portrait card proportions (matches the card faces) */
-  aspect-ratio: 3 / 4;
-  /* 33% smaller than the full column width, centered in each equal grid
-     column so spacing between tiles stays even. */
-  width: 67%;
-  justify-self: center;
+  gap: 4px;
+  padding: 6px 10px;
+  /* Short, wide tiles that fill each grid column (replaces the old portrait
+     3/4 card proportions, which read as oversized placeholder cards). */
+  width: 100%;
+  height: 54px;
   /* Light goldish-brown — distinct from the dark wood panel behind it */
   background: linear-gradient(180deg, #b8945a 0%, #a78648 100%);
   border: 2px solid #6a4418;
