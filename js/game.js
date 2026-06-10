@@ -412,7 +412,7 @@
     types.sort(function () { return Math.random() - 0.5; });
     var deck = [];
     types.slice(0, 3).forEach(function (type) {
-      CARDS.filter(function (c) { return c.type === type && !c.locked; })
+      CARDS.filter(function (c) { return c.type === type && !c.locked && SOG.Cards.laneOf(c) === 'arcadium'; })
            .forEach(function (c) { deck.push(c.id); });
     });
     return shuffle(deck);
