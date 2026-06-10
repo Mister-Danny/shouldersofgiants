@@ -127,6 +127,46 @@
      INIT
   ═══════════════════════════════════════════════════════════════ */
 
+  /* Build the battle-config object for a standard/Arcadium match from TODAY's
+     sources — SOG.state constants, the 2P Match config, window.aiDifficulty,
+     and the forced-locations strategy. Matches the battle-config schema blocks
+     (structure / resource / decks / locationAbilities / ai / scoring).
+     Battle-config arc Step 1: this is attached to G.config but NOT yet read —
+     the engine still runs off its constants. Every value here equals the
+     source it mirrors, so attaching it is behavior-neutral. (Steps 2+ route
+     initGame's reads through it; turns/scoring/AI reads come in a later step.) */
+  function resolveBattleConfig(twoPlayerCfg) {
+    var cfg2p             = twoPlayerCfg || null;
+    var hasExplicitLocs   = !!(cfg2p && cfg2p.locations  && cfg2p.locations.length);
+    var hasExplicitAiDeck = !!(cfg2p && cfg2p.oppDeckIds && cfg2p.oppDeckIds.length);
+    return {
+      structure: {
+        turns:            TURNS,
+        locationsCount:   3,
+        slotsPerLocation: SLOTS_PER_LOC,
+        handStart:        HAND_START,
+        maxHandSize:      MAX_HAND_SIZE
+      },
+      resource: { model: 'capital-flat', capital: CAPITAL, resetEachTurn: true },
+      decks: {
+        player: { source: 'active-deck' },                     // window.Decks.getActiveCards()
+        ai: hasExplicitAiDeck
+          ? { source: 'explicit', ids: cfg2p.oppDeckIds.slice() }
+          : { source: 'random-types', typeCount: 3 }           // buildAiDeck()
+      },
+      locationAbilities: {
+        // Abilities ride along with the chosen location objects' abilityKey;
+        // this block only describes how those locations are selected.
+        select: hasExplicitLocs
+          ? { mode: 'explicit', locations: cfg2p.locations }
+          : { mode: 'random-of-catalog', count: 3, catalog: 'LOCATIONS', allowForced: true }
+      },
+      ai:      { profile: window.aiDifficulty },
+      scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'draw' },
+      scriptHook: null
+    };
+  }
+
   function initGame() {
     // Default to easy if no difficulty was chosen (e.g. launched from tutorial)
     if (!window.aiDifficulty) window.aiDifficulty = 'easy';
@@ -134,29 +174,43 @@
     /* ── 2P mode: use Match-resolved locations + opponent deck ─── */
     var _2pCfg = (window.matchId && typeof Match !== 'undefined') ? Match.get2PConfig() : null;
 
-    G.locations = (_2pCfg && _2pCfg.locations && _2pCfg.locations.length)
-      ? _2pCfg.locations
+    /* Battle-config: built once from the sources above + constants. From here
+       initGame reads its own setup values through cfg (Step 2). _2pCfg is now
+       SUBSUMED — it feeds resolveBattleConfig and is no longer read directly.
+       (Turns, scoring, and the AI-profile reads still run off their constants
+       this step — they move in a later step.) */
+    G.config = resolveBattleConfig(_2pCfg);
+    var cfg = G.config;
+
+    /* Locations: cfg.locationAbilities.select — an explicit set (2P/Match) or
+       the random/forced pick. Equivalent to the old _2pCfg.locations branch. */
+    var locSel = cfg.locationAbilities.select;
+    G.locations = (locSel.mode === 'explicit' && locSel.locations && locSel.locations.length)
+      ? locSel.locations
       : pickLocations();
     window.initBattleUI(G.locations);
 
+    /* Player deck: cfg.decks.player (active-deck → the deck builder). */
     var deckIds = (window.Decks && window.Decks.getActiveCards()) || [];
     G.playerDeck = shuffle(deckIds.slice());
-    G.playerHand = G.playerDeck.splice(0, HAND_START);
+    G.playerHand = G.playerDeck.splice(0, cfg.structure.handStart);
 
-    G.aiDeck = (_2pCfg && _2pCfg.oppDeckIds && _2pCfg.oppDeckIds.length)
-      ? shuffle(_2pCfg.oppDeckIds.slice())
+    /* AI deck: cfg.decks.ai — explicit ids (2P) or random-types (buildAiDeck). */
+    var aiDeckCfg = cfg.decks.ai;
+    G.aiDeck = (aiDeckCfg.source === 'explicit' && aiDeckCfg.ids && aiDeckCfg.ids.length)
+      ? shuffle(aiDeckCfg.ids.slice())
       : buildAiDeck();
-    G.aiHand = G.aiDeck.splice(0, HAND_START);
+    G.aiHand = G.aiDeck.splice(0, cfg.structure.handStart);
 
     G.locations.forEach(function (loc) {
-      G.playerSlots[loc.id] = [null, null, null, null];
-      G.aiSlots[loc.id]     = [null, null, null, null];
+      G.playerSlots[loc.id] = Array(cfg.structure.slotsPerLocation).fill(null);
+      G.aiSlots[loc.id]     = Array(cfg.structure.slotsPerLocation).fill(null);
     });
 
     G.turn              = 1;
     G.phase             = 'select';
-    G.capital           = CAPITAL;
-    G.turnStartCapital  = CAPITAL;
+    G.capital           = cfg.resource.capital;
+    G.turnStartCapital  = cfg.resource.capital;
     G.playerFirst       = Math.random() < 0.5;
     showRevealFirstHighlight(G.playerFirst);
     G.playerRevealQueue = [];
