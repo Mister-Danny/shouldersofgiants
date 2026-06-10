@@ -1612,6 +1612,13 @@ window.SOG.Adventure.Prehistory = (function () {
         runPostBattleDialogue(WIN_DIALOGUE, function () {
           var neanderthalCard = (typeof CARDS !== 'undefined') &&
                                 CARDS.find(function (c) { return c.id === 34; });
+          // Single source of truth: record Neanderthal (34) in the player
+          // collection at the grant moment, alongside the acquisition reveal
+          // (same discipline as the Ötzi/Lucy fix). The
+          // sog_battle_neanderthal_complete progress flag is left untouched.
+          if (window.SOG && SOG.collection && typeof SOG.collection.unlockCard === 'function') {
+            SOG.collection.unlockCard(34);
+          }
           showCardAcquisition(
             neanderthalCard || { id: 34, name: 'Neanderthal', image: 'images/cards/prehistorycards/neanderthalcard.jpg', ip: 4, ability: null, abilityName: null },
             playCardAcquire,
