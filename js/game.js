@@ -182,6 +182,12 @@
     G.config = resolveBattleConfig(_2pCfg);
     var cfg = G.config;
 
+    /* AI profile bridge (Step 5): populate the global the AI read sites (ai.js,
+       game.js) already use FROM the config. This is the deliberate minimal
+       bridge — the read sites are untouched. Value round-trips the same string
+       resolveBattleConfig just captured, so behavior is identical. */
+    window.aiDifficulty = cfg.ai.profile;
+
     /* Locations: cfg.locationAbilities.select — an explicit set (2P/Match) or
        the random/forced pick. Equivalent to the old _2pCfg.locations branch. */
     var locSel = cfg.locationAbilities.select;
@@ -959,7 +965,7 @@
       refreshHandIPDisplays();
       refreshHandCostDisplays();
       updateScores();
-      setTimeout(function () { G.turn >= TURNS ? endGame() : nextTurn(); }, POST_REVEAL);
+      setTimeout(function () { G.turn >= G.config.structure.turns ? endGame() : nextTurn(); }, POST_REVEAL);
       return;
     }
     var item = seq[i];
@@ -1207,16 +1213,20 @@
       return { loc: loc, playerIP: pIP, aiIP: aIP,
                winner: pIP > aIP ? 'player' : aIP > pIP ? 'ai' : 'tie' };
     });
+    var sc = G.config.scoring;  // Step 4: scoring via G.config (most-locations rule)
     var pW = locResults.filter(function (r) { return r.winner === 'player'; }).length;
     var aW = locResults.filter(function (r) { return r.winner === 'ai';     }).length;
     var outcome, tb = false, pT = 0, aT = 0;
-    if      (pW >= 2) { outcome = 'player'; }
-    else if (aW >= 2) { outcome = 'ai'; }
+    if      (pW >= sc.winThreshold) { outcome = 'player'; }
+    else if (aW >= sc.winThreshold) { outcome = 'ai'; }
     else {
       tb = true;
-      pT = locResults.reduce(function (s, r) { return s + r.playerIP; }, 0);
-      aT = locResults.reduce(function (s, r) { return s + r.aiIP;     }, 0);
-      outcome = pT > aT ? 'player' : aT > pT ? 'ai' : 'draw';
+      // tiebreaker 'total-ip': compare summed IP across all locations.
+      if (sc.tiebreaker === 'total-ip') {
+        pT = locResults.reduce(function (s, r) { return s + r.playerIP; }, 0);
+        aT = locResults.reduce(function (s, r) { return s + r.aiIP;     }, 0);
+      }
+      outcome = pT > aT ? 'player' : aT > pT ? 'ai' : sc.exactTie;
     }
     return { outcome: outcome, tiebreaker: tb, playerWins: pW, aiWins: aW,
              playerTotal: pT, aiTotal: aT, locResults: locResults };

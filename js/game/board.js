@@ -490,7 +490,9 @@
   ═══════════════════════════════════════════════════════════════ */
 
   function updateHeader() {
-    headerTurnEl.textContent  = 'TURN ' + G.turn + ' / ' + TURNS;
+    // Step 3: turns count via G.config (same value as the TURNS constant).
+    var totalTurns = (G.config && G.config.structure) ? G.config.structure.turns : TURNS;
+    headerTurnEl.textContent  = 'TURN ' + G.turn + ' / ' + totalTurns;
     headerPhaseEl.textContent = G.phase === 'select' ? 'SELECT CARDS' : 'REVEAL';
     var capitalNumEl = document.getElementById('battle-capital-num');
     if (capitalNumEl) capitalNumEl.textContent = G.capital;
