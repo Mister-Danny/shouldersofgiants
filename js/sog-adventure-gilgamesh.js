@@ -1315,9 +1315,33 @@ SOG.GilgameshBattle = (function () {
   }
 
   var RESULT_ID = 'adv-gilgamesh-result';
+  var SHOW_RESULTS_ID = 'adv-gilgamesh-show-results';
   function _removeResultPopup() {
     var el = document.getElementById(RESULT_ID);
     if (el && el.parentNode) el.parentNode.removeChild(el);
+    _removeFloatingResultsBtn();
+  }
+  function _removeFloatingResultsBtn() {
+    var b = document.getElementById(SHOW_RESULTS_ID);
+    if (b && b.parentNode) b.parentNode.removeChild(b);
+  }
+  // "Game Board" on the victory popup — hide the scoreboard to reveal the final
+  // battle board for review, and float a "Show Results" button to bring it back.
+  function _hideResultForReview() {
+    var el = document.getElementById(RESULT_ID);
+    if (el) el.style.display = 'none';
+    if (document.getElementById(SHOW_RESULTS_ID)) return;
+    var btn = document.createElement('button');
+    btn.id = SHOW_RESULTS_ID;
+    btn.className = 'btn-primary';
+    btn.textContent = 'SHOW RESULTS';
+    btn.style.cssText = 'position:fixed;top:14px;right:14px;z-index:10060;';
+    btn.addEventListener('click', function () {
+      var r = document.getElementById(RESULT_ID);
+      if (r) r.style.display = '';
+      _removeFloatingResultsBtn();
+    });
+    document.body.appendChild(btn);
   }
 
   // Built on the standard adventure scoreboard markup (.adv-result →
@@ -1357,6 +1381,9 @@ SOG.GilgameshBattle = (function () {
         ? function () { _removeResultPopup(); _exitToOverworld(); }
         : function () { _removeResultPopup(); _runPostVictorySequence(); };
       actions.appendChild(mkBtn('CONTINUE', onContinue));
+      // Game Board: hide the scoreboard to review the final board; a floating
+      // "Show Results" button brings it back so Continue stays reachable.
+      actions.appendChild(mkBtn('GAME BOARD', function () { _hideResultForReview(); }));
     } else {
       actions.appendChild(mkBtn('PLAY AGAIN', function () { _removeResultPopup(); _onPlayAgain(); }));
       actions.appendChild(mkBtn('GAMEBOARD',  function () { _removeResultPopup(); _exitToOverworld(); }));

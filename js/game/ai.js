@@ -599,20 +599,51 @@
     return null;                                  // no move meaningfully improves the board
   }
 
+  // Finalize player queued moves (e.g. Lucy). queueMove already placed the card
+  // at its destination but left the 'queued-dest' PREVIEW class — which has
+  // pointer-events:none (unclickable) and a pulsing glow — and the moveLog entry
+  // flagged queued. The cloned adventure reveal never ran the standard move
+  // pipeline, so the card stayed "glowing" and unclickable forever. De-preview
+  // them here so they become normal, clickable revealed cards.
+  function _finalizeAdventurePlayerMoves(G) {
+    var any = false;
+    (G.moveLog || []).forEach(function (mv) {
+      if (!mv.queued) return;
+      mv.queued = false; any = true;
+      var slots = G.playerSlots[mv.toLocId] || [];
+      for (var i = 0; i < slots.length; i++) {
+        if (slots[i] && slots[i].cardId === mv.cardId) {
+          var el = (SOG.board && SOG.board.getSlotEl) ? SOG.board.getSlotEl('player', mv.toLocId, i) : null;
+          if (el) el.classList.remove('queued-dest');
+          break;
+        }
+      }
+    });
+    if (any) { G.locationSnapshots = {}; G.reservedSlotsPerLoc = {}; }
+  }
+
   function runAdventureMovements(onDone) {
     onDone = onDone || function () {};
     var G = SOG.state.G;
-    if (!G || !SOG.game || typeof SOG.game.executeMoveAnimated !== 'function') { onDone(); return; }
+    if (!G) { onDone(); return; }
 
-    // Find the AI's revealed Chariot that hasn't moved yet. Chariot "can move
-    // once on its own" — once per BATTLE, not per turn — so the guard is a flag
-    // on the card's slot data (which travels with the card when it moves), not
-    // the per-turn G.aiMovedThisTurn map.
+    // Finalize the player's queued moves first (Lucy), then the AI's Chariot.
+    _finalizeAdventurePlayerMoves(G);
+
+    if (!SOG.game || typeof SOG.game.executeMoveAnimated !== 'function') { onDone(); return; }
+
+    // Find the AI's revealed Chariot eligible to move:
+    //  • once per BATTLE, not per turn — guard via _advChariotMoved, a flag on
+    //    the card's slot data (travels with the card when it moves);
+    //  • NOT on the turn it was revealed — a card can only be selected to move
+    //    on a turn AFTER it enters play. turnPlayed is the play turn; during the
+    //    reveal pass G.turn is still that turn, so require G.turn > turnPlayed.
     var found = null;
     G.locations.forEach(function (loc) {
       (G.aiSlots[loc.id] || []).forEach(function (s) {
         if (found || !s || !s.revealed) return;
-        if (s.cardId === 48 && !s._advChariotMoved) {
+        if (s.cardId === 48 && !s._advChariotMoved &&
+            (s.turnPlayed == null || G.turn > s.turnPlayed)) {
           found = { locId: loc.id, sd: s };
         }
       });
