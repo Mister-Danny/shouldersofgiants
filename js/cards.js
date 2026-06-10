@@ -395,24 +395,23 @@ const CARDS = [
 ];
 
 /* ── Adventure-Mode card unlocks ─────────────────────────────────────
-   Cards in CARDS ship with locked:true and are hidden from the Deck
-   Builder (which filters on !locked). Adventure Mode "grants" cards as
-   the player progresses; granted ids persist as a JSON array under
-   `sog_unlocked_cards`. We flip the in-memory CARDS[].locked flag so the
-   Deck Builder shows them, and re-apply persisted grants on every boot.
+   Card OWNERSHIP now lives in SOG.collection (js/sog-collection.js) — the
+   single source of truth that owns the `sog_unlocked_cards` storage, the
+   starter set, and the CARDS[].locked view (it applies locked:false to owned
+   cards on boot). SOG.Cards.unlock/isUnlocked remain here as thin DELEGATES
+   so every existing caller keeps working unchanged.
 
-   SOG.Cards.unlock(idOrIds)  — flip locked:false + persist (idempotent)
-   SOG.Cards.isUnlocked(id)   — has this id been granted?
+   laneOf / ADVENTURE_ERAS stay here — they are pure card metadata (lane is
+   derived from era), not ownership.
 
-   Persistence is the single source of truth; the boot rehydration below
-   re-applies it so a page reload keeps granted cards visible.          */
+   SOG.Cards.unlock(idOrIds)  → SOG.collection.unlockCard(idOrIds)
+   SOG.Cards.isUnlocked(id)   → SOG.collection.isUnlocked(id)               */
 (function () {
   'use strict';
-  var KEY = 'sog_unlocked_cards';
 
   /* Card progression lanes (Phase D2d-a). Two fully separate lanes:
        'adventure' — Prehistory + Mesopotamia (and future Adventure eras).
-                     Unlocked via narrative grants (sog_unlocked_cards); no
+                     Owned via the player collection (sog_unlocked_cards); no
                      type-locks.
        'arcadium'  — everything else. Unlocked via the existing Arcadium
                      Progression (Serf/Giant wins, type-locks).
@@ -430,35 +429,17 @@ const CARDS = [
     return ADVENTURE_ERAS.indexOf(card.era) !== -1 ? 'adventure' : 'arcadium';
   }
 
-
-  function _read() {
-    try { var v = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(v) ? v : []; }
-    catch (e) { return []; }
-  }
-  function _write(ids) {
-    try { localStorage.setItem(KEY, JSON.stringify(ids)); } catch (e) {}
-  }
-  function _applyToCard(id) {
-    var c = CARDS.find(function (x) { return x.id === id; });
-    if (c) c.locked = false;
-  }
-
+  // Delegates to the collection (the single source of truth). The collection
+  // module loads right after this file; these resolve it at call time.
   function unlock(idOrIds) {
-    var ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
-    var have = _read();
-    var changed = false;
-    ids.forEach(function (id) {
-      if (typeof id !== 'number') return;
-      _applyToCard(id);                                  // in-memory (idempotent)
-      if (have.indexOf(id) === -1) { have.push(id); changed = true; }
-    });
-    if (changed) _write(have);
+    if (window.SOG && SOG.collection && typeof SOG.collection.unlockCard === 'function') {
+      return SOG.collection.unlockCard(idOrIds);
+    }
   }
-
-  function isUnlocked(id) { return _read().indexOf(id) !== -1; }
-
-  // Boot rehydration: re-apply any previously granted unlocks to CARDS.
-  _read().forEach(_applyToCard);
+  function isUnlocked(id) {
+    return !!(window.SOG && SOG.collection && typeof SOG.collection.isUnlocked === 'function'
+              && SOG.collection.isUnlocked(id));
+  }
 
   window.SOG = window.SOG || {};
   window.SOG.Cards = window.SOG.Cards || {};

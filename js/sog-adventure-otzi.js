@@ -927,6 +927,12 @@ SOG.OtziBattle = (function () {
           if (otziCard && preh && typeof preh.showCardAcquisition === 'function') {
             preh.showCardAcquisition(otziCard, null, function () {
               try { localStorage.setItem(KEY_CARD_OTZI_UNLOCKED, 'true'); } catch (e) {}
+              // Single source of truth: also record Otzi (35) in the player
+              // collection (the standalone flag stays — it gates re-showing
+              // this acquisition reveal on a repeat win).
+              if (window.SOG && SOG.collection && typeof SOG.collection.unlockCard === 'function') {
+                SOG.collection.unlockCard(35);
+              }
               _showOtziScoreboard('win', locResults, usedTiebreaker, playerTotal, otziTotal);
             });
           } else {

@@ -918,6 +918,11 @@ var Overworld = (function () {
   function _completePostVictorySequence() {
     try { localStorage.setItem(KEY_POST_NEANDERTHAL_DIALOGUE, 'true'); } catch (e) {}
     try { localStorage.setItem(KEY_CARD_LUCY_UNLOCKED, 'true'); } catch (e) {}
+    // Single source of truth: also record Lucy (33) in the player collection
+    // (the standalone narrative flag stays as-is).
+    if (window.SOG && SOG.collection && typeof SOG.collection.unlockCard === 'function') {
+      SOG.collection.unlockCard(33);
+    }
     // Signpost is now revealed — reload the node layer so it appears.
     // We only re-place nodes (not exits/character) to avoid resetting position.
     _refreshNodes();
