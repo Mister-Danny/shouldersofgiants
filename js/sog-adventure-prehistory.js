@@ -376,22 +376,14 @@ window.SOG.Adventure.Prehistory = (function () {
     return arr;
   }
 
-  // Swap the Otzi avatar img src to the Neanderthal portrait photo.
-  // Stash the original src so the exit path can restore it for the next
-  // standard battle.
-  function applyNeanderthalAvatar() {
-    var img = document.querySelector('.battle-avatar-otzi .battle-avatar-frame img');
-    if (!img) return;
-    if (typeof img.dataset.origSrc === 'undefined') img.dataset.origSrc = img.src;
-    img.src = 'images/portraits/neanderthalportait.jpeg';
-    img.style.objectPosition = '';   // use default (center top) from CSS
-  }
-  function restoreOtziAvatar() {
-    var img = document.querySelector('.battle-avatar-otzi .battle-avatar-frame img');
-    if (!img) return;
-    if (img.dataset.origSrc) img.src = img.dataset.origSrc;
-    img.style.objectPosition = '';
-  }
+  // Avatar presentation for this battle: ally is Lucy (the HTML default — no
+  // visible swap), opponent is the Neanderthal portrait. Lucy pops in later via
+  // popLucyIn(), so popAlly is omitted here. Applied/restored through the shared
+  // engine path (SOG.HUD.applyBattleAvatars / restoreBattleAvatars).
+  var PRESENTATION = {
+    allyAvatar:     'images/Lucy.png',
+    opponentAvatar: 'images/portraits/neanderthalportait.jpeg'
+  };
 
   function setTurnCounter(current, total) {
     var capEl = document.getElementById('battle-capital-info');
@@ -483,7 +475,7 @@ window.SOG.Adventure.Prehistory = (function () {
     }
 
     setTurnCounter(1, 4);
-    applyNeanderthalAvatar();
+    if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(PRESENTATION);
 
     // tutorial.js hides the reset button (display:none) for the guided
     // tutorial; initGame() restores it but we skip initGame() here.
@@ -998,7 +990,7 @@ window.SOG.Adventure.Prehistory = (function () {
 
   /* ── Lucy avatar pop-in (large bottom-left battle portrait) ── */
   function popLucyIn() {
-    var avEl = document.querySelector('.battle-avatar-lucy');
+    var avEl = document.querySelector('.battle-avatar-ally');
     if (avEl) avEl.classList.add('adv-active');
     // CSS handles the scale + opacity transition (.adv-active in style.css)
   }
@@ -1087,7 +1079,7 @@ window.SOG.Adventure.Prehistory = (function () {
       return;
     }
 
-    var lucyAvEl   = document.querySelector('.battle-avatar-lucy');
+    var lucyAvEl   = document.querySelector('.battle-avatar-ally');
     var hudTopLeft = document.querySelector('.battle-hud-topleft');
     var oppHand    = document.getElementById('battle-opp-hand');
     var hudBR      = document.querySelector('.battle-hud-bottomright');
@@ -1810,11 +1802,9 @@ window.SOG.Adventure.Prehistory = (function () {
       endTurnBtn.disabled = true;
       endTurnBtn.classList.remove('adv-pulse');
     }
-    // Reset Lucy avatar
-    var lucyAv = document.querySelector('.battle-avatar-lucy');
-    if (lucyAv) lucyAv.classList.remove('adv-active');
-    // Restore Otzi avatar image
-    restoreOtziAvatar();
+    // Restore both battle-screen avatar slots to the HTML baseline
+    // (also clears the ally's .adv-active pop state).
+    if (SOG.HUD && SOG.HUD.restoreBattleAvatars) SOG.HUD.restoreBattleAvatars();
     // Hide any open bubbles
     hideAllBubbles();
     // Remove End Turn hook
@@ -1870,7 +1860,7 @@ window.SOG.Adventure.Prehistory = (function () {
     log('Exiting Prehistory battle — returning to overworld');
     document.body.classList.remove('prehistory-battle');
     document.body.classList.remove('prehistory-pre-coaching');
-    restoreOtziAvatar();
+    if (SOG.HUD && SOG.HUD.restoreBattleAvatars) SOG.HUD.restoreBattleAvatars();
     hideAllBubbles();
     var wipeEl = document.getElementById('adv-radial-wipe');
     if (wipeEl) {

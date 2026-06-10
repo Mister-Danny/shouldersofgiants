@@ -326,40 +326,15 @@ SOG.GilgameshBattle = (function () {
     if (resetBtn) resetBtn.style.display = '';
   }
 
-  /* ── Explorer avatar management ──────────────────────────────── */
-  function applyExplorerAvatar() {
-    var img = document.querySelector('.battle-avatar-lucy .battle-avatar-frame img');
-    if (!img) return;
-    if (typeof img.dataset.origSrc === 'undefined') img.dataset.origSrc = img.src;
-    img.src = 'images/femaleexplorer%20portrait.jpeg';
-    var avEl = document.querySelector('.battle-avatar-lucy');
-    if (avEl) avEl.classList.add('adv-active');
-  }
-
-  function restoreExplorerAvatar() {
-    var img = document.querySelector('.battle-avatar-lucy .battle-avatar-frame img');
-    if (!img) return;
-    if (img.dataset.origSrc) img.src = img.dataset.origSrc;
-    var avEl = document.querySelector('.battle-avatar-lucy');
-    if (avEl) avEl.classList.remove('adv-active');
-  }
-
-  /* ── Opponent avatar: swap the shared Otzi portrait → Gilgamesh ──── */
-  function _oppAvatarImg() {
-    return document.querySelector('.battle-avatar-otzi .battle-avatar-frame img');
-  }
-  function applyGilgameshAvatar() {
-    var img = _oppAvatarImg();
-    if (!img) return;
-    if (typeof img.dataset.origSrc === 'undefined') img.dataset.origSrc = img.getAttribute('src');
-    img.src = 'images/portraits/gilgameshportrait.jpeg';
-    img.style.display = '';   // un-hide if a prior onerror hid it
-  }
-  function restoreGilgameshAvatar() {
-    var img = _oppAvatarImg();
-    if (!img) return;
-    if (img.dataset.origSrc) img.src = img.dataset.origSrc;
-  }
+  /* ── Avatar presentation ─────────────────────────────────────────
+     Ally is the female Explorer (popped in at apply time); opponent is
+     Gilgamesh. Both slots are set explicitly via the shared engine path
+     (SOG.HUD.applyBattleAvatars / restoreBattleAvatars). */
+  var PRESENTATION = {
+    allyAvatar:     'images/femaleexplorer%20portrait.jpeg',
+    opponentAvatar: 'images/portraits/gilgameshportrait.jpeg',
+    popAlly:        true
+  };
 
   /* ── Battle rules popup + opponent-portrait interaction (D3a.1) ──── */
   var RULES_TITLE = 'The Epic Battle of Gilgamesh';
@@ -368,7 +343,7 @@ SOG.GilgameshBattle = (function () {
     'Draw 2 cards per turn.',
     '4 turns total.'
   ];
-  function _opponentAvatarEl() { return document.querySelector('.battle-avatar-otzi'); }
+  function _opponentAvatarEl() { return document.querySelector('.battle-avatar-opponent'); }
   function _openRulesPopup(onDismiss) {
     if (window.SOG && SOG.BattleRulesPopup && typeof SOG.BattleRulesPopup.show === 'function') {
       SOG.BattleRulesPopup.show({ title: RULES_TITLE, body: RULES_BODY, onDismiss: onDismiss });
@@ -1451,8 +1426,7 @@ SOG.GilgameshBattle = (function () {
     document.body.classList.remove('otzi-battle');
     document.body.classList.remove('gilgamesh-battle');
     document.body.classList.remove('otzi-pre-deal');
-    restoreExplorerAvatar();
-    restoreGilgameshAvatar();
+    if (SOG.HUD && SOG.HUD.restoreBattleAvatars) SOG.HUD.restoreBattleAvatars();
     _unwireOpponentPortraitClick();
     if (window.SOG && SOG.BattleRulesPopup && typeof SOG.BattleRulesPopup.hide === 'function') {
       SOG.BattleRulesPopup.hide();
@@ -1504,9 +1478,8 @@ SOG.GilgameshBattle = (function () {
     // Build G state + board DOM (all 3 locations; Desert/GRV hidden by GSAP)
     setupBattleBoard();
 
-    // Swap Lucy avatar → Explorer (player), Otzi avatar → Gilgamesh (opponent).
-    applyExplorerAvatar();
-    applyGilgameshAvatar();
+    // Set both battle-screen avatars explicitly (ally Explorer, opponent Gilgamesh)
+    if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(PRESENTATION);
 
     // Switch to the battle screen
     if (typeof showScreen === 'function') {

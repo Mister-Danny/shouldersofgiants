@@ -17,6 +17,8 @@
  *   .showDialogueLine(line)               — alias for single-line via runLines
  *   .swapNpcPortrait(config, onDone)      — crossfade NPC portrait in-slot
  *   .slideOutNpc(onDone)                  — slide NPC slot down (mid-dialogue exit)
+ *   .applyBattleAvatars(presentation)     — set both battle-screen avatar slots
+ *   .restoreBattleAvatars()               — reset both slots to the HTML baseline
  *
  * Character keys: 'explorer' | 'lucy' | 'neanderthal' | 'otzi' | 'hunter' |
  *                 'farmer'   | 'gilgamesh' | 'sargon'
@@ -733,6 +735,61 @@ SOG.HUD = (function () {
     log('hide()');
   }
 
+  /* ══════════════════════════════════════════════════════════════
+     BATTLE-SCREEN AVATAR SLOTS  (.battle-avatar-opponent / -ally)
+     ──────────────────────────────────────────────────────────────
+     The two portrait frames on the battle SCREEN (not the HUD bar).
+     Each adventure battle declares its own avatars via a presentation
+     block; the engine sets BOTH slots explicitly on start and restores
+     BOTH to the HTML baseline on teardown — so no battle free-rides on
+     the default or another battle's cleanup.
+
+     HTML baseline (index.html): opponent=images/Otzi.jpg, ally=images/Lucy.png.
+
+     presentation = {
+       opponentAvatar: <img src>,    // required to set the opponent frame
+       allyAvatar:     <img src>,    // required to set the ally frame
+       popAlly:        <bool>        // add .adv-active so the ally avatar
+                                     // animates in at apply time (Explorer
+                                     // battles). Omit when the battle pops
+                                     // its ally in later (Prehistory/Lucy).
+     }
+  ══════════════════════════════════════════════════════════════ */
+  var BATTLE_AVATAR_BASELINE = {
+    opponent: 'images/Otzi.jpg',
+    ally:     'images/Lucy.png'
+  };
+
+  function _battleAvatarFrameImg(role) {
+    return document.querySelector('.battle-avatar-' + role + ' .battle-avatar-frame img');
+  }
+  function _setBattleAvatar(role, src) {
+    var img = _battleAvatarFrameImg(role);
+    if (!img || !src) return;
+    img.src = src;
+    img.style.display        = '';   // un-hide if a prior onerror hid it
+    img.style.objectPosition = '';   // use the CSS-default framing
+  }
+
+  /** Set both battle-screen avatar slots from a presentation block. */
+  function applyBattleAvatars(presentation) {
+    presentation = presentation || {};
+    if (presentation.opponentAvatar) _setBattleAvatar('opponent', presentation.opponentAvatar);
+    if (presentation.allyAvatar)     _setBattleAvatar('ally',     presentation.allyAvatar);
+    if (presentation.popAlly) {
+      var allyEl = document.querySelector('.battle-avatar-ally');
+      if (allyEl) allyEl.classList.add('adv-active');
+    }
+  }
+
+  /** Restore both battle-screen avatar slots to the HTML baseline. */
+  function restoreBattleAvatars() {
+    _setBattleAvatar('opponent', BATTLE_AVATAR_BASELINE.opponent);
+    _setBattleAvatar('ally',     BATTLE_AVATAR_BASELINE.ally);
+    var allyEl = document.querySelector('.battle-avatar-ally');
+    if (allyEl) allyEl.classList.remove('adv-active');
+  }
+
   /* ── Boot ────────────────────────────────────────────────────── */
   init();
 
@@ -750,7 +807,9 @@ SOG.HUD = (function () {
     exitDialogueMode:   exitDialogueMode,
     swapNpcPortrait:    swapNpcPortrait,
     slideOutNpc:        slideOutNpc,
-    isDialogueActive:   isDialogueActive
+    isDialogueActive:   isDialogueActive,
+    applyBattleAvatars:   applyBattleAvatars,
+    restoreBattleAvatars: restoreBattleAvatars
   };
 
 })();

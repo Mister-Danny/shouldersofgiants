@@ -350,23 +350,16 @@ SOG.OtziBattle = (function () {
     if (resetBtn) resetBtn.style.display = '';
   }
 
-  /* ── Explorer avatar management ──────────────────────────────── */
-  function applyExplorerAvatar() {
-    var img = document.querySelector('.battle-avatar-lucy .battle-avatar-frame img');
-    if (!img) return;
-    if (typeof img.dataset.origSrc === 'undefined') img.dataset.origSrc = img.src;
-    img.src = 'images/femaleexplorer%20portrait.jpeg';
-    var avEl = document.querySelector('.battle-avatar-lucy');
-    if (avEl) avEl.classList.add('adv-active');
-  }
-
-  function restoreExplorerAvatar() {
-    var img = document.querySelector('.battle-avatar-lucy .battle-avatar-frame img');
-    if (!img) return;
-    if (img.dataset.origSrc) img.src = img.dataset.origSrc;
-    var avEl = document.querySelector('.battle-avatar-lucy');
-    if (avEl) avEl.classList.remove('adv-active');
-  }
+  /* ── Avatar presentation ─────────────────────────────────────────
+     Ally is the female Explorer (popped in at apply time); opponent is
+     Ötzi — set EXPLICITLY here (it happens to match the HTML default, but
+     the battle no longer free-rides on that default or a prior battle's
+     cleanup). Applied/restored via the shared engine path. */
+  var PRESENTATION = {
+    allyAvatar:     'images/femaleexplorer%20portrait.jpeg',
+    opponentAvatar: 'images/Otzi.jpg',
+    popAlly:        true
+  };
 
   /* ── Fade out the radial wipe cover ──────────────────────────── */
   function fadeOutCover(onDone) {
@@ -1129,7 +1122,7 @@ SOG.OtziBattle = (function () {
   function teardown() {
     document.body.classList.remove('otzi-battle');
     document.body.classList.remove('otzi-pre-deal');
-    restoreExplorerAvatar();
+    if (SOG.HUD && SOG.HUD.restoreBattleAvatars) SOG.HUD.restoreBattleAvatars();
     hideBubbles();
     removeEndTurnHook();
     removeResetHook();
@@ -1173,8 +1166,8 @@ SOG.OtziBattle = (function () {
     // Build G state + board DOM (all 3 locations; Desert/GRV hidden by GSAP)
     setupBattleBoard();
 
-    // Swap Lucy avatar slot to show the Explorer
-    applyExplorerAvatar();
+    // Set both battle-screen avatars explicitly (ally Explorer, opponent Ötzi)
+    if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(PRESENTATION);
 
     // Switch to the battle screen
     if (typeof showScreen === 'function') {

@@ -3234,7 +3234,7 @@
     activeTextEl.textContent = '';
     updateHint();
 
-    var lucyAvEl = document.querySelector('.battle-avatar-lucy');
+    var lucyAvEl = document.querySelector('.battle-avatar-ally');
     if (lucyAvEl) lucyAvEl.classList.add('tut-speaking');
 
     TS.typeTimer = setInterval(function () {
@@ -3259,7 +3259,7 @@
       var activeTextEl = TS.useBubbles ? lucyBubbleTextEl : textEl;
       activeTextEl.textContent = TS.fullText;
       updateHint();
-      var lucyAvEl = document.querySelector('.battle-avatar-lucy');
+      var lucyAvEl = document.querySelector('.battle-avatar-ally');
       if (lucyAvEl) lucyAvEl.classList.remove('tut-speaking');
       return;
     }
@@ -3354,8 +3354,8 @@
   function unlit(el) { if (el) el.classList.remove('tut-lit'); }
 
   function showTutRevealHighlight(playerFirst) {
-    var lucyAv = document.querySelector('.battle-avatar-lucy');
-    var otziAv = document.querySelector('.battle-avatar-otzi');
+    var lucyAv = document.querySelector('.battle-avatar-ally');
+    var otziAv = document.querySelector('.battle-avatar-opponent');
     if (lucyAv) lucyAv.classList.toggle('reveal-first', !!playerFirst);
     if (otziAv) otziAv.classList.toggle('reveal-first', !playerFirst);
   }

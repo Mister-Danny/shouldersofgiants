@@ -110,8 +110,8 @@
   ═══════════════════════════════════════════════════════════════ */
 
   function showRevealFirstHighlight(playerFirst) {
-    var lucyAv = document.querySelector('.battle-avatar-lucy');
-    var otziAv = document.querySelector('.battle-avatar-otzi');
+    var lucyAv = document.querySelector('.battle-avatar-ally');
+    var otziAv = document.querySelector('.battle-avatar-opponent');
     if (lucyAv) lucyAv.classList.toggle('turn-first', !!playerFirst);
     if (otziAv) otziAv.classList.toggle('turn-first', !playerFirst);
   }
