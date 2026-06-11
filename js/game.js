@@ -211,17 +211,37 @@
       : pickLocations();
     window.initBattleUI(G.locations);
 
-    /* Player deck: cfg.decks.player (active-deck → the deck builder). */
-    var deckIds = (window.Decks && window.Decks.getActiveCards()) || [];
-    G.playerDeck = shuffle(deckIds.slice());
+    /* Player deck: cfg.decks.player. 'explicit' → a fixed id list from config
+       (scripted Adventure battles); otherwise the player's active deck from the
+       deck builder (Arcadium / 2P → 'active-deck'). The explicit branch is
+       unreached by Arcadium. */
+    var pDeck = cfg.decks.player;
+    if (pDeck && pDeck.source === 'explicit' && pDeck.ids && pDeck.ids.length) {
+      var pIds = pDeck.ids.slice();
+      G.playerDeck = pDeck.shuffle ? shuffle(pIds) : pIds;
+    } else {
+      var deckIds = (window.Decks && window.Decks.getActiveCards()) || [];
+      G.playerDeck = shuffle(deckIds.slice());
+    }
     G.playerHand = G.playerDeck.splice(0, cfg.structure.handStart);
 
-    /* AI deck: cfg.decks.ai — explicit ids (2P) or random-types (buildAiDeck). */
+    /* AI deck: cfg.decks.ai. 'explicit' → fixed ids (2P); 'scripted' → seed the
+       hand with ai.settings.playOrder and the deck with handPadding (scripted
+       opponent — faces never shown; the scriptedSequence AI step plays one each
+       turn); otherwise random-types via buildAiDeck (Arcadium). The 'scripted'
+       branch is unreached by Arcadium. */
     var aiDeckCfg = cfg.decks.ai;
-    G.aiDeck = (aiDeckCfg.source === 'explicit' && aiDeckCfg.ids && aiDeckCfg.ids.length)
-      ? shuffle(aiDeckCfg.ids.slice())
-      : buildAiDeck();
-    G.aiHand = G.aiDeck.splice(0, cfg.structure.handStart);
+    if (aiDeckCfg.source === 'explicit' && aiDeckCfg.ids && aiDeckCfg.ids.length) {
+      G.aiDeck = shuffle(aiDeckCfg.ids.slice());
+      G.aiHand = G.aiDeck.splice(0, cfg.structure.handStart);
+    } else if (aiDeckCfg.source === 'scripted') {
+      var aiSettings = (cfg.ai && cfg.ai.settings) || {};
+      G.aiHand = (aiSettings.playOrder   || []).slice();   // hand = scripted sequence
+      G.aiDeck = (aiSettings.handPadding || []).slice();   // deck = cosmetic padding
+    } else {
+      G.aiDeck = buildAiDeck();
+      G.aiHand = G.aiDeck.splice(0, cfg.structure.handStart);
+    }
 
     G.locations.forEach(function (loc) {
       G.playerSlots[loc.id] = Array(cfg.structure.slotsPerLocation).fill(null);
