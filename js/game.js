@@ -188,6 +188,15 @@
        resolveBattleConfig just captured, so behavior is identical. */
     window.aiDifficulty = cfg.ai.profile;
 
+    /* onIntro (async script hook): fires BEFORE the board is built. With no
+       script present (Arcadium / 2P / standard → scriptHook null) runAsyncOr
+       invokes the build continuation immediately — behaviour-identical to today. */
+    SOG.BattleHooks.runAsyncOr('onIntro', [], _initGameBuild);
+  }
+
+  function _initGameBuild() {
+    var cfg = G.config;
+
     /* Locations: cfg.locationAbilities.select — an explicit set (2P/Match) or
        the random/forced pick. Equivalent to the old _2pCfg.locations branch. */
     var locSel = cfg.locationAbilities.select;
@@ -261,12 +270,18 @@
 
     updateHeader();
     refreshMoveableCards();
-    SOG.ui.startBgMusic();
-    _startSelectionTimer();
 
-    if (typeof Analytics !== 'undefined') {
-      Analytics.gameStarted(window.aiDifficulty);
-    }
+    /* onBattleStart (async script hook): the board is built and the gameplay UI
+       is in place; a script can run its opening sequence (coaching, dialogue,
+       interactive pause) and gate turn 1 until done(). With no script present
+       the turn-1 activation tail runs immediately — behaviour-identical. */
+    SOG.BattleHooks.runAsyncOr('onBattleStart', [], function _activateTurn1() {
+      SOG.ui.startBgMusic();
+      _startSelectionTimer();
+      if (typeof Analytics !== 'undefined') {
+        Analytics.gameStarted(window.aiDifficulty);
+      }
+    });
   }
 
   /* ── Utilities ───────────────────────────────────────────────── */
@@ -885,6 +900,9 @@
 
   function startReveal() {
     G.phase = 'reveal';
+    /* onBeforeReveal (script hook): before the flip animation. Sync,
+       fire-and-forget. No script → no-op. */
+    SOG.BattleHooks.fire('onBeforeReveal', [G.turn]);
     clearSelection();      // tear down any click/keyboard selection state
     hideRevealFirstHighlight();  // glow shown during selection — clear it now
     snapBack();            // Restore all queued cards to true origin slots
@@ -965,6 +983,26 @@
       refreshHandIPDisplays();
       refreshHandCostDisplays();
       updateScores();
+      /* onAfterReveal (script hook): all flips + At-Once + continuous mods are
+         done. `revealed` lists the cards newly played this turn (both sides) so
+         a script (e.g. Ötzi flee) can act per-card. Sync, fire-and-forget.
+         No script → no-op. */
+      if (SOG.BattleHooks.has('onAfterReveal')) {
+        var revealed = [];
+        seq.forEach(function (it) {
+          if (it.type !== 'play') return;
+          var rLocId = it.toLocId;
+          var rSlots = (it.owner === 'player') ? G.playerSlots[rLocId] : G.aiSlots[rLocId];
+          var rIdx = -1;
+          if (rSlots) {
+            for (var k = 0; k < rSlots.length; k++) {
+              if (rSlots[k] && rSlots[k].cardId === it.cardId) { rIdx = k; break; }
+            }
+          }
+          revealed.push({ owner: it.owner, cardId: it.cardId, locId: rLocId, slotIndex: rIdx });
+        });
+        SOG.BattleHooks.fire('onAfterReveal', [{ turn: G.turn, revealed: revealed }]);
+      }
       setTimeout(function () { G.turn >= G.config.structure.turns ? endGame() : nextTurn(); }, POST_REVEAL);
       return;
     }
@@ -1105,6 +1143,10 @@
     _startSelectionTimer();
 
     if (typeof Analytics !== 'undefined') Analytics.turnStarted();
+
+    /* onTurnStart (script hook): start of a selection phase (turns 2+). Sync,
+       fire-and-forget. No script → no-op. */
+    SOG.BattleHooks.fire('onTurnStart', [G.turn]);
   }
 
   function endGame() {
@@ -1177,28 +1219,41 @@
 
     var _isLegendMilestone = _isTournamentChampion || _isSessionMilestone;
 
-    if (_isLegendMilestone) {
-      /* Brief pause so board location-win animations are visible, then cut to legend */
-      setTimeout(function () {
-        var showFn = (_isTournamentChampion && LegendScreen.showChampion)
-          ? function (cb) { LegendScreen.showChampion(window.currentLobbyId || '', cb); }
-          : function (cb) { LegendScreen.show(cb); };
+    /* Outcome hooks (async script): the engine has determined the result and
+       run all rules/bookkeeping above; this final block is the PRESENTATION.
+       A script runs its win/loss/tie narrative (dialogue, card grant, custom
+       end screen) then calls proceed() for the default scoreboard — or owns the
+       end screen and never calls it. With no script (Arcadium/2P/standard →
+       scriptHook null) proceed() runs immediately → today's presentation. */
+    var _defaultOutcomePresentation = function () {
+      if (_isLegendMilestone) {
+        /* Brief pause so board location-win animations are visible, then cut to legend */
+        setTimeout(function () {
+          var showFn = (_isTournamentChampion && LegendScreen.showChampion)
+            ? function (cb) { LegendScreen.showChampion(window.currentLobbyId || '', cb); }
+            : function (cb) { LegendScreen.show(cb); };
 
-        showFn(function () {
-          /* Legend clicked through — play win sound then show result screen */
-          if (typeof SFX !== 'undefined') SFX.gameWon();
-          _showResultScreen();
-        });
-      }, 800);
-    } else {
-      /* Normal path */
-      if (typeof SFX !== 'undefined') {
-        if      (result.outcome === 'player') SFX.gameWon();
-        else if (result.outcome === 'ai')     SFX.gameLost();
-        else                                  SFX.locationWon();
+          showFn(function () {
+            /* Legend clicked through — play win sound then show result screen */
+            if (typeof SFX !== 'undefined') SFX.gameWon();
+            _showResultScreen();
+          });
+        }, 800);
+      } else {
+        /* Normal path */
+        if (typeof SFX !== 'undefined') {
+          if      (result.outcome === 'player') SFX.gameWon();
+          else if (result.outcome === 'ai')     SFX.gameLost();
+          else                                  SFX.locationWon();
+        }
+        setTimeout(_showResultScreen, 1000);
       }
-      setTimeout(_showResultScreen, 1000);
-    }
+    };
+
+    var _outcomeHook = result.outcome === 'player' ? 'onWin'
+                     : result.outcome === 'ai'     ? 'onLoss'
+                     : 'onTie';
+    SOG.BattleHooks.runAsyncOr(_outcomeHook, [result], _defaultOutcomePresentation);
   }
 
   function tallyResult() {

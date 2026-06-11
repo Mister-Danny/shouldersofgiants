@@ -86,6 +86,9 @@
     if (window.SOG && window.SOG.HUD && window.SOG.HUD.isDialogueActive()) return true;
     var P = window.SOG && window.SOG.Adventure && window.SOG.Adventure.Prehistory;
     if (P && P.isCoachingActive()) return true;
+    /* Script-hook input gate (isInputBlocked predicate / services.blockInput).
+       No script → returns false → behaviour unchanged. */
+    if (window.SOG && SOG.BattleHooks && SOG.BattleHooks.isInputBlocked()) return true;
     return false;
   }
 
@@ -743,6 +746,13 @@
           typeof SOG.GilgameshBattle.notifyPlayerPlayed === 'function') {
         SOG.GilgameshBattle.notifyPlayerPlayed(cardId, locId);
       }
+    }
+
+    /* onPlayerPlayed (script hook): generic post-commit notify the migration
+       will eventually use in place of the bespoke calls above. Sync,
+       fire-and-forget. No script (scriptHook null / no G.config) → no-op. */
+    if (window.SOG && SOG.BattleHooks) {
+      SOG.BattleHooks.fire('onPlayerPlayed', [{ cardId: cardId, locId: locId, turn: G.turn }]);
     }
   }
 
