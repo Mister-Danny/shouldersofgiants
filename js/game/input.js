@@ -622,6 +622,35 @@
      paths can never disagree.
   ═══════════════════════════════════════════════════════════════ */
 
+  /* ── Battle-config-driven gating (Prehistory-cutover prerequisite) ──
+     These read G.config so the cutover can drop the prehistoryMode flag.
+     Guarded by !G.otziMode at the call sites because Ötzi/Gilgamesh don't set
+     G.config (it can be stale) and keep their own flag-based rules. */
+  function _resourceFree() {
+    // Cost-zero battle (resource.model 'none'); Arcadium's 'capital' is not free.
+    return !!(G.config && G.config.resource && G.config.resource.model === 'none');
+  }
+  function _cardsPerTurnCap() {
+    // Per-turn play cap (cfg.structure.cardsPerTurn); null = no cap (Arcadium).
+    return (G.config && G.config.structure && G.config.structure.cardsPerTurn != null)
+      ? G.config.structure.cardsPerTurn : null;
+  }
+  function _cardsPlayedThisTurn() {
+    // Cards placed but not yet revealed this turn — the canonical per-turn
+    // signal both the engine flow and the bespoke Prehistory loop maintain.
+    // (playerRevealQueue is NOT per-turn in the bespoke loop: it never resets
+    // between turns, so it accumulates across the whole battle.)
+    var n = 0;
+    for (var locId in G.playerSlots) {
+      var slots = G.playerSlots[locId];
+      if (!slots) continue;
+      for (var i = 0; i < slots.length; i++) {
+        if (slots[i] && !slots[i].revealed) n++;
+      }
+    }
+    return n;
+  }
+
   function isLegalPlayTarget(cardId, locId) {
     if (G.phase !== 'select') return false;
     var card = CARDS.find(function (c) { return c.id === cardId; });
@@ -629,9 +658,13 @@
     if (!G.playerSlots[locId]) return false;
     var firstEmpty   = G.playerSlots[locId].indexOf(null);
     if (firstEmpty === -1) return false;
-    if (!G.prehistoryMode && !G.otziMode && effectiveCost(card, locId) > G.capital) return false;
-    // Prehistory tutorial: only 1 card per turn.
-    if (G.prehistoryMode && G.prehistoryHasPlayed) return false;
+    // Cost-zero via config (resource.model 'none'); was G.prehistoryMode.
+    if (!_resourceFree() && !G.otziMode && effectiveCost(card, locId) > G.capital) return false;
+    // Cards-per-turn cap via config (cfg.structure.cardsPerTurn); was the
+    // prehistoryMode + prehistoryHasPlayed pair. !G.otziMode so a stale
+    // prehistory cap can't misfire during Ötzi/Gilgamesh (they use the rule below).
+    var _cap = _cardsPerTurnCap();
+    if (!G.otziMode && _cap != null && _cardsPlayedThisTurn() >= _cap) return false;
     // Otzi battle: max 2 cards per turn
     if (G.otziMode && (G.otziCardsPlayed || 0) >= 2) return false;
     // Turn-1 first-card-here: first play of turn 1 must go to the Great Rift Valley
@@ -675,8 +708,8 @@
   function commitPlay(cardId, locId) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return;
-    // In prehistory mode or Otzi mode Capital Cost is ignored (all cards are free).
-    var cost = (G.prehistoryMode || G.otziMode) ? 0 : effectiveCost(card, locId);
+    // Cost-zero via config (resource.model 'none', was G.prehistoryMode) or Otzi mode.
+    var cost = (_resourceFree() || G.otziMode) ? 0 : effectiveCost(card, locId);
     if (cost > G.capital) { var d = getSlotEl('player', locId, 0); if (d) SOG.ui.flashDeny(d); return; }
     var si = G.playerSlots[locId].indexOf(null);
     if (si === -1) { var d2 = getSlotEl('player', locId, 0); if (d2) SOG.ui.flashDeny(d2); return; }
