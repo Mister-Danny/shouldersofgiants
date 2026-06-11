@@ -758,14 +758,9 @@
     }
     updateHeader();
 
-    // Adventure Mode (Prehistory tutorial) hook: notify the adventure
-    // module so it can draw a card, enable End Turn, and (turn 1) show
-    // Lucy's "click End Turn" prompt. Standard battles ignore this.
-    if (G.prehistoryMode && window.SOG && SOG.Adventure &&
-        SOG.Adventure.Prehistory &&
-        typeof SOG.Adventure.Prehistory.notifyPlayerPlayed === 'function') {
-      SOG.Adventure.Prehistory.notifyPlayerPlayed(cardId, locId);
-    }
+    // Prehistory now runs through the engine + the 'prehistory' script, which
+    // receives the generic onPlayerPlayed hook fired below — the bespoke
+    // notifyPlayerPlayed flag-read is gone.
     // Adventure-battle hook (G.otziMode is shared by the Otzi and Gilgamesh
     // battles). Notify both modules; only the active battle has its end-turn
     // hook installed, so the inactive one's notify is a harmless no-op.

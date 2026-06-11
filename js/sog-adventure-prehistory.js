@@ -389,14 +389,9 @@ window.SOG.Adventure.Prehistory = (function () {
     ai: { profile: 'scriptedSequence',
           settings: { playOrder: [26, 27, 31, 34], faceDown: true,
                       handPadding: [29, 30, 32, 36, 28] } },
-    // null until the deferred entry cutover. The 'prehistory' script is
-    // registered below, but pointing scriptHook at it NOW would make its
-    // onPlayerPlayed / isInputBlocked hooks fire from the shared input.js call
-    // sites DURING the still-bespoke battle (G.config is set in setupBattleBoard)
-    // — e.g. a double turn-1 prompt. Keeping it null leaves the script dormant
-    // so the bespoke flow stays byte-identical. The cutover flips this to
-    // 'prehistory' and routes the entry through game.js's initGame lifecycle.
-    scriptHook: null
+    // The battle runs through game.js's initGame lifecycle + the registered
+    // 'prehistory' script (below), which supplies all narrative via the hooks.
+    scriptHook: 'prehistory'
   };
 
   // Fisher-Yates shuffle (in-place). The standard SOG.board.shuffle
@@ -427,103 +422,6 @@ window.SOG.Adventure.Prehistory = (function () {
     if (!p) return;
     if (p.bodyClass)        document.body.classList.add(p.bodyClass);
     if (p.preCoachingClass) document.body.classList.add(p.preCoachingClass);
-  }
-
-  function setupBattleBoard() {
-    log('Phase D — setting up Prehistory battle board');
-
-    // Body context classes (config.presentation): drive all CSS overrides; the
-    // pre-coaching sub-class hides hand+deck+HUD until Phase E slides them in.
-    _applyPresentationClasses(BATTLE_CONFIG.presentation);
-
-    // Build minimal G state directly (option β architecture — we do
-    // not call initGame()). The reveal sequence, hand UI, and ability
-    // engine all read from G, so populating it here is enough to make
-    // the rendering helpers happy.
-    //
-    // Stage 1: all rules values now READ from BATTLE_CONFIG instead of
-    // literals. Attach it to G.config (mirrors initGame's pattern; makes the
-    // config inspectable and preps the deferred game.js-lifecycle cutover).
-    var G   = SOG.state.G;
-    var cfg = BATTLE_CONFIG;
-    G.config = cfg;
-
-    // Clone the config's camp location so G never mutates the config object.
-    var camp = Object.assign({}, cfg.locationAbilities.select.locations[0]);
-    var slotsPerLoc = cfg.structure.slotsPerLocation;
-
-    G.locations    = [camp];
-    G.playerSlots  = {};
-    G.aiSlots      = {};
-    G.playerSlots[camp.id] = Array(slotsPerLoc).fill(null);
-    G.aiSlots[camp.id]     = Array(slotsPerLoc).fill(null);
-
-    var playerIds = cfg.decks.player.ids.slice();
-    G.playerDeck = cfg.decks.player.shuffle ? shuffleInPlace(playerIds) : playerIds;
-    G.playerHand = G.playerDeck.splice(0, cfg.structure.handStart);
-
-    // Parallel-to-player model: AI starts with the scripted playOrder in hand
-    // (4 cards) and handPadding in deck (5 cosmetic cards). The scriptedSequence
-    // AI step places playOrder[turn-1] and consumes one face-down card from the
-    // hand for display, so the opp-hand display starts hand=4 / deck=5 and
-    // decrements exactly as the player's — faces are never shown.
-    G.aiHand = cfg.ai.settings.playOrder.slice();    // [26, 27, 31, 34]
-    G.aiDeck = cfg.ai.settings.handPadding.slice();  // 5 cosmetic padding cards
-
-    G.turn               = 1;
-    G.phase              = 'select';
-    G.capital            = cfg.resource.capital;       // resource.model 'none' → 0
-    G.turnStartCapital   = cfg.resource.capital;
-    G.prehistoryMode     = true;       // flag for the input layer (Phase F)
-    G.playerFirst        = true;
-    G.bonusCapitalNextTurn   = 0;
-    G.aiBonusCapitalNextTurn = 0;
-    G.cardIPBonus         = {};
-    G.aiCardIPBonus       = {};
-    G.destroyedIPTotal    = 0;
-    G.aiDestroyedIPTotal  = 0;
-    G.movedThisTurn       = {};
-    G.aiMovedThisTurn     = {};
-    G.moveLog             = [];
-    G.playerActionLog     = [];
-    G.aiActionLog         = [];
-    G.locationSnapshots   = {};
-    G.reservedSlotsPerLoc = {};
-    G.deferredPlays       = {};
-    // Explicit resets for Play Again safety: these are NOT set by
-    // teardownBattle() and can carry stale values from a previous game.
-    // • prehistoryHasPlayed: still true after the player's last turn →
-    //   isLegalPlayTarget returns false → no-drop cursor on retry.
-    // • reveal queues: stale entries from the previous game don't
-    //   affect correctness but are confusing to debug.
-    G.prehistoryHasPlayed = false;
-    G.playerRevealQueue   = [];
-    G.aiRevealQueue       = [];
-
-    // Show the battle screen + build the board DOM. initBattleUI
-    // builds opp hand, board cols, and clears the player hand container.
-    if (typeof window.showScreen   === 'function') window.showScreen('screen-battle');
-    if (typeof window.initBattleUI === 'function') window.initBattleUI(G.locations);
-
-    // Build the player hand DOM (visibility-hidden by CSS until Phase E).
-    // rebuildPlayerHand also calls bindHandEvents so single-click → popup works.
-    if (SOG.input && typeof SOG.input.rebuildPlayerHand === 'function') {
-      SOG.input.rebuildPlayerHand();
-    } else if (typeof window.setPlayerHand === 'function') {
-      window.setPlayerHand(G.playerHand, G.playerDeck.length);
-    }
-    if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') {
-      SOG.ui.updateOppHand();
-    }
-
-    setTurnCounter(1, cfg.structure.turns);
-    if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(cfg.presentation);
-
-    // tutorial.js hides the reset button (display:none) for the guided
-    // tutorial; initGame() restores it but we skip initGame() here.
-    // Explicitly restore so the button is visible in adventure mode.
-    var resetBtn = document.getElementById('battle-reset-turn');
-    if (resetBtn) resetBtn.style.display = '';
   }
 
   /* ── Fade the radial-wipe cover out to reveal the board ───── */
@@ -1205,92 +1103,6 @@ window.SOG.Adventure.Prehistory = (function () {
     });
   }
 
-  /* ════════════════════════════════════════════════════════════
-     PHASE F — Turn loop, scripted AI, reveal, win/loss, replay
-     ════════════════════════════════════════════════════════════
-     Per-turn cadence (4 turns total):
-       1. Turn starts with End Turn button DISABLED. Hand drawn to
-          maintain 4 cards (cap exception: Tool's draw can push to 5).
-       2. Player drags one card → input.js's commitPlay places it.
-          input.js then calls our notifyPlayerPlayed().
-       3. notifyPlayerPlayed() draws 1 to maintain hand-of-4, enables
-          End Turn, and (turn 1 only) shows Lucy's "click End Turn"
-          prompt + pulses the End Turn button.
-       4. Player clicks End Turn → our endTurn hook fires (game.js's
-          handler early-returns for G.prehistoryMode).
-       5. AI plays its scripted card for this turn (face-down).
-       6. Reveal: both slots flip face-up via the existing flipSlot
-          animation; At Once abilities fire (Tool draws; others none);
-          evaluateContinuous() applies the per-slot contMod modifiers
-          (Fire/Cave Art/Dom Animal/Tribe); scores update.
-       7. Brief pause, then advanceToNextTurn() (or end battle if
-          this was turn 4).
-
-     Scripted AI sequence (deterministic):
-       T1 Hunter (27), T2 Gatherer (28), T3 Megalith (31),
-       T4 Neanderthal (34).
-
-     Win condition: after turn 4 reveal, player IP >= AI IP wins
-     (tie = player wins).
-  ═══════════════════════════════════════════════════════════════ */
-
-  var TOTAL_TURNS         = BATTLE_CONFIG.structure.turns;       // 4 (from config)
-  var POST_REVEAL_HOLD_MS = 1100;  // beat after IP updates before next turn
-  var HAND_CAP            = BATTLE_CONFIG.structure.maxHandSize; // 4; Tool's draw can exceed (see commentary)
-
-  // Module-level turn-loop state. Reset on each setupBattleBoard().
-  var _hasPlayedThisTurn = false;
-  var _endTurnHandler    = null;
-  var _resetHandler      = null;
-  var _onResultDismiss   = null;
-
-  // Public function called by input.js's commitPlay when a card is
-  // played AND G.prehistoryMode is true.
-  function notifyPlayerPlayed(cardId, locId) {
-    log('Phase F — player played card ' + cardId + ' at loc ' + locId);
-    _hasPlayedThisTurn = true;
-    // Mirror onto G so isLegalPlayTarget (in input.js) can block a
-    // second play this turn — G is the shared object both modules read.
-    SOG.state.G.prehistoryHasPlayed = true;
-
-    // NO draw here. Draw timing spec:
-    //   • Selection phase begins → draw 1 card (in advanceToNextTurn)
-    //   • Tool (id 26) At Once fires during the reveal phase and draws
-    //     its own card — can push hand to 5 on the following turn's draw.
-    // Drawing immediately after the play was removed so the hand
-    // visibly drops to 3 between placement and the next turn's refill.
-
-    // Enable End Turn and Reset now that the player has committed.
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) endTurnBtn.disabled = false;
-    if (resetBtn)   resetBtn.disabled   = false;
-
-    // Turn 1 only — Lucy bubble + End Turn pulse.
-    var G = SOG.state.G;
-    if (G.turn === 1) {
-      if (endTurnBtn) endTurnBtn.classList.add('adv-pulse');
-      showLucyOneLiner("When you've made your decision, click the End Turn button.");
-    }
-  }
-
-  // Draw cards from the player's deck until hand reaches HAND_CAP (4).
-  // Tool's onAtOnce ability draws via its own logic and bypasses this
-  // (it can push the hand to 5, and this function then no-ops until
-  // the hand is consumed back down to 4 or less).
-  function drawToHandCap() {
-    var G = SOG.state.G;
-    while (G.playerHand.length < HAND_CAP && G.playerDeck.length > 0) {
-      G.playerHand.push(G.playerDeck.shift());
-    }
-    // rebuildPlayerHand re-binds click events so popup keeps working mid-battle.
-    if (SOG.input && typeof SOG.input.rebuildPlayerHand === 'function') {
-      SOG.input.rebuildPlayerHand();
-    } else if (typeof window.setPlayerHand === 'function') {
-      window.setPlayerHand(G.playerHand, G.playerDeck.length);
-    }
-  }
-
   // One-shot Lucy bubble (no click-to-advance, no other lines).
   // Stays visible until explicitly hidden (e.g. on End Turn click).
   function showLucyOneLiner(text) {
@@ -1311,388 +1123,6 @@ window.SOG.Adventure.Prehistory = (function () {
   function hideLucyOneLiner() {
     var el = getBubbleEl('lucy');
     if (el) el.classList.remove('is-visible');
-  }
-
-  /* ── End Turn click handling (prehistory mode) ─────────────── */
-
-  function installEndTurnHook() {
-    if (_endTurnHandler) return;  // already installed
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    if (!endTurnBtn) return;
-    _endTurnHandler = function (e) {
-      var G = SOG.state.G;
-      if (!G.prehistoryMode) return;
-      if (endTurnBtn.disabled) return;
-      if (!_hasPlayedThisTurn) return;
-      e.stopPropagation();
-      onPrehistoryEndTurn();
-    };
-    // Capture phase so we run BEFORE the standard handler in game.js
-    // (which is registered without `useCapture`, i.e. bubbling). The
-    // standard handler's early-return on G.prehistoryMode also defends.
-    endTurnBtn.addEventListener('click', _endTurnHandler, true);
-  }
-
-  function removeEndTurnHook() {
-    if (!_endTurnHandler) return;
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    if (endTurnBtn) endTurnBtn.removeEventListener('click', _endTurnHandler, true);
-    _endTurnHandler = null;
-  }
-
-  /* ── Reset button hook ─────────────────────────────────────── */
-  // Capture phase (same rationale as End Turn): runs before game.js's
-  // bubbling handler, which does nothing in prehistoryMode anyway.
-  function installResetHook() {
-    if (_resetHandler) return;
-    var resetBtn = document.getElementById('battle-reset-turn');
-    if (!resetBtn) return;
-    _resetHandler = function (e) {
-      if (resetBtn.disabled) return;
-      e.stopPropagation();
-      onPrehistoryReset();
-    };
-    resetBtn.addEventListener('click', _resetHandler, true);
-  }
-
-  function removeResetHook() {
-    if (!_resetHandler) return;
-    var resetBtn = document.getElementById('battle-reset-turn');
-    if (resetBtn) resetBtn.removeEventListener('click', _resetHandler, true);
-    _resetHandler = null;
-  }
-
-  function onPrehistoryReset() {
-    log('Phase F — Reset (turn ' + SOG.state.G.turn + ')');
-    // Return the played card to the exact hand slot it came from.
-    // undoPlay reads sd.handIndex (stored by commitPlay) and splices the
-    // card back at that position — so the hand order is preserved.
-    // We scan the camp slots for the first unrevealed entry (there can
-    // only ever be one in the prehistory battle).
-    var G   = SOG.state.G;
-    var campId = G.locations && G.locations[0] ? G.locations[0].id : null;
-    var restored = false;
-    if (campId !== null && SOG.input && typeof SOG.input.undoPlay === 'function') {
-      var slots = G.playerSlots[campId] || [];
-      for (var i = 0; i < slots.length; i++) {
-        if (slots[i] && !slots[i].revealed) {
-          SOG.input.undoPlay(campId, i);
-          restored = true;
-          break;
-        }
-      }
-    }
-    if (!restored && SOG.input && typeof SOG.input.resetTurn === 'function') {
-      // Fallback (should not occur in normal prehistory flow).
-      SOG.input.resetTurn();
-    }
-    // Reset prehistory gate flags so the player can place again.
-    _hasPlayedThisTurn = false;
-    SOG.state.G.prehistoryHasPlayed = false;
-    // Disable both action buttons — nothing is pending.
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) { endTurnBtn.disabled = true; endTurnBtn.classList.remove('adv-pulse'); }
-    if (resetBtn)   resetBtn.disabled = true;
-    hideLucyOneLiner();
-  }
-
-  function onPrehistoryEndTurn() {
-    log('Phase F — End Turn (turn ' + SOG.state.G.turn + ')');
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) {
-      endTurnBtn.disabled = true;
-      endTurnBtn.classList.remove('adv-pulse');
-    }
-    // Lock Reset during the reveal + AI phase — nothing to undo now.
-    if (resetBtn) resetBtn.disabled = true;
-    hideLucyOneLiner();
-    aiPlayScripted();
-    // Brief pause so the player sees the Neanderthal's face-down card
-    // appear before the reveal animation flips both cards.
-    setTimeout(function () {
-      runPrehistoryReveal(function () {
-        var G = SOG.state.G;
-        if (G.turn >= TOTAL_TURNS) {
-          endBattle();
-        } else {
-          advanceToNextTurn();
-        }
-      });
-    }, 600);
-  }
-
-  /* ── AI step: dispatch on ai.profile (battle-config, Stage 2) ──
-     The engine's AI step now branches on cfg.ai.profile. This battle uses
-     'scriptedSequence' — a config-driven generic that places
-     cfg.ai.settings.playOrder[turn-1] face-down into the configured location,
-     replacing the old bespoke "consume aiHand[0]" mapping. Because aiHand was
-     seeded as playOrder (and only cosmetic padding is ever drawn to the end),
-     placing playOrder[turn-1] and consuming one face-down card from the hand
-     is byte-identical to the old behaviour for T1→T4. */
-  function aiPlayScripted() {
-    var cfg = SOG.state.G.config || BATTLE_CONFIG;
-    if (cfg.ai && cfg.ai.profile === 'scriptedSequence') return aiPlayScriptedSequence(cfg);
-    log('AI step: no handler for profile "' + (cfg.ai && cfg.ai.profile) + '"');
-  }
-
-  function aiPlayScriptedSequence(cfg) {
-    var G = SOG.state.G;
-    var playOrder = (cfg.ai && cfg.ai.settings && cfg.ai.settings.playOrder) || [];
-    var cardId = playOrder[G.turn - 1];
-    if (cardId == null) { log('scriptedSequence: no scripted card for turn ' + G.turn); return; }
-
-    // Display parity: consume one face-down card from the AI hand (mirrors the
-    // old consume-from-hand step) so the opp hand/deck counts decrement exactly
-    // as before. Faces are never shown, so which id is removed is cosmetic.
-    if (G.aiHand.length) G.aiHand = G.aiHand.slice(1);
-
-    var camp = G.locations[0];  // single-loc battle (locationsCount 1)
-    var slotIndex = G.aiSlots[camp.id].indexOf(null);
-    if (slotIndex === -1) { log('AI slots full — cannot place'); return; }
-
-    var card = CARDS.find(function (c) { return c.id === cardId; });
-    if (!card) { log('AI card id ' + cardId + ' not found in CARDS'); return; }
-
-    G.aiSlots[camp.id][slotIndex] = {
-      cardId:        cardId,
-      ip:            card.ip,
-      revealed:      false,
-      ipMod:         0,
-      contMod:       0,
-      ipModSources:  []
-    };
-    G.aiRevealQueue = G.aiRevealQueue || [];
-    G.aiRevealQueue.push(cardId);
-    G.aiActionLog.push({ type: 'play', cardId: cardId });
-
-    var slotEl = SOG.board.getSlotEl('opp', camp.id, slotIndex);
-    if (slotEl) {
-      slotEl.dataset.cardId = cardId;
-      SOG.board.setSlotFaceDown(slotEl);
-    }
-
-    // Update the opp hand display (visual face-down count).
-    if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') {
-      SOG.ui.updateOppHand();
-    }
-
-    log('AI (scriptedSequence) played ' + card.name + ' (id ' + cardId + ') at slot ' + slotIndex);
-  }
-
-  /* ── Reveal: flip player slot, then opp slot, then resolve ──── */
-  function runPrehistoryReveal(onDone) {
-    var G = SOG.state.G;
-    var camp = G.locations[0];
-
-    // Find the just-played player slot (face-up unplayed) — should be
-    // the highest-index non-null slot for this turn.
-    var playerSlotIdx = lastPlayedIndex(G.playerSlots[camp.id]);
-    var aiSlotIdx     = lastPlayedIndex(G.aiSlots[camp.id]);
-    var playerSlotEl  = playerSlotIdx >= 0 ? SOG.board.getSlotEl('player', camp.id, playerSlotIdx) : null;
-    var aiSlotEl      = aiSlotIdx     >= 0 ? SOG.board.getSlotEl('opp',    camp.id, aiSlotIdx)    : null;
-
-    // flipSlot is exposed via window in game.js. Each call animates the
-    // reveal + fires per-card SFX + sets sd.revealed = true.
-    var flipSlot = window.flipSlot ||
-                   (SOG.game && SOG.game.flipSlot);
-    // (Phase F robustness: if flipSlot isn't accessible — different
-    // export shape between sessions — fall back to a hard reveal.)
-    if (typeof flipSlot !== 'function') flipSlot = hardReveal;
-
-    flipSlot(playerSlotEl, function () {
-      flipSlot(aiSlotEl, function () {
-        resolveAfterReveal(onDone);
-      });
-    });
-  }
-
-  // Hard reveal fallback: just toggle classes + buildCardFace, no
-  // animation. Used if window.flipSlot isn't found for any reason.
-  function hardReveal(slotEl, cb) {
-    if (!slotEl) { if (cb) cb(); return; }
-    var cardId    = parseInt(slotEl.dataset.cardId,    10);
-    var locId     = parseInt(slotEl.dataset.locId,     10);
-    var slotIndex = parseInt(slotEl.dataset.slotIndex, 10);
-    var owner     = slotEl.dataset.owner;
-    var slots     = owner === 'player' ? SOG.state.G.playerSlots : SOG.state.G.aiSlots;
-    if (slots[locId] && slots[locId][slotIndex]) slots[locId][slotIndex].revealed = true;
-    slotEl.classList.remove('face-down', 'unplayed');
-    slotEl.classList.add('face-up');
-    var card = CARDS.find(function (c) { return c.id === cardId; });
-    if (card && SOG.board && SOG.board.buildCardFace) {
-      var sd = slots[locId][slotIndex];
-      var ip = SOG.board.effectiveIP(sd);
-      SOG.board.buildCardFace(slotEl, card, ip);
-    }
-    setTimeout(cb || function () {}, 60);
-  }
-
-  function lastPlayedIndex(slotArr) {
-    if (!slotArr) return -1;
-    for (var i = slotArr.length - 1; i >= 0; i--) {
-      if (slotArr[i] && slotArr[i].revealed === false) return i;
-    }
-    return -1;
-  }
-
-  function resolveAfterReveal(onDone) {
-    // 1) Fire At Once abilities for both newly-revealed cards (Tool's
-    //    draw triggers here). Sequential — done callback chains.
-    fireRevealAbilities(function () {
-      // 2) Apply continuous IP modifiers (Fire/Cave Art/Dom Animal/Tribe).
-      if (SOG.abilities && typeof SOG.abilities.evaluateContinuous === 'function') {
-        SOG.abilities.evaluateContinuous();
-      }
-      // 3) Refresh per-slot IP displays + the loc-score totals.
-      if (SOG.board && typeof SOG.board.refreshSlotIPDisplays === 'function') {
-        SOG.board.refreshSlotIPDisplays();
-      }
-      if (SOG.board && typeof SOG.board.updateScores === 'function') {
-        SOG.board.updateScores();
-      }
-      // 4) Brief pause so the player can read the result before the
-      //    next turn starts (or the battle ends).
-      setTimeout(onDone, POST_REVEAL_HOLD_MS);
-    });
-  }
-
-  function fireRevealAbilities(onAllDone) {
-    var G = SOG.state.G;
-    var camp = G.locations[0];
-    // Build a queue: just-revealed cards from both sides, in
-    // (player-first) order. Spec doesn't specify order; matches
-    // standard battle which interleaves but for one-card-per-side
-    // per turn the order doesn't materially matter (only Tool draws).
-    var queue = [];
-    var pSlots = G.playerSlots[camp.id];
-    var aSlots = G.aiSlots[camp.id];
-    for (var i = 0; i < pSlots.length; i++) {
-      var s = pSlots[i];
-      if (s && s.revealed && !s._abilityFired) queue.push({ owner: 'player', cardId: s.cardId, slot: s });
-    }
-    for (var j = 0; j < aSlots.length; j++) {
-      var s2 = aSlots[j];
-      if (s2 && s2.revealed && !s2._abilityFired) queue.push({ owner: 'opp', cardId: s2.cardId, slot: s2 });
-    }
-    var fire = function (idx) {
-      if (idx >= queue.length) { if (onAllDone) onAllDone(); return; }
-      var item = queue[idx];
-      item.slot._abilityFired = true;
-      if (SOG.abilities && typeof SOG.abilities.fireAtOnce === 'function') {
-        SOG.abilities.fireAtOnce(item.owner, item.cardId, camp.id, function () {
-          fire(idx + 1);
-        });
-      } else {
-        fire(idx + 1);
-      }
-    };
-    fire(0);
-  }
-
-  /* ── Advance to next turn ──────────────────────────────────── */
-  function advanceToNextTurn() {
-    var G = SOG.state.G;
-    G.turn++;
-    log('Phase F — advancing to turn ' + G.turn);
-    setTurnCounter(G.turn, TOTAL_TURNS);
-    _hasPlayedThisTurn = false;
-    G.prehistoryHasPlayed = false;  // unlock next play for isLegalPlayTarget
-
-    // Reset End Turn and Reset buttons (disabled until player places).
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) {
-      endTurnBtn.disabled = true;
-      endTurnBtn.classList.remove('adv-pulse');
-    }
-    if (resetBtn) resetBtn.disabled = true;
-
-    // Start-of-turn draw (player): exactly 1 card (flat draw, not draw-to-cap).
-    // Because this is a flat +1, Tool's reveal-phase draw (which fires
-    // before advanceToNextTurn) can push the hand to 4, and then this
-    // +1 brings it to 5 — the only legal way to exceed the 4-card cap.
-    var G2 = SOG.state.G;
-    if (G2.playerDeck.length > 0) {
-      G2.playerHand.push(G2.playerDeck.shift());
-      if (SOG.input && typeof SOG.input.rebuildPlayerHand === 'function') {
-        SOG.input.rebuildPlayerHand();
-      } else if (typeof window.setPlayerHand === 'function') {
-        window.setPlayerHand(G2.playerHand, G2.playerDeck.length);
-      }
-    }
-
-    // Start-of-turn draw (AI, parallel model): draw 1 cosmetic card from
-    // AI deck into AI hand. aiPlayScripted() consumed hand[0] this turn,
-    // dropping hand count by 1; this draw restores it — hand stays at 3→4
-    // and deck shrinks by 1, mirroring the player's draw rhythm.
-    if (G2.aiDeck.length > 0) {
-      G2.aiHand.push(G2.aiDeck.shift());
-      if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') {
-        SOG.ui.updateOppHand();
-      }
-    }
-  }
-
-  /* ── End battle: tally scores, play SFX, run post-battle flow ── */
-  function endBattle() {
-    var G = SOG.state.G;
-    var camp = G.locations[0];
-    var pIP = 0, aIP = 0;
-    G.playerSlots[camp.id].forEach(function (s) {
-      if (s && s.revealed) pIP += SOG.board.effectiveIP(s);
-    });
-    G.aiSlots[camp.id].forEach(function (s) {
-      if (s && s.revealed) aIP += SOG.board.effectiveIP(s);
-    });
-    var playerWon = pIP > aIP;
-    var tied      = pIP === aIP;
-    log('Phase F — battle complete: player ' + pIP + ' vs AI ' + aIP +
-        ' → ' + (playerWon ? 'VICTORY' : tied ? 'TIE' : 'DEFEAT'));
-
-    if (playerWon) {
-      markBattleComplete();
-      // Play victory fanfare immediately after the reveal settles
-      if (typeof SFX !== 'undefined' && typeof SFX.gameWon === 'function') SFX.gameWon();
-      // Brief pause for fanfare to land, then dialogue → card reveal → scoreboard
-      setTimeout(function () {
-        runPostBattleDialogue(WIN_DIALOGUE, function () {
-          var neanderthalCard = (typeof CARDS !== 'undefined') &&
-                                CARDS.find(function (c) { return c.id === 34; });
-          // Single source of truth: record Neanderthal (34) in the player
-          // collection at the grant moment, alongside the acquisition reveal
-          // (same discipline as the Ötzi/Lucy fix). The
-          // sog_battle_neanderthal_complete progress flag is left untouched.
-          if (window.SOG && SOG.collection && typeof SOG.collection.unlockCard === 'function') {
-            SOG.collection.unlockCard(34);
-          }
-          showCardAcquisition(
-            neanderthalCard || { id: 34, name: 'Neanderthal', image: 'images/cards/prehistorycards/neanderthalcard.jpg', ip: 4, ability: null, abilityName: null },
-            playCardAcquire,
-            function () { showVictoryScreen(pIP, aIP); }
-          );
-        });
-      }, 600);
-    } else if (tied) {
-      // Tie: same progression treatment as loss (no card, node stays active)
-      // TODO: replace with custom loss sound
-      if (typeof SFX !== 'undefined' && typeof SFX.gameLost === 'function') SFX.gameLost();
-      setTimeout(function () {
-        runPostBattleDialogue(TIE_DIALOGUE, function () {
-          showTieScreen(pIP, aIP);
-        });
-      }, 600);
-    } else {
-      // TODO: replace with custom loss sound
-      if (typeof SFX !== 'undefined' && typeof SFX.gameLost === 'function') SFX.gameLost();
-      // Brief pause for loss sound, then dialogue → scoreboard
-      setTimeout(function () {
-        runPostBattleDialogue(LOSS_DIALOGUE, function () {
-          showDefeatScreen(pIP, aIP);
-        });
-      }, 600);
-    }
   }
 
   /* ── Build a single result-loc-row element (Arcadium pattern) ── */
@@ -1723,11 +1153,10 @@ window.SOG.Adventure.Prehistory = (function () {
   function replayBattle(overlayEl) {
     overlayEl.style.display = 'none';
     teardownBattle();
-    setupBattleBoard();
-    document.body.classList.remove('prehistory-pre-coaching');
-    popLucyIn();
-    startTurnLoop();
-    log('Phase F — replay: re-entering battle from gameboard');
+    // Re-enter through the engine (replay → script takes the skip-intro path:
+    // no dialogue/wipe/coaching; popLucyIn via onBattleStart).
+    log('Phase F — replay: re-entering battle via initGame(BATTLE_CONFIG)');
+    if (typeof window.initGame === 'function') window.initGame(BATTLE_CONFIG);
   }
 
   // "Game Board" button — hides the result overlay so the player can
@@ -1759,7 +1188,7 @@ window.SOG.Adventure.Prehistory = (function () {
 
     el.style.display = 'flex';
 
-    // SFX already played in endBattle() before the dialogue sequence.
+    // SFX already played by the script's outcome hook before the dialogue.
 
     // Game Board — inspect the final board, then ← Results to return
     var boardBtn = document.getElementById('adv-result-victory-board');
@@ -1793,7 +1222,7 @@ window.SOG.Adventure.Prehistory = (function () {
 
     el.style.display = 'flex';
 
-    // SFX already played in endBattle() before the dialogue sequence.
+    // SFX already played by the script's outcome hook before the dialogue.
 
     // Game Board — inspect the final board, then ← Results to return
     var boardBtn = document.getElementById('adv-result-defeat-board');
@@ -1827,7 +1256,7 @@ window.SOG.Adventure.Prehistory = (function () {
 
     el.style.display = 'flex';
 
-    // SFX already played in endBattle() before the dialogue sequence.
+    // SFX already played by the script's outcome hook before the dialogue.
 
     // Game Board — inspect the final board, then ← Results to return
     var boardBtn = document.getElementById('adv-result-tie-board');
@@ -1863,14 +1292,9 @@ window.SOG.Adventure.Prehistory = (function () {
     if (SOG.HUD && SOG.HUD.restoreBattleAvatars) SOG.HUD.restoreBattleAvatars();
     // Hide any open bubbles
     hideAllBubbles();
-    // Remove End Turn hook
-    removeEndTurnHook();
     // Hide the adventure "← Results" back button (only shown during board review)
     var advBack = document.getElementById('adv-btn-back-results');
     if (advBack) { advBack.style.display = 'none'; advBack.onclick = null; }
-    // Clear prehistoryMode so subsequent standard battles work
-    if (SOG.state && SOG.state.G) SOG.state.G.prehistoryMode = false;
-    _hasPlayedThisTurn = false;
   }
 
   function exitBattleToOverworld() {
@@ -1893,22 +1317,6 @@ window.SOG.Adventure.Prehistory = (function () {
         }
       }, 500);
     }
-  }
-
-  /* ── Entry-point wiring: install End Turn hook when battle starts */
-  // Called from the intro flow (after coaching ends) AND from the
-  // skip-intro flow (after setupBattleBoard runs).
-  function startTurnLoop() {
-    log('Phase F — starting turn loop (turn 1)');
-    _hasPlayedThisTurn = false;
-    SOG.state.G.prehistoryHasPlayed = false;
-    installEndTurnHook();
-    installResetHook();
-    // Both action buttons start disabled — player must place a card first.
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) endTurnBtn.disabled = true;
-    if (resetBtn)   resetBtn.disabled   = true;
   }
 
   /* ── Exit back to overworld (devtools / temporary escape) ──── */
@@ -1955,48 +1363,15 @@ window.SOG.Adventure.Prehistory = (function () {
                                                   (cross-session replay)
   ═══════════════════════════════════════════════════════════════ */
   function startNeanderthalBattle() {
-    var battleComplete = isBattleComplete();
-    var skipIntro      = battleComplete || neanderthalIntroSeenThisSession;
-    log('startNeanderthalBattle() — battleComplete=' + battleComplete +
-        ' introSeenThisSession=' + neanderthalIntroSeenThisSession +
-        ' → skipIntro=' + skipIntro);
-
-    if (skipIntro) {
-      // Skip-intro path: drop straight to the gameboard (no walk, no
-      // dialogue, no wipe, no coaching). Spec: "Drop the player straight
-      // into the gameboard with their current deck."
-      setupBattleBoard();
-      // Skip-intro doesn't need the coaching slide-in either — clear
-      // the pre-coaching state immediately so the hand + buttons + HUD
-      // are visible right away. Lucy avatar still pops in (spec: "Her
-      // portrait stays on screen for the rest of the battle").
-      document.body.classList.remove('prehistory-pre-coaching');
-      popLucyIn();
-      startTurnLoop();
-    } else {
-      // Set this BEFORE the intro plays so a defeat-replay this session
-      // skips straight to the gameboard (phase F's loss-replay flow).
-      neanderthalIntroSeenThisSession = true;
-      // Phase C: pre-battle dialogue → radial wipe.
-      // Phase D: setupBattleBoard() while cover is up → fade cover out.
-      // Phase E: playCoaching() — intro exchange → shake + UI slide-in
-      //          → Lucy tutorial coaching → enable card interaction.
-      // Phase F: startTurnLoop() — install End Turn hook + gate.
-      playPreBattleDialogue(function () {
-        radialWipe(function () {
-          setupBattleBoard();
-          // Bubbles are no longer needed; the wipe covered them anyway.
-          hideAllBubbles();
-          fadeOutCover(function () {
-            log('Phase D complete — gameboard visible, starting Phase E');
-            playCoaching(function () {
-              log('Phase E complete — starting Phase F turn loop');
-              startTurnLoop();
-            });
-          });
-        });
-      });
-    }
+    // The Neanderthal battle runs through game.js's engine, configured by
+    // BATTLE_CONFIG (scriptHook 'prehistory'). The 'prehistory' script supplies
+    // ALL narrative via the lifecycle hooks: onIntro (pre-battle dialogue +
+    // radial wipe + screen switch under cover, or skip on replay), onBattleStart
+    // (avatars, turn presentation, coaching/slide-in or popLucyIn on replay),
+    // onTurnStart, onPlayerPlayed, and onWin/onLoss/onTie. The intro-vs-replay
+    // gating lives in the script (_scriptSkipIntro).
+    log('startNeanderthalBattle() → initGame(BATTLE_CONFIG)');
+    if (typeof window.initGame === 'function') window.initGame(BATTLE_CONFIG);
   }
 
   /* ── Devtools helpers ──────────────────────────────────────── */
@@ -2045,24 +1420,59 @@ window.SOG.Adventure.Prehistory = (function () {
     return isBattleComplete() || neanderthalIntroSeenThisSession;
   }
 
+  // End-Turn gating: the engine starts the button ENABLED each turn; this battle
+  // disables it until the player commits a card (1-card-per-turn cadence).
+  function _disableEndTurn() {
+    var btn = document.getElementById('battle-end-turn');
+    if (btn) { btn.disabled = true; btn.classList.remove('adv-pulse'); }
+  }
+  function _enableEndTurn() {
+    var btn = document.getElementById('battle-end-turn');
+    if (btn) btn.disabled = false;
+  }
+  // Per-turn presentation the engine doesn't do for this battle: the visible
+  // "Turn X / 4" counter, force player-first reveal order, suppress the engine's
+  // reveal-first avatar glow (the bespoke battle had none), and disable End Turn.
+  function _applyTurnPresentation(turn) {
+    setTurnCounter(turn, BATTLE_CONFIG.structure.turns);
+    SOG.state.G.playerFirst = true;
+    if (SOG.abilities && typeof SOG.abilities.hideRevealFirstHighlight === 'function') {
+      SOG.abilities.hideRevealFirstHighlight();
+    }
+    _disableEndTurn();
+  }
+
   var PREHISTORY_SCRIPT = {
-    // Pre-battle dialogue + radial wipe (before the board is built). First
-    // play only; on replay this is a no-op (engine builds the board directly).
+    // onIntro — fires BEFORE the engine builds the board. Apply the pre-board
+    // body classes; then first play only: pre-battle dialogue (over the
+    // overworld) → radial wipe → switch to the battle screen UNDER the wipe
+    // cover, so the engine's board build happens covered (radialWipe leaves the
+    // cover up; onBattleStart fades it). Replay: just switch to the battle screen.
     onIntro: function (ctx, done) {
-      if (_scriptSkipIntro()) { done(); return; }
-      // Mirror the bespoke flag set BEFORE the intro plays so a same-session
-      // defeat-replay skips straight to the board.
+      _applyPresentationClasses(BATTLE_CONFIG.presentation);
+      if (_scriptSkipIntro()) {
+        if (typeof window.showScreen === 'function') window.showScreen('screen-battle');
+        done();
+        return;
+      }
+      // Set BEFORE the intro plays so a same-session defeat-replay skips it.
       neanderthalIntroSeenThisSession = true;
       playPreBattleDialogue(function () {
-        radialWipe(function () { done(); });
+        radialWipe(function () {
+          if (typeof window.showScreen === 'function') window.showScreen('screen-battle');
+          done();   // → engine builds the board under the wipe cover
+        });
       });
     },
 
-    // Board built (under the wipe cover first-time). First play: fade the
-    // cover out → coaching Phase 1 → camera shake → UI slide-in → Phase 2
-    // (all chained inside playCoaching). Replay: clear the pre-coaching
-    // hidden state and pop Lucy in. Then hand control back to the engine.
+    // onBattleStart — board built (gameplay UI hidden by the pre-coaching class).
+    // Dress it: avatars + turn-1 presentation (counter, player-first, End-Turn
+    // disabled). First play: fade the cover out → coaching P1 → shake → slide-in
+    // → P2 (chained in playCoaching; Lucy pops in via the coaching script).
+    // Replay: clear the pre-coaching hidden state and pop Lucy in directly.
     onBattleStart: function (ctx, done) {
+      if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(BATTLE_CONFIG.presentation);
+      _applyTurnPresentation(1);
       if (_scriptSkipIntro()) {
         document.body.classList.remove('prehistory-pre-coaching');
         popLucyIn();
@@ -2075,9 +1485,22 @@ window.SOG.Adventure.Prehistory = (function () {
       });
     },
 
-    // Turn-1 "click End Turn" prompt + button pulse, after the player commits
-    // their first card. Later turns: nothing.
+    // onTurnStart (turns 2-4): re-apply the per-turn presentation.
+    onTurnStart: function (ctx, turn) {
+      _applyTurnPresentation(turn);
+    },
+
+    // onBeforeReveal: the player has ended the turn — clear the turn-1 "click
+    // End Turn" prompt + button pulse (the bespoke onPrehistoryEndTurn did this).
+    onBeforeReveal: function (ctx, turn) {
+      hideLucyOneLiner();
+      _disableEndTurn();
+    },
+
+    // onPlayerPlayed: enable End Turn now that a card is committed; turn 1 also
+    // shows Lucy's "click End Turn" prompt + button pulse.
     onPlayerPlayed: function (ctx, p) {
+      _enableEndTurn();
       if (p && p.turn === 1) {
         var endTurnBtn = document.getElementById('battle-end-turn');
         if (endTurnBtn) endTurnBtn.classList.add('adv-pulse');
@@ -2148,8 +1571,6 @@ window.SOG.Adventure.Prehistory = (function () {
     isBattleComplete:       isBattleComplete,
     markBattleComplete:     markBattleComplete,
     resetBattleComplete:    resetBattleComplete,
-    // Called by input.js commitPlay when G.prehistoryMode is true.
-    notifyPlayerPlayed:     notifyPlayerPlayed,
     // Shared card-acquisition component — called by overworld.js for the
     // Lucy reveal (and any future card unlocks that use the same flow).
     showCardAcquisition:    showCardAcquisition,

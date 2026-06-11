@@ -591,7 +591,6 @@
 
   endTurnBtn.addEventListener('click', function () {
     if (window.tutorialActive) return;  // tutorial owns this button
-    if (G.prehistoryMode)      return;  // adventure module owns End Turn in prehistory tutorial
     if (G.phase !== 'select')   return;
     if (typeof SFX !== 'undefined') SFX.endTurn();
     onEndTurn();
