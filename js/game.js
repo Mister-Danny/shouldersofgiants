@@ -443,7 +443,11 @@
         if (result.length === 3) return result;
       }
     } catch (e) {}
-    var pool = LOCATIONS.slice();
+    // Standard Arcadium pool = the six locations with an ability. Savannah (7)
+    // and Desert (8) carry abilityKey null and exist only for the Ötzi adventure
+    // battle (which resolves them by id from LOCATIONS), so exclude them from the
+    // random pick.
+    var pool = LOCATIONS.filter(function (l) { return l.abilityKey != null; });
     pool.sort(function () { return Math.random() - 0.5; });
     return pool.slice(0, 3);
   }
