@@ -381,8 +381,10 @@ window.SOG.Adventure.Prehistory = (function () {
     },
     rewards: { onWin: { cards: [34], completionFlag: 'sog_battle_neanderthal_complete' } },
     presentation: {
-      allyAvatar:     'images/Lucy.png',                       // ally is Lucy (HTML default — no visible swap)
-      opponentAvatar: 'images/portraits/neanderthalportait.jpeg'
+      bodyClass:        'prehistory-battle',        // gates all CSS overrides (applied pre-board)
+      preCoachingClass: 'prehistory-pre-coaching',  // additionally hides hand+deck+HUD until slide-in
+      allyAvatar:       'images/Lucy.png',          // ally is Lucy (HTML default — no visible swap)
+      opponentAvatar:   'images/portraits/neanderthalportait.jpeg'
     },
     ai: { profile: 'scriptedSequence',
           settings: { playOrder: [26, 27, 31, 34], faceDown: true,
@@ -416,13 +418,23 @@ window.SOG.Adventure.Prehistory = (function () {
     if (turnEl) turnEl.textContent = '';
   }
 
+  // Pre-board presentation: apply the battle's static body-class identity from
+  // config.presentation. These classes drive all CSS overrides and gate the
+  // hidden-until-slide-in state, so they're applied BEFORE the board renders.
+  // The bespoke setup calls this now; the 'prehistory' script calls it from
+  // onIntro at the cutover — one path, one source of truth.
+  function _applyPresentationClasses(p) {
+    if (!p) return;
+    if (p.bodyClass)        document.body.classList.add(p.bodyClass);
+    if (p.preCoachingClass) document.body.classList.add(p.preCoachingClass);
+  }
+
   function setupBattleBoard() {
     log('Phase D — setting up Prehistory battle board');
 
-    // Body context class — drives all CSS overrides. Pre-coaching
-    // sub-class hides hand+deck+HUD until Phase E slides them in.
-    document.body.classList.add('prehistory-battle');
-    document.body.classList.add('prehistory-pre-coaching');
+    // Body context classes (config.presentation): drive all CSS overrides; the
+    // pre-coaching sub-class hides hand+deck+HUD until Phase E slides them in.
+    _applyPresentationClasses(BATTLE_CONFIG.presentation);
 
     // Build minimal G state directly (option β architecture — we do
     // not call initGame()). The reveal sequence, hand UI, and ability
