@@ -1420,6 +1420,12 @@ window.SOG.Adventure.Prehistory = (function () {
     return isBattleComplete() || neanderthalIntroSeenThisSession;
   }
 
+  // The skip-intro decision must be made ONCE per battle entry, in onIntro,
+  // BEFORE neanderthalIntroSeenThisSession is set — otherwise onBattleStart's
+  // re-evaluation would read the just-set flag and wrongly skip the coaching
+  // (and fadeOutCover), leaving the wipe cover up. onBattleStart reads this.
+  var _battleSkippedIntro = false;
+
   // End-Turn gating: the engine starts the button ENABLED each turn; this battle
   // disables it until the player commits a card (1-card-per-turn cadence).
   function _disableEndTurn() {
@@ -1449,8 +1455,11 @@ window.SOG.Adventure.Prehistory = (function () {
     // cover, so the engine's board build happens covered (radialWipe leaves the
     // cover up; onBattleStart fades it). Replay: just switch to the battle screen.
     onIntro: function (ctx, done) {
+      // Capture the skip decision ONCE, before mutating the flag below, so
+      // onBattleStart can reuse it (decide-once semantics, like the bespoke flow).
+      _battleSkippedIntro = _scriptSkipIntro();
       _applyPresentationClasses(BATTLE_CONFIG.presentation);
-      if (_scriptSkipIntro()) {
+      if (_battleSkippedIntro) {
         if (typeof window.showScreen === 'function') window.showScreen('screen-battle');
         done();
         return;
@@ -1473,7 +1482,7 @@ window.SOG.Adventure.Prehistory = (function () {
     onBattleStart: function (ctx, done) {
       if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(BATTLE_CONFIG.presentation);
       _applyTurnPresentation(1);
-      if (_scriptSkipIntro()) {
+      if (_battleSkippedIntro) {   // captured in onIntro before the flag was set
         document.body.classList.remove('prehistory-pre-coaching');
         popLucyIn();
         done();
