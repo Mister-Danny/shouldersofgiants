@@ -1204,9 +1204,16 @@
     if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);
     showResult(result);
 
-    /* Progression: track wins for card unlocking (single-player only) */
+    /* Progression: track wins for card unlocking (single-player only).
+       Scripted battles (G.config.scriptHook set — Adventure narrative battles
+       like Prehistory) do NOT feed Arcadium progression: recordWin both
+       increments the win counters and arms the victory montage
+       (window._pendingMontage), so skipping it suppresses every progression
+       side-effect. Arcadium has scriptHook null → the guard is unreached and it
+       records exactly as today. */
     if (result.outcome === 'player' &&
         typeof Progression !== 'undefined' &&
+        !(G.config && G.config.scriptHook) &&
         !window.matchId && !window.versusStudentMode && !window.tournamentMatch) {
       Progression.recordWin(window.aiDifficulty);
     }
