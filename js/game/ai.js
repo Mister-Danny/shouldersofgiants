@@ -1,7 +1,11 @@
 /**
  * game/ai.js — Shoulders of Giants · AI Opponent
  *
- * Handles both AI difficulty modes:
+ * AI selection dispatches on cfg.ai.profile first:
+ *   scriptedSequence — plays cfg.ai.settings.playOrder[turn-1] face-down
+ *                      (config-driven scripted opponent; reached only when a
+ *                       battle config sets this profile)
+ * For every other profile it falls through to the legacy window.aiDifficulty modes:
  *   Easy / Serf  — random play with ~33% carelessness
  *   Hard / Giant — strategic candidate scoring (aiGiantStrategy)
  *
@@ -54,6 +58,25 @@
       G.aiActionLog.push({ type: 'play', cardId: cardId });  // bug 16: unified action log
       var slotEl = helpers.getSlotEl('opp', locId, slotIndex);
       if (slotEl) { slotEl.dataset.cardId = cardId; helpers.setSlotFaceDown(slotEl); }
+    }
+
+    /* ── Scripted-sequence profile (config-driven) ───────────────
+       A scripted opponent plays a fixed card each turn from
+       cfg.ai.settings.playOrder, face-down into the battle's location —
+       the generic, engine-resident version of the prehistory module's
+       scriptedSequence step, now reachable from game.js's flow. Keyed off
+       cfg.ai.profile (NOT window.aiDifficulty), so for every other profile
+       the legacy difficulty branches below run exactly as today. The card
+       is placed via the same commitPlay helper (identical slot data +
+       reveal-queue + action-log + face-down DOM as a normal AI play). */
+    var _aiProfile = G.config && G.config.ai && G.config.ai.profile;
+    if (_aiProfile === 'scriptedSequence') {
+      var _settings  = (G.config.ai.settings) || {};
+      var _playOrder = _settings.playOrder || [];
+      var _cardId    = _playOrder[G.turn - 1];
+      var _loc       = G.locations && G.locations[0];   // single-location scripted battle
+      if (_cardId != null && _loc) commitPlay(_cardId, _loc.id);
+      return;
     }
 
     /* ── Giant / Hard mode: strategic AI ────────────────────────── */
