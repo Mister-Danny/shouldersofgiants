@@ -14,7 +14,7 @@
  *   Conditional — triggered by destroyCard() / discardFromHand()
  *
  * Depends on: cards.js, locations.js, ui.js
- * Exposes:    window.initGame()
+ * Exposes:    window.initGame([injectedCfg])  — optional config; falls back to resolveBattleConfig
  */
 
 (function () {
@@ -171,19 +171,21 @@
     };
   }
 
-  function initGame() {
+  function initGame(injectedCfg) {
     // Default to easy if no difficulty was chosen (e.g. launched from tutorial)
     if (!window.aiDifficulty) window.aiDifficulty = 'easy';
 
     /* ── 2P mode: use Match-resolved locations + opponent deck ─── */
     var _2pCfg = (window.matchId && typeof Match !== 'undefined') ? Match.get2PConfig() : null;
 
-    /* Battle-config: built once from the sources above + constants. From here
-       initGame reads its own setup values through cfg (Step 2). _2pCfg is now
-       SUBSUMED — it feeds resolveBattleConfig and is no longer read directly.
-       (Turns, scoring, and the AI-profile reads still run off their constants
-       this step — they move in a later step.) */
-    G.config = resolveBattleConfig(_2pCfg);
+    /* Battle-config injection seam (Prehistory-cutover prerequisite):
+       a caller may pass a fully-formed config (e.g. a scripted Adventure
+       battle); otherwise initGame resolves its own as before. Arcadium and
+       every current caller pass nothing → the fallback runs resolveBattleConfig
+       exactly as today, so behaviour is byte-for-byte identical. From here
+       initGame reads its setup values through cfg; _2pCfg only feeds the
+       fallback. */
+    G.config = injectedCfg || resolveBattleConfig(_2pCfg);
     var cfg = G.config;
 
     /* AI profile bridge (Step 5): populate the global the AI read sites (ai.js,
