@@ -387,7 +387,14 @@ window.SOG.Adventure.Prehistory = (function () {
     ai: { profile: 'scriptedSequence',
           settings: { playOrder: [26, 27, 31, 34], faceDown: true,
                       handPadding: [29, 30, 32, 36, 28] } },
-    scriptHook: 'prehistory'
+    // null until the deferred entry cutover. The 'prehistory' script is
+    // registered below, but pointing scriptHook at it NOW would make its
+    // onPlayerPlayed / isInputBlocked hooks fire from the shared input.js call
+    // sites DURING the still-bespoke battle (G.config is set in setupBattleBoard)
+    // — e.g. a double turn-1 prompt. Keeping it null leaves the script dormant
+    // so the bespoke flow stays byte-identical. The cutover flips this to
+    // 'prehistory' and routes the entry through game.js's initGame lifecycle.
+    scriptHook: null
   };
 
   // Fisher-Yates shuffle (in-place). The standard SOG.board.shuffle
@@ -1994,6 +2001,134 @@ window.SOG.Adventure.Prehistory = (function () {
    */
   function isCoachingActive() {
     return co_lines !== null || postBattleDialogueActive;
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     SCRIPT-HOOK MODULE (battle-config migration, Stage 1)
+     ────────────────────────────────────────────────────────────
+     The narrative half of this battle, expressed through the engine's
+     script-hook seam (SOG.BattleHooks), registered as 'prehistory'. It
+     maps the bespoke flow's narrative inventory onto the lifecycle hooks,
+     REUSING the existing dialogue constants, coaching content, cinematic
+     helpers, and result screens — it CALLS them, it does not re-implement.
+
+     Intro-only-vs-replay gating is owned here: the intro (pre-battle
+     dialogue + wipe) and the two coaching phases fire only first-time
+     (battleComplete || introSeenThisSession); the outcome dialogue and the
+     card-acquisition reveal fire EVERY play.
+
+     ── INERT THIS SESSION ──
+     The registry holds this script, but the entry point
+     (startNeanderthalBattle) still runs the bespoke loop and
+     BATTLE_CONFIG.scriptHook is null — so nothing resolves to this script
+     yet and no hook fires (proven: Prehistory + Arcadium play identically).
+     The deferred cutover flips scriptHook to 'prehistory' and routes the
+     entry through game.js's initGame lifecycle, at which point these hooks
+     drive the battle. Board-presentation timing (body classes / hidden-
+     until-coaching state, currently in setupBattleBoard) is reconciled at
+     that cutover; the hooks below mirror the bespoke sequence so the move
+     is mechanical.
+  ════════════════════════════════════════════════════════════ */
+  function _scriptSkipIntro() {
+    return isBattleComplete() || neanderthalIntroSeenThisSession;
+  }
+
+  var PREHISTORY_SCRIPT = {
+    // Pre-battle dialogue + radial wipe (before the board is built). First
+    // play only; on replay this is a no-op (engine builds the board directly).
+    onIntro: function (ctx, done) {
+      if (_scriptSkipIntro()) { done(); return; }
+      // Mirror the bespoke flag set BEFORE the intro plays so a same-session
+      // defeat-replay skips straight to the board.
+      neanderthalIntroSeenThisSession = true;
+      playPreBattleDialogue(function () {
+        radialWipe(function () { done(); });
+      });
+    },
+
+    // Board built (under the wipe cover first-time). First play: fade the
+    // cover out → coaching Phase 1 → camera shake → UI slide-in → Phase 2
+    // (all chained inside playCoaching). Replay: clear the pre-coaching
+    // hidden state and pop Lucy in. Then hand control back to the engine.
+    onBattleStart: function (ctx, done) {
+      if (_scriptSkipIntro()) {
+        document.body.classList.remove('prehistory-pre-coaching');
+        popLucyIn();
+        done();
+        return;
+      }
+      hideAllBubbles();
+      fadeOutCover(function () {
+        playCoaching(function () { done(); });
+      });
+    },
+
+    // Turn-1 "click End Turn" prompt + button pulse, after the player commits
+    // their first card. Later turns: nothing.
+    onPlayerPlayed: function (ctx, p) {
+      if (p && p.turn === 1) {
+        var endTurnBtn = document.getElementById('battle-end-turn');
+        if (endTurnBtn) endTurnBtn.classList.add('adv-pulse');
+        showLucyOneLiner("When you've made your decision, click the End Turn button.");
+      }
+    },
+
+    // Win: fanfare → win dialogue → card-acquisition reveal (grant Neanderthal
+    // 34 + completion flag) → victory screen. The script OWNS the end screen,
+    // so it does NOT call proceed() (the engine's default scoreboard).
+    onWin: function (ctx, result, proceed) {
+      markBattleComplete();
+      if (typeof SFX !== 'undefined' && typeof SFX.gameWon === 'function') SFX.gameWon();
+      setTimeout(function () {
+        runPostBattleDialogue(WIN_DIALOGUE, function () {
+          if (window.SOG && SOG.collection && typeof SOG.collection.unlockCard === 'function') {
+            SOG.collection.unlockCard(34);
+          }
+          var neanderthalCard = (typeof CARDS !== 'undefined') &&
+                                CARDS.find(function (c) { return c.id === 34; });
+          showCardAcquisition(
+            neanderthalCard || { id: 34, name: 'Neanderthal', image: 'images/cards/prehistorycards/neanderthalcard.jpg', ip: 4, ability: null, abilityName: null },
+            playCardAcquire,
+            function () { showVictoryScreen(result.playerTotal, result.aiTotal); }
+          );
+        });
+      }, 600);
+    },
+
+    // Loss: loss dialogue → defeat screen.
+    onLoss: function (ctx, result, proceed) {
+      if (typeof SFX !== 'undefined' && typeof SFX.gameLost === 'function') SFX.gameLost();
+      setTimeout(function () {
+        runPostBattleDialogue(LOSS_DIALOGUE, function () {
+          showDefeatScreen(result.playerTotal, result.aiTotal);
+        });
+      }, 600);
+    },
+
+    // Tie: tie dialogue → tie screen (tie-as-loss progression — no card, node
+    // stays active). Reached when single-location scoring + tie:'loss' yields
+    // an exact-tie outcome.
+    onTie: function (ctx, result, proceed) {
+      if (typeof SFX !== 'undefined' && typeof SFX.gameLost === 'function') SFX.gameLost();
+      setTimeout(function () {
+        runPostBattleDialogue(TIE_DIALOGUE, function () {
+          showTieScreen(result.playerTotal, result.aiTotal);
+        });
+      }, 600);
+    },
+
+    // Input gate during coaching / post-battle dialogue — the role
+    // isCoachingActive() plays today in input.js _dialogueActive.
+    isInputBlocked: function (ctx) {
+      return isCoachingActive();
+    }
+  };
+
+  // Register the script (name 'prehistory'). Dormant until the deferred
+  // cutover points BATTLE_CONFIG.scriptHook at it and routes the entry
+  // through game.js's lifecycle.
+  if (window.SOG && SOG.BattleHooks && typeof SOG.BattleHooks.register === 'function') {
+    SOG.BattleHooks.register('prehistory', PREHISTORY_SCRIPT);
   }
 
   return {
