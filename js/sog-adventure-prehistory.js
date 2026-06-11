@@ -337,34 +337,58 @@ window.SOG.Adventure.Prehistory = (function () {
        T4 start draw → hand 5; plays Neanderthal (34) → hand 4, deck 1.
   ═══════════════════════════════════════════════════════════════ */
 
-  // Pseudo-location for The Camp. ID 100 sidesteps the standard locs
-  // (1-6) so the CSS rule .battle-col[data-loc-id="100"] targets only
-  // this tile and we don't accidentally style any real game location.
-  function buildCampLocation() {
-    return {
-      id:          100,
-      name:        'The Camp',
-      region:      '',
-      abilityText: '',  // spec: "No ability text"
-      abilityKey:  null
-    };
-  }
+  /* ══════════════════════════════════════════════════════════════
+     BATTLE CONFIG (battle-config migration, Stage 1)
+     ──────────────────────────────────────────────────────────────
+     The rules half of this battle expressed as a config object, per the
+     migration design. This session is the HYBRID step: the existing
+     Prehistory turn loop stays, but its setup/AI now READ from this config
+     instead of hardcoded literals. (Full cutover to game.js's lifecycle +
+     the engine config-dimension extensions is a deferred later step.)
 
-  function buildPrehistoryDeck() {
-    // IDs per cards.js:206-279 — no duplicates, no Lucy (id 33).
-    return [26, 27, 28, 29, 30, 31, 32, 36];
-  }
-
-  function buildNeanderthalAiDeck() {
-    // Full scripted play sequence T1→T4: Tool(26), Hunter(27), Megalith(31), Neanderthal(34).
-    // Tool fires its "draw 1" ability during the reveal phase (fireRevealAbilities →
-    // abilityTool), pushing an extra cosmetic card from deck to hand. This makes the
-    // AI's hand/deck pattern mirror a player who opens with Tool.
-    // All 4 are loaded directly into G.aiHand at setup. G.aiDeck is seeded
-    // separately with 5 cosmetic cards so the opp-hand display starts at
-    // hand=4, deck=5 — mirroring the player's opening state.
-    return [26, 27, 31, 34];
-  }
+     • The Camp uses pseudo-location ID 100 to sidestep the standard locs
+       (1-6) so .battle-col[data-loc-id="100"] targets only this tile.
+     • decks.player.ids per cards.js (no duplicates, no Lucy id 33).
+     • ai.settings.playOrder is the scripted opponent sequence T1→T4:
+       Tool(26) → Hunter(27) → Megalith(31) → Neanderthal(34). Tool fires
+       its "draw 1" At-Once during reveal, mirroring a player opening Tool.
+       handPadding seeds G.aiDeck with 5 cosmetic cards (faces never shown)
+       so the opp-hand display starts hand=4 / deck=5, matching the player.
+     • scriptHook 'prehistory' is the target; the script module is registered
+       in the deferred Stage 3, so it is INERT this session (no script is
+       registered → the BattleHooks seam resolves to null and falls through).
+  ══════════════════════════════════════════════════════════════ */
+  var BATTLE_CONFIG = {
+    structure: { turns: 4, locationsCount: 1, slotsPerLocation: 4,
+                 handStart: 4, maxHandSize: 4, cardsPerTurn: 1 },
+    resource:  { model: 'none', capital: 0, resetEachTurn: false },
+    // Flat +1 draw per turn (NOT draw-to-cap). Tool(26)'s reveal-phase draw
+    // is the documented soft-cap exception that can push the hand to 5.
+    draw:      { model: 'flat', perTurn: 1, softCapExceptionCardId: 26 },
+    decks: {
+      player: { source: 'explicit', ids: [26, 27, 28, 29, 30, 31, 32, 36], shuffle: true },
+      ai:     { source: 'scripted' }   // cards come from ai.settings.playOrder
+    },
+    locationAbilities: {
+      select: { mode: 'explicit', locations: [
+        { id: 100, name: 'The Camp', region: '', abilityText: '', abilityKey: null }
+      ] }
+    },
+    scoring: {
+      rule: 'single-location', metric: 'player-ip-vs-ai-ip',
+      outcomes: { win: 'pIP>aIP', loss: 'pIP<aIP', tie: 'pIP===aIP' },
+      tie: 'loss'   // a tie is treated like a loss for progression (own dialogue/screen)
+    },
+    rewards: { onWin: { cards: [34], completionFlag: 'sog_battle_neanderthal_complete' } },
+    presentation: {
+      allyAvatar:     'images/Lucy.png',                       // ally is Lucy (HTML default — no visible swap)
+      opponentAvatar: 'images/portraits/neanderthalportait.jpeg'
+    },
+    ai: { profile: 'scriptedSequence',
+          settings: { playOrder: [26, 27, 31, 34], faceDown: true,
+                      handPadding: [29, 30, 32, 36, 28] } },
+    scriptHook: 'prehistory'
+  };
 
   // Fisher-Yates shuffle (in-place). The standard SOG.board.shuffle
   // is the same algorithm but we avoid the cross-module dependency.
@@ -375,15 +399,6 @@ window.SOG.Adventure.Prehistory = (function () {
     }
     return arr;
   }
-
-  // Avatar presentation for this battle: ally is Lucy (the HTML default — no
-  // visible swap), opponent is the Neanderthal portrait. Lucy pops in later via
-  // popLucyIn(), so popAlly is omitted here. Applied/restored through the shared
-  // engine path (SOG.HUD.applyBattleAvatars / restoreBattleAvatars).
-  var PRESENTATION = {
-    allyAvatar:     'images/Lucy.png',
-    opponentAvatar: 'images/portraits/neanderthalportait.jpeg'
-  };
 
   function setTurnCounter(current, total) {
     var capEl = document.getElementById('battle-capital-info');
@@ -406,32 +421,40 @@ window.SOG.Adventure.Prehistory = (function () {
     // not call initGame()). The reveal sequence, hand UI, and ability
     // engine all read from G, so populating it here is enough to make
     // the rendering helpers happy.
-    var G = SOG.state.G;
-    var camp = buildCampLocation();
+    //
+    // Stage 1: all rules values now READ from BATTLE_CONFIG instead of
+    // literals. Attach it to G.config (mirrors initGame's pattern; makes the
+    // config inspectable and preps the deferred game.js-lifecycle cutover).
+    var G   = SOG.state.G;
+    var cfg = BATTLE_CONFIG;
+    G.config = cfg;
+
+    // Clone the config's camp location so G never mutates the config object.
+    var camp = Object.assign({}, cfg.locationAbilities.select.locations[0]);
+    var slotsPerLoc = cfg.structure.slotsPerLocation;
 
     G.locations    = [camp];
     G.playerSlots  = {};
     G.aiSlots      = {};
-    G.playerSlots[camp.id] = [null, null, null, null];
-    G.aiSlots[camp.id]     = [null, null, null, null];
+    G.playerSlots[camp.id] = Array(slotsPerLoc).fill(null);
+    G.aiSlots[camp.id]     = Array(slotsPerLoc).fill(null);
 
-    G.playerDeck = shuffleInPlace(buildPrehistoryDeck().slice());
-    G.playerHand = G.playerDeck.splice(0, 4);  // hand of 4 (spec)
+    var playerIds = cfg.decks.player.ids.slice();
+    G.playerDeck = cfg.decks.player.shuffle ? shuffleInPlace(playerIds) : playerIds;
+    G.playerHand = G.playerDeck.splice(0, cfg.structure.handStart);
 
-    // Parallel-to-player model: AI starts with 4 scripted cards in hand
-    // and 5 cosmetic padding cards in deck. aiPlayScripted() always takes
-    // aiHand[0] so the scripted sequence runs T1→T4 in order. The deck
-    // cards are cosmetic — they keep the opp-hand display at hand=4, deck=5
-    // at game start, exactly matching the player's opening hand/deck counts.
-    // T1 Tool fires its draw ability and pulls one cosmetic card from deck
-    // into hand, making hand briefly 4 before the next-turn draw brings it to 5.
-    G.aiHand = buildNeanderthalAiDeck().slice();   // [26, 27, 31, 34]
-    G.aiDeck = [29, 30, 32, 36, 28];              // 5 cosmetic padding cards (faces never shown)
+    // Parallel-to-player model: AI starts with the scripted playOrder in hand
+    // (4 cards) and handPadding in deck (5 cosmetic cards). The scriptedSequence
+    // AI step places playOrder[turn-1] and consumes one face-down card from the
+    // hand for display, so the opp-hand display starts hand=4 / deck=5 and
+    // decrements exactly as the player's — faces are never shown.
+    G.aiHand = cfg.ai.settings.playOrder.slice();    // [26, 27, 31, 34]
+    G.aiDeck = cfg.ai.settings.handPadding.slice();  // 5 cosmetic padding cards
 
     G.turn               = 1;
     G.phase              = 'select';
-    G.capital            = 0;          // spec: CC ignored entirely
-    G.turnStartCapital   = 0;
+    G.capital            = cfg.resource.capital;       // resource.model 'none' → 0
+    G.turnStartCapital   = cfg.resource.capital;
     G.prehistoryMode     = true;       // flag for the input layer (Phase F)
     G.playerFirst        = true;
     G.bonusCapitalNextTurn   = 0;
@@ -474,8 +497,8 @@ window.SOG.Adventure.Prehistory = (function () {
       SOG.ui.updateOppHand();
     }
 
-    setTurnCounter(1, 4);
-    if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(PRESENTATION);
+    setTurnCounter(1, cfg.structure.turns);
+    if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(cfg.presentation);
 
     // tutorial.js hides the reset button (display:none) for the guided
     // tutorial; initGame() restores it but we skip initGame() here.
@@ -1192,9 +1215,9 @@ window.SOG.Adventure.Prehistory = (function () {
      (tie = player wins).
   ═══════════════════════════════════════════════════════════════ */
 
-  var TOTAL_TURNS         = 4;
+  var TOTAL_TURNS         = BATTLE_CONFIG.structure.turns;       // 4 (from config)
   var POST_REVEAL_HOLD_MS = 1100;  // beat after IP updates before next turn
-  var HAND_CAP            = 4;     // Tool's draw can exceed this (see commentary)
+  var HAND_CAP            = BATTLE_CONFIG.structure.maxHandSize; // 4; Tool's draw can exceed (see commentary)
 
   // Module-level turn-loop state. Reset on each setupBattleBoard().
   var _hasPlayedThisTurn = false;
@@ -1381,18 +1404,32 @@ window.SOG.Adventure.Prehistory = (function () {
     }, 600);
   }
 
-  /* ── AI scripted play ──────────────────────────────────────── */
-  // Hard-coded turn → card-id mapping. Matches the user spec
-  // (T1 Hunter, T2 Gatherer, T3 Megalith, T4 Neanderthal). The AI's
-  // hand was pre-loaded with all 4 cards in setupBattleBoard, so we
-  // consume from index 0 each turn for a deterministic sequence.
+  /* ── AI step: dispatch on ai.profile (battle-config, Stage 2) ──
+     The engine's AI step now branches on cfg.ai.profile. This battle uses
+     'scriptedSequence' — a config-driven generic that places
+     cfg.ai.settings.playOrder[turn-1] face-down into the configured location,
+     replacing the old bespoke "consume aiHand[0]" mapping. Because aiHand was
+     seeded as playOrder (and only cosmetic padding is ever drawn to the end),
+     placing playOrder[turn-1] and consuming one face-down card from the hand
+     is byte-identical to the old behaviour for T1→T4. */
   function aiPlayScripted() {
-    var G = SOG.state.G;
-    if (!G.aiHand.length) { log('AI hand empty — nothing to play'); return; }
-    var cardId = G.aiHand[0];
-    G.aiHand = G.aiHand.slice(1);
+    var cfg = SOG.state.G.config || BATTLE_CONFIG;
+    if (cfg.ai && cfg.ai.profile === 'scriptedSequence') return aiPlayScriptedSequence(cfg);
+    log('AI step: no handler for profile "' + (cfg.ai && cfg.ai.profile) + '"');
+  }
 
-    var camp = G.locations[0];  // single-loc battle
+  function aiPlayScriptedSequence(cfg) {
+    var G = SOG.state.G;
+    var playOrder = (cfg.ai && cfg.ai.settings && cfg.ai.settings.playOrder) || [];
+    var cardId = playOrder[G.turn - 1];
+    if (cardId == null) { log('scriptedSequence: no scripted card for turn ' + G.turn); return; }
+
+    // Display parity: consume one face-down card from the AI hand (mirrors the
+    // old consume-from-hand step) so the opp hand/deck counts decrement exactly
+    // as before. Faces are never shown, so which id is removed is cosmetic.
+    if (G.aiHand.length) G.aiHand = G.aiHand.slice(1);
+
+    var camp = G.locations[0];  // single-loc battle (locationsCount 1)
     var slotIndex = G.aiSlots[camp.id].indexOf(null);
     if (slotIndex === -1) { log('AI slots full — cannot place'); return; }
 
@@ -1422,7 +1459,7 @@ window.SOG.Adventure.Prehistory = (function () {
       SOG.ui.updateOppHand();
     }
 
-    log('AI played ' + card.name + ' (id ' + cardId + ') at slot ' + slotIndex);
+    log('AI (scriptedSequence) played ' + card.name + ' (id ' + cardId + ') at slot ' + slotIndex);
   }
 
   /* ── Reveal: flip player slot, then opp slot, then resolve ──── */
