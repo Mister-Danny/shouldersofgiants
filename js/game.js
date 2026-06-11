@@ -147,7 +147,11 @@
         handStart:        HAND_START,
         maxHandSize:      MAX_HAND_SIZE
       },
-      resource: { model: 'capital-flat', capital: CAPITAL, resetEachTurn: true },
+      resource: { model: 'capital', capital: CAPITAL, resetEachTurn: true },
+      // Draw policy. 'replenish' = draw back up by however many cards were
+      // played last turn, capped at structure.maxHandSize (today's Arcadium
+      // behaviour). The 'flat' variant (+N/turn) exists for future battles.
+      draw: { model: 'replenish' },
       decks: {
         player: { source: 'active-deck' },                     // window.Decks.getActiveCards()
         ai: hasExplicitAiDeck
@@ -1106,7 +1110,13 @@
   function nextTurn() {
     G.turn    += 1;
     G.phase    = 'select';
-    G.capital  = CAPITAL + G.bonusCapitalNextTurn;
+    /* Capital reset via config.resource (was hardcoded CAPITAL). 'none' holds
+       capital at 0 (future capital-less battles); any other model resets to
+       resource.capital + bonus. Arcadium (model 'capital', capital 5) is
+       identical to the old CAPITAL + bonus. The 'none' branch is unreached
+       by Arcadium. */
+    var _res = G.config.resource;
+    G.capital  = (_res.model === 'none') ? 0 : (_res.capital + G.bonusCapitalNextTurn);
     G.turnStartCapital     = G.capital;
     G.bonusCapitalNextTurn = 0;
     SOG.input.resetDragInfo();
@@ -1126,10 +1136,24 @@
     G.reservedSlotsPerLoc    = {};
     G.deferredPlays          = {};
 
-    var playerCanDraw = Math.min(playerDrew, Math.max(0, MAX_HAND_SIZE - G.playerHand.length));
-    var aiCanDraw     = Math.min(aiDrew,     Math.max(0, MAX_HAND_SIZE - G.aiHand.length));
-    G.playerDeck.splice(0, playerCanDraw).forEach(function (id) { G.playerHand.push(id); });
-    G.aiDeck.splice(0, aiCanDraw).forEach(function (id) { G.aiHand.push(id); });
+    /* Draw policy via config.draw (was hardcoded draw-to-MAX_HAND_SIZE).
+       'flat' draws a fixed +N per side per turn (future capital-less battles);
+       'replenish' (Arcadium) draws back up by however many cards were played
+       last turn, capped at structure.maxHandSize — identical to the old logic
+       (MAX_HAND_SIZE === structure.maxHandSize). The 'flat' branch is unreached
+       by Arcadium. */
+    var _draw    = G.config.draw || { model: 'replenish' };
+    var _maxHand = G.config.structure.maxHandSize;
+    if (_draw.model === 'flat') {
+      var _n = _draw.perTurn || 1;
+      G.playerDeck.splice(0, Math.min(_n, G.playerDeck.length)).forEach(function (id) { G.playerHand.push(id); });
+      G.aiDeck.splice(0,     Math.min(_n, G.aiDeck.length)).forEach(function (id) { G.aiHand.push(id); });
+    } else {
+      var playerCanDraw = Math.min(playerDrew, Math.max(0, _maxHand - G.playerHand.length));
+      var aiCanDraw     = Math.min(aiDrew,     Math.max(0, _maxHand - G.aiHand.length));
+      G.playerDeck.splice(0, playerCanDraw).forEach(function (id) { G.playerHand.push(id); });
+      G.aiDeck.splice(0, aiCanDraw).forEach(function (id) { G.aiHand.push(id); });
+    }
 
     rebuildPlayerHand();
     SOG.ui.updateOppHand();
@@ -1268,7 +1292,26 @@
       return { loc: loc, playerIP: pIP, aiIP: aIP,
                winner: pIP > aIP ? 'player' : aIP > pIP ? 'ai' : 'tie' };
     });
-    var sc = G.config.scoring;  // Step 4: scoring via G.config (most-locations rule)
+    var sc   = G.config.scoring;
+    var rule = sc.rule || 'most-locations';
+
+    /* ── 'single-location' rule (future variant — UNREACHED by Arcadium) ──
+       For a one-location battle: compare player vs AI IP at that location.
+       sc.tie governs the exact-tie outcome ('loss' → a distinct 'tie' outcome
+       the caller treats like a loss, vs 'draw' for a true draw). Written for
+       the deferred Prehistory cutover; Arcadium uses 'most-locations' below. */
+    if (rule === 'single-location') {
+      var only = locResults[0] || { playerIP: 0, aiIP: 0 };
+      var sOutcome = only.playerIP > only.aiIP ? 'player'
+                   : only.aiIP > only.playerIP ? 'ai'
+                   : (sc.tie === 'loss' ? 'tie' : (sc.exactTie || 'draw'));
+      return { outcome: sOutcome, tiebreaker: false,
+               playerWins: only.playerIP > only.aiIP ? 1 : 0,
+               aiWins:     only.aiIP > only.playerIP ? 1 : 0,
+               playerTotal: only.playerIP, aiTotal: only.aiIP, locResults: locResults };
+    }
+
+    /* ── 'most-locations' rule (Arcadium — unchanged) ── */
     var pW = locResults.filter(function (r) { return r.winner === 'player'; }).length;
     var aW = locResults.filter(function (r) { return r.winner === 'ai';     }).length;
     var outcome, tb = false, pT = 0, aT = 0;
