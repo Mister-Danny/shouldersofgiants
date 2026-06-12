@@ -630,7 +630,16 @@
     }
 
     /* ── Normal AI path ──────────────────────────────────────── */
-    SOG.ai.runAiMovements();
+    // Adventure battles (cfg.ai.movement 'adventure') relocate their move-capable
+    // AI cards (Chariot, id 48) POST-reveal via runAdventureMovements — once per
+    // BATTLE (_advChariotMoved) with the smart _bestChariotDest destination —
+    // rather than the Arcadium end-turn runAiMovements path (which records a
+    // once-per-TURN move into the reveal sequence). Skip runAiMovements there so
+    // the Chariot isn't moved twice. Inert for Arcadium/Prehistory/Ötzi (none
+    // sets ai.movement 'adventure'); aiActionLog is reset by nextTurn, not here.
+    if (!(G.config && G.config.ai && G.config.ai.movement === 'adventure')) {
+      SOG.ai.runAiMovements();
+    }
     SOG.ai.runAiSelection();
     SOG.ui.updateOppHand();
     setTimeout(startReveal, 600);
@@ -1032,7 +1041,27 @@
         });
         SOG.BattleHooks.fire('onAfterReveal', [{ turn: G.turn, revealed: revealed }]);
       }
-      setTimeout(function () { G.turn >= G.config.structure.turns ? endGame() : nextTurn(); }, POST_REVEAL);
+      var _proceedAfterReveal = function () {
+        setTimeout(function () { G.turn >= G.config.structure.turns ? endGame() : nextTurn(); }, POST_REVEAL);
+      };
+      /* Adventure-battle AI movement (cfg.ai.movement 'adventure'): relocate a
+         move-capable AI card (Chariot, id 48) now that every card is revealed —
+         once per BATTLE (_advChariotMoved), smart _bestChariotDest destination,
+         executed directly via executeMoveAnimated (fires the arrival strike).
+         Mirrors the bespoke cloned-reveal ordering (flee per-card during reveal,
+         then Chariot move, then turn advance). Re-tally after the strike, then
+         proceed. Config-gated; inert for Arcadium/Prehistory/Ötzi (none sets
+         ai.movement 'adventure', and none has a move-capable AI card here). */
+      if (G.config && G.config.ai && G.config.ai.movement === 'adventure'
+          && SOG.ai && typeof SOG.ai.runAdventureMovements === 'function') {
+        SOG.ai.runAdventureMovements(function () {
+          evaluateContinuous();
+          updateScores();
+          _proceedAfterReveal();
+        });
+      } else {
+        _proceedAfterReveal();
+      }
       return;
     }
     var item = seq[i];

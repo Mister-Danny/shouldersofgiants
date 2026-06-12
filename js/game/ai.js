@@ -106,6 +106,40 @@
       return;
     }
 
+    /* ── Heuristic profile (config-driven, battle-supplied selector) ──
+       A card-aware opponent whose decision logic lives in the battle module,
+       not the engine. The battle's config provides:
+
+         cfg.ai.settings.selectPlays(ctx) → [ {cardId, locId}, ... ]
+
+       a pure decision function the engine invokes once per AI turn. It receives
+       ctx = { G, turn, hand, locations } (hand is a copy of G.aiHand; read
+       G.aiSlots / G.playerSlots / CARDS / SOG.board off G for board state) and
+       RETURNS this turn's plays as an array of {cardId, locId} in play order.
+       The engine owns the turn loop + timing and commits each returned play via
+       the SAME commitPlay helper (identical slot data / reveal-queue /
+       action-log / face-down DOM as every other profile); the battle owns the
+       card-aware logic (hold rules, synergy targeting, anti-stacking). commitPlay
+       no-ops on a full slot or unknown card, so a malformed/over-long return is
+       self-limiting. Keyed off cfg.ai.profile (NOT window.aiDifficulty), so every
+       other profile takes the legacy branches below unchanged. Dormant until a
+       config sets profile 'heuristic'. */
+    if (_aiProfile === 'heuristic') {
+      var _hSettings    = (G.config.ai.settings) || {};
+      var _hSelectPlays = _hSettings.selectPlays;
+      if (typeof _hSelectPlays === 'function') {
+        var _hCtx   = { G: G, turn: G.turn, hand: G.aiHand.slice(), locations: G.locations };
+        var _hPlays = _hSelectPlays(_hCtx) || [];
+        for (var _hp = 0; _hp < _hPlays.length; _hp++) {
+          var _hPlay = _hPlays[_hp];
+          if (_hPlay && _hPlay.cardId != null && _hPlay.locId != null) {
+            commitPlay(_hPlay.cardId, _hPlay.locId);
+          }
+        }
+      }
+      return;
+    }
+
     /* ── Giant / Hard mode: strategic AI ────────────────────────── */
     if (window.aiDifficulty === 'hard') {
       aiGiantStrategy(budget).forEach(function (play) {
