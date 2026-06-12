@@ -1752,6 +1752,37 @@
     done();
   }
 
+  /* ── Ötzi (id 35) — reactive: flee ───────────────────────────
+     Ötzi relocates to a random OTHER location with an open slot on his own
+     side whenever ANOTHER card lands at his location (either side), AFTER he is
+     already revealed — never on his own reveal (the fireOnCardLandedHere
+     dispatcher excludes the just-landed card). One definition, fired through the
+     shared reveal pipeline, so it behaves identically in every battle.
+     The slot data + DOM move synchronously (mirrors executeMoveAnimated's
+     applyMove, minus the slide + IP-mods), so scoring sees Ötzi at his new
+     location. ctx = { owner, locId, slotIndex, slot, landedOwner, landedCardId }. */
+  function abilityOtziFlee(ctx) {
+    var owner      = ctx.owner;
+    var fromLoc    = ctx.locId;
+    var ownerSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
+
+    var candidates = G.locations.filter(function (loc) {
+      return loc.id !== fromLoc && ownerSlots[loc.id] && ownerSlots[loc.id].indexOf(null) !== -1;
+    });
+    if (!candidates.length) return;  // nowhere to flee
+    var dest = candidates[Math.floor(Math.random() * candidates.length)];
+
+    // Animated relocate. The reactive trigger fires mid-reveal, and POST_REVEAL
+    // (1200ms) leaves the slide ample time to finish — and executeMoveAnimated's
+    // applyMove updates the score on landing — before any end-of-turn scoring,
+    // so no synchronous-data workaround is needed.
+    if (SOG.game && typeof SOG.game.executeMoveAnimated === 'function') {
+      SOG.game.executeMoveAnimated(owner, 35, fromLoc, dest.id, {}, function () {
+        if (typeof console !== 'undefined') console.log('[Otzi] flee: card 35 (' + owner + ') relocated from loc ' + fromLoc + ' to loc ' + dest.id);
+      });
+    }
+  }
+
   var CARD_ABILITIES = {
     2:  { onAtOnce: abilityScholarOfficials },
     3:  { onAtOnce: abilityJustinian        },
@@ -1762,6 +1793,7 @@
     13: { onAtOnce: abilityCortes           },
     23: { onAtOnce: abilityZhengHe          },
     26: { onAtOnce: abilityTool             },  // Prehistory tutorial
+    35: { onCardLandedHere: abilityOtziFlee },  // Ötzi — reactive flee (any card lands at his loc after he's revealed)
 
     /* ── Mesopotamia era ───────────────────────────────────────────
        Phase C cards (37 Sargon, 40 Scribe, 43 Gilgamesh) remain
@@ -1806,11 +1838,49 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     REACTIVE: ON-CARD-LANDED-HERE DISPATCHER
+     ───────────────────────────────────────────────────────────────
+     Fired by the reveal pipeline right after a card lands (is revealed) at a
+     location. For every OTHER already-revealed card at that location (either
+     side), looks up CARD_ABILITIES[id].onCardLandedHere and fires it. The
+     just-landed card is EXCLUDED, so a card never reacts to its own reveal —
+     this is the trigger for "another card lands at my location after I'm
+     revealed" (e.g. Ötzi's flee, id 35). One definition, fired identically in
+     every battle whose reveal runs through this pipeline.
+  ═══════════════════════════════════════════════════════════════ */
+  function fireOnCardLandedHere(landedOwner, landedCardId, locId) {
+    if (locId == null) return;
+    // Snapshot the reactors first (the abilities mutate the board).
+    var reactors = [];
+    ['player', 'opp'].forEach(function (side) {
+      var slots = (side === 'player' ? G.playerSlots : G.aiSlots)[locId];
+      if (!slots) return;
+      slots.forEach(function (sd, i) {
+        if (!sd || !sd.revealed) return;
+        // Exclude the just-landed card (its owner's side + id) so it never
+        // reacts to its own arrival. Deck ids are unique, so this is exact.
+        if (side === landedOwner && sd.cardId === landedCardId) return;
+        var spec = CARD_ABILITIES[sd.cardId];
+        if (spec && typeof spec.onCardLandedHere === 'function') {
+          reactors.push({ owner: side, locId: locId, slotIndex: i, slot: sd, cardId: sd.cardId });
+        }
+      });
+    });
+    reactors.forEach(function (r) {
+      CARD_ABILITIES[r.cardId].onCardLandedHere({
+        owner: r.owner, locId: r.locId, slotIndex: r.slotIndex, slot: r.slot,
+        landedOwner: landedOwner, landedCardId: landedCardId
+      });
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      PUBLIC EXPORTS
   ═══════════════════════════════════════════════════════════════ */
   SOG.abilities = {
     /* Dispatch + engine */
     fireAtOnce:                fireAtOnce,
+    fireOnCardLandedHere:      fireOnCardLandedHere,
     evaluateContinuous:        evaluateContinuous,
     /* Shared ability helpers (callable from game.js if needed) */
     isKenteProtected:          isKenteProtected,

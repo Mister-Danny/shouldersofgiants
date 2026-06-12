@@ -671,7 +671,8 @@ SOG.OtziBattle = (function () {
     // radial wipe is already up), onBattleStart (avatars + the full opening
     // cinematic: park sides → fade cover → pre-shake dialogue → shake → slide-in
     // → post-shake dialogue → deal), onTurnStart, onPlayerPlayed, onBeforeReveal,
-    // onAfterReveal (the flee), and onWin/onLoss/onTie.
+    // and onWin/onLoss/onTie. (Ötzi's flee is now card 35's onCardLandedHere
+    // ability, fired by the shared reveal pipeline.)
     if (typeof window.initGame === 'function') window.initGame(OTZI_CONFIG);
   }
 
@@ -744,65 +745,6 @@ SOG.OtziBattle = (function () {
     }, 600);
   }
 
-  // Ötzi's flee: if card 35 is revealed at triggeredLocId, relocate it to a
-  // random other location with an open slot on its side. Called from the 'otzi'
-  // script's onAfterReveal. CRITICAL: the slot DATA + DOM are moved
-  // SYNCHRONOUSLY (mirroring executeMoveAnimated.applyMove, minus the slide
-  // animation and IP-mods) so the engine's tallyResult scores card 35 at its
-  // NEW location — an async relocate would race the engine's scoring.
-  function _maybeOtziFlees(triggeredLocId) {
-    var G = SOG.state.G;
-    if (!G) return;
-
-    // Check both sides — Otzi card (id 35) may be owned by player or AI.
-    var owner = null, srcIdx = -1;
-    var sides = ['player', 'opp'];
-    for (var s = 0; s < sides.length; s++) {
-      var sideSlots = (sides[s] === 'player' ? G.playerSlots : G.aiSlots);
-      var locSlots = (sideSlots && sideSlots[triggeredLocId]) || [];
-      for (var i = 0; i < locSlots.length; i++) {
-        if (locSlots[i] && locSlots[i].cardId === 35 && locSlots[i].revealed) {
-          owner = sides[s]; srcIdx = i; break;
-        }
-      }
-      if (owner) break;
-    }
-    if (!owner) return;  // Otzi not here (or face-down)
-
-    // Find eligible destinations: another location with an open slot on the same side
-    var ownerSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var candidates = G.locations.filter(function (loc) {
-      if (loc.id === triggeredLocId) return false;
-      return ownerSlots[loc.id] && ownerSlots[loc.id].indexOf(null) !== -1;
-    });
-    if (!candidates.length) return;  // nowhere to flee
-
-    var dest = candidates[Math.floor(Math.random() * candidates.length)];
-    var sd   = ownerSlots[triggeredLocId][srcIdx];
-    var B    = SOG.board || {};
-
-    // ── Synchronous data + DOM move ──
-    ownerSlots[triggeredLocId][srcIdx] = null;
-    if (B.clearSlotDOM) B.clearSlotDOM(owner, triggeredLocId, srcIdx);
-    if (owner === 'player') { if (B.compactPlayerSlots) B.compactPlayerSlots(triggeredLocId); if (B.syncPlayerSlots) B.syncPlayerSlots(triggeredLocId); }
-    else                    { if (B.compactOppSlots)    B.compactOppSlots(triggeredLocId);    if (B.syncOppSlots)    B.syncOppSlots(triggeredLocId); }
-
-    var destIdx = ownerSlots[dest.id].indexOf(null);
-    if (destIdx === -1) return;  // shouldn't happen (candidate had an open slot)
-    ownerSlots[dest.id][destIdx] = sd;
-
-    var card   = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === 35; });
-    var destEl = B.getSlotEl ? B.getSlotEl(owner, dest.id, destIdx) : null;
-    if (destEl && card) {
-      destEl.dataset.cardId = 35;
-      destEl.className      = 'battle-card-slot occupied face-up';
-      destEl.removeAttribute('draggable');
-      if (B.buildCardFace) B.buildCardFace(destEl, card, B.effectiveIP ? B.effectiveIP(sd) : sd.ip);
-    }
-    if (B.updateScores) B.updateScores();
-    log('Otzi card (' + owner + ') fled from loc ' + triggeredLocId + ' to loc ' + dest.id);
-  }
-
   var OTZI_SCRIPT = {
     // The overworld already raised the radial-wipe cover, so onIntro just applies
     // the pre-board classes and switches to the battle screen (under the cover).
@@ -849,15 +791,8 @@ SOG.OtziBattle = (function () {
       _otziEnableButtons();
     },
 
-    // The flee. After reveal, if card 35 (Ötzi) was played this turn, relocate it.
-    // _maybeOtziFlees moves the slot DATA synchronously so the engine scores card
-    // 35 at its new location (POST_REVEAL gives the slide time to land).
-    onAfterReveal: function (ctx, info) {
-      var revealed = (info && info.revealed) || [];
-      for (var i = 0; i < revealed.length; i++) {
-        if (revealed[i].cardId === 35) { _maybeOtziFlees(revealed[i].locId); break; }
-      }
-    },
+    // (Ötzi's flee is now card 35's onCardLandedHere ability, fired by the shared
+    //  reveal pipeline — no per-battle onAfterReveal handler.)
 
     onWin:  function (ctx, result, proceed) { _otziRouteOutcome(true,  false, result); },
     onLoss: function (ctx, result, proceed) { _otziRouteOutcome(false, false, result); },

@@ -569,50 +569,6 @@ SOG.GilgameshBattle = (function () {
     // Otzi's flee ability is triggered at reveal time (runGilgameshReveal), not here.
   }
 
-  // delayMs: 350 when triggered by a player play (lets card-drop animation settle);
-  //           0 when triggered by an AI play (synchronous path, no animation to wait for).
-  function _maybeOtziFlees(triggeredLocId, delayMs) {
-    var G = SOG.state.G;
-    if (!G) return;
-    if (delayMs === undefined) delayMs = 350;
-
-    // Check both sides — Otzi card (id 35) may be owned by player or AI.
-    var owner = null;
-    var sideSlots;
-    var sides = ['player', 'opp'];
-    for (var s = 0; s < sides.length; s++) {
-      sideSlots = (sides[s] === 'player' ? G.playerSlots : G.aiSlots);
-      var locSlots = (sideSlots && sideSlots[triggeredLocId]) || [];
-      for (var i = 0; i < locSlots.length; i++) {
-        if (locSlots[i] && locSlots[i].cardId === 35 && locSlots[i].revealed) {
-          owner = sides[s];
-          break;
-        }
-      }
-      if (owner) break;
-    }
-    if (!owner) return;  // Otzi not here (or face-down)
-
-    // Find eligible destinations: another location with an open slot on the same side
-    var ownerSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var candidates = G.locations.filter(function (loc) {
-      if (loc.id === triggeredLocId) return false;
-      return ownerSlots[loc.id] && ownerSlots[loc.id].indexOf(null) !== -1;
-    });
-    if (!candidates.length) return;  // nowhere to flee
-
-    var dest      = candidates[Math.floor(Math.random() * candidates.length)];
-    var gameOwner = owner === 'player' ? 'player' : 'opp';
-
-    setTimeout(function () {
-      if (window.SOG && SOG.game && typeof SOG.game.executeMoveAnimated === 'function') {
-        SOG.game.executeMoveAnimated(gameOwner, 35, triggeredLocId, dest.id, {}, function () {
-          log('Otzi card (' + gameOwner + ') fled from loc ' + triggeredLocId + ' to loc ' + dest.id);
-        });
-      }
-    }, delayMs);
-  }
-
   /* ── End Turn hook ────────────────────────────────────────────── */
   function installEndTurnHook() {
     if (_gilgameshEndTurnHandler) return;
@@ -935,7 +891,13 @@ SOG.GilgameshBattle = (function () {
             if (!G.culturalCount) G.culturalCount = { player: 0, opp: 0 };
             G.culturalCount[item.owner] = (G.culturalCount[item.owner] || 0) + 1;
           }
-          _maybeOtziFlees(item.locId, 0);
+          // Reactive abilities of OTHER already-revealed cards at this location
+          // (e.g. Ötzi's flee, card 35) — the shared dispatcher, identical to
+          // the engine reveal pipeline. Excludes the just-landed card, so Ötzi
+          // never fleas on his own reveal.
+          if (SOG.abilities && typeof SOG.abilities.fireOnCardLandedHere === 'function') {
+            SOG.abilities.fireOnCardLandedHere(item.owner, cardId, item.locId);
+          }
           afterCard();
           setTimeout(function () { next(i + 1); }, 500);
         }

@@ -1100,6 +1100,13 @@
               G.culturalCount[item.owner] = (G.culturalCount[item.owner] || 0) + 1;
             }
           }
+          // (d) Reactive: fire onCardLandedHere for OTHER already-revealed cards
+          //     at this location (e.g. Ötzi's flee). Excludes the just-landed
+          //     card, so it never fires on a card's own reveal. No card 35 in an
+          //     Arcadium deck → unreached there.
+          if (SOG.abilities && typeof SOG.abilities.fireOnCardLandedHere === 'function') {
+            SOG.abilities.fireOnCardLandedHere(item.owner, item.cardId, rLocId);
+          }
           proceed();
         });
       });
