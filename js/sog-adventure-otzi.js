@@ -507,23 +507,18 @@ SOG.OtziBattle = (function () {
     teardown();
     if (typeof showScreen === 'function') showScreen('screen-overworld');
     if (wonBattle) {
-      // 500 ms settle — let the overworld screen finish rendering before
-      // triggering the post-victory sequence.
+      // After beating Otzi the player STAYS on East Africa. Re-render the map in
+      // place (victory checkmark + the now-unlocked To Egypt box) and play the
+      // one-time return dialogue; the player then travels to Egypt manually via
+      // the To Egypt box (goodbye + walk-off). The old D1 auto-travel cinematic
+      // (startMesopotamiaArrival) is no longer triggered here.
+      // NOTE (deferred follow-up): the Egypt/Mesopotamia intro scenes and the
+      // Mesopotamia unlock (sog_mesopotamia_arrival_complete) used to live in
+      // that cinematic and now need re-wiring into the manual navigation flow.
+      // 500 ms settle — let the overworld screen finish rendering first.
       setTimeout(function () {
-        var mesArrivalDone = false;
-        try { mesArrivalDone = localStorage.getItem('sog_mesopotamia_arrival_complete') === 'true'; } catch (e) {}
-
-        if (!mesArrivalDone) {
-          // First victory: play the full Phase D1 Otzi→Mesopotamia travel cinematic.
-          if (window.Overworld && typeof window.Overworld.startMesopotamiaArrival === 'function') {
-            window.Overworld.startMesopotamiaArrival();
-          }
-        } else {
-          // Subsequent victories (replay): just apply the victory checkmark and return.
-          // The full D1 cinematic only plays once.
-          // TODO (future phase): add replay-specific overworld dialogue here.
-          var nodeEl = document.querySelector('#overworld-overlay [data-id="egypt-signpost"]');
-          if (nodeEl) nodeEl.classList.add('overworld-node-complete');
+        if (window.Overworld && typeof window.Overworld.returnToEastAfricaAfterOtzi === 'function') {
+          window.Overworld.returnToEastAfricaAfterOtzi();
         }
       }, 500);
     }

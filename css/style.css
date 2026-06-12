@@ -8055,6 +8055,15 @@ body.tut-locked #battle-reset-turn {
   white-space: nowrap;
 }
 .overworld-exit:hover .overworld-exit-label { opacity: 1; }
+/* Transient "flash" — reveal an exit box + label for a moment (e.g. 1.5s after
+   an arrival dialogue) to point the player at the next exit, then fade back to
+   hover-only. Mirrors the hover appearance; the label's 0.2s opacity transition
+   gives it a gentle fade in/out. */
+.overworld-exit--flash {
+  border-color: rgba(255, 215, 0, 0.5);
+  background: rgba(255, 215, 0, 0.06);
+}
+.overworld-exit--flash .overworld-exit-label { opacity: 1; }
 
 /* Transition: full-screen black fade with 'Traveling...' text */
 #overworld-transition {

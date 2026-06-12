@@ -23,6 +23,9 @@ var Overworld = (function () {
   var KEY_POST_NEANDERTHAL_DIALOGUE = 'sog_post_neanderthal_overworld_complete';
   var KEY_CARD_LUCY_UNLOCKED        = 'sog_card_lucy_unlocked';
   var KEY_BATTLE_OTZI_COMPLETE      = 'sog_battle_otzi_complete';
+  var KEY_EASTAFRICA_POSTOTZI_DIALOGUE = 'sog_eastafrica_postotzi_dialogue_seen'; // one-time East Africa return dialogue (after beating Otzi)
+  var KEY_TOEGYPT_GOODBYE              = 'sog_toegypt_goodbye_seen';              // one-time Hunter goodbye on first To Egypt click
+  var KEY_EGYPT_ARRIVAL                = 'sog_egypt_arrival_seen';                // one-time Egypt arrival dialogue (manual flow)
   var KEY_MESOPOTAMIA_ARRIVAL       = 'sog_mesopotamia_arrival_complete';
   var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set in future when battle is won
   // Phase D2c
@@ -187,6 +190,36 @@ var Overworld = (function () {
 
   var PHASE1_WAIT_MS = 3000;    // 3s arrival pause before Phase 1 fires
 
+  /* ── Post-Otzi East Africa flow dialogue (reuses the standard runner) ── */
+  // One-time, first return to East Africa after beating Otzi.
+  var EASTAFRICA_POSTOTZI_DIALOGUE = [
+    { who: 'explorer', text: 'Who knew history had so much conflict?'                  },
+    { who: 'hunter',   text: 'Tell me about it.'                                       },
+    { who: 'explorer', text: 'What do you mean?'                                       },
+    { who: 'hunter',   text: 'These other tribes won’t leave my antelope alone.'  },
+    { who: 'explorer', text: 'Couldn’t you share?'                                },
+    { who: 'hunter',   text: 'What does that mean?'                                    }
+  ];
+  // One-time, first click of the To Egypt box — plays before the walk-off.
+  var TOEGYPT_GOODBYE_DIALOGUE = [
+    { who: 'hunter',   text: 'Hey, where are you going?'                               },
+    { who: 'explorer', text: 'I want to see the rest of the world.'                    },
+    { who: 'hunter',   text: 'There’s more world out there?'                      },
+    { who: 'explorer', text: 'Of course.'                                              },
+    { who: 'hunter',   text: 'Maybe I won’t have to fight others for resources?' },
+    { who: 'explorer', text: 'Maybe…'                                             },
+    { who: 'explorer', text: 'Let’s go!'                                          }
+  ];
+
+  // Walk-off target offset (relative to the explorer's current position) for
+  // leaving East Africa toward Egypt: she walks up-and-right off the screen
+  // edge, then the map transition fades in. Halved from the original 96/-96 to
+  // cut the dead footstep tail (sprite already off-screen, footsteps still
+  // playing) by ~half WITHOUT changing the visible walk's speed or direction —
+  // same heading, just a shorter off-screen run. Shared by the D1 first-win
+  // cinematic and the To Egypt exit box.
+  var EGYPT_WALKOFF = { dx: 48, dy: -48 };
+
   /* ════════════════════════════════════════════════════════════
      MAP DATA — easy to extend for new regions
      ════════════════════════════════════════════════════════════
@@ -257,12 +290,27 @@ var Overworld = (function () {
           id:      'to-egypt',
           label:   'To Egypt \u2192',
           zone:    { x: 29, y: 5, w: 22, h: 24 },
-          walkTo:  { x: 28, y: 16 },
+          walkTo:  { x: 28, y: 16 },   // fallback target if gsap is unavailable
+          walkOff: true,               // dramatic off-screen walk toward Egypt (reuses the D1 walk-off), not a short hop
           target:  'egypt',
           entryAt: { x: 10, y: 85 },
           showIf:  function () {
             try { return localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true'; }
             catch (e) { return false; }
+          },
+          // First click only: Hunter's goodbye, then the walk-off + transition.
+          // Subsequent clicks skip straight to the walk-off (flag already set).
+          onBeforeExit: function (proceed) {
+            var seen = false;
+            try { seen = localStorage.getItem(KEY_TOEGYPT_GOODBYE) === 'true'; } catch (e) {}
+            if (seen) { proceed(); return; }
+            isDialogueLocked = true;
+            cancelIdle();
+            runDialogue(TOEGYPT_GOODBYE_DIALOGUE, function () {
+              isDialogueLocked = false;
+              try { localStorage.setItem(KEY_TOEGYPT_GOODBYE, 'true'); } catch (e) {}
+              proceed();
+            });
           }
         }
       ]
@@ -633,6 +681,7 @@ var Overworld = (function () {
       if (typeof e.showIf === 'function' && !e.showIf()) return;
       var exitEl = document.createElement('div');
       exitEl.className = 'overworld-exit';
+      exitEl.dataset.exitId = e.id;   // for flashExit() targeting
       exitEl.style.left   = e.zone.x + '%';
       exitEl.style.top    = e.zone.y + '%';
       exitEl.style.width  = e.zone.w + '%';
@@ -793,9 +842,19 @@ var Overworld = (function () {
   /* ── Exit click — walk then transition ─────────────────────── */
   function onExitClick(exit) {
     if (isMoving || isTransitioning || isDialogueLocked) return;
-    walkPath([exit.walkTo], function () {
-      transitionToMap(exit.target, exit.entryAt);
-    });
+    // The actual departure: walk (off-screen if exit.walkOff, else to walkTo),
+    // then fade-transition to the target map.
+    var go = function () {
+      var dest = exit.walkOff
+        ? { x: currentPos.x + EGYPT_WALKOFF.dx, y: currentPos.y + EGYPT_WALKOFF.dy }
+        : exit.walkTo;
+      walkPath([dest], function () {
+        transitionToMap(exit.target, exit.entryAt);
+      });
+    };
+    // Optional one-time pre-departure dialogue (e.g. the To Egypt goodbye).
+    if (typeof exit.onBeforeExit === 'function') exit.onBeforeExit(go);
+    else go();
   }
 
   /* ── Map transition: fade black + 'Traveling...' + swap ───── */
@@ -814,6 +873,12 @@ var Overworld = (function () {
     var tl = gsap.timeline({
       onComplete: function () {
         isTransitioning = false;
+        // Per-map arrival sequences (each self-guards on currentMapId + its
+        // one-time flag): East Africa post-Otzi dialogue, Egypt arrival, or the
+        // Mesopotamia arrival sequence (which plays through to the Uruk node).
+        if (maybePlayEastAfricaReturnDialogue()) return;
+        if (maybePlayEgyptArrival()) return;
+        if (maybePlayMesopotamiaArrival()) return;
         scheduleIdle();
       }
     });
@@ -891,6 +956,93 @@ var Overworld = (function () {
     // Flag is NOT set yet — Phase 2 still has to play on node click.
     // The Prehistory node's base CSS pulse is already active by default.
     scheduleIdle();
+  }
+
+  /* ── First return to East Africa after beating Otzi ───────────
+     One-time Explorer/Hunter exchange. Fires when the player is on
+     East Africa with sog_battle_otzi_complete set and the dialogue
+     not yet seen. Reuses the standard dialogue runner. Returns true
+     if it started the dialogue (caller then skips scheduleIdle).   */
+  function maybePlayEastAfricaReturnDialogue() {
+    if (isDialogueLocked) return false;
+    if (currentMapId !== 'eastafrica') return false;
+    try {
+      if (localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) !== 'true') return false;
+      if (localStorage.getItem(KEY_EASTAFRICA_POSTOTZI_DIALOGUE) === 'true') return false;
+    } catch (e) { return false; }
+
+    isDialogueLocked = true;
+    cancelIdle();
+    runDialogue(EASTAFRICA_POSTOTZI_DIALOGUE, function () {
+      isDialogueLocked = false;
+      try { localStorage.setItem(KEY_EASTAFRICA_POSTOTZI_DIALOGUE, 'true'); } catch (e) {}
+      flashExit('to-egypt', 1500);   // point the player at the now-relevant exit
+      scheduleIdle();
+    });
+    return true;
+  }
+
+  /* Briefly reveal an exit box + label (border + label), then fade back to
+     hover-only. Used after arrival dialogues to point at the next exit. */
+  function flashExit(exitId, durationMs) {
+    if (!overlayEl) return;
+    var el = overlayEl.querySelector('.overworld-exit[data-exit-id="' + exitId + '"]');
+    if (!el) return;
+    el.classList.add('overworld-exit--flash');
+    setTimeout(function () {
+      if (el) el.classList.remove('overworld-exit--flash');
+    }, durationMs || 1500);
+  }
+
+  /* ── Arrival in Egypt (manual flow) ───────────────────────────
+     One-time. Places the Umm el-Qaab decoration + plays the Egypt
+     dialogue, then STOPS (no auto walk-off). Flashes the To Mesopotamia
+     box so the player knows where to go, then waits for their click.    */
+  function maybePlayEgyptArrival() {
+    if (isDialogueLocked) return false;
+    if (currentMapId !== 'egypt') return false;
+    try { if (localStorage.getItem(KEY_EGYPT_ARRIVAL) === 'true') return false; } catch (e) { return false; }
+
+    isDialogueLocked = true;
+    cancelIdle();
+    _d1PlaceUmmelqaab();
+    runDialogue(D1_SCENE2_DIALOGUE, function () {
+      isDialogueLocked = false;
+      try { localStorage.setItem(KEY_EGYPT_ARRIVAL, 'true'); } catch (e) {}
+      flashExit('to-mesopotamia', 1500);
+      scheduleIdle();
+    });
+    return true;
+  }
+
+  /* ── Arrival in Mesopotamia (manual flow) ─────────────────────
+     One-time. Plays the short arrival dialogue then runs the full D2a
+     sequence (river walk → farming dialectic → Walls of Uruk node
+     appears), which sets sog_mesopotamia_arrival_complete at its end.    */
+  function maybePlayMesopotamiaArrival() {
+    if (isDialogueLocked) return false;
+    if (currentMapId !== 'mesopotamia') return false;
+    try { if (localStorage.getItem(KEY_MESOPOTAMIA_ARRIVAL) === 'true') return false; } catch (e) { return false; }
+
+    isDialogueLocked = true;
+    cancelIdle();
+    // Keep the lock through D1 Scene 3 into _d2aSequence, which unlocks the
+    // player and sets the arrival-complete flag at its own end.
+    runDialogue(D1_SCENE3_DIALOGUE, function () {
+      _d2aSequence();
+    });
+    return true;
+  }
+
+  /* ── Post-Otzi return to the overworld (player stays on East Africa) ──
+     Called by sog-adventure-otzi.js after an Otzi win. The battle return uses
+     showScreen (not a map transition), so re-render East Africa in place — this
+     paints the victory checkmark on the signpost node AND the now-unlocked
+     To Egypt box (both gated on sog_battle_otzi_complete) — then play the
+     one-time return dialogue. The player navigates to Egypt manually.         */
+  function returnToEastAfricaAfterOtzi() {
+    loadMap('eastafrica', { useSaved: true });
+    if (!maybePlayEastAfricaReturnDialogue()) scheduleIdle();
   }
 
   /* ── Phase 2: Explorer + Lucy exchange (on Prehistory click) ─ */
@@ -992,7 +1144,7 @@ var Overworld = (function () {
     // === SCENE 1: East Africa ===
     runDialogue(D1_SCENE1_DIALOGUE, function () {
       // After "Let's go!" — Explorer walks off the right edge
-      walkPath([{ x: currentPos.x + 96, y: currentPos.y - 96 }], function () {
+      walkPath([{ x: currentPos.x + EGYPT_WALKOFF.dx, y: currentPos.y + EGYPT_WALKOFF.dy }], function () {
         // Travel transition 1: East Africa → Egypt
         _d1TravelTo('egypt', { x: 10, y: 85 }, function () {
           // === SCENE 2: Egypt ===
@@ -1726,6 +1878,9 @@ var Overworld = (function () {
     // If this is the player's first time on East Africa, play the
     // scripted intro dialogue (locks movement until it ends).
     var dialogueStarted = maybePlayAdventureIntro();
+    if (!dialogueStarted) dialogueStarted = maybePlayEastAfricaReturnDialogue();
+    if (!dialogueStarted) dialogueStarted = maybePlayEgyptArrival();
+    if (!dialogueStarted) dialogueStarted = maybePlayMesopotamiaArrival();
     if (!dialogueStarted) scheduleIdle();
   }
 
@@ -1781,6 +1936,15 @@ var Overworld = (function () {
     // Phase D1 — Otzi→Mesopotamia travel cinematic. Called by sog-adventure-otzi.js
     // after the player wins the Otzi battle and clicks "Back to Map" for the first time.
     startMesopotamiaArrival: startMesopotamiaArrival,
+    // First-return-to-East-Africa dialogue (after beating Otzi). Called by
+    // sog-adventure-otzi.js when the player returns to the overworld and stays
+    // on East Africa (replay path), since that return uses showScreen rather
+    // than a map transition. No-op if not on East Africa / Otzi not beaten /
+    // already seen. Returns true if it started the dialogue.
+    maybePlayEastAfricaReturnDialogue: maybePlayEastAfricaReturnDialogue,
+    // Post-Otzi-win return: re-render East Africa in place (checkmark + To Egypt
+    // box) and play the one-time return dialogue. Replaces the old auto-travel.
+    returnToEastAfricaAfterOtzi: returnToEastAfricaAfterOtzi,
     // D3a — post-loss Cuneiform intervention, called by the Gilgamesh battle.
     runGilgameshCuneiformIntervention: runGilgameshCuneiformIntervention,
     // Devtools helpers
