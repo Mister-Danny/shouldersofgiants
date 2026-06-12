@@ -246,7 +246,26 @@ var Overworld = (function () {
           ]
         }
       ],
-      exits: []   // no exit zones \u2014 Egypt is accessed via the signpost node
+      exits: [
+        {
+          // Forward exit to Egypt. Sits at the top of the screen just right of
+          // the egypt-signpost (Otzi) node at x:20,y:20. GATED: only rendered
+          // once the player has beaten Otzi (sog_battle_otzi_complete) \u2014 same
+          // flag the Otzi card grant / signpost checkmark use. Mirrors the
+          // "To Mesopotamia"/"To East Africa" boxes exactly; entryAt matches the
+          // D1 East Africa->Egypt arrival point (Egypt's west spawn).
+          id:      'to-egypt',
+          label:   'To Egypt \u2192',
+          zone:    { x: 29, y: 5, w: 22, h: 24 },
+          walkTo:  { x: 28, y: 16 },
+          target:  'egypt',
+          entryAt: { x: 10, y: 85 },
+          showIf:  function () {
+            try { return localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true'; }
+            catch (e) { return false; }
+          }
+        }
+      ]
     },
 
     'egypt': {
@@ -610,6 +629,8 @@ var Overworld = (function () {
 
     // Place exit zones
     data.exits.forEach(function (e) {
+      // Gate: skip exits with a showIf predicate that returns false (mirrors nodes).
+      if (typeof e.showIf === 'function' && !e.showIf()) return;
       var exitEl = document.createElement('div');
       exitEl.className = 'overworld-exit';
       exitEl.style.left   = e.zone.x + '%';
