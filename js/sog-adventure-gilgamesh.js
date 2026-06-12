@@ -1004,11 +1004,10 @@ SOG.GilgameshBattle = (function () {
     G.playerActionLog     = [];
     G.aiActionLog         = [];
     G.moveLog             = [];
-    // Preserve Lucy's move flag across turns: she gets one move per battle, not per turn.
-    // All other movement cards (Magellan etc.) reset normally.
-    var lucyAlreadyMoved = G.movedThisTurn && G.movedThisTurn[33];
+    // Lucy's "once per battle" is now enforced by a persistent slot-data flag
+    // (sd._advLucyMoved, set in the shared queueMove) — it rides the card across
+    // turn resets, so movedThisTurn resets normally for every card here.
     G.movedThisTurn       = {};
-    if (lucyAlreadyMoved) G.movedThisTurn[33] = true;
     G.aiMovedThisTurn     = {};
     G.locationSnapshots   = {};
     G.reservedSlotsPerLoc = {};

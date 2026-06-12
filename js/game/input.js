@@ -1018,7 +1018,7 @@
         var card = CARDS.find(function (x) { return x.id === s.cardId; });
         var mv = (s.cardId === 24 && !G.movedThisTurn[24]) ||   // Magellan
                  (s.cardId === 25 && !G.columbusMoved)    ||    // Columbus
-                 (s.cardId === 33 && !G.movedThisTurn[33]) ||   // Lucy — First Steps: can move once
+                 (s.cardId === 33 && !s._advLucyMoved) ||       // Lucy — First Steps: move once per BATTLE (persistent slot flag, mirrors Chariot's _advChariotMoved)
                  (s.cardId === 48 && !G.movedThisTurn[48]) ||   // Chariot — can move once per turn
                  // Scandinavia: Military cards can move away for free (once per turn)
                  (scandinaviaLoc && loc.id === scandinaviaLoc.id && card && card.type === 'Military' && !G.movedThisTurn[s.cardId]) ||
@@ -1092,6 +1092,7 @@
 
     G.movedThisTurn[cardId] = true;
     if (cardId === 25) G.columbusMoved = true;
+    if (cardId === 33) sd._advLucyMoved = true;   // Lucy: once per BATTLE — flag rides the slot data (mirrors Chariot's _advChariotMoved), survives turn resets so no per-battle preservation needed
 
     G.playerActionLog.push({ type: 'move', cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId });
     G.moveLog.push({ cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId, queued: true, isColumbus: cardId === 25 });
