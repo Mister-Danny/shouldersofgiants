@@ -3,8 +3,10 @@
  *
  * AI selection dispatches on cfg.ai.profile first:
  *   scriptedSequence — plays cfg.ai.settings.playOrder[turn-1] face-down
- *                      (config-driven scripted opponent; reached only when a
- *                       battle config sets this profile)
+ *                      (config-driven scripted opponent)
+ *   random-n         — plays cfg.ai.settings.cardsPerTurn random cards into
+ *                      random open locations, cost-free (Ötzi-style opponent)
+ *   (both reached only when a battle config sets the profile)
  * For every other profile it falls through to the legacy window.aiDifficulty modes:
  *   Easy / Serf  — random play with ~33% carelessness
  *   Hard / Giant — strategic candidate scoring (aiGiantStrategy)
@@ -76,6 +78,31 @@
       var _cardId    = _playOrder[G.turn - 1];
       var _loc       = G.locations && G.locations[0];   // single-location scripted battle
       if (_cardId != null && _loc) commitPlay(_cardId, _loc.id);
+      return;
+    }
+
+    /* ── Random-N profile (config-driven) ────────────────────────
+       Plays exactly settings.cardsPerTurn random cards from the hand into
+       random open locations, COST-FREE — the engine-resident version of the
+       Ötzi battle's aiPlayCards. Deliberately NOT the 'easy' capital-budgeted
+       logic: an Ötzi-style battle is capital 0 / cost-free, where 'easy' would
+       dump the whole hand. Keyed off cfg.ai.profile (NOT window.aiDifficulty),
+       so every other profile takes the legacy difficulty branches below
+       unchanged. Each card is placed via the same commitPlay helper (identical
+       slot data / reveal-queue / action-log / face-down DOM). */
+    if (_aiProfile === 'random-n') {
+      var _rSettings = (G.config.ai.settings) || {};
+      var _n = Math.min(_rSettings.cardsPerTurn || 0, G.aiHand.length);
+      for (var _rp = 0; _rp < _n; _rp++) {
+        if (!G.aiHand.length) break;
+        var _openLocs = G.locations.filter(function (loc) {
+          return (G.aiSlots[loc.id] || []).indexOf(null) !== -1;
+        });
+        if (!_openLocs.length) break;
+        var _rCard = G.aiHand[Math.floor(Math.random() * G.aiHand.length)];
+        var _rLoc  = _openLocs[Math.floor(Math.random() * _openLocs.length)];
+        commitPlay(_rCard, _rLoc.id);   // removes the card from aiHand by id
+      }
       return;
     }
 
