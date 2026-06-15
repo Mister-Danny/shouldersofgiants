@@ -408,13 +408,14 @@ SOG.OtziBattle = (function () {
     setTimeout(function () { if (onDone) onDone(); }, 1000);
   }
 
-  // _hasPlayedThisTurn is written by notifyPlayerPlayed (kept for the shared
-  // Gilgamesh otziMode path); the bespoke End-Turn/Reset handlers that read it
-  // are gone.
+  // _hasPlayedThisTurn is written by notifyPlayerPlayed (now orphaned — see
+  // below); the bespoke End-Turn/Reset handlers that read it are gone.
   var _hasPlayedThisTurn = false;
 
-  /* Called by input.js's commitPlay when G.otziMode is true (the shared
-     Gilgamesh path; Ötzi itself now runs config-driven via the 'otzi' script) */
+  /* ORPHANED (flagged for cleanup): was called by input.js's commitPlay via the
+     old adventure-battle notify bridge, which is gone. Ötzi now runs config-
+     driven via the 'otzi' script (onPlayerPlayed hook → _otziEnableButtons), so
+     nothing calls this. Left as a harmless no-op; safe to delete. */
   function notifyPlayerPlayed(cardId, locId) {
     log('Player played card ' + cardId + ' at loc ' + locId);
     _hasPlayedThisTurn = true;
@@ -632,9 +633,6 @@ SOG.OtziBattle = (function () {
       wipeEl.classList.remove('active');
       wipeEl.style.opacity  = '';
       wipeEl.style.clipPath = '';
-    }
-    if (window.SOG && SOG.state && SOG.state.G) {
-      SOG.state.G.otziMode = false;
     }
   }
 

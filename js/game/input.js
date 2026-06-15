@@ -622,10 +622,10 @@
      paths can never disagree.
   ═══════════════════════════════════════════════════════════════ */
 
-  /* ── Battle-config-driven gating (Prehistory-cutover prerequisite) ──
-     These read G.config so the cutover can drop the prehistoryMode flag.
-     Guarded by !G.otziMode at the call sites because Ötzi/Gilgamesh don't set
-     G.config (it can be stale) and keep their own flag-based rules. */
+  /* ── Battle-config-driven gating ──
+     Cost-free play and the per-turn play cap read G.config, so every battle —
+     Arcadium and the migrated adventure battles (Prehistory/Ötzi/Gilgamesh) —
+     runs the same config-driven path. */
   function _resourceFree() {
     // Cost-zero battle (resource.model 'none'); Arcadium's 'capital' is not free.
     return !!(G.config && G.config.resource && G.config.resource.model === 'none');
@@ -658,18 +658,16 @@
     if (!G.playerSlots[locId]) return false;
     var firstEmpty   = G.playerSlots[locId].indexOf(null);
     if (firstEmpty === -1) return false;
-    // Cost-zero via config (resource.model 'none'); was G.prehistoryMode.
-    if (!_resourceFree() && !G.otziMode && effectiveCost(card, locId) > G.capital) return false;
-    // Cards-per-turn cap via config (cfg.structure.cardsPerTurn); was the
-    // prehistoryMode + prehistoryHasPlayed pair. !G.otziMode so a stale
-    // prehistory cap can't misfire during Ötzi/Gilgamesh (they use the rule below).
+    // Cost-zero via config (resource.model 'none').
+    if (!_resourceFree() && effectiveCost(card, locId) > G.capital) return false;
+    // Cards-per-turn cap via config (cfg.structure.cardsPerTurn; null = no cap).
+    // The migrated adventure battles set cardsPerTurn (e.g. 2); the cap is counted
+    // via unrevealed slots (_cardsPlayedThisTurn).
     var _cap = _cardsPerTurnCap();
-    if (!G.otziMode && _cap != null && _cardsPlayedThisTurn() >= _cap) return false;
-    // Otzi battle: max 2 cards per turn
-    if (G.otziMode && (G.otziCardsPlayed || 0) >= 2) return false;
+    if (_cap != null && _cardsPlayedThisTurn() >= _cap) return false;
     // Turn-1 first-card-here: first play of turn 1 must go to the Great Rift Valley
     var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
-    if (!G.otziMode && riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
+    if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
       return false;
     }
     return true;
@@ -708,14 +706,14 @@
   function commitPlay(cardId, locId) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return;
-    // Cost-zero via config (resource.model 'none', was G.prehistoryMode) or Otzi mode.
-    var cost = (_resourceFree() || G.otziMode) ? 0 : effectiveCost(card, locId);
+    // Cost-zero via config (resource.model 'none').
+    var cost = _resourceFree() ? 0 : effectiveCost(card, locId);
     if (cost > G.capital) { var d = getSlotEl('player', locId, 0); if (d) SOG.ui.flashDeny(d); return; }
     var si = G.playerSlots[locId].indexOf(null);
     if (si === -1) { var d2 = getSlotEl('player', locId, 0); if (d2) SOG.ui.flashDeny(d2); return; }
     // FIRST_CARD_HERE: first play on Turn 1 must go to the Great Rift Valley
     var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
-    if (!G.otziMode && riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
+    if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
       var d2 = getSlotEl('player', locId, 0); if (d2) SOG.ui.flashDeny(d2); return;
     }
     clearSelection();  // any click/keyboard selection becomes stale after commit
@@ -758,27 +756,10 @@
     }
     updateHeader();
 
-    // Prehistory now runs through the engine + the 'prehistory' script, which
-    // receives the generic onPlayerPlayed hook fired below — the bespoke
-    // notifyPlayerPlayed flag-read is gone.
-    // Adventure-battle hook (G.otziMode is shared by the Otzi and Gilgamesh
-    // battles). Notify both modules; only the active battle has its end-turn
-    // hook installed, so the inactive one's notify is a harmless no-op.
-    if (G.otziMode) {
-      G.otziCardsPlayed = (G.otziCardsPlayed || 0) + 1;
-      if (window.SOG && SOG.OtziBattle &&
-          typeof SOG.OtziBattle.notifyPlayerPlayed === 'function') {
-        SOG.OtziBattle.notifyPlayerPlayed(cardId, locId);
-      }
-      if (window.SOG && SOG.GilgameshBattle &&
-          typeof SOG.GilgameshBattle.notifyPlayerPlayed === 'function') {
-        SOG.GilgameshBattle.notifyPlayerPlayed(cardId, locId);
-      }
-    }
-
-    /* onPlayerPlayed (script hook): generic post-commit notify the migration
-       will eventually use in place of the bespoke calls above. Sync,
-       fire-and-forget. No script (scriptHook null / no G.config) → no-op. */
+    /* onPlayerPlayed (script hook): every migrated battle (Prehistory/Ötzi/
+       Gilgamesh) reacts to a committed card here (e.g. enabling End Turn) — the
+       old per-battle notify bridge is gone. Sync, fire-and-forget. No script
+       (scriptHook null / no G.config) → no-op. */
     if (window.SOG && SOG.BattleHooks) {
       SOG.BattleHooks.fire('onPlayerPlayed', [{ cardId: cardId, locId: locId, turn: G.turn }]);
     }
@@ -788,11 +769,8 @@
     var sd = G.playerSlots[locId][slotIndex];
     if (!sd || sd.revealed) return;
     clearSelection();  // any click/keyboard selection becomes stale after undo
-    // Otzi battle: returning a played card to hand frees up one of the two
-    // plays-per-turn. commitPlay increments G.otziCardsPlayed, so undoPlay
-    // must decrement it (clamped at 0) — otherwise the >=2 gate in
-    // isLegalPlayTarget keeps blocking new plays even with an empty board.
-    if (G.otziMode) G.otziCardsPlayed = Math.max(0, (G.otziCardsPlayed || 0) - 1);
+    // The per-turn cap counts unrevealed slots (_cardsPlayedThisTurn), so undoing
+    // a play frees up a slot automatically — no counter to decrement.
     var card = CARDS.find(function (c) { return c.id === sd.cardId; });
     if (card) G.capital += effectiveCost(card, locId);
     // Cap to this turn's starting capital — preserves bonus capital
@@ -923,12 +901,6 @@
     G.playerRevealQueue = [];
     G.moveLog           = [];
     G.playerActionLog   = [];
-
-    // Otzi battle: reset the per-turn play counter so the player can play
-    // again after a reset. The Otzi capture handler (onOtziReset) normally
-    // handles this, but resetTurn() is the fallback path if that handler
-    // hasn't been installed yet (e.g. early in the intro sequence).
-    if (G.otziMode) G.otziCardsPlayed = 0;
 
     rebuildPlayerHand();
     updateHeader();

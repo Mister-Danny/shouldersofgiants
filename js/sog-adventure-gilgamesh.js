@@ -2,9 +2,9 @@
  * sog-adventure-gilgamesh.js
  * Shoulders of Giants — Adventure Mode: Gilgamesh Battle 1 (Phase D3a)
  *
- * Real battle, cloned from the Otzi battle (sog-adventure-otzi.js) — same
- * adventure-battle engine (G.otziMode: no CC, 2 cards/turn, 4 turns), with
- * Gilgamesh-specific data. SOG.GilgameshBattle.start() is called by
+ * Real battle on the shared config engine (initGame + the 'gilgamesh' script):
+ * cost-free, 2 cards/turn, 4 turns, with Gilgamesh-specific data.
+ * SOG.GilgameshBattle.start() is called by
  * overworld.js after the Walls-of-Uruk encounter dialogue.
  *
  * Decks (each side shuffles, draws 4, 8/5 remain):
@@ -954,9 +954,6 @@ SOG.GilgameshBattle = (function () {
       wipeEl.style.opacity  = '';
       wipeEl.style.clipPath = '';
     }
-    if (window.SOG && SOG.state && SOG.state.G) {
-      SOG.state.G.otziMode = false;
-    }
   }
 
   /* ════════════════════════════════════════════════════════════
@@ -1083,7 +1080,7 @@ SOG.GilgameshBattle = (function () {
     }
     return {
       structure: { turns: 4, locationsCount: 3, slotsPerLocation: 4, handStart: 4, maxHandSize: 4, cardsPerTurn: 2 },
-      resource:  { model: 'none', capital: 0 },               // cost-free (was G.otziMode)
+      resource:  { model: 'none', capital: 0 },               // cost-free
       draw:      { model: 'replenish' },                       // fill-to-4
       decks:     { player: playerDeck, ai: aiDeck },
       locationAbilities: { select: { mode: 'explicit', locations: _gilgameshLocations() } },
