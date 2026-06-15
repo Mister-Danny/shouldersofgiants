@@ -8834,6 +8834,14 @@ body.otzi-battle #adv-bubble-explorer::after {
   border-right-color: #fffef5;
 }
 
+/* Gilgamesh Battle-1: the bottom-left Explorer bubble (shared Otzi styling,
+   left:168px) is fixed-width and wraps text, so at width:230px its right edge
+   (~398px) clipped the leftmost hand card (cards start ~382px in the 4-card
+   adventure hand). Narrow it so the right edge (168+200=368px) clears the hand
+   with a small gap; longer lines just wrap taller, staying left of the cards.
+   Scoped to gilgamesh-battle so the verified Otzi battle is untouched. */
+body.gilgamesh-battle #adv-bubble-explorer { width: 200px; }
+
 /* In battle context: portrait is handled by the avatar circle — hide the
    inline portrait inside the bubble itself. */
 body.otzi-battle .adv-bubble .adv-bubble-portrait { display: none; }

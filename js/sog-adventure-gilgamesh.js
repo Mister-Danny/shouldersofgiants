@@ -588,6 +588,14 @@ SOG.GilgameshBattle = (function () {
      Loss → "Play Again" (post-loss intervention, or a direct restart once
             Cuneiform is granted) + "Gameboard" (overworld). Tie = loss.  */
 
+  // Gilgamesh's on-board taunt after a loss/tie, before the DEFEAT scoreboard.
+  var GILGAMESH_LOSS_SMACK = [
+    { who: 'otzi',     text: 'Muahaha...' },
+    { who: 'explorer', text: 'I never had a chance.' },
+    { who: 'otzi',     text: 'What did you expect in my city-state?' },
+    { who: 'explorer', text: 'Your cards were too overpowering.' }
+  ];
+
   function _routePostBattle(won, isTie, locResults) {
     if (_isRematch) {
       // Battle 2 (rematch): standard end-game, no victory sequence.
@@ -600,7 +608,11 @@ SOG.GilgameshBattle = (function () {
       try { localStorage.setItem(KEY_PHASE1_COMPLETE, 'true'); } catch (e) {}
       _showResultPopup(true, locResults);   // CONTINUE → _runPostVictorySequence
     } else {
-      _showResultPopup(false, locResults);  // tie treated as loss; PLAY AGAIN → intervention
+      // Loss/tie: Gilgamesh smack-talk on the board, THEN the DEFEAT scoreboard
+      // (PLAY AGAIN → Cuneiform intervention).
+      runLines(GILGAMESH_LOSS_SMACK, function () {
+        _showResultPopup(false, locResults);
+      });
     }
   }
 
@@ -697,9 +709,24 @@ SOG.GilgameshBattle = (function () {
 
   function _runPostVictorySequence() {
     runLines([
-      { who: 'otzi', text: 'I underestimated you.' },
-      { who: 'otzi', text: "For that, you've earned a prize." }
+      { who: 'explorer', text: 'I did it!' },
+      { who: 'otzi',     text: 'How was that possible?' },
+      { who: 'explorer', text: 'I learned from history.' },
+      { who: 'otzi',     text: "By doing so, you've earned this." },
+      { who: 'explorer', text: 'Wow!' },
+      { who: 'otzi',     text: 'See what you can get yourself at the Mesopotamian Marketplace.' },
+      { who: 'explorer', text: "Thank you! You're such a gracious king." },
+      { who: 'otzi',     text: "We'll see next time you face me..." }
     ], function () {
+      // ═══════════════════════════════════════════════════════════════
+      // TODO(gold/market — Gilgamesh primary-path part 2): hook the GOLD
+      // REWARD grant + Mesopotamian Marketplace node transition in HERE,
+      // right after the win dialogue above (which already teases the
+      // Marketplace). They will REPLACE the legacy 5-card-grant / Enkidu /
+      // deck-builder flow below. NOT built this session — for now we fall
+      // through to that existing flow so the win path stays playable
+      // end-to-end. Remove the fall-through when the market path lands.
+      // ═══════════════════════════════════════════════════════════════
       _grantStarterCards(function () {
         runLines([{ who: 'explorer', text: 'Thank you?' }], function () {
           runLines([
@@ -836,23 +863,27 @@ SOG.GilgameshBattle = (function () {
      (CSS-gated to body[data-screen="overworld"]), so while everything is black
      we switch to the overworld for the HUD, then switch back to the battle
      screen before fading the black out — invisible to the player. */
+  // Farmer dialogue runs in two halves around the Cuneiform card-acquisition
+  // animation (A → grant reveal → B).
   var FARMER_POSTLOSS_A = [
-    { who: 'farmer',   text: 'Hey' },
-    { who: 'explorer', text: 'What are you doing here?' },
-    { who: 'farmer',   text: 'I have a secret to pass along.' }
+    { who: 'farmer',   text: 'Hey, I think you could use this.' },
+    { who: 'explorer', text: 'What?' }
   ];
   var FARMER_POSTLOSS_B = [
-    { who: 'explorer', text: 'What is this?' },
-    { who: 'farmer',   text: 'Cuneiform — the first written language.' },
-    { who: 'explorer', text: "Thank you, but what do I do with it?" },
-    { who: 'farmer',   text: 'It will bring your Prehistory cards up to date.' },
-    { who: 'explorer', text: 'That makes so much sense.' },
-    { who: 'farmer',   text: "Don't tell anyone where you got it." },
-    { who: 'farmer',   text: 'I must go. Good luck.' }
+    { who: 'explorer', text: "What's this?" },
+    { who: 'farmer',   text: 'Cuneiform, the first written language.' },
+    { who: 'explorer', text: 'Oh wow, how does it work?' },
+    { who: 'farmer',   text: 'Obviously, you should read it.' },
+    { who: 'explorer', text: 'Oh, right.' },
+    { who: 'farmer',   text: 'But in effect, it will empower those old prehistoric cards you have.' },
+    { who: 'explorer', text: 'Thank you.' },
+    { who: 'farmer',   text: "Don't mention. Seriously." }
   ];
   var GILGAMESH_POSTLOSS_CHALLENGE = [
     { who: 'otzi',     text: 'Back for more?' },
-    { who: 'explorer', text: "I've learned from my mistakes." }
+    { who: 'explorer', text: "I think, I'm ready." },
+    { who: 'otzi',     text: 'I think you should have learned your lesson.' },
+    { who: 'explorer', text: "That's exactly what I did." }
   ];
 
   // Pure-black cover at z 100 — below the HUD (150) and grant reveals (5000+),
@@ -880,31 +911,62 @@ SOG.GilgameshBattle = (function () {
     else if (cb) cb();
   }
 
+  /* Post-loss Cuneiform intervention WITH the candle restored:
+       SHH → board fades to black → MATCHSTRIKE + candle flame fills the black →
+       Farmer/Explorer conversation in the lower HUD (Cuneiform card-acquisition
+       mid-way) → SHH + candle fades out → HUD exits → battle board returns →
+       Gilgamesh re-challenges on the board → onDone (caller shakes + restarts
+       into a fresh game with Cuneiform now shuffled in).
+     The candle flame visual is reused from overworld.js (window.Overworld
+     .showCuneiformCandle / .fadeOutCuneiformCandle), which owns the flame in one
+     place. If unavailable, we fall back to the plain-black conversation. */
   function _runCuneiformIntervention(onDone) {
     var hud = window.SOG && SOG.HUD;
+    var ow  = window.Overworld;
+    var hasCandle = !!(ow && typeof ow.showCuneiformCandle === 'function'
+                          && typeof ow.fadeOutCuneiformCandle === 'function');
     _playSfx('sfx/shh.m4a');
     _gFadeToBlack(function () {
       // Behind black: borrow the overworld screen so the HUD can render.
       if (typeof showScreen === 'function') showScreen('screen-overworld');
       if (hud && typeof hud.enterDialogueMode === 'function') hud.enterDialogueMode(null, function () {});
       if (hud && typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'farmer' });
-      _gHudLines(FARMER_POSTLOSS_A, function () {
-        _grantCuneiform(function () {
-          _gHudLines(FARMER_POSTLOSS_B, function () {
-            var backToBoard = function () {
-              // Behind black: return to the intact battle board, then fade black out.
-              if (typeof showScreen === 'function') showScreen('screen-battle');
-              _gFadeFromBlack(function () {
-                runLines(GILGAMESH_POSTLOSS_CHALLENGE, function () {
-                  if (onDone) onDone();
-                });
-              });
-            };
-            if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(backToBoard);
-            else backToBoard();
+
+      var runConversation = function () {
+        _gHudLines(FARMER_POSTLOSS_A, function () {
+          _grantCuneiform(function () {
+            _gHudLines(FARMER_POSTLOSS_B, function () {
+              var backToBoard = function () {
+                // Behind the candle: return to the intact battle board.
+                if (typeof showScreen === 'function') showScreen('screen-battle');
+                _playSfx('sfx/shh.m4a');   // SHH as the candle is snuffed
+                var revealChallenge = function () {
+                  runLines(GILGAMESH_POSTLOSS_CHALLENGE, function () {
+                    if (onDone) onDone();
+                  });
+                };
+                if (hasCandle) {
+                  // The candlelit backdrop covers the plain-black cover beneath
+                  // it, so drop the black instantly (invisible), then fade the
+                  // candle out to reveal the battle board.
+                  var f = document.getElementById('gilg-loss-fade');
+                  if (f && f.parentNode) f.parentNode.removeChild(f);
+                  ow.fadeOutCuneiformCandle(revealChallenge);
+                } else {
+                  _gFadeFromBlack(revealChallenge);
+                }
+              };
+              if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(backToBoard);
+              else backToBoard();
+            });
           });
         });
-      });
+      };
+
+      // MATCHSTRIKE + candle flame fills the black, THEN the conversation runs
+      // over the candlelit backdrop. No candle helper → plain-black fallback.
+      if (hasCandle) ow.showCuneiformCandle(runConversation);
+      else runConversation();
     });
   }
 

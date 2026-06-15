@@ -1574,6 +1574,56 @@ var Overworld = (function () {
     });
   }
 
+  /* Standalone Cuneiform candle for the Gilgamesh post-loss intervention
+     (sog-adventure-gilgamesh.js drives it via window.Overworld). Unlike
+     _runCandle this is decoupled from the overworld iris/wipe: the caller has
+     ALREADY faded the screen to black, so we just strike the match, bloom the
+     flame, and hand off to the persistent candlelit backdrop (z 100, below the
+     HUD 150) that carries the Farmer conversation. onLit() fires once the flame
+     has settled and the backdrop is up. Reuses _candleColor + _ensureCandleBackdrop
+     so the flame visual lives in exactly one place; pair with the exported
+     fadeOutCuneiformCandle() to dismiss it. */
+  function _runCuneiformCandle(onLit) {
+    try { var ms = new Audio('sfx/matchstrike.m4a'); ms.play(); } catch (e) {}
+
+    var existing = document.getElementById('adv-candle');
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    var candle = document.createElement('div');
+    candle.id = 'adv-candle';
+    candle.style.cssText = 'position:fixed;inset:0;z-index:10002;pointer-events:none;opacity:0;';
+    (document.getElementById('sog-stage') || document.body).appendChild(candle);
+
+    function setGlow(t, sizePct) {
+      var c    = _candleColor(t);
+      var core = 'rgb('  + c[0] + ',' + c[1] + ',' + c[2] + ')';
+      var warm = 'rgba(' + c[0] + ',' + Math.round(c[1] * 0.5) + ',' + Math.round(c[2] * 0.3) + ',0.55)';
+      candle.style.background =
+        'radial-gradient(circle at 50% 48%, ' + core + ' 0%, ' + warm + ' ' + sizePct + '%, transparent ' + (sizePct * 2.2) + '%)';
+    }
+
+    setGlow(0, 5);
+    if (typeof gsap === 'undefined') {
+      _ensureCandleBackdrop();
+      if (candle.parentNode) candle.parentNode.removeChild(candle);
+      if (onLit) onLit();
+      return;
+    }
+    gsap.to(candle, { opacity: 1, duration: 0.4, ease: 'power1.out' });
+    var p = { t: 0, size: 5 };
+    gsap.to(p, {
+      t: 1, size: 24, duration: 2.6, ease: 'power1.inOut',
+      onUpdate: function () { setGlow(p.t, p.size); }
+    });
+    gsap.delayedCall(3.1, function () {
+      _ensureCandleBackdrop();
+      if (onLit) onLit();
+      gsap.to(candle, {
+        opacity: 0, duration: 0.6, ease: 'power1.inOut',
+        onComplete: function () { if (candle.parentNode) candle.parentNode.removeChild(candle); }
+      });
+    });
+  }
+
   /* Grant a single card: unlock (idempotent) + card-acquisition reveal that
      auto-dismisses after ~1.5s (player can still click early). */
   function _d2cGrantCard(id, cb) {
@@ -1947,6 +1997,11 @@ var Overworld = (function () {
     returnToEastAfricaAfterOtzi: returnToEastAfricaAfterOtzi,
     // D3a — post-loss Cuneiform intervention, called by the Gilgamesh battle.
     runGilgameshCuneiformIntervention: runGilgameshCuneiformIntervention,
+    // Reusable candle visual for the Gilgamesh post-loss intervention (the
+    // battle module fades to black itself, then drives these): bloom the flame
+    // over the black + raise the candlelit backdrop, then dismiss it.
+    showCuneiformCandle:    _runCuneiformCandle,
+    fadeOutCuneiformCandle: _fadeOutCandleBackdrop,
     // Devtools helpers
     goToMap: function (mapId) {
       if (!MAPS[mapId]) { console.warn('No such map:', mapId); return; }
