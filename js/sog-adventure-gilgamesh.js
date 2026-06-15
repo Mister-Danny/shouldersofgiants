@@ -1466,6 +1466,201 @@ SOG.GilgameshBattle = (function () {
     });
   }
 
+  /* ════════════════════════════════════════════════════════════════
+     BATTLE-CONFIG MIGRATION (Stage 2) — DORMANT
+     ────────────────────────────────────────────────────────────────
+     The engine-resident half of this battle: a config-builder + a registered
+     'gilgamesh' script that map the bespoke flow onto game.js's initGame
+     lifecycle + the Stage-1 heuristic-AI seam (cfg.ai.profile 'heuristic' +
+     cfg.ai.movement 'adventure'). REUSES the bespoke helpers (dialogue, popup,
+     AI heuristics, post-battle sequences) — it calls them, it does not
+     re-implement.
+
+     ── DORMANT THIS SESSION ──
+     The registry holds the script, but the entry point (start) still runs the
+     bespoke loop and NEVER assigns buildGilgameshConfig() to G.config — so the
+     'gilgamesh' scriptHook never resolves and no hook fires (the shared input.js
+     onPlayerPlayed / isInputBlocked call sites resolve the active script from
+     G.config.scriptHook, which bespoke Gilgamesh leaves untouched). The Stage-3
+     cutover flips start() to initGame(buildGilgameshConfig(_isRematch)),
+     reconciles board-presentation timing (the engine's _initGameBuild deals the
+     hand the bespoke dealCards/setupBattleBoard does today), and removes the
+     bespoke loop.
+  ════════════════════════════════════════════════════════════════ */
+
+  // Cedar Forest / Uruk / Mount Mashu, no abilities — setupBattleBoard's inline
+  // location defs expressed as a config helper (abilityKey already null).
+  function _gilgameshLocations() {
+    return [
+      { id: 8, name: 'Cedar Forest', region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/cedarforest.jpg', thumbnailCrop: null },
+      { id: 7, name: 'Uruk',         region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/uruk.jpg',       thumbnailCrop: null },
+      { id: 2, name: 'Mount Mashu',  region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/mountmashu.jpg', thumbnailCrop: null }
+    ];
+  }
+
+  /* Card-aware AI selector behind the Stage-1 'heuristic' seam. A faithful
+     re-packaging of aiPlayCards (NOT a redesign): the same ranked/held/
+     preferred/fallback decisions, reusing the same _g* helpers (which read
+     SOG.state.G directly). Receives ctx = { G, turn, hand, locations } and
+     RETURNS [{cardId, locId}] in play order; the engine commits each via its
+     own commitPlay. To keep the sequential decisions IDENTICAL to the bespoke
+     (which placed each card via _gAiPlaceCard before deciding the next), it
+     reflects each pick on the board between iterations, then RESTORES the board
+     so the engine stays the authoritative committer (no reveal-queue / DOM side
+     effects here). */
+  function gilgameshSelectPlays(ctx) {
+    var G = ctx.G;                       // === SOG.state.G (the _g* helpers read it)
+    var numPlay = Math.min(2, G.aiHand.length);
+    var plays = [], simSlots = [], handSnapshot = G.aiHand.slice();
+    for (var p = 0; p < numPlay; p++) {
+      if (!G.aiHand.length || !_gAiOpenLocs().length) break;
+      var ranked = G.aiHand.map(function (cid) { return { cid: cid, score: _gCardPlayScore(cid, G.turn) }; });
+      var playable = ranked.filter(function (r) { return r.score >= 0; });
+      var pool = playable.length ? playable : ranked;
+      pool.sort(function (a, b) { return b.score - a.score; });
+      var cardId = pool[0].cid;
+      var locId  = _gPreferredLoc(cardId);
+      if (locId === null) locId = _gFallbackLoc();
+      if (locId === null) break;
+      var slotIndex = G.aiSlots[locId].indexOf(null);
+      if (slotIndex === -1) break;
+      var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
+      if (!card) break;                  // mirrors _gAiPlaceCard's !card → false → break
+      plays.push({ cardId: cardId, locId: locId });
+      G.aiSlots[locId][slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], turnPlayed: G.turn };
+      G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
+      simSlots.push({ locId: locId, slotIndex: slotIndex });
+    }
+    simSlots.forEach(function (s) { G.aiSlots[s.locId][s.slotIndex] = null; });
+    G.aiHand = handSnapshot;
+    return plays;
+  }
+
+  // The config-builder. Battle-1 vs rematch differ ONLY in deck sourcing and
+  // (via _isRematch) end-game routing — ONE script ('gilgamesh') drives both.
+  function buildGilgameshConfig(isRematch) {
+    var playerDeck, aiDeck;
+    if (isRematch) {
+      playerDeck = { source: 'active-deck' };   // deck-builder deck (engine → window.Decks.getActiveCards())
+      aiDeck     = { source: 'explicit', ids: GILGAMESH_AI_IDS.concat([ENKIDU_ID]), shuffle: true };
+    } else {
+      var pIds = PREHISTORY_IDS.slice();
+      if (_has(KEY_CUNEIFORM_GRANTED)) pIds.push(46);   // Cuneiform once granted
+      playerDeck = { source: 'explicit', ids: pIds, shuffle: true };
+      aiDeck     = { source: 'explicit', ids: GILGAMESH_AI_IDS.slice(), shuffle: true };
+    }
+    return {
+      structure: { turns: 4, locationsCount: 3, slotsPerLocation: 4, handStart: 4, maxHandSize: 4, cardsPerTurn: 2 },
+      resource:  { model: 'none', capital: 0 },               // cost-free (was G.otziMode)
+      draw:      { model: 'replenish' },                       // fill-to-4
+      decks:     { player: playerDeck, ai: aiDeck },
+      locationAbilities: { select: { mode: 'explicit', locations: _gilgameshLocations() } },
+      scoring:   { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },  // exact-IP tie → onTie (tie-as-loss)
+      ai:        { profile: 'heuristic', movement: 'adventure', settings: { selectPlays: gilgameshSelectPlays } },
+      presentation: {
+        bodyClass:        'gilgamesh-battle',                  // Mesopotamia location art
+        bodyClassExtra:   'otzi-battle',                       // shared adventure-battle styling
+        preCoachingClass: 'otzi-pre-deal',                     // hides hand until the deal
+        allyAvatar:       'images/femaleexplorer%20portrait.jpeg',
+        opponentAvatar:   'images/portraits/gilgameshportrait.jpeg',
+        popAlly:          true
+      },
+      // Minimal — onWin owns the multi-stage prize (5 cards + Enkidu + deck
+      // builder) and the completion flags; the engine never consumes this since
+      // onWin/onLoss/onTie don't call proceed().
+      rewards:   { onWin: { completionFlag: KEY_PHASE1_COMPLETE } },
+      scriptHook: 'gilgamesh'
+    };
+  }
+
+  /* ── 'gilgamesh' script (registered; dormant until the Stage-3 cutover) ── */
+  var _gBattleSkippedOpening = false;   // decide-once, captured in onIntro
+  var _gScriptDialogueActive = false;   // drives isInputBlocked during the opening
+
+  // Opening dialogue + interactive pause play ONCE (Attempt 1): skip on a repeat
+  // (opening-seen), after the post-loss Cuneiform grant, or on the rematch.
+  // Captured BEFORE _runOpeningDialogue can set sog_gilgamesh_opening_seen
+  // (the Prehistory decide-once lesson — don't re-evaluate post-mutation).
+  function _gScriptSkipOpening() {
+    return _has('sog_gilgamesh_opening_seen') || _has(KEY_CUNEIFORM_GRANTED) || _isRematch;
+  }
+  function _gApplyPresentationClasses(p) {
+    if (!p) return;
+    if (p.bodyClass)        document.body.classList.add(p.bodyClass);
+    if (p.bodyClassExtra)   document.body.classList.add(p.bodyClassExtra);
+    if (p.preCoachingClass) document.body.classList.add(p.preCoachingClass);
+  }
+  function _gEnableButtons() {
+    var e = document.getElementById('battle-end-turn');   if (e) e.disabled = false;
+    var r = document.getElementById('battle-reset-turn'); if (r) r.disabled = false;
+  }
+  function _gDisableButtons() {
+    var e = document.getElementById('battle-end-turn');   if (e) e.disabled = true;
+    var r = document.getElementById('battle-reset-turn'); if (r) r.disabled = true;
+  }
+
+  var GILGAMESH_SCRIPT = {
+    // Pre-board: context classes + switch to the battle screen under the
+    // overworld's radial-wipe cover (onBattleStart fades it). Decide-once skip
+    // captured here, before the opening can flip sog_gilgamesh_opening_seen.
+    onIntro: function (ctx, done) {
+      _gBattleSkippedOpening = _gScriptSkipOpening();
+      _gApplyPresentationClasses(ctx.config && ctx.config.presentation);
+      if (typeof window.showScreen === 'function') window.showScreen('screen-battle');
+      done();   // → engine builds the board (decks/locations from config) under the cover
+    },
+
+    // Board built (hidden by otzi-pre-deal). Avatars + turn-1 presentation, then
+    // fade the cover → deal → (Attempt-1 only) opening dialogue + INTERACTIVE
+    // PAUSE (glow portrait → await click → BattleRulesPopup → resume) → wire the
+    // persistent rules-popup portrait click. done() begins turn 1.
+    onBattleStart: function (ctx, done) {
+      if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(ctx.config && ctx.config.presentation);
+      setTurnCounter(1, TOTAL_TURNS);
+      _gDisableButtons();
+      fadeOutCover(function () {
+        dealCards(function () {
+          var finishStart = function () { _wireOpponentPortraitClick(); done(); };
+          if (_gBattleSkippedOpening) { finishStart(); return; }
+          _gScriptDialogueActive = true;
+          _runOpeningDialogue(function () {   // 5 lines → portrait pause → rules popup → "Thank you"
+            _gScriptDialogueActive = false;
+            finishStart();
+          });
+        });
+      });
+    },
+
+    // Turns 2-4: re-apply per-turn presentation; buttons disabled until a play.
+    onTurnStart: function (ctx, turn) {
+      setTurnCounter(turn, TOTAL_TURNS);
+      _gDisableButtons();
+    },
+
+    // A card was committed — enable End Turn + Reset (mirrors notifyPlayerPlayed).
+    onPlayerPlayed: function (ctx, p) { _gEnableButtons(); },
+
+    // Player ended the turn — keep buttons disabled through the reveal.
+    onBeforeReveal: function (ctx, turn) { _gDisableButtons(); },
+
+    // Block card input while the opening dialogue / interactive pause is active.
+    isInputBlocked: function (ctx) { return !!_gScriptDialogueActive; },
+
+    // Outcomes own the screen (no proceed()): _routePostBattle branches on
+    // _isRematch — Battle-1 win → scoreboard CONTINUE → _runPostVictorySequence
+    // (dialogue → 5-card grant → Enkidu reveal → fade → deck builder); rematch
+    // win → completion + overworld; loss → PLAY AGAIN → Cuneiform intervention;
+    // exact-IP tie → routed as a loss (tie-as-loss). result.locResults is the
+    // same {loc, playerIP, aiIP} shape Otzi already consumes.
+    onWin:  function (ctx, result, proceed) { _routePostBattle(true,  false, result.locResults); },
+    onLoss: function (ctx, result, proceed) { _routePostBattle(false, false, result.locResults); },
+    onTie:  function (ctx, result, proceed) { _routePostBattle(false, true,  result.locResults); }
+  };
+
+  if (window.SOG && SOG.BattleHooks && typeof SOG.BattleHooks.register === 'function') {
+    SOG.BattleHooks.register('gilgamesh', GILGAMESH_SCRIPT);
+  }
+
   /* ── Public surface ──────────────────────────────────────────── */
   function isBattleComplete() {
     try { return localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; }
