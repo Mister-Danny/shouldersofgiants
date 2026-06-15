@@ -54,7 +54,15 @@
       var resBonus  = G.aiCardIPBonus[cardId] || 0;
       var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
       var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
-      G.aiSlots[locId][slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
+      var _sd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
+      // Adventure battles relocate a move-capable AI card (Chariot) post-reveal
+      // via runAdventureMovements, whose "not on the card's OWN reveal turn" guard
+      // reads turnPlayed (parity with the player's commitPlay; the removed bespoke
+      // _gAiPlaceCard set it). Scope to adventure-movement configs so other
+      // battles' AI slot data — and the Tribe (36) turnPlayed ability — are
+      // unchanged (Ötzi's AI Tribe stays inert exactly as today).
+      if (G.config && G.config.ai && G.config.ai.movement === 'adventure') _sd.turnPlayed = G.turn;
+      G.aiSlots[locId][slotIndex] = _sd;
       G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
       G.aiRevealQueue.push(cardId);
       G.aiActionLog.push({ type: 'play', cardId: cardId });  // bug 16: unified action log
