@@ -239,93 +239,6 @@ SOG.GilgameshBattle = (function () {
     if (turnEl) turnEl.textContent = '';
   }
 
-  /* ── Board setup ─────────────────────────────────────────────── */
-  function setupBattleBoard() {
-    log('setupBattleBoard()');
-
-    var G = SOG.state.G;
-
-    // Gilgamesh's three locations — no abilities.
-    var cedar = { id: 8, name: 'Cedar Forest', region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/cedarforest.jpg', thumbnailCrop: null };
-    var uruk  = { id: 7, name: 'Uruk',         region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/uruk.jpg',       thumbnailCrop: null };
-    var mashu = { id: 2, name: 'Mount Mashu',  region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/mountmashu.jpg', thumbnailCrop: null };
-
-    // Order: Cedar Forest (left) · Uruk (center) · Mount Mashu (right)
-    G.locations = [cedar, uruk, mashu];
-
-    G.playerSlots = {};
-    G.aiSlots     = {};
-    G.locations.forEach(function (loc) {
-      G.playerSlots[loc.id] = [null, null, null, null];
-      G.aiSlots[loc.id]     = [null, null, null, null];
-    });
-
-    // Shuffle decks + deal initial hands (4 each)
-    var playerDeck    = shuffleInPlace(buildPlayerDeck());
-    G.playerHand      = playerDeck.splice(0, 4);
-    G.playerDeck      = playerDeck;
-
-    var gilgameshDeckArr   = shuffleInPlace(buildAiDeck());
-    G.aiHand          = gilgameshDeckArr.splice(0, 4);
-    G.aiDeck          = gilgameshDeckArr;
-
-    // Minimal G state (mirrors Prehistory's setupBattleBoard pattern)
-    G.turn                  = 1;
-    G.phase                 = 'select';
-    G.capital               = 0;
-    G.turnStartCapital      = 0;
-    G.otziMode              = true;
-    G.otziCardsPlayed       = 0;
-    G.prehistoryMode        = false;
-    G.playerFirst           = true;
-    G.bonusCapitalNextTurn  = 0;
-    G.aiBonusCapitalNextTurn = 0;
-    G.cardIPBonus           = {};
-    G.aiCardIPBonus         = {};
-    G.destroyedIPTotal      = 0;
-    G.aiDestroyedIPTotal    = 0;
-    G.movedThisTurn         = {};
-    G.aiMovedThisTurn       = {};
-    G.moveLog               = [];
-    G.playerActionLog       = [];
-    G.aiActionLog           = [];
-    G.locationSnapshots     = {};
-    G.reservedSlotsPerLoc   = {};
-    G.deferredPlays         = {};
-    G.prehistoryHasPlayed   = false;
-    G.playerRevealQueue     = [];
-    G.aiRevealQueue         = [];
-    G.culturalCount         = { player: 0, opp: 0 };  // Gilgamesh card reads this
-    G.playOrderCounter      = 0;                       // Scribe play-order metadata
-    G.locationBoosts        = G.locationBoosts || {};  // Sargon (unused here, but safe)
-
-    // Build board DOM with all 3 locations
-    if (typeof window.initBattleUI === 'function') {
-      window.initBattleUI(G.locations);
-    }
-
-    // D3a.1: all 3 locations render in place immediately (no shake-into-place
-    // intro — that inherited Otzi tutorial beat is cut for Gilgamesh).
-
-    // Build player hand DOM (CSS hides it via otzi-pre-deal until card deal)
-    if (window.SOG && SOG.input && typeof SOG.input.rebuildPlayerHand === 'function') {
-      SOG.input.rebuildPlayerHand();
-    } else if (typeof window.setPlayerHand === 'function') {
-      window.setPlayerHand(G.playerHand, G.playerDeck.length);
-    }
-
-    // Sync opp-hand display with G state (4 face-down + deck 6)
-    if (window.SOG && SOG.ui && typeof SOG.ui.updateOppHand === 'function') {
-      SOG.ui.updateOppHand();
-    }
-
-    setTurnCounter(1, TOTAL_TURNS);
-
-    // Restore reset button (tutorial.js may have hidden it)
-    var resetBtn = document.getElementById('battle-reset-turn');
-    if (resetBtn) resetBtn.style.display = '';
-  }
-
   /* ── Avatar presentation ─────────────────────────────────────────
      Ally is the female Explorer (popped in at apply time); opponent is
      Gilgamesh. Both slots are set explicitly via the shared engine path
@@ -552,116 +465,6 @@ SOG.GilgameshBattle = (function () {
     setTimeout(function () { if (onDone) onDone(); }, 1000);
   }
 
-  /* ── Phase 3: Turn loop state ─────────────────────────────────── */
-  var _hasPlayedThisTurn   = false;
-  var _gilgameshEndTurnHandler  = null;
-  var _gilgameshResetHandler    = null;
-
-  /* Called by input.js's commitPlay when G.otziMode is true */
-  function notifyPlayerPlayed(cardId, locId) {
-    log('Player played card ' + cardId + ' at loc ' + locId);
-    _hasPlayedThisTurn = true;
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) endTurnBtn.disabled = false;
-    if (resetBtn)   resetBtn.disabled   = false;
-
-    // Otzi's flee ability is triggered at reveal time (runGilgameshReveal), not here.
-  }
-
-  /* ── End Turn hook ────────────────────────────────────────────── */
-  function installEndTurnHook() {
-    if (_gilgameshEndTurnHandler) return;
-    var btn = document.getElementById('battle-end-turn');
-    if (!btn) return;
-    _gilgameshEndTurnHandler = function (e) {
-      var G = SOG.state.G;
-      if (!G.otziMode) return;
-      if (btn.disabled) return;
-      if (!_hasPlayedThisTurn) return;
-      e.stopPropagation();
-      onGilgameshEndTurn();
-    };
-    btn.addEventListener('click', _gilgameshEndTurnHandler, true);
-  }
-
-  function removeEndTurnHook() {
-    if (!_gilgameshEndTurnHandler) return;
-    var btn = document.getElementById('battle-end-turn');
-    if (btn) btn.removeEventListener('click', _gilgameshEndTurnHandler, true);
-    _gilgameshEndTurnHandler = null;
-  }
-
-  /* ── Reset hook ───────────────────────────────────────────────── */
-  function installResetHook() {
-    if (_gilgameshResetHandler) return;
-    var btn = document.getElementById('battle-reset-turn');
-    if (!btn) return;
-    _gilgameshResetHandler = function (e) {
-      var G = SOG.state.G;
-      if (!G.otziMode) return;
-      if (btn.disabled) return;
-      e.stopImmediatePropagation();
-      onGilgameshReset();
-    };
-    btn.addEventListener('click', _gilgameshResetHandler, true);
-  }
-
-  function removeResetHook() {
-    if (!_gilgameshResetHandler) return;
-    var btn = document.getElementById('battle-reset-turn');
-    if (btn) btn.removeEventListener('click', _gilgameshResetHandler, true);
-    _gilgameshResetHandler = null;
-  }
-
-  function onGilgameshReset() {
-    log('Otzi Reset — returning played cards to hand');
-    var G = SOG.state.G;
-    // Undo ALL unrevealed player plays (up to 2 per turn)
-    var anyRestored = false;
-    G.locations.forEach(function (loc) {
-      var slots = G.playerSlots[loc.id] || [];
-      for (var i = slots.length - 1; i >= 0; i--) {
-        if (slots[i] && !slots[i].revealed) {
-          if (SOG.input && typeof SOG.input.undoPlay === 'function') {
-            SOG.input.undoPlay(loc.id, i);
-            anyRestored = true;
-          }
-        }
-      }
-    });
-    _hasPlayedThisTurn = false;
-    G.otziCardsPlayed  = 0;
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) endTurnBtn.disabled = true;
-    if (resetBtn)   resetBtn.disabled   = true;
-  }
-
-  /* ── End Turn: AI plays, reveal, next turn or end ─────────────── */
-  function onGilgameshEndTurn() {
-    log('Otzi End Turn — turn ' + SOG.state.G.turn);
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) endTurnBtn.disabled = true;
-    if (resetBtn)   resetBtn.disabled   = true;
-
-    // AI plays cards face-down
-    aiPlayCards();
-
-    // Brief pause so the face-down cards appear, then reveal
-    setTimeout(function () {
-      runGilgameshReveal(function () {
-        var G = SOG.state.G;
-        if (G.turn >= TOTAL_TURNS) {
-          setTimeout(endGilgameshBattle, 800);
-        } else {
-          advanceGilgameshTurn();
-        }
-      });
-    }, 600);
-  }
-
   /* ── AI: card-aware play selection (D3a.2 ST2) ────────────────────
      A modest priority cascade — NOT optimal play. For each of up to 2 plays:
      pick the highest-value playable card (deferring "hold" cards), then send
@@ -778,314 +581,6 @@ SOG.GilgameshBattle = (function () {
     }
   }
 
-  function _gAiPlaceCard(cardId, locId) {
-    var G        = SOG.state.G;
-    var slotIndex = G.aiSlots[locId].indexOf(null);
-    if (slotIndex === -1) return false;
-    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
-    if (!card) return false;
-    G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
-    G.aiSlots[locId][slotIndex] = {
-      cardId: cardId, ip: card.ip, revealed: false,
-      ipMod: 0, contMod: 0, ipModSources: [], turnPlayed: G.turn
-    };
-    G.aiRevealQueue.push(cardId);
-    if (SOG.board && typeof SOG.board.getSlotEl === 'function') {
-      var slotEl = SOG.board.getSlotEl('opp', locId, slotIndex);
-      if (slotEl) {
-        slotEl.dataset.cardId = cardId;
-        if (SOG.board.setSlotFaceDown) SOG.board.setSlotFaceDown(slotEl);
-      }
-    }
-    // Otzi's flee ability is triggered at reveal time (runGilgameshReveal), not here.
-    return true;
-  }
-
-  function aiPlayCards() {
-    var G       = SOG.state.G;
-    var numPlay = Math.min(2, G.aiHand.length);
-    for (var p = 0; p < numPlay; p++) {
-      if (!G.aiHand.length || !_gAiOpenLocs().length) break;
-      // Rank hand: prefer non-held cards (score >= 0); only release a held card
-      // if nothing else is available this play.
-      var ranked = G.aiHand.map(function (cid) { return { cid: cid, score: _gCardPlayScore(cid, G.turn) }; });
-      var playable = ranked.filter(function (r) { return r.score >= 0; });
-      var pool = playable.length ? playable : ranked;
-      pool.sort(function (a, b) { return b.score - a.score; });
-      var cardId = pool[0].cid;
-      var locId  = _gPreferredLoc(cardId);
-      if (locId === null) locId = _gFallbackLoc();
-      if (locId === null) break;
-      if (!_gAiPlaceCard(cardId, locId)) break;
-    }
-    if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') SOG.ui.updateOppHand();
-  }
-
-  /* ── Reveal all unrevealed slots across 3 locations ─────────── */
-  function runGilgameshReveal(onDone) {
-    var G        = SOG.state.G;
-    var flipSlot = window.flipSlot || (SOG.game && SOG.game.flipSlot);
-    if (typeof flipSlot !== 'function') flipSlot = _hardReveal;
-
-    // Gather [{ owner, locId, idx }] for all unrevealed slots
-    var toFlip = [];
-    G.locations.forEach(function (loc) {
-      (G.playerSlots[loc.id] || []).forEach(function (sd, i) {
-        if (sd && !sd.revealed) toFlip.push({ owner: 'player', locId: loc.id, idx: i });
-      });
-      (G.aiSlots[loc.id] || []).forEach(function (sd, i) {
-        if (sd && !sd.revealed) toFlip.push({ owner: 'opp', locId: loc.id, idx: i });
-      });
-    });
-
-    // Re-evaluate continuous abilities + refresh displays after each card reveal.
-    // Matches the cadence of the regular game's revealNext → proceed pipeline.
-    function afterCard() {
-      if (SOG.abilities && typeof SOG.abilities.evaluateContinuous === 'function') {
-        SOG.abilities.evaluateContinuous();
-      }
-      if (SOG.board && typeof SOG.board.refreshSlotIPDisplays === 'function') SOG.board.refreshSlotIPDisplays();
-      if (SOG.board && typeof SOG.board.updateScores         === 'function') SOG.board.updateScores();
-    }
-
-    var next = function (i) {
-      if (i >= toFlip.length) {
-        afterCard();   // final pass once every card is revealed
-        // D3a.2 ST1: process AI movements (Chariot) — the cloned reveal never
-        // ran the canonical runAiMovements path, so move-capable cards never
-        // relocated. runAdventureMovements decides + executes via
-        // executeMoveAnimated (which fires the arrival strike), then we refresh.
-        var finishReveal = function () { setTimeout(function () { if (onDone) onDone(); }, 1100); };
-        if (SOG.ai && typeof SOG.ai.runAdventureMovements === 'function') {
-          SOG.ai.runAdventureMovements(function () { afterCard(); finishReveal(); });
-        } else {
-          finishReveal();
-        }
-        return;
-      }
-      var item   = toFlip[i];
-      // Capture cardId from slot data before the flip marks it revealed
-      var slots  = item.owner === 'player' ? G.playerSlots : G.aiSlots;
-      var sd     = slots[item.locId] && slots[item.locId][item.idx];
-      var cardId = sd ? sd.cardId : null;
-      var slotEl = SOG.board && typeof SOG.board.getSlotEl === 'function'
-                   ? SOG.board.getSlotEl(item.owner, item.locId, item.idx) : null;
-      flipSlot(slotEl, function () {
-        // Fire At Once ability (e.g. Tool → draw a card), then check Otzi flee,
-        // refresh + continue.  Otzi's ability fires here — at reveal time — for
-        // both player and AI cards, for both the fireAtOnce and fallback paths.
-        function afterReveal() {
-          // Replicate game.js revealNext's post-At-Once play-from-hand hooks so
-          // AI (and player) plays behave equivalently to the standard game.
-          // The cloned battle reveal previously skipped these, silently breaking
-          // Scribe (needs play metadata) and the Gilgamesh card (needs the
-          // cumulative Cultural counter).
-          if (sd && item.locId !== null) {
-            G.playOrderCounter = (G.playOrderCounter || 0) + 1;
-            sd.playTime      = G.playOrderCounter;
-            sd.originalLocId = item.locId;
-          }
-          var _pc = (typeof CARDS !== 'undefined') &&
-                    CARDS.find(function (c) { return c.id === cardId; });
-          if (_pc && _pc.type === 'Cultural' && item.locId !== null) {
-            if (!G.culturalCount) G.culturalCount = { player: 0, opp: 0 };
-            G.culturalCount[item.owner] = (G.culturalCount[item.owner] || 0) + 1;
-          }
-          // Reactive abilities of OTHER already-revealed cards at this location
-          // (e.g. Ötzi's flee, card 35) — the shared dispatcher, identical to
-          // the engine reveal pipeline. Excludes the just-landed card, so Ötzi
-          // never fleas on his own reveal.
-          if (SOG.abilities && typeof SOG.abilities.fireOnCardLandedHere === 'function') {
-            SOG.abilities.fireOnCardLandedHere(item.owner, cardId, item.locId);
-          }
-          afterCard();
-          setTimeout(function () { next(i + 1); }, 500);
-        }
-        if (cardId && SOG.abilities && typeof SOG.abilities.fireAtOnce === 'function') {
-          SOG.abilities.fireAtOnce(item.owner, cardId, item.locId, afterReveal);
-        } else {
-          afterReveal();
-        }
-      });
-    };
-
-    // Before the sequential flip begins, ensure every unrevealed card is
-    // showing face-down. Player cards were placed face-up during the select
-    // phase (commitPlay → 'face-up unplayed') and Lucy's move destination
-    // has 'queued-dest'. Mirror game.js lines 824-853: GSAP-squish them to
-    // face-down so the whole board shows a uniform face-down state, then
-    // start the reveal sequence.
-    var faceUpEls = [];
-    toFlip.forEach(function (item) {
-      var slotEl = SOG.board && typeof SOG.board.getSlotEl === 'function'
-                   ? SOG.board.getSlotEl(item.owner, item.locId, item.idx) : null;
-      if (slotEl && !slotEl.classList.contains('face-down')) {
-        faceUpEls.push(slotEl);
-      }
-    });
-
-    function startReveal() {
-      setTimeout(function () { next(0); }, 400);
-    }
-
-    if (faceUpEls.length && typeof gsap !== 'undefined') {
-      gsap.to(faceUpEls, {
-        scaleX: 0, duration: 0.15, ease: 'power2.in',
-        onComplete: function () {
-          faceUpEls.forEach(function (el) {
-            el.classList.remove('face-up', 'unplayed', 'queued-dest');
-            el.classList.add('face-down');
-            el.innerHTML = '';
-          });
-          gsap.to(faceUpEls, { scaleX: 1, duration: 0.12, ease: 'power2.out',
-            onComplete: startReveal
-          });
-        }
-      });
-    } else {
-      faceUpEls.forEach(function (el) {
-        el.classList.remove('face-up', 'unplayed', 'queued-dest');
-        el.classList.add('face-down');
-        el.innerHTML = '';
-      });
-      startReveal();
-    }
-  }
-
-  /* Fallback reveal with no animation */
-  function _hardReveal(slotEl, cb) {
-    if (!slotEl) { if (cb) cb(); return; }
-    var cardId    = parseInt(slotEl.dataset.cardId,    10);
-    var locId     = parseInt(slotEl.dataset.locId,     10);
-    var slotIndex = parseInt(slotEl.dataset.slotIndex, 10);
-    var owner     = slotEl.dataset.owner;
-    var G         = SOG.state.G;
-    var slots     = owner === 'player' ? G.playerSlots : G.aiSlots;
-    if (slots[locId] && slots[locId][slotIndex]) slots[locId][slotIndex].revealed = true;
-    slotEl.classList.remove('face-down', 'unplayed');
-    slotEl.classList.add('face-up');
-    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
-    if (card && SOG.board && SOG.board.buildCardFace) {
-      var sd = slots[locId] && slots[locId][slotIndex];
-      var ip = sd ? (SOG.board.effectiveIP ? SOG.board.effectiveIP(sd) : sd.ip) : card.ip;
-      SOG.board.buildCardFace(slotEl, card, ip);
-    }
-    setTimeout(cb || function () {}, 60);
-  }
-
-  /* ── Advance to next turn ─────────────────────────────────────── */
-  function advanceGilgameshTurn() {
-    var G = SOG.state.G;
-    G.turn++;
-    log('Advancing to turn ' + G.turn);
-    setTurnCounter(G.turn, TOTAL_TURNS);
-    _hasPlayedThisTurn = false;
-    G.otziCardsPlayed  = 0;
-    G.prehistoryHasPlayed = false;
-
-    // Draw up to hand-cap (4) for player; draw up to 4 for AI
-    while (G.playerDeck.length > 0 && G.playerHand.length < 4) {
-      G.playerHand.push(G.playerDeck.shift());
-    }
-    while (G.aiDeck.length > 0 && G.aiHand.length < 4) {
-      G.aiHand.push(G.aiDeck.shift());
-    }
-
-    if (SOG.input && typeof SOG.input.rebuildPlayerHand === 'function') {
-      SOG.input.rebuildPlayerHand();
-    } else if (typeof window.setPlayerHand === 'function') {
-      window.setPlayerHand(G.playerHand, G.playerDeck.length);
-    }
-    if (SOG.ui && typeof SOG.ui.updateOppHand === 'function') SOG.ui.updateOppHand();
-
-    // Reset turn-state in G (mirrors nextTurn() in game.js)
-    G.playerRevealQueue   = [];
-    G.aiRevealQueue       = [];
-    G.playerActionLog     = [];
-    G.aiActionLog         = [];
-    G.moveLog             = [];
-    // Lucy's "once per battle" is now enforced by a persistent slot-data flag
-    // (sd._advLucyMoved, set in the shared queueMove) — it rides the card across
-    // turn resets, so movedThisTurn resets normally for every card here.
-    G.movedThisTurn       = {};
-    G.aiMovedThisTurn     = {};
-    G.locationSnapshots   = {};
-    G.reservedSlotsPerLoc = {};
-    G.deferredPlays       = {};
-
-    // Re-evaluate moveable affordances now that movedThisTurn has been reset.
-    // Without this, Lucy (card 33) and other movement cards never show their
-    // moveable ring on turns 2-4 because refreshMoveableCards isn't called
-    // anywhere else in the Otzi turn-advance path.
-    if (SOG.input && typeof SOG.input.refreshMoveableCards === 'function') {
-      SOG.input.refreshMoveableCards();
-    }
-
-    // Buttons: disabled until player places a card
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) endTurnBtn.disabled = true;
-    if (resetBtn)   resetBtn.disabled   = true;
-  }
-
-  /* ── End battle: tally 3-location scores ──────────────────────── */
-  function endGilgameshBattle() {
-    var G    = SOG.state.G;
-    var eIP  = SOG.board && SOG.board.effectiveIP;
-    var playerWins = 0, gilgameshWins = 0;
-
-    // Tally per-location winners
-    var locResults = G.locations.map(function (loc) {
-      var pIP = 0, aIP = 0;
-      (G.playerSlots[loc.id] || []).forEach(function (s) {
-        if (s && s.revealed) pIP += eIP ? eIP(s) : (s.ip || 0);
-      });
-      (G.aiSlots[loc.id] || []).forEach(function (s) {
-        if (s && s.revealed) aIP += eIP ? eIP(s) : (s.ip || 0);
-      });
-      return { loc: loc, playerIP: pIP, aiIP: aIP };
-    });
-
-    locResults.forEach(function (r) {
-      if (r.playerIP > r.aiIP)      playerWins++;
-      else if (r.aiIP > r.playerIP) gilgameshWins++;
-    });
-
-    log('Battle over — player wins ' + playerWins + ' locs, Otzi wins ' + gilgameshWins);
-
-    // Determine outcome. True tie = 1-1-1 split with equal total IP.
-    var won = false, isTie = false, usedTiebreaker = false;
-    var playerTotal = 0, gilgameshTotal = 0;
-    if (playerWins >= 2) {
-      won = true;
-    } else if (gilgameshWins >= 2) {
-      won = false;
-    } else {
-      usedTiebreaker = true;
-      locResults.forEach(function (r) {
-        playerTotal += r.playerIP;
-        gilgameshTotal   += r.aiIP;
-      });
-      if (playerTotal === gilgameshTotal) {
-        isTie = true;   // exact tie — treated as loss for progression
-        won   = false;
-      } else {
-        won = playerTotal > gilgameshTotal;
-      }
-      log('Tiebreaker — player total IP: ' + playerTotal + ', Otzi total IP: ' + gilgameshTotal);
-    }
-
-    if (won) {
-      // NOTE: sog_battle_gilgamesh_complete is intentionally NOT set in D3a
-      // (D3b sets it on the Battle 2 win). Battle 1 victory sets phase-1.
-      if (typeof SFX !== 'undefined' && typeof SFX.gameWon === 'function') SFX.gameWon();
-    } else {
-      if (typeof SFX !== 'undefined' && typeof SFX.gameLost === 'function') SFX.gameLost();
-    }
-
-    setTimeout(function () { _routePostBattle(won, isTie, locResults); }, 600);
-  }
-
   /* ── Post-battle: self-rendered result popup ──────────────────────
      Win  → set phase-1 complete (+ lucky-win Cuneiform auto-grant) →
             "Continue" returns to the Mesopotamia overworld (D3b adds the
@@ -1182,7 +677,7 @@ SOG.GilgameshBattle = (function () {
     document.body.appendChild(fade);
     void fade.offsetHeight; fade.style.opacity = '1';
     setTimeout(function () {
-      removeEndTurnHook(); removeResetHook(); teardown();
+      teardown();   // engine owns the End Turn / Reset buttons now
       // The player owns their Prehistory cards (they piloted them in Battle 1)
       // but those are never explicitly unlocked elsewhere — register them
       // silently so the deck-builder pool can reach 12. The 5 Mesopotamia
@@ -1427,34 +922,19 @@ SOG.GilgameshBattle = (function () {
   }
 
   function _restartBattle() {
-    removeEndTurnHook(); removeResetHook(); teardown();
+    teardown();   // engine owns the End Turn / Reset buttons now
     if (typeof SOG !== 'undefined' && SOG.GilgameshBattle) SOG.GilgameshBattle.start();
   }
 
   /* Tear down and return to the Mesopotamia overworld. */
   function _exitToOverworld() {
-    removeEndTurnHook(); removeResetHook(); teardown();
+    teardown();   // engine owns the End Turn / Reset buttons now
     if (typeof showScreen === 'function') showScreen('screen-overworld');
     setTimeout(function () {
       if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') {
         window.Overworld.resumeAfterBattle();
       }
     }, 100);
-  }
-
-  /* ── Start turn loop (called after dealCards completes) ─────── */
-  function startTurnLoop() {
-    log('Phase 3 — installing turn loop hooks');
-    var G = SOG.state.G;
-    G.otziCardsPlayed  = 0;
-    _hasPlayedThisTurn = false;
-    installEndTurnHook();
-    installResetHook();
-    // Buttons start disabled — enabled after first card placement
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) endTurnBtn.disabled = true;
-    if (resetBtn)   resetBtn.disabled   = true;
   }
 
   /* ── Teardown ─────────────────────────────────────────────────── */
@@ -1468,8 +948,6 @@ SOG.GilgameshBattle = (function () {
       SOG.BattleRulesPopup.hide();
     }
     hideBubbles();
-    removeEndTurnHook();
-    removeResetHook();
     var wipeEl = document.getElementById('adv-radial-wipe');
     if (wipeEl) {
       wipeEl.classList.remove('active');
@@ -1496,49 +974,28 @@ SOG.GilgameshBattle = (function () {
        8. Board fully assembled — Phase 3 will wire the turn loop
   ═══════════════════════════════════════════════════════════════ */
   function start() {
-    log('start() — Phase 2 implementation');
+    log('start() → initGame(buildGilgameshConfig)');
 
-    // Capture rematch state up-front (before a Battle-1 win sets phase-1).
+    // Capture rematch state up-front (before a Battle-1 win sets phase-1). Drives
+    // deck sourcing (config) + end-game routing (_routePostBattle). Same entry is
+    // used by Battle 1, the deck-builder "Let's Play" rematch, and the Attempt-2
+    // restart (_restartBattle), so this captures the correct mode each time.
     _isRematch = _has(KEY_PHASE1_COMPLETE);
 
     // Prime the Web Audio context (needs a user gesture — the click that
     // started this encounter counts, so resume here to ensure beeps work).
     var _ctx = getBleepCtx();
-    if (_ctx && _ctx.state === 'suspended') { try { _ctx.resume(); } catch(e) {} }
+    if (_ctx && _ctx.state === 'suspended') { try { _ctx.resume(); } catch (e) {} }
 
-    // Context classes
-    document.body.classList.add('otzi-battle');
-    document.body.classList.add('gilgamesh-battle');   // scopes Mesopotamia location art
-    document.body.classList.add('otzi-pre-deal');
-
-    // Build G state + board DOM (all 3 locations; Desert/GRV hidden by GSAP)
-    setupBattleBoard();
-
-    // Set both battle-screen avatars explicitly (ally Explorer, opponent Gilgamesh)
-    if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(PRESENTATION);
-
-    // Switch to the battle screen
-    if (typeof showScreen === 'function') {
-      showScreen('screen-battle');
-    }
-
-    // Buttons: visible after deal but non-functional in Phase 2
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) endTurnBtn.disabled = true;
-    if (resetBtn)   resetBtn.disabled   = true;
-
-    // Fade out the radial wipe → all 3 locations already in place (no shake
-    // intro). Deal, run the Attempt-1 opening dialogue, then begin turn 1.
-    fadeOutCover(function () {
-      dealCards(function () {
-        _runOpeningDialogue(function () {
-          _wireOpponentPortraitClick();   // rules popup stays clickable all battle
-          log('Turn loop starting');
-          startTurnLoop();
-        });
-      });
-    });
+    // Route through game.js's engine: buildGilgameshConfig + the registered
+    // 'gilgamesh' script (scriptHook) supply ALL setup + narrative via the
+    // lifecycle hooks — onIntro (body classes + screen switch under the
+    // overworld wipe), onBattleStart (avatars + fade cover + deal + the
+    // Attempt-1 opening dialogue with the interactive portrait/rules-popup pause
+    // + wire the persistent rules click), onTurnStart/onPlayerPlayed/
+    // onBeforeReveal/isInputBlocked, and onWin/onLoss/onTie. The AI is the
+    // heuristic seam (gilgameshSelectPlays) + adventure Chariot movement.
+    if (typeof window.initGame === 'function') window.initGame(buildGilgameshConfig(_isRematch));
   }
 
   /* ════════════════════════════════════════════════════════════════
@@ -1745,8 +1202,7 @@ SOG.GilgameshBattle = (function () {
   return {
     start:                start,
     isBattleComplete:     isBattleComplete,
-    teardown:             teardown,
-    notifyPlayerPlayed:   notifyPlayerPlayed
+    teardown:             teardown
   };
 
 })();
