@@ -1332,23 +1332,98 @@ SOG.GilgameshBattle = (function () {
     document.body.appendChild(overlay);
   }
 
-  /* "Play Again" after a loss. If Cuneiform is already granted, restart the
-     battle directly. Otherwise run the post-loss candle/Farmer/Cuneiform/
-     Gilgamesh-challenge intervention (owned by overworld.js, which has the
-     candle + HUD-dialogue helpers), then restart Battle 1 Attempt 2. */
+  /* ── Post-loss Cuneiform intervention (battle-screen, no candle) ──────
+     Plays over the (still-intact) lost board: SHH → board fades to black →
+     HUD Farmer/Explorer conversation (Cuneiform card-acquisition mid-way) →
+     board fades back in "as it was" → Gilgamesh re-challenges on the board →
+     onDone (the caller shakes + restarts into a fresh game with Cuneiform now
+     shuffled into the deck). The HUD only renders on the overworld screen
+     (CSS-gated to body[data-screen="overworld"]), so while everything is black
+     we switch to the overworld for the HUD, then switch back to the battle
+     screen before fading the black out — invisible to the player. */
+  var FARMER_POSTLOSS_A = [
+    { who: 'farmer',   text: 'Hey' },
+    { who: 'explorer', text: 'What are you doing here?' },
+    { who: 'farmer',   text: 'I have a secret to pass along.' }
+  ];
+  var FARMER_POSTLOSS_B = [
+    { who: 'explorer', text: 'What is this?' },
+    { who: 'farmer',   text: 'Cuneiform — the first written language.' },
+    { who: 'explorer', text: "Thank you, but what do I do with it?" },
+    { who: 'farmer',   text: 'It will bring your Prehistory cards up to date.' },
+    { who: 'explorer', text: 'That makes so much sense.' },
+    { who: 'farmer',   text: "Don't tell anyone where you got it." },
+    { who: 'farmer',   text: 'I must go. Good luck.' }
+  ];
+  var GILGAMESH_POSTLOSS_CHALLENGE = [
+    { who: 'otzi',     text: 'Back for more?' },
+    { who: 'explorer', text: "I've learned from my mistakes." }
+  ];
+
+  // Pure-black cover at z 100 — below the HUD (150) and grant reveals (5000+),
+  // above the screen content (same proven layer as the candle backdrop).
+  function _gFadeToBlack(onDone) {
+    var prev = document.getElementById('gilg-loss-fade');
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+    var fade = document.createElement('div');
+    fade.id = 'gilg-loss-fade';
+    fade.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;z-index:100;pointer-events:none;transition:opacity 0.5s ease;';
+    (document.getElementById('sog-stage') || document.body).appendChild(fade);
+    void fade.offsetHeight;   // reflow so the transition animates from 0
+    fade.style.opacity = '1';
+    setTimeout(function () { if (onDone) onDone(); }, 540);
+  }
+  function _gFadeFromBlack(onDone) {
+    var fade = document.getElementById('gilg-loss-fade');
+    if (!fade) { if (onDone) onDone(); return; }
+    fade.style.opacity = '0';
+    setTimeout(function () { if (fade.parentNode) fade.parentNode.removeChild(fade); if (onDone) onDone(); }, 540);
+  }
+  function _gHudLines(lines, cb) {
+    var hud = window.SOG && SOG.HUD;
+    if (hud && typeof hud.runLines === 'function') hud.runLines(lines, cb);
+    else if (cb) cb();
+  }
+
+  function _runCuneiformIntervention(onDone) {
+    var hud = window.SOG && SOG.HUD;
+    _playSfx('sfx/shh.m4a');
+    _gFadeToBlack(function () {
+      // Behind black: borrow the overworld screen so the HUD can render.
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+      if (hud && typeof hud.enterDialogueMode === 'function') hud.enterDialogueMode(null, function () {});
+      if (hud && typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'farmer' });
+      _gHudLines(FARMER_POSTLOSS_A, function () {
+        _grantCuneiform(function () {
+          _gHudLines(FARMER_POSTLOSS_B, function () {
+            var backToBoard = function () {
+              // Behind black: return to the intact battle board, then fade black out.
+              if (typeof showScreen === 'function') showScreen('screen-battle');
+              _gFadeFromBlack(function () {
+                runLines(GILGAMESH_POSTLOSS_CHALLENGE, function () {
+                  if (onDone) onDone();
+                });
+              });
+            };
+            if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(backToBoard);
+            else backToBoard();
+          });
+        });
+      });
+    });
+  }
+
+  /* "Play Again" after a loss. Cuneiform already granted → restart directly.
+     Otherwise run the post-loss intervention (above) on the still-intact board,
+     then shake → restart into a fresh Attempt 2 (Cuneiform now in the deck). */
   function _onPlayAgain() {
     if (_has(KEY_CUNEIFORM_GRANTED)) {
       _restartBattle();
       return;
     }
-    var ow = window.Overworld;
-    if (ow && typeof ow.runGilgameshCuneiformIntervention === 'function') {
-      removeEndTurnHook(); removeResetHook(); teardown();
-      ow.runGilgameshCuneiformIntervention(function () { SOG.GilgameshBattle.start(); });
-    } else {
-      // Fallback: grant Cuneiform silently and restart.
-      _grantCuneiform(function () { _restartBattle(); });
-    }
+    _runCuneiformIntervention(function () {
+      shakeCamera(function () { _restartBattle(); });
+    });
   }
 
   function _restartBattle() {
