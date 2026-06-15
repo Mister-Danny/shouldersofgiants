@@ -645,7 +645,12 @@
       var slots = G.playerSlots[locId];
       if (!slots) continue;
       for (var i = 0; i < slots.length; i++) {
-        if (slots[i] && !slots[i].revealed) n++;
+        // Count only cards PLAYED this turn (turnPlayed === current turn), not
+        // moved cards (which keep their original earlier turnPlayed) nor stale
+        // revealed:false slots left by a prior turn. A move must not consume one
+        // of the per-turn plays. (Was: any unrevealed slot — which conflated
+        // moves/stale cards with this-turn plays.)
+        if (slots[i] && !slots[i].revealed && slots[i].turnPlayed === G.turn) n++;
       }
     }
     return n;

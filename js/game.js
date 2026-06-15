@@ -1095,6 +1095,12 @@
     }
 
     // type === 'play'
+    // Plays are matched by cardId (findSlotEl + findIndex below). This relies on
+    // the singleton-deck invariant: a deck can hold at most one copy of any card
+    // (decks.js addCard rejects duplicates) and the two sides never share ids, so
+    // each cardId is unique on a side. If multi-copy decks are ever introduced,
+    // a second copy would resolve to the first's (already-revealed) slot and stay
+    // revealed:false — switch this to a position-based match (toLocId + slot).
     var slotEl = findSlotEl(item.owner, item.cardId);
     var rLocId = slotEl ? getCardLocId(item.owner, item.cardId) : null;
     var rSlots = item.owner === 'player' ? G.playerSlots : G.aiSlots;
