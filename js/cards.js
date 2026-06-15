@@ -313,7 +313,7 @@ const CARDS = [
     image: "images/mesopotamiacards/farmer@0.5x.jpg", locked: true
   },
   {
-    id: 40, name: "Scribe", cc: 2, ip: 1,
+    id: 40, name: "Scribe", cc: 2, ip: 2,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Record Keeper",
     ability: "Continuous: The cards you've played before Scribe here gain +1 IP.",
@@ -370,7 +370,7 @@ const CARDS = [
     image: "images/mesopotamiacards/hammurabi@0.5x.jpg", locked: true
   },
   {
-    id: 48, name: "Chariot", cc: 2, ip: 2,
+    id: 48, name: "Chariot", cc: 2, ip: 3,
     type: "Military", type2: null, era: "Mesopotamia",
     abilityName: "Wheels of Conquest",
     ability: "Can move once on its own. When it arrives at a new location, strike one of your opponent's cards there and reduce it by -1 IP.",
