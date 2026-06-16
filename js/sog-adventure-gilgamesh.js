@@ -17,10 +17,10 @@
  *   No location abilities. (Placeholder art — swap when Mesopotamia
  *   battle backgrounds exist.)
  *
- * State flags:
- *   sog_cuneiform_granted          — set when Cuneiform is awarded
- *   sog_gilgamesh_phase1_complete  — set on Battle 1 victory (D3b trigger)
- *   sog_battle_gilgamesh_complete  — declared, NOT set here (D3b/Battle 2)
+ * State flags (one-and-done battle — no rematch):
+ *   sog_cuneiform_granted          — set when Cuneiform is awarded (post-loss)
+ *   sog_gilgamesh_phase1_complete  — set on victory (overworld re-entry gate)
+ *   sog_battle_gilgamesh_complete  — set on victory (isBattleComplete / overworld)
  */
 
 var SOG = window.SOG || {};
@@ -29,41 +29,17 @@ SOG.GilgameshBattle = (function () {
   'use strict';
 
   /* ── localStorage keys ──────────────────────────────────────── */
-  var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set in D3b
+  var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set on victory
   var KEY_PHASE1_COMPLETE           = 'sog_gilgamesh_phase1_complete';
   var KEY_CUNEIFORM_GRANTED         = 'sog_cuneiform_granted';
 
-  /* ── Deck IDs ────────────────────────────────────────────────── */
-  var PREHISTORY_IDS   = [26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36]; // 11
+  /* ── Deck IDs (one-and-done: the same battle is retried until won) ─── */
+  var PREHISTORY_IDS   = [26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36]; // 11 — player base
   var GILGAMESH_AI_IDS = [38, 39, 40, 41, 42, 43, 45, 48, 49];         // 9 Mesopotamia
-  var MESO_STARTER_IDS = [38, 39, 40, 42, 41]; // Priest, Farmer, Scribe, Soldier, Canals (win prize)
-  var ENKIDU_ID        = 44;                   // joins Gilgamesh's deck for the rematch
-  var KEY_MESO_STARTER_GRANTED = 'sog_mesopotamia_starter_granted';
-
-  // True for the rematch (Battle 2): captured at start() from the phase-1 flag,
-  // BEFORE this victory could set it. Drives deck sourcing + end-game routing.
-  var _isRematch = false;
+  var ENKIDU_ID        = 44;                   // ALWAYS in Gilgamesh's AI deck
+  var GILGAMESH_CARD_ID = 43;                  // granted to the player on victory
 
   function _has(key) { try { return localStorage.getItem(key) === 'true'; } catch (e) { return false; } }
-
-  // Player's deck pool. Battle 1: 11 Prehistory (+Cuneiform once granted).
-  // Rematch: the deck the player just built in the deck builder.
-  function buildPlayerDeck() {
-    if (_isRematch && window.Decks && typeof window.Decks.getActiveCards === 'function') {
-      var built = window.Decks.getActiveCards();
-      if (built && built.length) return built.slice();
-    }
-    var ids = PREHISTORY_IDS.slice();
-    if (_has(KEY_CUNEIFORM_GRANTED)) ids.push(46);
-    return ids;
-  }
-
-  // AI deck. Rematch adds Enkidu (id 44) to Gilgamesh's 9 Mesopotamia cards.
-  function buildAiDeck() {
-    var ids = GILGAMESH_AI_IDS.slice();
-    if (_isRematch) ids.push(ENKIDU_ID);
-    return ids;
-  }
 
   /* ── Timing ──────────────────────────────────────────────────── */
   var TYPE_SPEED_MS = 32;
@@ -597,15 +573,12 @@ SOG.GilgameshBattle = (function () {
   ];
 
   function _routePostBattle(won, isTie, locResults) {
-    if (_isRematch) {
-      // Battle 2 (rematch): standard end-game, no victory sequence.
-      if (won) { try { localStorage.setItem(KEY_BATTLE_GILGAMESH_COMPLETE, 'true'); } catch (e) {} }
-      _showResultPopup(won, locResults);
-      return;
-    }
-    // Battle 1
+    // One-and-done: the same battle is retried until won. Win → set the
+    // completion flags (overworld re-entry + isBattleComplete) and run the
+    // victory reward; loss/tie → smack-talk + DEFEAT (PLAY AGAIN → intervention).
     if (won) {
       try { localStorage.setItem(KEY_PHASE1_COMPLETE, 'true'); } catch (e) {}
+      try { localStorage.setItem(KEY_BATTLE_GILGAMESH_COMPLETE, 'true'); } catch (e) {}
       _showResultPopup(true, locResults);   // CONTINUE → _runPostVictorySequence
     } else {
       // Loss/tie: Gilgamesh smack-talk on the board, THEN the DEFEAT scoreboard
@@ -627,125 +600,53 @@ SOG.GilgameshBattle = (function () {
     } else if (done) { done(); }
   }
 
-  /* ── Post-victory sequence (Battle 1 win) ─────────────────────────
-     CONTINUE on the victory scoreboard runs this on the battle screen:
-       Gilgamesh dialogue → grant the 5 Mesopotamia starter cards →
-       Explorer line → Gilgamesh summons Enkidu (growl sfx) → Enkidu card
-       pops up 2s and fades into his deck → closing lines → shh + fade to
-       the deck builder (12-card build) → "Let's Play" launches the rematch
-       (player's built deck vs. Gilgamesh + Enkidu).                       */
-
   function _playSfx(src) { try { var a = new Audio(src); a.play(); } catch (e) {} }
 
-  // Grant the 5 starter cards back-to-back via the shared acquisition reveal.
-  function _grantStarterCards(cb) {
+  /* Grant the Gilgamesh card (43) on victory via the shared card-acquisition
+     reveal (same animation as the Cuneiform grant). unlock is idempotent. */
+  function _grantGilgameshCard(done) {
+    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') SOG.Cards.unlock([GILGAMESH_CARD_ID]);
+    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === GILGAMESH_CARD_ID; });
     var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
-    var i = 0;
-    (function next() {
-      if (i >= MESO_STARTER_IDS.length) {
-        try { localStorage.setItem(KEY_MESO_STARTER_GRANTED, 'true'); } catch (e) {}
-        if (cb) cb();
-        return;
-      }
-      var id = MESO_STARTER_IDS[i++];
-      if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') SOG.Cards.unlock([id]);
-      var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === id; });
-      if (card && preh && typeof preh.showCardAcquisition === 'function') {
-        preh.showCardAcquisition(card, null, next, { autoDismissMs: 1500 });
-      } else { next(); }
-    })();
+    if (card && preh && typeof preh.showCardAcquisition === 'function') {
+      preh.showCardAcquisition(card, null, function () { if (done) done(); }, { autoDismissMs: 1500 });
+    } else if (done) { done(); }
   }
 
-  // Enkidu card pops up centred for ~2s, then shrinks/fades toward Gilgamesh's
-  // deck (top-right). NOT the "card acquired" reveal — it's HIS card.
-  function _revealEnkidu(cb) {
-    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === ENKIDU_ID; });
-    var overlay = document.createElement('div');
-    overlay.id = 'gilg-enkidu-reveal';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .35s ease;';
-    var img = document.createElement('img');
-    img.src = card ? card.image : 'images/mesopotamiacards/enkidu@0.5x.jpg';
-    img.alt = 'Enkidu';
-    img.style.cssText = 'width:200px;max-width:40vw;height:auto;border-radius:8px;box-shadow:0 0 44px rgba(248,208,0,.65);transition:opacity .5s ease, transform .5s ease;';
-    overlay.appendChild(img);
-    document.body.appendChild(overlay);
-    void overlay.offsetHeight; overlay.style.opacity = '1';
-    setTimeout(function () {
-      img.style.transform = 'translate(38vw, -40vh) scale(0.18)';
-      img.style.opacity   = '0';
-      setTimeout(function () {
-        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-        if (cb) cb();
-      }, 520);
-    }, 2000);
-  }
-
-  // shh + dark fade → tear down the battle → open the deck builder for the
-  // rematch deck. adventureBattleTarget routes its "Let's Play" back here.
-  function _fadeToDeckBuilder() {
-    var fade = document.createElement('div');
-    fade.id = 'gilg-db-fade';
-    fade.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;z-index:10050;transition:opacity .55s ease;pointer-events:none;';
-    document.body.appendChild(fade);
-    void fade.offsetHeight; fade.style.opacity = '1';
-    setTimeout(function () {
-      teardown();   // engine owns the End Turn / Reset buttons now
-      // The player owns their Prehistory cards (they piloted them in Battle 1)
-      // but those are never explicitly unlocked elsewhere — register them
-      // silently so the deck-builder pool can reach 12. The 5 Mesopotamia
-      // starters were already unlocked during the grant sequence.
-      if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') {
-        SOG.Cards.unlock(PREHISTORY_IDS);
-      }
-      window.adventureBattleTarget = 'gilgamesh';
-      if (typeof showScreen === 'function') showScreen('screen-deckbuilder');
-      if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
-      setTimeout(function () {
-        fade.style.opacity = '0';
-        setTimeout(function () { if (fade.parentNode) fade.parentNode.removeChild(fade); }, 600);
-      }, 80);
-    }, 600);
-  }
-
+  /* ── Post-victory reward sequence (one-and-done win) ──────────────
+     CONTINUE on the victory scoreboard runs this on the battle screen:
+       win dialogue → Gilgamesh-card acquisition (43) → [gold reward, part 4]
+       → closing dialogue → [Mesopotamian Marketplace transition, part 4].
+     The old rematch machinery (5-card grant, Enkidu reveal, deck-builder
+     hand-off) is retired — Enkidu now just lives in Gilgamesh's deck. */
   function _runPostVictorySequence() {
     runLines([
       { who: 'explorer', text: 'I did it!' },
       { who: 'otzi',     text: 'How was that possible?' },
       { who: 'explorer', text: 'I learned from history.' },
-      { who: 'otzi',     text: "By doing so, you've earned this." },
-      { who: 'explorer', text: 'Wow!' },
-      { who: 'otzi',     text: 'See what you can get yourself at the Mesopotamian Marketplace.' },
-      { who: 'explorer', text: "Thank you! You're such a gracious king." },
-      { who: 'otzi',     text: "We'll see next time you face me..." }
+      { who: 'otzi',     text: "By doing so, you've earned this." }
     ], function () {
-      // ═══════════════════════════════════════════════════════════════
-      // TODO(gold/market — Gilgamesh primary-path part 2): hook the GOLD
-      // REWARD grant + Mesopotamian Marketplace node transition in HERE,
-      // right after the win dialogue above (which already teases the
-      // Marketplace). They will REPLACE the legacy 5-card-grant / Enkidu /
-      // deck-builder flow below. NOT built this session — for now we fall
-      // through to that existing flow so the win path stays playable
-      // end-to-end. Remove the fall-through when the market path lands.
-      // ═══════════════════════════════════════════════════════════════
-      _grantStarterCards(function () {
-        runLines([{ who: 'explorer', text: 'Thank you?' }], function () {
-          runLines([
-            { who: 'otzi', text: "But it won't happen again." },
-            { who: 'otzi', text: 'Enkidu?!' }
-          ], function () {
-            _playSfx('sfx/enkidugrowl.mp3');
-            runLines([{ who: 'explorer', text: "I don't like that sound." }], function () {
-              _revealEnkidu(function () {
-                runLines([
-                  { who: 'otzi',     text: 'With my companion by my side, I will become immortal.' },
-                  { who: 'explorer', text: 'Oh boy.' }
-                ], function () {
-                  _playSfx('sfx/shh.m4a');
-                  _fadeToDeckBuilder();
-                });
-              });
-            });
-          });
+      // (a) Win reward: grant the Gilgamesh card (43) with the acquisition animation.
+      _grantGilgameshCard(function () {
+        // ═══════════════════════════════════════════════════════════════
+        // TODO(gold reward 25 — part 4): the 25-gold reward animation hooks
+        // in HERE, immediately after the Gilgamesh-card grant and before the
+        // closing dialogue. NOT built this session.
+        // ═══════════════════════════════════════════════════════════════
+        runLines([
+          { who: 'explorer', text: 'Wow!' },
+          { who: 'otzi',     text: 'See what you can get yourself at the Mesopotamian Marketplace.' },
+          { who: 'explorer', text: "Thank you! You're such a gracious king." },
+          { who: 'otzi',     text: "We'll see next time you face me..." }
+        ], function () {
+          // ═══════════════════════════════════════════════════════════════
+          // TODO(market transition — part 4): the Mesopotamian Marketplace
+          // node transition hooks in HERE (the win dialogue above teases it),
+          // replacing the temporary overworld return below. NOT built this
+          // session — for now we return to the overworld so the win path stays
+          // playable end-to-end (the deck-builder auto-hand-off is retired).
+          // ═══════════════════════════════════════════════════════════════
+          _exitToOverworld();
         });
       });
     });
@@ -833,12 +734,9 @@ SOG.GilgameshBattle = (function () {
       return b;
     }
     if (won) {
-      // Battle 1 victory → rich post-victory sequence (prize + Enkidu + deck
-      // builder). Rematch victory → straight back to the overworld.
-      var onContinue = _isRematch
-        ? function () { _removeResultPopup(); _exitToOverworld(); }
-        : function () { _removeResultPopup(); _runPostVictorySequence(); };
-      actions.appendChild(mkBtn('CONTINUE', onContinue));
+      // Victory → the post-victory reward sequence (Gilgamesh-card grant +
+      // closing dialogue; gold + market in part 4).
+      actions.appendChild(mkBtn('CONTINUE', function () { _removeResultPopup(); _runPostVictorySequence(); }));
       // Game Board: hide the scoreboard to review the final board; a floating
       // "Show Results" button brings it back so Continue stays reachable.
       actions.appendChild(mkBtn('GAME BOARD', function () { _hideResultForReview(); }));
@@ -1035,12 +933,6 @@ SOG.GilgameshBattle = (function () {
   function start() {
     log('start() → initGame(buildGilgameshConfig)');
 
-    // Capture rematch state up-front (before a Battle-1 win sets phase-1). Drives
-    // deck sourcing (config) + end-game routing (_routePostBattle). Same entry is
-    // used by Battle 1, the deck-builder "Let's Play" rematch, and the Attempt-2
-    // restart (_restartBattle), so this captures the correct mode each time.
-    _isRematch = _has(KEY_PHASE1_COMPLETE);
-
     // Prime the Web Audio context (needs a user gesture — the click that
     // started this encounter counts, so resume here to ensure beeps work).
     var _ctx = getBleepCtx();
@@ -1054,7 +946,7 @@ SOG.GilgameshBattle = (function () {
     // + wire the persistent rules click), onTurnStart/onPlayerPlayed/
     // onBeforeReveal/isInputBlocked, and onWin/onLoss/onTie. The AI is the
     // heuristic seam (gilgameshSelectPlays) + adventure Chariot movement.
-    if (typeof window.initGame === 'function') window.initGame(buildGilgameshConfig(_isRematch));
+    if (typeof window.initGame === 'function') window.initGame(buildGilgameshConfig());
   }
 
   /* ════════════════════════════════════════════════════════════════
@@ -1073,7 +965,7 @@ SOG.GilgameshBattle = (function () {
      'gilgamesh' scriptHook never resolves and no hook fires (the shared input.js
      onPlayerPlayed / isInputBlocked call sites resolve the active script from
      G.config.scriptHook, which bespoke Gilgamesh leaves untouched). The Stage-3
-     cutover flips start() to initGame(buildGilgameshConfig(_isRematch)),
+     cutover flips start() to initGame(buildGilgameshConfig()),
      reconciles board-presentation timing (the engine's _initGameBuild deals the
      hand the bespoke dealCards/setupBattleBoard does today), and removes the
      bespoke loop.
@@ -1127,19 +1019,14 @@ SOG.GilgameshBattle = (function () {
     return plays;
   }
 
-  // The config-builder. Battle-1 vs rematch differ ONLY in deck sourcing and
-  // (via _isRematch) end-game routing — ONE script ('gilgamesh') drives both.
-  function buildGilgameshConfig(isRematch) {
-    var playerDeck, aiDeck;
-    if (isRematch) {
-      playerDeck = { source: 'active-deck' };   // deck-builder deck (engine → window.Decks.getActiveCards())
-      aiDeck     = { source: 'explicit', ids: GILGAMESH_AI_IDS.concat([ENKIDU_ID]), shuffle: true };
-    } else {
-      var pIds = PREHISTORY_IDS.slice();
-      if (_has(KEY_CUNEIFORM_GRANTED)) pIds.push(46);   // Cuneiform once granted
-      playerDeck = { source: 'explicit', ids: pIds, shuffle: true };
-      aiDeck     = { source: 'explicit', ids: GILGAMESH_AI_IDS.slice(), shuffle: true };
-    }
+  // The config-builder (one-and-done: ONE battle, retried until won). Player =
+  // Prehistory base (+Cuneiform once granted on a loss); AI = Gilgamesh's 9
+  // Mesopotamia cards + Enkidu (always). The 'gilgamesh' script drives it.
+  function buildGilgameshConfig() {
+    var pIds = PREHISTORY_IDS.slice();
+    if (_has(KEY_CUNEIFORM_GRANTED)) pIds.push(46);   // Cuneiform once granted
+    var playerDeck = { source: 'explicit', ids: pIds, shuffle: true };
+    var aiDeck     = { source: 'explicit', ids: GILGAMESH_AI_IDS.concat([ENKIDU_ID]), shuffle: true };
     return {
       structure: { turns: 4, locationsCount: 3, slotsPerLocation: 4, handStart: 4, maxHandSize: 4, cardsPerTurn: 2 },
       resource:  { model: 'none', capital: 0 },               // cost-free
@@ -1156,9 +1043,9 @@ SOG.GilgameshBattle = (function () {
         opponentAvatar:   'images/portraits/gilgameshportrait.jpeg',
         popAlly:          true
       },
-      // Minimal — onWin owns the multi-stage prize (5 cards + Enkidu + deck
-      // builder) and the completion flags; the engine never consumes this since
-      // onWin/onLoss/onTie don't call proceed().
+      // Minimal — the script's onWin owns the reward sequence (Gilgamesh-card
+      // grant; gold + market in part 4) and sets the completion flags itself;
+      // the engine never consumes this since onWin/onLoss/onTie don't proceed().
       rewards:   { onWin: { completionFlag: KEY_PHASE1_COMPLETE } },
       scriptHook: 'gilgamesh'
     };
@@ -1168,12 +1055,12 @@ SOG.GilgameshBattle = (function () {
   var _gBattleSkippedOpening = false;   // decide-once, captured in onIntro
   var _gScriptDialogueActive = false;   // drives isInputBlocked during the opening
 
-  // Opening dialogue + interactive pause play ONCE (Attempt 1): skip on a repeat
-  // (opening-seen), after the post-loss Cuneiform grant, or on the rematch.
+  // Opening dialogue + interactive pause play ONCE (first attempt): skip on a
+  // repeat (opening-seen) or after the post-loss Cuneiform grant (every retry).
   // Captured BEFORE _runOpeningDialogue can set sog_gilgamesh_opening_seen
   // (the Prehistory decide-once lesson — don't re-evaluate post-mutation).
   function _gScriptSkipOpening() {
-    return _has('sog_gilgamesh_opening_seen') || _has(KEY_CUNEIFORM_GRANTED) || _isRematch;
+    return _has('sog_gilgamesh_opening_seen') || _has(KEY_CUNEIFORM_GRANTED);
   }
   function _gApplyPresentationClasses(p) {
     if (!p) return;
@@ -1237,12 +1124,12 @@ SOG.GilgameshBattle = (function () {
     // Block card input while the opening dialogue / interactive pause is active.
     isInputBlocked: function (ctx) { return !!_gScriptDialogueActive; },
 
-    // Outcomes own the screen (no proceed()): _routePostBattle branches on
-    // _isRematch — Battle-1 win → scoreboard CONTINUE → _runPostVictorySequence
-    // (dialogue → 5-card grant → Enkidu reveal → fade → deck builder); rematch
-    // win → completion + overworld; loss → PLAY AGAIN → Cuneiform intervention;
-    // exact-IP tie → routed as a loss (tie-as-loss). result.locResults is the
-    // same {loc, playerIP, aiIP} shape Otzi already consumes.
+    // Outcomes own the screen (no proceed()): _routePostBattle — win → set
+    // completion flags → scoreboard CONTINUE → _runPostVictorySequence (dialogue
+    // → Gilgamesh-card grant → [gold/market, part 4] → overworld); loss → PLAY
+    // AGAIN → Cuneiform intervention → retry the SAME battle; exact-IP tie →
+    // routed as a loss (tie-as-loss). result.locResults is the same
+    // {loc, playerIP, aiIP} shape Otzi already consumes.
     onWin:  function (ctx, result, proceed) { _routePostBattle(true,  false, result.locResults); },
     onLoss: function (ctx, result, proceed) { _routePostBattle(false, false, result.locResults); },
     onTie:  function (ctx, result, proceed) { _routePostBattle(false, true,  result.locResults); }
