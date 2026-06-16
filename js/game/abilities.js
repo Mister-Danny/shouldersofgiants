@@ -123,6 +123,40 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     AT-ONCE TARGETING — REVEALED-ONLY ITERATION
+     ───────────────────────────────────────────────────────────────
+     The universal rule: an At Once ability sees a card only once it has
+     entered play (been revealed). A face-down card at the same location has
+     not entered play, so no At Once effect may reach it. Every slot-touching
+     At Once ability must select its targets through this helper so the rule
+     can never be hand-omitted again.
+
+     forEachRevealedAt(slots, locId, fn):
+       • `slots` — the SIDE whose cards to scan: pass G.playerSlots or
+         G.aiSlots (own vs opponent is the caller's choice).
+       • `locId` — the location to scan.
+       • `fn(sd, index)` — called ONCE per REVEALED, non-null slot, in slot
+         order. `index` is the slot index (for getSlotEl / slot-nulling).
+         The ability applies any FURTHER filter (by id, type, cc, …) inside
+         `fn` via an early `return` — exactly as the hand-rolled loops did,
+         minus the now-centralized `!s || !s.revealed` guard.
+
+     Expresses every existing target-selection shape without behavior change:
+     side-effect loops (Justinian reset, Scholar pulse, Cortes victims),
+     counts (Scholar count), and find/reduce (Empress Wu best, Soldier
+     targets, Hammurabi lowest) — all accumulate in a closure inside `fn`.
+  ═══════════════════════════════════════════════════════════════ */
+
+  function forEachRevealedAt(slots, locId, fn) {
+    var arr = slots && slots[locId];
+    if (!arr) return;
+    for (var i = 0; i < arr.length; i++) {
+      var s = arr[i];
+      if (s && s.revealed) fn(s, i);
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      ADJACENCY
   ═══════════════════════════════════════════════════════════════ */
 
@@ -645,7 +679,8 @@
   function abilityScholarOfficials(owner, locId, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     // Count revealed cards at this location, excluding Scholar-Officials (id 2) itself
-    var count = slots[locId].filter(function (s) { return s && s.revealed && s.cardId !== 2; }).length;
+    var count = 0;
+    forEachRevealedAt(slots, locId, function (s) { if (s.cardId !== 2) count++; });
     if (owner === 'player') G.bonusCapitalNextTurn   += count;
     else                    G.aiBonusCapitalNextTurn += count;
     if (count > 0) {
@@ -658,8 +693,8 @@
       }
       // Pulse each contributing card so viewers can see what's being counted
       if (typeof Anim !== 'undefined') {
-        slots[locId].forEach(function (s, si) {
-          if (!s || !s.revealed || s.cardId === 2) return;
+        forEachRevealedAt(slots, locId, function (s, si) {
+          if (s.cardId === 2) return;
           var contEl = getSlotEl(owner, locId, si);
           if (contEl) Anim.scholarPulse(contEl);
         });
@@ -682,8 +717,7 @@
     var anyAffected = false;
     ['player', 'opp'].forEach(function (side) {
       var sl = side === 'player' ? G.playerSlots : G.aiSlots;
-      sl[locId].forEach(function (s, si) {
-        if (!s || !s.revealed) return;
+      forEachRevealedAt(sl, locId, function (s, si) {
 
         // ── Clear resurrection-chain accumulator (Samurai 12, Jesus 10) ─
         // The active bonus on the board lives in s.ipMod (as a named
@@ -737,8 +771,7 @@
     // at this location. At-Once abilities affect cards currently in play —
     // unrevealed cards aren't yet in play and aren't legal targets.
     var best = null;
-    oppSlots[locId].forEach(function (s) {
-      if (!s || !s.revealed) return;
+    forEachRevealedAt(oppSlots, locId, function (s) {
       var c = CARDS.find(function (x) { return x.id === s.cardId; });
       if (!c || (c.type !== 'Political' && c.type !== 'Military')) return;
       var ip = effectiveIP(s);
@@ -862,8 +895,8 @@
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     // Collect other At Once cards at this location (exclude Pacal himself)
     var cards = [];
-    slots[locId].forEach(function (s) {
-      if (!s || !s.revealed || s.cardId === 5) return;
+    forEachRevealedAt(slots, locId, function (s) {
+      if (s.cardId === 5) return;
       var c = CARDS.find(function (x) { return x.id === s.cardId; });
       if (c && c.ability && c.ability.indexOf('At Once') !== -1) cards.push(s.cardId);
     });
@@ -956,8 +989,8 @@
 
     // ── Snapshot victims (all revealed at this loc except Cortes) ─
     var victims = [];
-    slots[locId].forEach(function (s, idx) {
-      if (!s || !s.revealed || s.cardId === 13) return;
+    forEachRevealedAt(slots, locId, function (s, idx) {
+      if (s.cardId === 13) return;
       var el   = getSlotEl(owner, locId, idx);
       var rect = el ? el.getBoundingClientRect() : null;
       victims.push({ cardId: s.cardId, ip: effectiveIP(s), slotIdx: idx, el: el, rect: rect });
@@ -1225,9 +1258,7 @@
     var oppSide  = owner === 'player' ? 'opp' : 'player';
     var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
     var targets  = [];
-    oppSlots[locId].forEach(function (s) {
-      if (s && s.revealed) targets.push(s);
-    });
+    forEachRevealedAt(oppSlots, locId, function (s) { targets.push(s); });
     if (targets.length === 0) { done(); return; }
 
     function applyStrike(targetSd) {
@@ -1267,8 +1298,7 @@
 
     function findLowestCCIndex(slots, skipCardId) {
       var lowestCC = Infinity, lowestIdx = -1;
-      slots[locId].forEach(function (s, si) {
-        if (!s || !s.revealed) return;
+      forEachRevealedAt(slots, locId, function (s, si) {
         if (skipCardId !== undefined && s.cardId === skipCardId) return;
         var c = CARDS.find(function (x) { return x.id === s.cardId; });
         if (c && c.cc < lowestCC) { lowestCC = c.cc; lowestIdx = si; }
@@ -1305,10 +1335,13 @@
       return !!c && c.type === 'Prehistory';
     }
 
-    // (a) Prehistory cards already placed at this location → permanent +1 now.
+    // (a) Prehistory cards already REVEALED at this location → permanent +1 now.
+    // Routed through forEachRevealedAt so a face-down Prehistory card (not yet
+    // in play) is never boosted — the universal At Once rule, same as every
+    // other slot-touching ability.
     var eid = nextEventId();
-    (slots[locId] || []).forEach(function (s) {
-      if (s && isPrehistory(s.cardId)) {
+    forEachRevealedAt(slots, locId, function (s) {
+      if (isPrehistory(s.cardId)) {
         addIPMod(s, 1, 'Cuneiform', eid);
         if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
           SOG.ui.showIPFloat(owner, s.cardId, 1);
@@ -1335,8 +1368,8 @@
   function abilityPhoenicians(owner, locId, done) {
     var mySlots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var culturalTargets = [];
-    mySlots[locId].forEach(function (s, si) {
-      if (!s || !s.revealed || s.cardId === 49) return;
+    forEachRevealedAt(mySlots, locId, function (s, si) {
+      if (s.cardId === 49) return;
       var c = CARDS.find(function (x) { return x.id === s.cardId; });
       if (c && c.type === 'Cultural') culturalTargets.push({ sd: s, si: si });
     });
