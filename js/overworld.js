@@ -27,7 +27,8 @@ var Overworld = (function () {
   var KEY_TOEGYPT_GOODBYE              = 'sog_toegypt_goodbye_seen';              // one-time Hunter goodbye on first To Egypt click
   var KEY_EGYPT_ARRIVAL                = 'sog_egypt_arrival_seen';                // one-time Egypt arrival dialogue (manual flow)
   var KEY_MESOPOTAMIA_ARRIVAL       = 'sog_mesopotamia_arrival_complete';
-  var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set in future when battle is won
+  var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set on the Gilgamesh win
+  var KEY_MARKET_FIRST_VISIT        = 'sog_market_first_visit_done';   // one-time auto-walk into the market
   // Phase D2c
   var KEY_MET_GILGAMESH             = 'sog_met_gilgamesh';              // set after the "You will be." line
   var KEY_MESO_STARTER_GRANTED      = 'sog_mesopotamia_starter_granted'; // set after all 5 card grants complete
@@ -376,6 +377,21 @@ var Overworld = (function () {
           scale: 1.35,
           showIf: function () {
             try { return localStorage.getItem(KEY_MESOPOTAMIA_ARRIVAL) === 'true'; } catch (e) { return false; }
+          }
+        },
+        {
+          // Mesopotamian Marketplace. GATED: appears only after the Gilgamesh win
+          // (KEY_BATTLE_GILGAMESH_COMPLETE) — same completion-flag gating as the
+          // To Egypt box. Placed near the Uruk node; position is provisional and
+          // will be fine-tuned. First win auto-walks here (see returnFromGilgameshWin);
+          // afterwards it's a clickable node that re-enters the market placeholder.
+          id:    'market',
+          name:  'Mesopotamian Marketplace',
+          image: NODE_PATH + 'mesomarketnode@0.5x.png',
+          x: 80, y: 66,
+          scale: 2,   // node sprite rendered too small at natural size — double it
+          showIf: function () {
+            try { return localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; } catch (e) { return false; }
           }
         }
       ],
@@ -762,6 +778,17 @@ var Overworld = (function () {
           // First run: "Welcome to my city" exchange → Battle 1 Attempt 1.
           _runGilgameshEncounter(D2B_GILGAMESH_DIALOGUE, _launchGilgameshBattle);
         }
+      });
+      return;
+    }
+
+    // ── Mesopotamian Marketplace — revisit (the first visit auto-walks via
+    //    returnFromGilgameshWin). Walk to the node, then open the market. ──
+    if (node.id === 'market' && currentMapId === 'mesopotamia') {
+      isDialogueLocked = true;
+      cancelIdle();
+      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+        _enterMarket();
       });
       return;
     }
@@ -1683,6 +1710,226 @@ var Overworld = (function () {
     });
   }
 
+  function _findMesoNode(id) {
+    var found = null;
+    MAPS.mesopotamia.nodes.forEach(function (n) { if (n.id === id) found = n; });
+    return found;
+  }
+
+  /* Post-Gilgamesh-win return, called by the battle module after the win
+     dialogue + Gilgamesh-card grant. The battle module has faded to black and
+     switched to the overworld screen; we land the Explorer at the Uruk node on
+     the (still-loaded) Mesopotamia map, reveal the now-unlocked market node, fade
+     the black out via onMapShown, then — FIRST TIME ONLY — auto-walk her into the
+     market. Afterwards the market node just sits there, clickable to revisit. */
+  function returnFromGilgameshWin(onMapShown) {
+    isDialogueLocked = true;
+    isTransitioning  = false;
+
+    // The player came from Mesopotamia, so its map DOM is intact behind the
+    // battle screen; make sure it's the current map (defensive).
+    if (currentMapId !== 'mesopotamia') loadMap('mesopotamia', {});
+
+    // Land at the Uruk node.
+    var uruk = _findMesoNode('walls-of-uruk');
+    if (uruk) {
+      currentPos.x = uruk.x; currentPos.y = uruk.y;
+      positionChar(uruk.x, uruk.y);
+      setStanding();
+    }
+
+    // Re-render nodes — the market node now passes its showIf (Gilgamesh beaten).
+    // Start it hidden so it can fade in AFTER the map is revealed.
+    _refreshNodes();
+    var marketEl = overlayEl && overlayEl.querySelector('[data-id="market"]');
+    if (marketEl) marketEl.style.opacity = '0';
+
+    // Reveal the map + Uruk (battle module fades its black cover out).
+    if (onMapShown) onMapShown();
+
+    // Beat 2: fade the market node in (~after the map fade-from-black).
+    setTimeout(function () {
+      if (marketEl) {
+        if (typeof gsap !== 'undefined') gsap.to(marketEl, { opacity: 1, duration: 0.6, ease: 'power1.out' });
+        else marketEl.style.opacity = '1';
+      }
+
+      var firstDone = false;
+      try { firstDone = localStorage.getItem(KEY_MARKET_FIRST_VISIT) === 'true'; } catch (e) {}
+
+      if (firstDone) {
+        // Already visited once — just hand control back; the node is clickable.
+        isDialogueLocked = false;
+        scheduleIdle();
+        return;
+      }
+
+      // Beat 3: FIRST TIME — auto-walk to the market node, then enter it.
+      var market = _findMesoNode('market');
+      var dest   = market ? (market.path || [{ x: market.x, y: market.y }]) : [];
+      setTimeout(function () {
+        walkPath(dest, function () {
+          try { localStorage.setItem(KEY_MARKET_FIRST_VISIT, 'true'); } catch (e) {}
+          _enterMarket();
+        });
+      }, 800);
+    }, 650);
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     MESOPOTAMIAN MARKET SCREEN
+     ────────────────────────────────────────────────────────────
+     Visual layout only this session — no buying / gold spend yet.
+       • Full-screen mesomarket.jpg backdrop at z-100 (BELOW the HUD at
+         z-150, the same layering the candle intervention uses), so the
+         adventure HUD bar + the trader portrait render on top.
+       • 9 cards laid on three shelves matching samplefinishedmarket.jpg,
+         each rendered with the in-game card face (SOG.board.buildCardFace →
+         cost/IP corners) + a pricetag@0.5x.png tag with the gold price.
+       • Clicking a card opens the shared in-game card-detail popup
+         (SOG.ui.openBattlePopup) — buying is NOT wired.
+       • Trader portrait (mesotrader) sits in the HUD conversation slot via
+         enterDialogueMode + swapNpcPortrait('trader'); no dialogue yet.
+       • Back button (top-right, above the HUD) exits to the overworld.
+     Reached by the first-win auto-walk and by clicking the market node.
+     TODO(market interior — later): wire gold + buying onto this layout. */
+
+  // Positions match samplefinishedmarket.jpg over the (tighter-crop) mesomarket.jpg:
+  // shelf 1 = 5 cards on the top shelf, shelf 2 = 4 cards on the lower shelf
+  // (Enkidu is the last card on shelf 2 and stays 30 gold — there is no 3rd shelf).
+  // `xs` are per-card horizontal CENTERS (%) and `topPct` is the card top (%);
+  // per-card `price` drives the tag. Easy to fine-tune.
+  var MARKET_SHELVES = [
+    { topPct: 14, xs: [25, 34.5, 44, 53.5, 62.5], cards: [
+        { id: 39, price: 10 },   // Farmer
+        { id: 40, price: 10 },   // Scribe
+        { id: 42, price: 10 },   // Soldier
+        { id: 41, price: 10 },   // Canals
+        { id: 38, price: 10 }    // Priest
+    ] },
+    { topPct: 40, xs: [26, 37.5, 49, 60], cards: [
+        { id: 45, price: 20 },   // Ziggurat
+        { id: 48, price: 20 },   // Chariot
+        { id: 49, price: 20 },   // Phoenicians
+        { id: 44, price: 30 }    // Enkidu (last on shelf 2, stays 30 gold)
+    ] }
+  ];
+  var MARKET_CARD_W = 86;   // px (stage space); height follows the card aspect
+  var MARKET_CARD_H = 126;
+
+  function _buildMarketCard(cardId, leftPct, topPct, price) {
+    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
+    if (!card) return null;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'market-card';
+    wrap.style.cssText = 'position:absolute;left:' + leftPct + '%;top:' + topPct + '%;' +
+      'width:' + MARKET_CARD_W + 'px;height:' + MARKET_CARD_H + 'px;transform:translateX(-50%);' +
+      'container-type:inline-size;cursor:pointer;border:2px solid #1a0a04;border-radius:4px;' +
+      'box-shadow:0 4px 10px rgba(0,0,0,.55);overflow:hidden;background:#100a02;';
+
+    // In-game card face (image + CC/IP corners) — same renderer as battle/deck.
+    if (window.SOG && SOG.board && typeof SOG.board.buildCardFace === 'function') {
+      SOG.board.buildCardFace(wrap, card, card.ip);
+    } else if (window.buildCardImg) {
+      wrap.appendChild(window.buildCardImg(card));
+    }
+
+    // Click → shared in-game card-detail popup (no buying yet).
+    wrap.addEventListener('click', function () {
+      if (window.SOG && SOG.ui && typeof SOG.ui.openBattlePopup === 'function') {
+        var sd = { cardId: card.id, ip: card.ip, ipMod: 0, ipModSources: [],
+                   contMod: 0, contModSources: [], revealed: true, bonuses: [], turnPlayed: 0 };
+        SOG.ui.openBattlePopup(card, sd, 'player', false);
+      }
+    });
+
+    // Price tag — built as a SIBLING of the card (positioned in screen space),
+    // NOT a child: the card wrap's overflow:hidden (which clips the rounded card
+    // image) would otherwise clip the tag away. Hangs just below the card bottom.
+    var tag = document.createElement('div');
+    tag.className = 'market-pricetag';
+    tag.style.cssText = 'position:absolute;left:' + (leftPct + 0.5) + '%;' +
+      'top:calc(' + (topPct - 2) + '% + ' + (MARKET_CARD_H - 8) + 'px);transform:translateX(-50%);' +
+      'width:115px;height:77px;background:url("images/ui_images/pricetag@0.5x.png") center/contain no-repeat;' +
+      'display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:50;';
+    var num = document.createElement('span');
+    num.textContent = price;
+    num.style.cssText = 'font-family:var(--font, sans-serif);font-size:32px;font-weight:bold;' +
+      'color:#3a2400;text-shadow:0 1px 0 rgba(255,230,150,.6);transform:translate(-10px, 3px);';
+    tag.appendChild(num);
+
+    return { cardEl: wrap, tagEl: tag };
+  }
+
+  function _enterMarket() {
+    isDialogueLocked = true;
+    cancelIdle();
+    stopFootsteps();
+    var prev = document.getElementById('adv-market-screen');
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+
+    // Backdrop + cards live BELOW the HUD (z-150) so the HUD bar + trader
+    // portrait render on top — same layering trick as the candle intervention.
+    var screen = document.createElement('div');
+    screen.id = 'adv-market-screen';
+    screen.style.cssText = 'position:absolute;inset:0;z-index:100;overflow:hidden;' +
+      'background:url("images/ui_images/mesomarket.jpg") center/cover no-repeat;';
+
+    // Lay out the 9 cards on their two shelves (card + its price tag).
+    MARKET_SHELVES.forEach(function (shelf) {
+      shelf.cards.forEach(function (c, i) {
+        var leftPct = (shelf.xs[i] != null) ? shelf.xs[i] : (20 + i * 12);
+        var built   = _buildMarketCard(c.id, leftPct, shelf.topPct, c.price);
+        if (built) { screen.appendChild(built.cardEl); screen.appendChild(built.tagEl); }
+      });
+    });
+
+    // Back-to-overworld button (top-right; its own z so it sits above the HUD).
+    var btn = document.createElement('button');
+    btn.className = 'btn-primary';
+    btn.id = 'adv-market-back';
+    btn.textContent = '← Leave Market';
+    btn.style.cssText = 'position:absolute;top:14px;right:14px;z-index:160;font-size:15px;' +
+      'padding:8px 16px;cursor:pointer;';
+    btn.addEventListener('click', _exitMarket);
+    screen.appendChild(btn);
+
+    (document.getElementById('sog-stage') || document.body).appendChild(screen);
+
+    // Trader portrait in the HUD conversation slot — no dialogue yet, just the
+    // portrait in place for a future trader conversation. enterDialogueMode gives
+    // the conversation layout; we then load the trader into the NPC slot, reveal
+    // it, and clear any stale dialogue text so nothing speaks. Degrades gracefully
+    // if the HUD is absent.
+    var hud = window.SOG && window.SOG.HUD;
+    if (hud && typeof hud.enterDialogueMode === 'function') {
+      hud.enterDialogueMode(null, function () {
+        var npcImg = document.getElementById('adv-hud-npc-img');
+        if (npcImg) npcImg.src = 'images/portraits/mesotrader@0.5x.jpg';
+        var slot = document.getElementById('adv-hud-npc-slot');
+        if (slot) { slot.style.opacity = '1'; slot.style.transform = 'translateY(0)'; }
+        ['adv-hud-dialogue-text', 'adv-hud-dialogue-text-npc'].forEach(function (id) {
+          var el = document.getElementById(id); if (el) el.textContent = '';
+        });
+      });
+    }
+  }
+
+  /* Leave the market → back to the Mesopotamia overworld. */
+  function _exitMarket() {
+    // Undo the manual NPC-slot reveal (we set it directly in _enterMarket, so
+    // exitDialogueMode's own slide-out doesn't know about it).
+    var slot = document.getElementById('adv-hud-npc-slot');
+    if (slot) { slot.style.opacity = '0'; slot.style.transform = ''; }
+    var hud = window.SOG && window.SOG.HUD;
+    if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(function () {});
+    var screen = document.getElementById('adv-market-screen');
+    if (screen && screen.parentNode) screen.parentNode.removeChild(screen);
+    isDialogueLocked = false;
+    scheduleIdle();
+  }
+
   /* Post-loss Cuneiform intervention (D3a sub-task 4). Called by the Gilgamesh
      battle's "Play Again" when Cuneiform isn't yet granted. Reuses the candle
      transition + HUD Farmer dialogue. The battle module has already torn itself
@@ -1997,6 +2244,9 @@ var Overworld = (function () {
     returnToEastAfricaAfterOtzi: returnToEastAfricaAfterOtzi,
     // D3a — post-loss Cuneiform intervention, called by the Gilgamesh battle.
     runGilgameshCuneiformIntervention: runGilgameshCuneiformIntervention,
+    // Post-win return: land at Uruk, reveal the market node, first-time auto-walk
+    // into the market. Called by the Gilgamesh battle after its win sequence.
+    returnFromGilgameshWin: returnFromGilgameshWin,
     // Reusable candle visual for the Gilgamesh post-loss intervention (the
     // battle module fades to black itself, then drives these): bloom the flame
     // over the black + raise the candlelit backdrop, then dismiss it.

@@ -639,14 +639,12 @@ SOG.GilgameshBattle = (function () {
           { who: 'explorer', text: "Thank you! You're such a gracious king." },
           { who: 'otzi',     text: "We'll see next time you face me..." }
         ], function () {
-          // ═══════════════════════════════════════════════════════════════
-          // TODO(market transition — part 4): the Mesopotamian Marketplace
-          // node transition hooks in HERE (the win dialogue above teases it),
-          // replacing the temporary overworld return below. NOT built this
-          // session — for now we return to the overworld so the win path stays
-          // playable end-to-end (the deck-builder auto-hand-off is retired).
-          // ═══════════════════════════════════════════════════════════════
-          _exitToOverworld();
+          // The win dialogue (above) teases the Marketplace; now fade to the
+          // Mesopotamia map at Uruk, reveal the market node, and — first time
+          // only — auto-walk the Explorer into the market. (The market SCREEN
+          // itself is a placeholder until next session — see overworld
+          // _enterMarket's TODO.)
+          _returnToMesopotamiaMarket();
         });
       });
     });
@@ -895,6 +893,22 @@ SOG.GilgameshBattle = (function () {
         window.Overworld.resumeAfterBattle();
       }
     }, 100);
+  }
+
+  /* Post-win → Mesopotamia market navigation. Fade to black, tear down, switch
+     to the overworld screen UNDER the black, then hand off to the overworld:
+     it lands at Uruk, reveals the market node, and (first time) auto-walks into
+     the market. We pass _gFadeFromBlack as the "map shown" callback so the black
+     lifts once the overworld has positioned the Explorer + refreshed the nodes.
+     Falls back to the plain overworld return if the hook is unavailable. */
+  function _returnToMesopotamiaMarket() {
+    var ow = window.Overworld;
+    if (!ow || typeof ow.returnFromGilgameshWin !== 'function') { _exitToOverworld(); return; }
+    _gFadeToBlack(function () {
+      teardown();   // engine owns the End Turn / Reset buttons now
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+      ow.returnFromGilgameshWin(function () { _gFadeFromBlack(); });
+    });
   }
 
   /* ── Teardown ─────────────────────────────────────────────────── */
