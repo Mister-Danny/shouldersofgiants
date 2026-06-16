@@ -192,53 +192,92 @@ SOG.HUD = (function () {
      DECK SLOTS
   ══════════════════════════════════════════════════════════════ */
 
+  /* Renders the HUD's resting centre content. Was 6 deck slots; now a single
+     ACTIVE-deck tile (named with the deck the player took into battle / last
+     selected) + a GOLD display (reads SOG.gold) + a placeholder STAMINA bar.
+     Name kept for the 3 internal callers + the public API. */
   function refreshDecks() {
     if (!_decksEl) return;
     _decksEl.innerHTML = '';
-
-    var allDecks  = (window.Decks && window.Decks.getAllDecks()) || [];
-    var slotCount = (window.Decks && window.Decks.SLOT_COUNT) || allDecks.length || 6;
-
-    for (var i = 0; i < slotCount; i++) {
-      var deck = allDecks[i] || null;
-      _decksEl.appendChild(_buildSlotTile(i + 1, deck));
-    }
+    _decksEl.appendChild(_buildActiveDeckTile());
+    _decksEl.appendChild(_buildGoldDisplay());
+    _decksEl.appendChild(_buildStaminaBar());
   }
 
-  function _buildSlotTile(slotNum, deck) {
+  // The single active-deck tile — labelled with the active deck's name.
+  function _buildActiveDeckTile() {
+    var deck = (window.Decks && typeof window.Decks.getActive === 'function')
+      ? window.Decks.getActive() : null;
+
     var el = document.createElement('div');
-    el.className  = 'adv-hud-deck-slot';
-    el.dataset.slot = String(slotNum);
+    el.className = 'adv-hud-deck-slot adv-hud-deck-slot--occupied adv-hud-deck-slot--single';
 
-    var hasCards = deck && Array.isArray(deck.cards) && deck.cards.length > 0;
+    var thumb = document.createElement('div');
+    thumb.className = 'adv-hud-deck-thumb';
 
-    if (hasCards) {
-      el.classList.add('adv-hud-deck-slot--occupied');
+    var nameEl = document.createElement('div');
+    nameEl.className   = 'adv-hud-deck-name';
+    nameEl.textContent = (deck && deck.name) ? deck.name : 'Deck';
 
-      var thumb = document.createElement('div');
-      thumb.className = 'adv-hud-deck-thumb';
+    el.appendChild(thumb);
+    el.appendChild(nameEl);
 
-      var nameEl = document.createElement('div');
-      nameEl.className   = 'adv-hud-deck-name';
-      nameEl.textContent = deck.name || ('Deck ' + slotNum);
-
-      el.appendChild(thumb);
-      el.appendChild(nameEl);
-    } else {
-      var plus = document.createElement('div');
-      plus.className   = 'adv-hud-deck-empty';
-      plus.textContent = '+';
-      el.appendChild(plus);
-    }
-
-    el.addEventListener('click', (function (num) {
-      return function () {
-        if (_inDialogue) return;   // suppress deck clicks during dialogue
-        log('Deck slot ' + num + ' clicked — stub for Phase H3');
-      };
-    })(slotNum));
-
+    el.addEventListener('click', function () {
+      if (_inDialogue) return;   // suppress clicks during dialogue
+      log('Active deck tile clicked — stub');
+    });
     return el;
+  }
+
+  // Gold display — coin + the current balance (SOG.gold). The number element
+  // carries an id so refreshGold() can update it after a grant.
+  function _buildGoldDisplay() {
+    var el = document.createElement('div');
+    el.className = 'adv-hud-gold';
+    el.title = 'Gold';
+
+    var coin = document.createElement('img');
+    coin.className = 'adv-hud-gold-coin';
+    coin.src = 'images/ui_images/coin.png';
+    coin.alt = 'Gold';
+    coin.draggable = false;
+
+    var num = document.createElement('span');
+    num.className   = 'adv-hud-gold-num';
+    num.id          = 'adv-hud-gold-num';
+    num.textContent = (window.SOG && SOG.gold) ? SOG.gold.get() : 0;
+
+    el.appendChild(coin);
+    el.appendChild(num);
+    return el;
+  }
+
+  // Stamina bar — PLACEHOLDER (cosmetic only; no mechanic). Reserves the space
+  // and renders a static bar for now.
+  function _buildStaminaBar() {
+    var el = document.createElement('div');
+    el.className = 'adv-hud-stamina';
+    el.title = 'Stamina (placeholder)';
+
+    var label = document.createElement('div');
+    label.className   = 'adv-hud-stamina-label';
+    label.textContent = 'STAMINA';
+
+    var track = document.createElement('div');
+    track.className = 'adv-hud-stamina-track';
+    var fill = document.createElement('div');
+    fill.className = 'adv-hud-stamina-fill';   // static fill — see CSS
+    track.appendChild(fill);
+
+    el.appendChild(label);
+    el.appendChild(track);
+    return el;
+  }
+
+  // Refresh just the gold number (e.g. after a win reward grants gold).
+  function refreshGold() {
+    var el = document.getElementById('adv-hud-gold-num');
+    if (el && window.SOG && SOG.gold) el.textContent = SOG.gold.get();
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -801,6 +840,7 @@ SOG.HUD = (function () {
     show:               show,
     hide:               hide,
     refreshDecks:       refreshDecks,
+    refreshGold:        refreshGold,
     runDialogue:        runDialogue,
     runLines:           runLines,
     showDialogueLine:   showDialogueLine,

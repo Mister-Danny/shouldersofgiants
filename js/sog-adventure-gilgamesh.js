@@ -572,11 +572,17 @@ SOG.GilgameshBattle = (function () {
     { who: 'explorer', text: 'Your cards were too overpowering.' }
   ];
 
+  // True if THIS win is the player's first-ever Gilgamesh win. Captured in
+  // _routePostBattle BEFORE the completion flag is set, then read by the gold
+  // reward in _runPostVictorySequence (first win = 25 gold, repeat win = 10).
+  var _gWinWasFirstTime = false;
+
   function _routePostBattle(won, isTie, locResults) {
     // One-and-done: the same battle is retried until won. Win → set the
     // completion flags (overworld re-entry + isBattleComplete) and run the
     // victory reward; loss/tie → smack-talk + DEFEAT (PLAY AGAIN → intervention).
     if (won) {
+      _gWinWasFirstTime = !_has(KEY_BATTLE_GILGAMESH_COMPLETE);   // capture BEFORE setting it
       try { localStorage.setItem(KEY_PHASE1_COMPLETE, 'true'); } catch (e) {}
       try { localStorage.setItem(KEY_BATTLE_GILGAMESH_COMPLETE, 'true'); } catch (e) {}
       _showResultPopup(true, locResults);   // CONTINUE → _runPostVictorySequence
@@ -613,6 +619,51 @@ SOG.GilgameshBattle = (function () {
     } else if (done) { done(); }
   }
 
+  /* Gold-acquisition animation: coin + "<amount> Gold" (gold letters, black
+     outline) fade in and fall to a centre stopping point; demedici-money.mp3
+     plays AT the moment it lands. `amount` is a parameter — not hardcoded — so
+     this is reusable for any future gold reward. onDone fires after it settles. */
+  function _runGoldRewardAnimation(amount, onDone) {
+    var overlay = document.createElement('div');
+    overlay.id = 'gilg-gold-reward';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;pointer-events:none;';
+
+    var box = document.createElement('div');
+    box.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;opacity:0;' +
+      'transform:translateY(-110px);transition:opacity 0.45s ease, transform 0.7s cubic-bezier(0.2,0.9,0.3,1);';
+
+    var coin = document.createElement('img');
+    coin.src = 'images/ui_images/coin.png'; coin.alt = ''; coin.draggable = false;
+    coin.style.cssText = 'width:130px;height:130px;object-fit:contain;filter:drop-shadow(0 6px 10px rgba(0,0,0,0.6));';
+
+    var label = document.createElement('div');
+    label.textContent = amount + ' Gold';
+    label.style.cssText = 'font-family:var(--font, sans-serif);font-size:46px;font-weight:bold;color:#f3d574;' +
+      '-webkit-text-stroke:2px #1a0a04;' +
+      'text-shadow:-2px -2px 0 #1a0a04, 2px -2px 0 #1a0a04, -2px 2px 0 #1a0a04, 2px 2px 0 #1a0a04, 0 4px 6px rgba(0,0,0,0.55);';
+
+    box.appendChild(coin); box.appendChild(label);
+    overlay.appendChild(box);
+    (document.getElementById('sog-stage') || document.body).appendChild(overlay);
+
+    void box.offsetHeight;                 // reflow so the transition animates from the start state
+    box.style.opacity = '1';
+    box.style.transform = 'translateY(0)';
+
+    // SFX early in the drop (sooner than the full 0.7s fall).
+    setTimeout(function () { _playSfx('sfx/demedici-money.mp3'); }, 300);
+
+    // Hold, then fade out + finish.
+    setTimeout(function () {
+      box.style.transition = 'opacity 0.4s ease';
+      box.style.opacity = '0';
+      setTimeout(function () {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (onDone) onDone();
+      }, 420);
+    }, 1900);
+  }
+
   /* ── Post-victory reward sequence (one-and-done win) ──────────────
      CONTINUE on the victory scoreboard runs this on the battle screen:
        win dialogue → Gilgamesh-card acquisition (43) → [gold reward, part 4]
@@ -628,11 +679,14 @@ SOG.GilgameshBattle = (function () {
     ], function () {
       // (a) Win reward: grant the Gilgamesh card (43) with the acquisition animation.
       _grantGilgameshCard(function () {
-        // ═══════════════════════════════════════════════════════════════
-        // TODO(gold reward 25 — part 4): the 25-gold reward animation hooks
-        // in HERE, immediately after the Gilgamesh-card grant and before the
-        // closing dialogue. NOT built this session.
-        // ═══════════════════════════════════════════════════════════════
+        // (b) Gold reward — first win = 25, repeat = 10 (per _gWinWasFirstTime,
+        // captured before the win flag was set). Bank it, refresh the HUD gold
+        // number, play the coin animation, then continue. Gold lives only on the
+        // Gilgamesh win path; Prehistory/Otzi/Arcadium award none.
+        var goldAmount = _gWinWasFirstTime ? 25 : 10;
+        if (window.SOG && SOG.gold) SOG.gold.add(goldAmount);
+        if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshGold === 'function') SOG.HUD.refreshGold();
+        _runGoldRewardAnimation(goldAmount, function () {
         runLines([
           { who: 'explorer', text: 'Wow!' },
           { who: 'otzi',     text: 'See what you can get yourself at the Mesopotamian Marketplace.' },
@@ -646,6 +700,7 @@ SOG.GilgameshBattle = (function () {
           // _enterMarket's TODO.)
           _returnToMesopotamiaMarket();
         });
+        });   // _runGoldRewardAnimation callback
       });
     });
   }

@@ -9714,6 +9714,65 @@ body[data-screen="overworld"] #overworld-overlay {
   color: rgba(212, 170, 80, 0.65);
 }
 
+/* ── Restructured HUD centre: single deck tile + gold + stamina ────────── */
+
+/* The single active-deck tile — a touch wider so the name reads cleanly. */
+.adv-hud-deck-slot--single { width: 104px; }
+.adv-hud-deck-slot--single .adv-hud-deck-name { font-size: 9px; }
+
+/* Gold display — coin + balance. */
+.adv-hud-gold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.adv-hud-gold-coin {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+}
+.adv-hud-gold-num {
+  font-family: var(--font);
+  font-size: 26px;
+  font-weight: bold;
+  color: #f3d574;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.6), 0 0 1px #5a3a08;
+}
+
+/* Stamina bar — PLACEHOLDER (cosmetic, no mechanic yet). */
+.adv-hud-stamina {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 150px;
+  flex-shrink: 0;
+}
+.adv-hud-stamina-label {
+  font-family: var(--font);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: rgba(212, 170, 80, 0.85);
+  text-transform: uppercase;
+}
+.adv-hud-stamina-track {
+  width: 100%;
+  height: 14px;
+  border: 1px solid rgba(212, 170, 80, 0.5);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+.adv-hud-stamina-fill {
+  height: 100%;
+  width: 72%;   /* static placeholder level */
+  background: linear-gradient(180deg, #6fcf5a 0%, #3fae2e 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
 /* Right portion: compact music panel — fixed ~230 px, two stacked rows */
 #adv-hud-music {
   flex: 0 0 230px;
