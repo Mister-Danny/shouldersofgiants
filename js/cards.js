@@ -337,7 +337,7 @@ const CARDS = [
     id: 43, name: "Gilgamesh", cc: 5, ip: 5,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Epic Hero",
-    ability: "Continuous: Gains +1 IP for each Cultural card you've played.",
+    ability: "Continuous: Gains +1 IP for all other Cultural cards you've played.",
     image: "images/mesopotamiacards/gilgamesh@0.5x.jpg", locked: true
   },
   {
@@ -356,10 +356,10 @@ const CARDS = [
   },
   {
     /* Filename on disk is misspelled "cunieform" — to be renamed in a later pass */
-    id: 46, name: "Cuneiform", cc: 1, ip: 2,
+    id: 46, name: "Cuneiform", cc: 1, ip: 1,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Writing",
-    ability: "At Once: Grants +1 IP to all Prehistory cards at this location and in your hand. Hand-card boosts persist when those cards are later played.",
+    ability: "At Once: +1 IP to all of your Prehistory cards in play.",
     image: "images/mesopotamiacards/cunieform@0.5x.jpg", locked: true
   },
   {

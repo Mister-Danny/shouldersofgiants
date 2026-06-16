@@ -500,14 +500,15 @@
         });
       });
 
-      // Gilgamesh (id 43): +1 IP for each Cultural card the owner has played
-      // this game. Counter persists through destruction — "you've played" is
-      // all-time.  Self-portrait attribution (source id === 43).
+      // Gilgamesh (id 43): +1 IP for all OTHER Cultural cards the owner has played
+      // this game — Gilgamesh does NOT boost himself. culturalCount is all-time
+      // (persists through destruction) and includes Gilgamesh's own play (he's
+      // Cultural), so subtract 1 to exclude him. Self-portrait attribution.
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (s) {
           if (!s || !s.revealed || s.cardId !== 43) return;
-          var bonus = (G.culturalCount && G.culturalCount[own]) || 0;
+          var bonus = ((G.culturalCount && G.culturalCount[own]) || 0) - 1;  // exclude Gilgamesh himself
           if (bonus <= 0) return;
           s.contMod = (s.contMod || 0) + bonus;
           s.contModSources.push({ source: 'Gilgamesh', delta: bonus });
@@ -1318,45 +1319,29 @@
     setTimeout(done, 600);
   }
 
-  // Cuneiform (id 46) — "Writing" — At Once: snapshots at its play moment
-  // and grants +1 IP to every Prehistory card (a) in slots at this location
-  // and (b) in the owner's hand. Hand-card boosts persist when those cards
-  // are later played (carried via G.cardIPBonus, re-applied at commit time
-  // with Cuneiform attribution). Prehistory cards drawn AFTER Cuneiform plays
-  // are NOT boosted — the snapshot is taken now, once.
+  // Cuneiform (id 46) — "Writing" — At Once: +1 IP to all of the owner's
+  // Prehistory cards IN PLAY (revealed, across every location). A permanent
+  // ipMod applied once, now. Face-down Prehistory cards (not yet in play) and
+  // hand cards are NOT boosted — the universal At Once rule, enforced via
+  // forEachRevealedAt, same as every other slot-touching ability.
   function abilityCuneiform(owner, locId, done) {
-    var isPlayer  = (owner === 'player');
-    var slots     = isPlayer ? G.playerSlots : G.aiSlots;
-    var hand      = isPlayer ? G.playerHand   : G.aiHand;
-    var bonusMap  = isPlayer ? G.cardIPBonus  : G.aiCardIPBonus;
+    var slots = (owner === 'player') ? G.playerSlots : G.aiSlots;
 
     function isPrehistory(id) {
       var c = CARDS.find(function (x) { return x.id === id; });
       return !!c && c.type === 'Prehistory';
     }
 
-    // (a) Prehistory cards already REVEALED at this location → permanent +1 now.
-    // Routed through forEachRevealedAt so a face-down Prehistory card (not yet
-    // in play) is never boosted — the universal At Once rule, same as every
-    // other slot-touching ability.
     var eid = nextEventId();
-    forEachRevealedAt(slots, locId, function (s) {
-      if (isPrehistory(s.cardId)) {
-        addIPMod(s, 1, 'Cuneiform', eid);
-        if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
-          SOG.ui.showIPFloat(owner, s.cardId, 1);
+    G.locations.forEach(function (loc) {
+      forEachRevealedAt(slots, loc.id, function (s) {
+        if (isPrehistory(s.cardId)) {
+          addIPMod(s, 1, 'Cuneiform', eid);
+          if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
+            SOG.ui.showIPFloat(owner, s.cardId, 1);
+          }
         }
-      }
-    });
-
-    // (b) Prehistory cards in hand → pending +1 that's applied (with Cuneiform
-    // attribution) whenever the card is later played, and persists across replays.
-    if (!G.cardIPBonusSource) G.cardIPBonusSource = {};
-    (hand || []).forEach(function (cardId) {
-      if (isPrehistory(cardId)) {
-        bonusMap[cardId] = (bonusMap[cardId] || 0) + 1;
-        if (isPlayer) G.cardIPBonusSource[cardId] = 'Cuneiform';
-      }
+      });
     });
 
     done();
