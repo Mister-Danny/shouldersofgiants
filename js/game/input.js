@@ -871,6 +871,18 @@
       if (mv.queued) {
         G.movedThisTurn[mv.cardId] = false;
         if (mv.isColumbus) G.columbusMoved = false;
+        // Undoing the move also returns any once-per-BATTLE persistent move flag
+        // the move SET this turn (Lucy 33 / Chariot 48), so the card regains its
+        // move. Only mv.queued (this-turn, not-yet-resolved) moves reach here, and
+        // a once-per-battle card can only be queued if its flag wasn't already set
+        // — so this can never clear a flag from a prior-turn resolved move. The sd
+        // still sits at the destination preview (snapBack runs in step 2). This
+        // belongs in resetTurn, NOT snapBack: snapBack also runs at reveal-start,
+        // where a resolving move's flag must survive.
+        var movedSd = (G.playerSlots[mv.toLocId] || []).find(function (s) {
+          return s && s.cardId === mv.cardId;
+        });
+        if (movedSd) { delete movedSd._advLucyMoved; delete movedSd._advChariotMoved; }
       }
     });
 
@@ -1069,7 +1081,7 @@
 
     G.movedThisTurn[cardId] = true;
     if (cardId === 25) G.columbusMoved = true;
-    if (cardId === 33) sd._advLucyMoved = true;   // Lucy: once per BATTLE — flag rides the slot data (mirrors Chariot's _advChariotMoved), survives turn resets so no per-battle preservation needed
+    if (cardId === 33) sd._advLucyMoved = true;   // Lucy: once per BATTLE — flag rides the slot data (mirrors Chariot's _advChariotMoved). Set at QUEUE time, so resetTurn clears it when it snaps this move back (the move never happened); it only persists once the move RESOLVES at reveal.
 
     G.playerActionLog.push({ type: 'move', cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId });
     G.moveLog.push({ cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId, queued: true, isColumbus: cardId === 25 });
