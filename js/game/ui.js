@@ -348,7 +348,8 @@
     Military:    'military',
     Cultural:    'cultural',
     Exploration: 'exploration',
-    Scientific:  'scientific'
+    Scientific:  'scientific',
+    Prehistory:  'prehistory'
   };
 
   /**
@@ -361,10 +362,10 @@
   function openBattlePopup(card, sd, owner, isBoard) {
     battlePopupNameEl.textContent = card.name;
 
-    // Header row: type label.
-    // Hidden for Prehistory era cards and cards with no type assigned.
+    // Header row: type label (shown whenever the card has a type — every type
+    // now has a symbol, including Prehistory).
     if (battlePopupTypeEl) {
-      var showType = !!(card.type && card.era !== 'Prehistory');
+      var showType = !!card.type;
       if (showType) {
         var iconCls = TYPE_ICON_CLASS[card.type];
         var iconHTML = iconCls

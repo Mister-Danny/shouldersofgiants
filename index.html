@@ -1490,14 +1490,29 @@
        and dialogue boxes (z9999).
   ════════════════════════════════════════════════════════════════ -->
   <div id="adv-hud">
-    <!-- LEFT: Explorer portrait -->
-    <div id="adv-hud-portrait" title="Avatar — future customisation">
-      <img src="images/femaleexplorer%20portrait.jpeg" alt="Explorer" draggable="false">
+    <!-- LEFT group: avatar + name · stamina (word / bar / textbook) -->
+    <div id="adv-hud-left">
+      <!-- Avatar + static player title -->
+      <div id="adv-hud-portrait" title="Avatar — future customisation">
+        <img src="images/femaleexplorer%20portrait.jpeg" alt="Explorer" draggable="false">
+        <!-- Static default; a future name system can feed this via SOG.HUD.setName(). -->
+        <div id="adv-hud-player-name">Explorer</div>
+      </div>
+      <!-- Stamina column: big STAMINA word fills the top, a thin bar sits centred in
+           the HUD, and the textbook fills the bottom. The textbook is a placeholder
+           for a future learning-check that will boost stamina — image only, no fn. -->
+      <div id="adv-hud-stamina-col" title="Stamina (placeholder)">
+        <div class="adv-hud-stamina-label">STAMINA</div>
+        <div class="adv-hud-stamina-track"><div class="adv-hud-stamina-fill"></div></div>
+        <img id="adv-hud-textbook" src="images/ui_images/textbook.png" alt=""
+             title="Learning check — coming soon" draggable="false">
+      </div>
     </div>
-    <!-- CENTER: Resting state (deck slots + music) OR State B (dialogue text) -->
+    <!-- MIDDLE: dynamic region name — absolutely centred on the WHOLE bar (set by
+         SOG.HUD.setRegion() from the current map's displayName). -->
+    <div id="adv-hud-region">East Africa</div>
+    <!-- Centre zone: hosts the State B dialogue text overlay. -->
     <div id="adv-hud-center">
-      <div id="adv-hud-decks"><!-- 6 slot tiles injected by SOG.HUD.refreshDecks() --></div>
-      <div id="adv-hud-music"><!-- Play/Pause + Volume injected by SOG.HUD --></div>
       <!-- State B: dialogue text area — hidden in resting state, shown in dialogue mode -->
       <div id="adv-hud-dialogue">
         <!-- Left half: player/Explorer lines -->
@@ -1512,10 +1527,24 @@
         </div>
       </div>
     </div>
-    <!-- RIGHT: Utility buttons (resting) OR NPC portrait (dialogue mode) -->
+    <!-- RIGHT group: gold coin · deck (card back → opens the deck builder; merges the
+         old deck slot + Deck Builder button) · Options icon — OR State B NPC portrait. -->
     <div id="adv-hud-util">
-      <button id="adv-hud-btn-deckbuilder" class="adv-hud-util-btn">Deck Builder</button>
-      <button id="adv-hud-btn-options"     class="adv-hud-util-btn">Options</button>
+      <!-- Gold — coin with the balance overlaid in its centre (white). The number
+           keeps its id so the existing SOG.HUD.refreshGold() path still updates it. -->
+      <div id="adv-hud-gold" title="Gold">
+        <img id="adv-hud-gold-coin" src="images/ui_images/coin@0.5x.png" alt="Gold" draggable="false">
+        <span id="adv-hud-gold-num">0</span>
+      </div>
+      <div id="adv-hud-deck" title="Deck Builder">
+        <img class="adv-hud-deck-back" src="images/ui_images/SOG_Card_Back_Medium.jpeg"
+             alt="Deck" draggable="false">
+        <!-- Active deck's saved name (Decks.getActive().name) via refreshDecks(). -->
+        <div id="adv-hud-deck-name">Deck</div>
+      </div>
+      <button id="adv-hud-btn-options" class="adv-hud-icon-btn" title="Options">
+        <img src="images/ui_images/options@0.5x.png" alt="Options" draggable="false">
+      </button>
       <!-- State B: NPC portrait slot — hidden in resting state, slides up on dialogue enter -->
       <div id="adv-hud-npc-slot">
         <img id="adv-hud-npc-img" src="" alt="" draggable="false">

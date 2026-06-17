@@ -56,11 +56,8 @@ SOG.HUD = (function () {
   ══════════════════════════════════════════════════════════════ */
 
   var _hudEl       = null;   // #adv-hud
-  var _decksEl     = null;   // #adv-hud-decks
-  var _musicEl     = null;   // #adv-hud-music
-  var _playBtn     = null;
-  var _volSlider   = null;
-  var _trackInfoEl = null;
+  var _deckEl      = null;   // #adv-hud-deck  (card-back → opens deck builder)
+  var _deckNameEl  = null;   // #adv-hud-deck-name (active deck's saved name)
   var _playerPortEl = null;  // #adv-hud-portrait  (the zone element)
   var _dlgEl           = null;   // #adv-hud-dialogue
   var _dlgTextEl       = null;   // #adv-hud-dialogue-text        (player zone)
@@ -158,8 +155,8 @@ SOG.HUD = (function () {
 
   function init() {
     _hudEl        = document.getElementById('adv-hud');
-    _decksEl      = document.getElementById('adv-hud-decks');
-    _musicEl      = document.getElementById('adv-hud-music');
+    _deckEl       = document.getElementById('adv-hud-deck');
+    _deckNameEl   = document.getElementById('adv-hud-deck-name');
     _playerPortEl = document.getElementById('adv-hud-portrait');
     _dlgEl           = document.getElementById('adv-hud-dialogue');
     _dlgTextEl       = document.getElementById('adv-hud-dialogue-text');
@@ -174,14 +171,9 @@ SOG.HUD = (function () {
       return;
     }
 
-    _buildMusicStrip();
     _wirePortrait();
     _wireUtilButtons();
     _setupShowScreenHook();
-
-    if (window.SOG && window.SOG.music) {
-      window.SOG.music.onUpdate = _syncMusicUI;
-    }
 
     refreshDecks();
     _initialised = true;
@@ -192,165 +184,54 @@ SOG.HUD = (function () {
      DECK SLOTS
   ══════════════════════════════════════════════════════════════ */
 
-  /* Renders the HUD's resting centre content. Was 6 deck slots; now a single
-     ACTIVE-deck tile (named with the deck the player took into battle / last
-     selected) + a GOLD display (reads SOG.gold) + a placeholder STAMINA bar.
-     Name kept for the 3 internal callers + the public API. */
+  /* Refreshes the HUD's dynamic resting content: the active deck's saved name
+     (shown under the card-back deck button) and the gold balance. The stamina
+     bar + textbook are static markup. Name kept for the existing callers (init,
+     the showScreen hook) + the public API. */
   function refreshDecks() {
-    if (!_decksEl) return;
-    _decksEl.innerHTML = '';
-    _decksEl.appendChild(_buildActiveDeckTile());
-    _decksEl.appendChild(_buildGoldDisplay());
-    _decksEl.appendChild(_buildStaminaBar());
+    if (_deckNameEl) {
+      var deck = (window.Decks && typeof window.Decks.getActive === 'function')
+        ? window.Decks.getActive() : null;
+      _deckNameEl.textContent = (deck && deck.name) ? deck.name : 'Deck';
+    }
+    _refreshDeckLock();
+    refreshGold();
   }
 
-  // The single active-deck tile — labelled with the active deck's name.
-  function _buildActiveDeckTile() {
-    var deck = (window.Decks && typeof window.Decks.getActive === 'function')
-      ? window.Decks.getActive() : null;
-
-    var el = document.createElement('div');
-    el.className = 'adv-hud-deck-slot adv-hud-deck-slot--occupied adv-hud-deck-slot--single';
-
-    var thumb = document.createElement('div');
-    thumb.className = 'adv-hud-deck-thumb';
-
-    var nameEl = document.createElement('div');
-    nameEl.className   = 'adv-hud-deck-name';
-    nameEl.textContent = (deck && deck.name) ? deck.name : 'Deck';
-
-    el.appendChild(thumb);
-    el.appendChild(nameEl);
-
-    el.addEventListener('click', function () {
-      if (_inDialogue) return;   // suppress clicks during dialogue
-      log('Active deck tile clicked — stub');
-    });
-    return el;
+  // The deck builder stays LOCKED (greyed, non-clickable) early in adventure mode
+  // so the player isn't distracted by it. It unlocks after the first Gilgamesh
+  // win + marketplace visit (see overworld _maybePlayDeckBuilderUnlock).
+  function _deckbuilderUnlocked() {
+    try { return localStorage.getItem('sog_deckbuilder_unlocked') === 'true'; } catch (e) { return false; }
+  }
+  function _refreshDeckLock() {
+    if (_deckEl) _deckEl.classList.toggle('adv-hud-deck-locked', !_deckbuilderUnlocked());
   }
 
-  // Gold display — coin + the current balance (SOG.gold). The number element
-  // carries an id so refreshGold() can update it after a grant.
-  function _buildGoldDisplay() {
-    var el = document.createElement('div');
-    el.className = 'adv-hud-gold';
-    el.title = 'Gold';
-
-    var coin = document.createElement('img');
-    coin.className = 'adv-hud-gold-coin';
-    coin.src = 'images/ui_images/coin.png';
-    coin.alt = 'Gold';
-    coin.draggable = false;
-
-    var num = document.createElement('span');
-    num.className   = 'adv-hud-gold-num';
-    num.id          = 'adv-hud-gold-num';
-    num.textContent = (window.SOG && SOG.gold) ? SOG.gold.get() : 0;
-
-    el.appendChild(coin);
-    el.appendChild(num);
-    return el;
-  }
-
-  // Stamina bar — PLACEHOLDER (cosmetic only; no mechanic). Reserves the space
-  // and renders a static bar for now.
-  function _buildStaminaBar() {
-    var el = document.createElement('div');
-    el.className = 'adv-hud-stamina';
-    el.title = 'Stamina (placeholder)';
-
-    var label = document.createElement('div');
-    label.className   = 'adv-hud-stamina-label';
-    label.textContent = 'STAMINA';
-
-    var track = document.createElement('div');
-    track.className = 'adv-hud-stamina-track';
-    var fill = document.createElement('div');
-    fill.className = 'adv-hud-stamina-fill';   // static fill — see CSS
-    track.appendChild(fill);
-
-    el.appendChild(label);
-    el.appendChild(track);
-    return el;
-  }
-
-  // Refresh just the gold number (e.g. after a win reward grants gold).
+  // Refresh just the gold number (e.g. after a win reward grants gold). The
+  // number sits overlaid on the coin; this only updates the text.
   function refreshGold() {
     var el = document.getElementById('adv-hud-gold-num');
-    if (el && window.SOG && SOG.gold) el.textContent = SOG.gold.get();
-  }
-
-  /* ══════════════════════════════════════════════════════════════
-     MUSIC STRIP
-  ══════════════════════════════════════════════════════════════ */
-
-  function _buildMusicStrip() {
-    if (!_musicEl) return;
-
-    // TOP ROW — Clip wrapper + crawling track-info span
-    var trackWrap = document.createElement('div');
-    trackWrap.className = 'adv-hud-track-wrap';
-
-    _trackInfoEl = document.createElement('span');
-    _trackInfoEl.className = 'adv-hud-track-info';
-    _trackInfoEl.title     = '';
-
-    trackWrap.appendChild(_trackInfoEl);
-
-    // BOTTOM ROW — Play/Pause + Volume slider
-    var controlsRow = document.createElement('div');
-    controlsRow.className = 'adv-hud-music-controls';
-
-    _playBtn = document.createElement('button');
-    _playBtn.className   = 'adv-hud-music-btn';
-    _playBtn.title       = 'Play / Pause';
-    _playBtn.textContent = '▶';
-
-    _volSlider = document.createElement('input');
-    _volSlider.type      = 'range';
-    _volSlider.className = 'adv-hud-music-vol';
-    _volSlider.min       = '0';
-    _volSlider.max       = '100';
-    _volSlider.step      = '1';
-
-    var music = window.SOG && window.SOG.music;
-    _volSlider.value = String(music ? music.getVolume() : 10);
-
-    _playBtn.addEventListener('click', function () {
-      var m = window.SOG && window.SOG.music;
-      if (m) m.toggle();
-    });
-
-    _volSlider.addEventListener('input', function () {
-      var pct = parseInt(_volSlider.value, 10);
-      var m = window.SOG && window.SOG.music;
-      if (m) m.setVolume(pct);
-      var origSlider = document.getElementById('music-volume-slider');
-      if (origSlider) origSlider.value = String(pct);
-    });
-
-    controlsRow.appendChild(_playBtn);
-    controlsRow.appendChild(_volSlider);
-    _musicEl.appendChild(trackWrap);
-    _musicEl.appendChild(controlsRow);
-
-    _syncMusicUI();
-  }
-
-  function _syncMusicUI() {
-    if (!_playBtn) return;
-    var m = window.SOG && window.SOG.music;
-    var playing = m && m.isPlaying();
-    _playBtn.textContent = playing ? '▌▌' : '▶';
-    if (_volSlider && m) _volSlider.value = String(m.getVolume());
-    if (_trackInfoEl && m && typeof m.getCurrentTrack === 'function') {
-      var track = m.getCurrentTrack();
-      var text  = track.full || '—';
-      _trackInfoEl.textContent = text;
-      _trackInfoEl.title       = text;
-    } else if (_trackInfoEl) {
-      _trackInfoEl.textContent = '—';
+    if (el && window.SOG && SOG.gold) {
+      var val = SOG.gold.get();
+      el.textContent = val;
+      // Triple-digit (100+) totals get a 2px-smaller font so they fit the coin.
+      el.classList.toggle('gold-triple', String(val).length >= 3);
     }
+  }
+
+  // Set the central region/location label (called by overworld.js loadMap with
+  // the current map's display name). Purely a display update — no behaviour.
+  function setRegion(name) {
+    var el = document.getElementById('adv-hud-region');
+    if (el) el.textContent = name || '';
+  }
+
+  // Set the player's display name (default "Explorer"). Wired for a future name
+  // system; purely a display update.
+  function setName(name) {
+    var el = document.getElementById('adv-hud-player-name');
+    if (el) el.textContent = name || 'Explorer';
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -365,10 +246,29 @@ SOG.HUD = (function () {
   }
 
   function _wireUtilButtons() {
-    var dbBtn  = document.getElementById('adv-hud-btn-deckbuilder');
+    // Card-back deck element — merges the old deck slot + Deck Builder button.
+    // Clicking it opens the solo deck builder (same path battlelobby uses).
+    if (_deckEl) {
+      _deckEl.addEventListener('click', function () {
+        if (_inDialogue) return;            // suppress clicks during dialogue
+        if (!_deckbuilderUnlocked()) return; // locked early in adventure mode
+        _openDeckBuilder();
+      });
+    }
+    // Options icon — unlabeled; same stub the old OPTIONS button had.
     var optBtn = document.getElementById('adv-hud-btn-options');
-    if (dbBtn)  dbBtn.addEventListener('click',  function () { log('Deck Builder clicked — stub'); });
-    if (optBtn) optBtn.addEventListener('click', function () { log('Options clicked — stub');       });
+    if (optBtn) optBtn.addEventListener('click', function () { log('Options clicked — stub'); });
+  }
+
+  function _openDeckBuilder() {
+    window.versusStudentMode = false;   // solo deck building (not the versus flow)
+    window.multiplayerMode   = false;
+    // Adventure context: the deck builder is being managed from the overworld
+    // HUD (not a battle/Arcadium entry). This drives the "Back to Map" /
+    // "Save Decks" buttons. Cleared when the player clicks Back to Map.
+    window.deckBuilderFromOverworld = true;
+    if (typeof window.showScreen === 'function') window.showScreen('screen-deckbuilder');
+    if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -388,7 +288,6 @@ SOG.HUD = (function () {
       if (_hudEl) _hudEl.style.display = '';
       if (id === 'screen-overworld') {
         refreshDecks();
-        _syncMusicUI();
       }
     };
   }
@@ -765,7 +664,6 @@ SOG.HUD = (function () {
     if (!_hudEl) return;
     _hudEl.style.display = 'flex';
     refreshDecks();
-    _syncMusicUI();
     log('show()');
   }
 
@@ -841,6 +739,8 @@ SOG.HUD = (function () {
     hide:               hide,
     refreshDecks:       refreshDecks,
     refreshGold:        refreshGold,
+    setRegion:          setRegion,
+    setName:            setName,
     runDialogue:        runDialogue,
     runLines:           runLines,
     showDialogueLine:   showDialogueLine,

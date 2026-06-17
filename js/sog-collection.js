@@ -83,7 +83,12 @@ SOG.collection = (function () {
       if (_isStarter(id)) return;            // starters are config — not persisted
       if (earned.indexOf(id) === -1) { earned.push(id); changed = true; }
     });
-    if (changed) _writeEarned(earned);
+    if (changed) {
+      _writeEarned(earned);
+      // Keep the default deck (slot 1) in step with the collection while the
+      // deck builder is still locked (no-op once the player owns deck comp).
+      syncDefaultDeck();
+    }
     return changed;
   }
 
@@ -101,15 +106,36 @@ SOG.collection = (function () {
     }
   }
 
+  // While the deck builder is still LOCKED (early adventure), the player can't
+  // compose decks yet, so the DEFAULT deck (slot 1) auto-mirrors the collection:
+  // the 8 starters at the start, then Lucy / Ötzi / Neanderthal / Cuneiform /
+  // marketplace buys as they're earned. This is what the Gilgamesh battle plays
+  // from. Once the builder unlocks (post-marketplace), the player owns deck
+  // composition and we stop touching slot 1.
+  var KEY_DECKBUILDER_UNLOCKED = 'sog_deckbuilder_unlocked';
+  function _deckbuilderUnlocked() {
+    try { return localStorage.getItem(KEY_DECKBUILDER_UNLOCKED) === 'true'; } catch (e) { return false; }
+  }
+  function syncDefaultDeck() {
+    if (_deckbuilderUnlocked()) return false;     // player owns deck comp now
+    if (!window.Decks || typeof window.Decks.setDeckCards !== 'function') return false;
+    window.Decks.setDeckCards(1, getUnlockedCards());
+    if (typeof window.Decks.setActiveSlot === 'function') window.Decks.setActiveSlot(1);
+    return true;
+  }
+
   /* ── Boot: apply the owned view (starters ∪ earned → locked:false). Mirrors
         the rehydration cards.js used to do, now extended to include starters. ── */
   getUnlockedCards().forEach(function (id) { _applyOwned(id, true); });
+  // Seed the default deck from the collection on boot (no-op once unlocked).
+  syncDefaultDeck();
 
   return {
     STARTER_CARD_IDS: STARTER_CARD_IDS.slice(),
     getUnlockedCards: getUnlockedCards,
     isUnlocked:       isUnlocked,
     unlockCard:       unlockCard,
+    syncDefaultDeck:  syncDefaultDeck,
     resetCollection:  resetCollection
   };
 })();

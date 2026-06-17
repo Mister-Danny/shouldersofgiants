@@ -64,7 +64,9 @@
                   && typeof d.name === 'string'
                   && Array.isArray(d.cards);
             });
-            if (ok) return parsed;
+            if (ok) {
+              return parsed;
+            }
           }
         }
       }
@@ -142,13 +144,12 @@
 
   function _save() { persistDecks(_decks); }
 
-  // Adventure Mode builds a smaller deck (12) than Arcadium/multiplayer (15).
-  // Keyed on the same flag the deck builder uses to detect adventure mode.
-  var ADVENTURE_DECK_SIZE = 12;
-  function effectiveDeckSize() {
-    return (typeof window !== 'undefined' && window.adventureBattleTarget)
-      ? ADVENTURE_DECK_SIZE : DECK_SIZE;
-  }
+  // The deck-size cap (15) — the hard MAXIMUM a deck can hold, used by addCard's
+  // cap and the builder counter. Decks may be SAVED with fewer than 15 cards
+  // (early adventure battles like Gilgamesh and the Prehistory tutorials accept
+  // partial decks); the 15-card requirement is enforced at battle entry for the
+  // "going forward" battles (Arcadium / multiplayer), not here.
+  function effectiveDeckSize() { return DECK_SIZE; }
 
   function addCard(cardId) {
     var d = _decks[_active - 1];
@@ -170,6 +171,23 @@
 
   function hasCard(cardId) {
     return _decks[_active - 1].cards.indexOf(cardId) !== -1;
+  }
+
+  // Replace a slot's entire card list (deduped, capped at DECK_SIZE). Used by the
+  // default-deck auto-sync: while the deck builder is still locked, slot 1 mirrors
+  // the player's collection so adventure battles always have a ready-made deck.
+  function setDeckCards(slot, ids) {
+    var d = getDeck(slot);
+    if (!d) return false;
+    var seen = {}, clean = [];
+    (ids || []).forEach(function (id) {
+      if (typeof id === 'number' && !seen[id] && clean.length < DECK_SIZE) {
+        seen[id] = true; clean.push(id);
+      }
+    });
+    d.cards = clean;
+    _save();
+    return true;
   }
 
   function rename(slot, raw) {
@@ -217,6 +235,7 @@
     getActiveCards: getActiveCards,
     getCardCount:   getCardCount,
     addCard:        addCard,
+    setDeckCards:   setDeckCards,
     removeCard:     removeCard,
     hasCard:        hasCard,
     rename:         rename,

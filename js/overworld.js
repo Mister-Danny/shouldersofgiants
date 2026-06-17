@@ -30,6 +30,7 @@ var Overworld = (function () {
   var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set on the Gilgamesh win
   var KEY_MARKET_FIRST_VISIT        = 'sog_market_first_visit_done';   // one-time auto-walk into the market
   var KEY_MARKET_INTRO_SEEN         = 'sog_market_intro_seen';         // one-time trader intro dialogue
+  var KEY_DECKBUILDER_UNLOCKED      = 'sog_deckbuilder_unlocked';      // deck builder button un-greys after first marketplace return
   // Phase D2c
   var KEY_MET_GILGAMESH             = 'sog_met_gilgamesh';              // set after the "You will be." line
   var KEY_MESO_STARTER_GRANTED      = 'sog_mesopotamia_starter_granted'; // set after all 5 card grants complete
@@ -202,6 +203,11 @@ var Overworld = (function () {
     { who: 'explorer', text: 'Couldn’t you share?'                                },
     { who: 'hunter',   text: 'What does that mean?'                                    }
   ];
+  // One-time, on the FIRST return from the marketplace — un-greys the deck builder.
+  var DECKBUILDER_UNLOCK_DIALOGUE = [
+    { who: 'explorer', text: 'I’m starting to build quite a collection.' },
+    { who: 'explorer', text: 'Let’s see if I can build a deck.'          }
+  ];
   // One-time, first click of the To Egypt box — plays before the walk-off.
   var TOEGYPT_GOODBYE_DIALOGUE = [
     { who: 'hunter',   text: 'Hey, where are you going?'                               },
@@ -233,6 +239,7 @@ var Overworld = (function () {
 
   var MAPS = {
     'eastafrica': {
+      displayName: 'East Africa',
       image: MAP_PATH + 'eastafrica.jpeg',
       // Spawn: at the foot of Kilimanjaro — right of the explorer dialogue box
       // (box is at left:35% viewport; character at x:65 puts her clearly east of it).
@@ -319,6 +326,7 @@ var Overworld = (function () {
     },
 
     'egypt': {
+      displayName: 'Egypt',
       image: MAP_PATH + 'egypt.jpeg',
       spawn: { x: 10, y: 85 },
       startsFogged: true,
@@ -344,6 +352,7 @@ var Overworld = (function () {
     },
 
     'mesopotamia': {
+      displayName: 'Mesopotamia',
       image: MAP_PATH + 'mesopotamia.jpeg',
       spawn: { x: 10, y: 85 },
       startsFogged: true,
@@ -391,6 +400,7 @@ var Overworld = (function () {
           image: NODE_PATH + 'mesomarketnode@0.5x.png',
           x: 80, y: 66,
           scale: 2,   // node sprite rendered too small at natural size — double it
+          flipX: true, // mirror the stall sprite horizontally to face the other way
           showIf: function () {
             try { return localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; } catch (e) { return false; }
           }
@@ -647,6 +657,12 @@ var Overworld = (function () {
     document.body.classList.toggle('overworld-away-from-home', mapId !== 'eastafrica');
     mapImgEl.src = data.image;
 
+    // Update the HUD region label to the current map's display name (dynamic —
+    // never hardcoded). Guarded: a no-op if the HUD isn't present/ready.
+    if (window.SOG && SOG.HUD && typeof SOG.HUD.setRegion === 'function') {
+      SOG.HUD.setRegion(data.displayName || mapId);
+    }
+
     // Clear overlay. Character is re-appended LAST (after nodes and exits)
     // so it always paints on top in DOM order — prevents node images from
     // covering the character when she stands at the same position as a node.
@@ -667,6 +683,7 @@ var Overworld = (function () {
       img.src = n.image;
       img.alt = n.name;
       img.draggable = false;
+      if (n.flipX) img.style.transform = 'scaleX(-1)';
       nodeEl.appendChild(img);
       // Optional hover label (e.g. "To Egypt" on the signpost node).
       if (n.label) {
@@ -1964,7 +1981,31 @@ var Overworld = (function () {
     var screen = document.getElementById('adv-market-screen');
     if (screen && screen.parentNode) screen.parentNode.removeChild(screen);
     isDialogueLocked = false;
-    scheduleIdle();
+    // First time back from the marketplace, the explorer notes the growing
+    // collection and the deck builder un-greys. One-time; gated below.
+    _maybePlayDeckBuilderUnlock(function () { scheduleIdle(); });
+  }
+
+  // One-time deck-builder unlock: after the player has won Gilgamesh and visited
+  // the marketplace, play the explorer's "let's build a deck" beat, set the
+  // unlock flag, and refresh the HUD so the (previously greyed) deck button
+  // becomes clickable. No-op once already unlocked or before the Gilgamesh win.
+  function _maybePlayDeckBuilderUnlock(done) {
+    var won = false, already = false;
+    try {
+      won     = localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true';
+      already = localStorage.getItem(KEY_DECKBUILDER_UNLOCKED) === 'true';
+    } catch (e) {}
+    if (!won || already) { if (done) done(); return; }
+    isDialogueLocked = true;
+    cancelIdle();
+    runDialogue(DECKBUILDER_UNLOCK_DIALOGUE, function () {
+      try { localStorage.setItem(KEY_DECKBUILDER_UNLOCKED, 'true'); } catch (e) {}
+      isDialogueLocked = false;
+      var hud = window.SOG && window.SOG.HUD;
+      if (hud && typeof hud.refreshDecks === 'function') hud.refreshDecks();  // un-grey
+      if (done) done();
+    });
   }
 
   /* ── Market buy popup (market-specific; NOT the shared battle popup) ─────
@@ -1976,6 +2017,14 @@ var Overworld = (function () {
     var p = document.getElementById('adv-market-buy');
     if (p && p.parentNode) p.parentNode.removeChild(p);
   }
+
+  // Card type → category-symbol class (mirrors the battle/deck-builder popups).
+  // Labor / Economic have no symbol art yet → fall through to a text-only type.
+  var MARKET_TYPE_ICON = {
+    Political: 'political', Religious: 'religious', Military: 'military',
+    Cultural: 'cultural', Exploration: 'exploration', Scientific: 'scientific',
+    Prehistory: 'prehistory'
+  };
 
   function _openMarketBuyPopup(card, price) {
     _closeMarketBuyPopup();
@@ -2000,8 +2049,9 @@ var Overworld = (function () {
     } else if (window.buildCardImg) { big.appendChild(window.buildCardImg(card)); }
 
     // Detail box (flush against the card's right edge, same height → one entity).
+    // Width brought in 15% (340 → 289); the unit stays centred via the overlay.
     var box = document.createElement('div');
-    box.style.cssText = 'width:340px;height:' + CARD_H + 'px;flex-shrink:0;display:flex;flex-direction:column;' +
+    box.style.cssText = 'width:289px;height:' + CARD_H + 'px;flex-shrink:0;display:flex;flex-direction:column;' +
       'background:linear-gradient(180deg,#f6efdc 0%,#e8dcb8 100%);border:3px solid #1a0a04;border-left:none;' +
       'border-radius:0 8px 8px 0;color:#1a0a04;font-family:var(--font,sans-serif);';
 
@@ -2011,9 +2061,17 @@ var Overworld = (function () {
     var nameEl = document.createElement('div');
     nameEl.textContent = card.name;
     nameEl.style.cssText = 'font-size:26px;font-weight:bold;letter-spacing:0.02em;margin-bottom:4px;';
+    // Type row: category symbol + "TYPE · ERA" (matches the battle/deck-builder
+    // popups). Uses the shared .popup-card-type / .cat-icon styling.
     var typeEl = document.createElement('div');
-    typeEl.textContent = (card.type || '') + (card.era ? (card.type ? ' · ' : '') + card.era : '');
-    typeEl.style.cssText = 'font-size:13px;opacity:0.7;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;';
+    typeEl.className = 'popup-card-type';
+    typeEl.style.cssText = 'font-size:14px;opacity:0.8;letter-spacing:0.08em;margin-bottom:14px;' +
+      'color:inherit;text-shadow:none;';
+    var _ic = MARKET_TYPE_ICON[card.type];
+    var _icHTML = _ic ? '<span class="cat-icon cat-icon--' + _ic + '" aria-hidden="true"></span>' : '';
+    var _lbl = (card.type || '');
+    if (card.era && card.era !== card.type) _lbl += (_lbl ? ' · ' : '') + card.era;
+    typeEl.innerHTML = _icHTML + '<span class="cat-label">' + _lbl.toUpperCase() + '</span>';
     content.appendChild(nameEl); content.appendChild(typeEl);
     if (card.abilityName) {
       var abNm = document.createElement('div');
@@ -2179,6 +2237,7 @@ var Overworld = (function () {
       img.src = n.image;
       img.alt = n.name;
       img.draggable = false;
+      if (n.flipX) img.style.transform = 'scaleX(-1)';
       nodeEl.appendChild(img);
       if (n.label) {
         var labelEl = document.createElement('div');

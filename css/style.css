@@ -854,6 +854,14 @@ img    { display: block; }
   box-shadow: 0 2px 0 rgba(0,0,0,0.4);
   cursor: not-allowed;
 }
+/* Brief "Saved ✓" confirmation flash on the adventure-mode Save Decks button */
+.btn-save.db-saved-flash,
+.btn-save.db-saved-flash:hover {
+  background: rgba(40, 78, 28, 0.96);
+  border-color: #7fcf5a;
+  color: #e8ffd8;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 16px rgba(127, 207, 90, 0.45);
+}
 
 /* Deselect All button — warm muted red accent */
 .btn-deselect-all {
@@ -1459,13 +1467,12 @@ img    { display: block; }
   width: 1em;
   height: 1em;
   flex-shrink: 0;
-  background-color: currentColor;
-  -webkit-mask-position: center;
-          mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-          mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-          mask-size: contain;
+  /* Render the symbol art directly as a background image (universally supported —
+     unlike CSS mask, which didn't render on some browsers). The art is solid
+     black on transparent; it's inverted to a light tint on the dark popups below. */
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
 }
 /* Per-category translate values compensate for transparent padding
    inside each source PNG so the visible ink's bottom anchors to the
@@ -1474,38 +1481,44 @@ img    { display: block; }
      religious.png:   2.54% → translateY(0.025em)
      military / cultural / exploration: 0% → no translate */
 .popup-card-type .cat-icon--political {
-  -webkit-mask-image: url('../images/symbols/politcal.png');
-          mask-image: url('../images/symbols/politcal.png');
+  background-image: url('../images/symbols/politcal.png');
   transform: translateY(0.06em);
 }
 .popup-card-type .cat-icon--religious {
-  -webkit-mask-image: url('../images/symbols/religious.png');
-          mask-image: url('../images/symbols/religious.png');
+  background-image: url('../images/symbols/religious.png');
   width: 0.80em;
   height: 0.80em;
   transform: translateY(0.02em);
 }
 .popup-card-type .cat-icon--military {
-  -webkit-mask-image: url('../images/symbols/military.png');
-          mask-image: url('../images/symbols/military.png');
+  background-image: url('../images/symbols/military.png');
   width: 0.80em;
   height: 0.80em;
 }
 .popup-card-type .cat-icon--cultural {
-  -webkit-mask-image: url('../images/symbols/cultural.png');
-          mask-image: url('../images/symbols/cultural.png');
+  background-image: url('../images/symbols/cultural.png');
   width: 0.80em;
   height: 0.80em;
 }
 .popup-card-type .cat-icon--exploration {
-  -webkit-mask-image: url('../images/symbols/exploration.png');
-          mask-image: url('../images/symbols/exploration.png');
+  background-image: url('../images/symbols/exploration.png');
   width: 0.80em;
   height: 0.80em;
 }
 .popup-card-type .cat-icon--scientific {
-  -webkit-mask-image: url('../images/symbols/scientific.svg');
-          mask-image: url('../images/symbols/scientific.svg');
+  background-image: url('../images/symbols/scientific.png');
+}
+.popup-card-type .cat-icon--prehistory {
+  background-image: url('../images/symbols/prehistory.png');
+  transform: translateY(0.06em);   /* 6.3% bottom padding → baseline nudge */
+}
+
+/* The battle / deck-builder popups are dark (their type sits in a
+   .popup-header-row); the black symbol art would vanish, so invert it to a
+   light tint there. The marketplace popup is light parchment (its type is a
+   bare .popup-card-type, NOT in a header row), so the black art is left as-is. */
+.popup-header-row .popup-card-type .cat-icon {
+  filter: invert(1);
 }
 
 /* Horizontal rule between name and ability */
@@ -8216,32 +8229,47 @@ body.tut-locked #battle-reset-turn {
    right zone. Speaker rings (is-speaker) highlight who is talking.
    ================================================================ */
 
-/* Center zone needs position:relative for absolute dialogue overlay */
-#adv-hud-center { position: relative; }
+/* The dialogue overlay (#adv-hud-dialogue, a child of #adv-hud-center) is left
+   intentionally NOT positioned here so the overlay's `inset:0` resolves against
+   the whole bar (#adv-hud, position:absolute) instead of the off-centre centre
+   zone. That keeps the diagonal divider at the TRUE screen centre regardless of
+   how wide the left/right resting groups are. */
+#adv-hud-center { position: static; }
 
 /* Right zone needs position:relative for absolute NPC slot */
 #adv-hud-util   { position: relative; }
 
 /* ── Resting → dialogue transitions ─────────────────────────── */
 
-#adv-hud-decks,
-#adv-hud-music {
+#adv-hud-region,
+#adv-hud-player-name,
+#adv-hud-gold,
+#adv-hud-deck,
+#adv-hud-btn-options {
   transition: opacity 0.25s ease;
 }
+#adv-hud-stamina-col {
+  transition: opacity 0.25s ease, width 0.25s ease, margin 0.25s ease;
+}
 
-#adv-hud.dialogue-mode #adv-hud-decks,
-#adv-hud.dialogue-mode #adv-hud-music {
+#adv-hud.dialogue-mode #adv-hud-region,
+#adv-hud.dialogue-mode #adv-hud-player-name,
+#adv-hud.dialogue-mode #adv-hud-stamina-col,
+#adv-hud.dialogue-mode #adv-hud-gold,
+#adv-hud.dialogue-mode #adv-hud-deck,
+#adv-hud.dialogue-mode #adv-hud-btn-options {
   opacity: 0;
   pointer-events: none;
 }
 
-.adv-hud-util-btn {
-  transition: opacity 0.25s ease;
-}
-
-#adv-hud.dialogue-mode .adv-hud-util-btn {
-  opacity: 0;
-  pointer-events: none;
+/* Left-group stamina collapses its width in dialogue mode so the player portrait
+   stands alone at the left edge (its retained space isn't covered by the dialogue
+   overlay). The right-group gold + deck + options stay put — the NPC portrait
+   slot (inset:0 over #adv-hud-util) covers them. */
+#adv-hud.dialogue-mode #adv-hud-stamina-col {
+  width: 0;
+  margin: 0;
+  overflow: hidden;
 }
 
 /* ── Dialogue text area (State B center) ─────────────────────── */
@@ -8291,22 +8319,25 @@ body.tut-locked #battle-reset-turn {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 50%;
+  width: 50%;             /* each zone = one screen half (overlay spans the bar) */
   display: none;          /* hidden until .active */
   align-items: center;
-  padding: 0 24px;
+  padding: 0 28px;
   overflow: hidden;
 }
 
-/* Player zone occupies the LEFT half */
+/* Player zone occupies the LEFT half; outer padding clears the player portrait. */
 #adv-hud-dlg-player {
   left: 0;
+  padding-left: 130px;
 }
 
-/* NPC zone occupies the RIGHT half; text floats right */
+/* NPC zone occupies the RIGHT half; text floats right, outer padding clears the
+   NPC portrait at the bar's right edge. */
 .adv-hud-dlg-zone--npc {
   right: 0;
   justify-content: flex-end;
+  padding-right: 142px;
 }
 
 .adv-hud-dlg-zone.active {
@@ -8371,7 +8402,8 @@ body.tut-locked #battle-reset-turn {
   inset: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;   /* hug the right edge — util now also holds music */
+  padding-right: 34px;         /* keep the NPC portrait where it sat at 168px-wide util */
   overflow: hidden;   /* clips scaled/zoomed portrait to the HUD bar bounds */
   opacity: 0;
   pointer-events: none;
@@ -9546,14 +9578,28 @@ body.prehistory-battle .db-overlay-ip {
   align-items: stretch;
   z-index: 150;
 
-  /* Dark wood plank — fine horizontal grain + warm browns */
+  /* Natural wood — warm boards with soft, slightly irregular long grain running
+     along the bar (two overlaid grain layers with different periods so the lines
+     don't read as a regular stripe), gentle tonal banding, and a top-lit sheen. */
   background:
-    repeating-linear-gradient(
-      0deg,
-      transparent 0px, transparent 5px,
-      rgba(0, 0, 0, 0.06) 5px, rgba(0, 0, 0, 0.06) 6px
-    ),
-    linear-gradient(180deg, #4a2c0e 0%, #3a1e08 45%, #2e1605 100%);
+    /* fine grain layer A */
+    repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, 0)        0px,
+      rgba(0, 0, 0, 0)        6px,
+      rgba(38, 20, 6, 0.07)   7px,
+      rgba(0, 0, 0, 0)        9px),
+    /* fine grain layer B (different period → quasi-irregular) */
+    repeating-linear-gradient(0deg,
+      rgba(255, 226, 180, 0.025) 0px,
+      rgba(255, 226, 180, 0.025) 1px,
+      rgba(0, 0, 0, 0)           11px),
+    /* broad tonal bands for natural colour variation */
+    linear-gradient(0deg,
+      rgba(90, 55, 22, 0.10) 0%,
+      rgba(0, 0, 0, 0.00)    50%,
+      rgba(70, 42, 16, 0.10) 100%),
+    /* warm base, top-lit → darker at the bottom */
+    linear-gradient(180deg, #6e4119 0%, #5a3414 42%, #482a0f 78%, #3c2209 100%);
   border-top: 3px solid #d4aa50;
   box-shadow:
     inset 0 2px 0 rgba(248, 220, 80, 0.12),
@@ -9584,27 +9630,38 @@ body[data-screen="overworld"] #overworld-overlay {
   height: calc(100% - 120px);   /* 720 - 120 = 600 px */
 }
 
-/* ── LEFT: Portrait zone (120 × 96 px) ──────────────────────── */
+/* ── LEFT group: avatar+name · stamina/textbook · gold coin ────────
+   Anchored to the left edge. Children spaced by margins (no flex gap) so
+   stamina + gold collapse cleanly to width 0 in dialogue mode. */
+#adv-hud-left {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+/* ── Portrait zone — avatar + static player title stacked ──────── */
 #adv-hud-portrait {
   width: 120px;
   flex-shrink: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(ellipse at 50% 30%, rgba(180, 130, 40, 0.14) 0%, transparent 65%),
-    linear-gradient(180deg, #3e2208 0%, #2a1804 100%);
+  gap: 4px;
+  /* Transparent so the HUD's wood texture runs continuously behind the
+     portrait (no separate brown panel around the frame). */
+  background: transparent;
   cursor: pointer;
   transition: background 0.15s;
 }
 #adv-hud-portrait:hover {
-  background:
-    radial-gradient(ellipse at 50% 30%, rgba(200, 150, 50, 0.22) 0%, transparent 65%),
-    linear-gradient(180deg, #4e2e10 0%, #3a2208 100%);
+  /* Subtle warm highlight over the wood on hover. */
+  background: radial-gradient(ellipse at 50% 35%, rgba(212, 170, 80, 0.16) 0%, transparent 70%);
 }
 #adv-hud-portrait img {
-  width: 100px;
-  height: 100px;
+  width: 84px;
+  height: 84px;
   object-fit: cover;
   object-position: center top;
   border: 2px solid #d4aa50;
@@ -9615,154 +9672,57 @@ body[data-screen="overworld"] #overworld-overlay {
   display: block;
 }
 
-/* ── CENTER: Deck slots (left) + music strip (right) ─────────── */
-#adv-hud-center {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  padding: 8px 12px 8px 8px;
-  gap: 16px;
-}
-
-/* Left portion: six deck slots spread evenly across available space */
-#adv-hud-decks {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: row;
-  justify-content: space-evenly;
-  align-items: center;
-}
-
-/* Individual deck slot tile — 96×96 px square */
-.adv-hud-deck-slot {
-  width: 96px;
-  height: 96px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 2px;
-  border: 1px solid rgba(212, 170, 80, 0.28);
-  border-radius: 3px;
-  cursor: pointer;
-  overflow: hidden;
-  background: linear-gradient(180deg, #281404 0%, #1e1002 100%);
-  transition: border-color 0.12s, background 0.12s;
-}
-.adv-hud-deck-slot:hover {
-  border-color: rgba(212, 170, 80, 0.70);
-  background: linear-gradient(180deg, #3a1c08 0%, #2a1406 100%);
-}
-
-/* Occupied variant — goldish parchment, matching .db-slot-card */
-.adv-hud-deck-slot--occupied {
-  background: linear-gradient(180deg, #b8945a 0%, #9a7a3c 100%);
-  border-color: rgba(160, 100, 24, 0.85);
-}
-.adv-hud-deck-slot--occupied:hover {
-  background: linear-gradient(180deg, #c9a368 0%, #a88844 100%);
-  border-color: #a07030;
-}
-
-/* Thumbnail area (top part of occupied slot) */
-.adv-hud-deck-thumb {
-  width: 100%;
-  flex: 1;
-  min-height: 0;
-  background: rgba(0, 0, 0, 0.16);
-}
-
-/* Deck name label (bottom of occupied slot) */
-.adv-hud-deck-name {
+/* Static player title (default "Explorer"); SOG.HUD.setName() can feed it. */
+#adv-hud-player-name {
   font-family: var(--font);
-  font-size: 8px;
-  color: #2a1608;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-  width: 100%;
-  text-align: center;
-  padding: 0 3px 2px;
-  flex-shrink: 0;
-  text-shadow: 0 1px 0 rgba(255, 240, 200, 0.30);
-}
-
-/* Empty slot: dashed ring + "+" glyph */
-.adv-hud-deck-empty {
-  width: 26px;
-  height: 26px;
-  border: 2px dashed rgba(212, 170, 80, 0.28);
-  border-radius: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font);
-  font-size: 18px;
-  color: rgba(212, 170, 80, 0.32);
-  line-height: 1;
-  transition: border-color 0.12s, color 0.12s;
-}
-.adv-hud-deck-slot:hover .adv-hud-deck-empty {
-  border-color: rgba(212, 170, 80, 0.60);
-  color: rgba(212, 170, 80, 0.65);
-}
-
-/* ── Restructured HUD centre: single deck tile + gold + stamina ────────── */
-
-/* The single active-deck tile — a touch wider so the name reads cleanly. */
-.adv-hud-deck-slot--single { width: 104px; }
-.adv-hud-deck-slot--single .adv-hud-deck-name { font-size: 9px; }
-
-/* Gold display — coin + balance. */
-.adv-hud-gold {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.adv-hud-gold-coin {
-  width: 38px;
-  height: 38px;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
-}
-.adv-hud-gold-num {
-  font-family: var(--font);
-  font-size: 26px;
+  font-size: 11px;
   font-weight: bold;
-  color: #f3d574;
-  letter-spacing: 0.02em;
-  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.6), 0 0 1px #5a3a08;
+  letter-spacing: 0.06em;
+  color: rgba(243, 213, 116, 0.95);
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  line-height: 1;
+  white-space: nowrap;
 }
 
-/* Stamina bar — PLACEHOLDER (cosmetic, no mechanic yet). */
-.adv-hud-stamina {
+/* ── Stamina column — fills the full bar height: the big STAMINA word fills
+   the space above the (thin, HUD-centred) bar, and the textbook fills the
+   space below. Label + textbook share equal flex so the bar stays centred. */
+#adv-hud-stamina-col {
+  flex-shrink: 0;
+  margin-left: 16px;
+  align-self: stretch;
+  width: 168px;   /* widened so the left group ≈ the right group (balance) */
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  width: 150px;
-  flex-shrink: 0;
+  justify-content: center;
+  padding: 6px 0;
 }
+/* STAMINA word — grows to fill the top space, large. */
 .adv-hud-stamina-label {
-  font-family: var(--font);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  color: rgba(212, 170, 80, 0.85);
-  text-transform: uppercase;
-}
-.adv-hud-stamina-track {
+  flex: 1 1 0;
+  min-height: 0;
   width: 100%;
-  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font);
+  font-size: 22px;
+  font-weight: bold;
+  letter-spacing: 0.07em;
+  color: rgba(212, 170, 80, 0.9);
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  line-height: 1;
+}
+/* Thin bar — sits centred in the HUD. */
+.adv-hud-stamina-track {
+  flex-shrink: 0;
+  width: 100%;
+  height: 9px;
   border: 1px solid rgba(212, 170, 80, 0.5);
-  border-radius: 7px;
+  border-radius: 5px;
   background: rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
@@ -9772,158 +9732,190 @@ body[data-screen="overworld"] #overworld-overlay {
   background: linear-gradient(180deg, #6fcf5a 0%, #3fae2e 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
+/* Textbook — placeholder for a future learning-check that boosts stamina.
+   Shares equal flex with the STAMINA word (so the bar stays centred) and fills
+   the bottom space; aspect-ratio keeps it square so the (4096px) source can't
+   claim its natural width and blow out the column. */
+#adv-hud-textbook {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+  width: auto;
+  aspect-ratio: 1 / 1;
+  max-width: 150px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+  user-select: none;
+  display: block;
+}
 
-/* Right portion: compact music panel — fixed ~230 px, two stacked rows */
-#adv-hud-music {
-  flex: 0 0 230px;
+/* ── Gold — coin with the balance overlaid in its centre (white) ── */
+#adv-hud-gold {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Coin is taller than the 120px bar — anchor it to the bottom so it overflows
+     into the map. Nudged down slightly (the visible coin face has generous
+     transparent padding, so it won't clip). */
+  align-self: flex-end;
+  margin-bottom: -1px;
+}
+/* Coin 25% bigger again (116→145px); overflows the bar top. */
+#adv-hud-gold-coin {
+  width: 145px;
+  height: 145px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
+  user-select: none;
+  display: block;
+}
+#adv-hud-gold-num {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  /* The coin face centre sits ~3% below the image centre, so nudge the number
+     down to sit in the middle of the visible coin. */
+  transform: translate(-50%, calc(-50% + 4px));
+  font-family: var(--font);
+  font-size: 37px;
+  font-weight: bold;
+  color: #ffffff;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 3px rgba(120, 70, 10, 0.9);
+  pointer-events: none;
+}
+/* Triple-digit (100+) totals drop 2px so the wider number still fits the coin. */
+#adv-hud-gold-num.gold-triple {
+  font-size: 35px;
+}
+
+/* ── MIDDLE: dynamic region name (BIG); also hosts the dialogue overlay
+   (position: relative set in the State B block above). ──────────── */
+#adv-hud-center {
+  flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-  padding: 4px 0;
-}
-
-/* Top row: clip container masks overflow while inner span crawls */
-.adv-hud-track-wrap {
-  width: 100%;
-  overflow: hidden;
-}
-
-/* Crawling track name — translates from off-screen right to off-screen left */
-.adv-hud-track-info {
-  display: inline-block;
-  white-space: nowrap;
-  font-family: var(--font);
-  font-size: 20px;
-  color: rgba(212, 170, 80, 0.75);
-  letter-spacing: 0.05em;
-  line-height: 1.2;
-  animation: hud-marquee 16s linear infinite;
-}
-
-@keyframes hud-marquee {
-  0%   { transform: translateX(230px); }   /* enter from off-screen right */
-  100% { transform: translateX(-100%); }   /* exit off-screen left */
-}
-
-/* Bottom row: play/pause button + volume slider */
-.adv-hud-music-controls {
-  display: flex;
-  flex-direction: row;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  justify-content: center;
+  padding: 8px 16px;
 }
-
-/* Play/Pause button */
-.adv-hud-music-btn {
-  background: rgba(0, 0, 0, 0.30);
-  border: 1px solid rgba(212, 170, 80, 0.38);
-  border-radius: 2px;
-  color: #f8d000;
-  font-size: 11px;
+#adv-hud-region {
+  /* Absolutely centred on the WHOLE bar (independent of the left/right groups'
+     widths) so the region name is dead-centre horizontally on screen. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1;
+  font-family: var(--font);
+  font-size: 38px;
+  font-weight: bold;
+  letter-spacing: 0.10em;
+  color: #f0d99a;
+  text-transform: uppercase;
+  text-shadow: 0 3px 4px rgba(0, 0, 0, 0.65), 0 0 2px #5a3a08;
   line-height: 1;
-  padding: 2px 8px;
-  cursor: pointer;
-  font-family: var(--font);
-  flex-shrink: 0;
-  transition: border-color 0.10s, background 0.10s;
-  user-select: none;
-}
-.adv-hud-music-btn:hover {
-  border-color: #d4aa50;
-  background: rgba(212, 170, 80, 0.14);
-  color: #fff5c8;
-}
-.adv-hud-music-btn:active {
-  transform: translateY(1px);
+  white-space: nowrap;
+  text-align: center;
 }
 
-/* Volume slider — narrower now that track info has more horizontal space */
-.adv-hud-music-vol {
-  -webkit-appearance: none;
-  appearance: none;
-  flex: 1;
-  min-width: 50px;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(212, 170, 80, 0.28);
-  border-radius: 3px;
-  outline: none;
-  cursor: pointer;
-}
-.adv-hud-music-vol::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #f8d000;
-  cursor: pointer;
-  border: 1px solid #c49a28;
-  box-shadow: 0 0 4px rgba(248, 208, 0, 0.35);
-}
-.adv-hud-music-vol::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #f8d000;
-  cursor: pointer;
-  border: 1px solid #c49a28;
-  box-shadow: 0 0 4px rgba(248, 208, 0, 0.35);
-}
-
-/* ── RIGHT: Utility buttons (168 × 120 px, two 72×72 squares side-by-side) */
+/* ── RIGHT group: deck card-back (→ deck builder) · Options icon ── */
 #adv-hud-util {
-  width: 168px;
   flex-shrink: 0;
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 8px;
+  justify-content: flex-end;
+  /* Per-item margins (not a uniform gap): the coin has ~36px of transparent
+     padding on its right, so the deck is pulled in to keep the VISUAL coin→deck
+     gap equal to the deck→options gap. */
+  padding: 0 10px;
 }
+#adv-hud-deck    { margin-left: -8px; }   /* coin → deck (compensates coin padding) */
+#adv-hud-btn-options { margin-left: 24px; }  /* deck → options */
 
-/* Square parchment-frame button — 72×72 px */
-.adv-hud-util-btn {
-  width: 72px;
-  height: 72px;
+/* Card-back deck button — merges the old deck slot + Deck Builder button.
+   Click opens the deck builder; the active deck name shows underneath. */
+#adv-hud-deck {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0;
-  /* Parchment fill matching .db-slot-card */
-  background: linear-gradient(180deg, #b8945a 0%, #9a7a3c 100%);
-  border: 2px solid #7a5a20;
+  gap: 3px;
+  cursor: pointer;
+}
+.adv-hud-deck-back {
+  height: 86px;
+  width: auto;
+  border: 2px solid #d4aa50;
   border-radius: 4px;
   box-shadow:
-    0 2px 0 rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 240, 200, 0.15);
-  color: #2a1608;
+    inset 0 0 0 1px rgba(248, 220, 80, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.6);
+  display: block;
+  transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+}
+#adv-hud-deck:hover .adv-hud-deck-back {
+  transform: translateY(-2px);
+  border-color: #f6d873;
+  box-shadow:
+    inset 0 0 0 1px rgba(248, 220, 80, 0.30),
+    0 4px 10px rgba(0, 0, 0, 0.6);
+}
+#adv-hud-deck-name {
   font-family: var(--font);
   font-size: 9px;
-  letter-spacing: 0.06em;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  color: rgba(243, 213, 116, 0.95);
   text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
-  user-select: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  line-height: 1;
+  max-width: 88px;
   text-align: center;
-  line-height: 1.3;
-  padding: 4px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
-.adv-hud-util-btn:hover {
-  background: linear-gradient(180deg, #c9a368 0%, #aa8a4c 100%);
-  border-color: #9a6e2e;
-  color: #1a0a02;
-  box-shadow:
-    0 2px 0 rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 240, 200, 0.25);
+/* Locked state — greyed out + non-interactive until the deck builder unlocks
+   (after the first Gilgamesh win + marketplace visit). Keeps the player from
+   being distracted by it early in adventure mode. */
+#adv-hud-deck.adv-hud-deck-locked {
+  cursor: default;
+  pointer-events: none;
+  filter: grayscale(1) brightness(0.55);
+  opacity: 0.5;
 }
-.adv-hud-util-btn:active {
-  transform: translateY(1px);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+#adv-hud-deck.adv-hud-deck-locked #adv-hud-deck-name {
+  color: rgba(200, 200, 200, 0.6);
 }
+
+/* Options — unlabeled icon settings button. */
+#adv-hud-btn-options {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s, filter 0.12s;
+}
+#adv-hud-btn-options img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+  display: block;
+}
+#adv-hud-btn-options:hover { transform: scale(1.06); }
+#adv-hud-btn-options:hover img { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6)) brightness(1.08); }
+#adv-hud-btn-options:active { transform: scale(0.97); }
+
 /* End Adventure Mode HUD — Phase H1 */

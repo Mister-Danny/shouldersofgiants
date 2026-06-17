@@ -70,8 +70,17 @@ SOG.DevMenu = (function () {
     });
   }
 
+  // Scene jumps leave the home screen, but bypass the normal "play" button that
+  // fades home music out — so kill it here or it bleeds into the overworld/battle.
+  function stopHomeMusic() {
+    try {
+      if (window.HomeFlow && typeof window.HomeFlow.stopMusic === 'function') window.HomeFlow.stopMusic(300);
+    } catch (e) {}
+  }
+
   // Land on an overworld map instantly (no travel animation), nodes gated by flags.
   function gotoOverworld(mapId) {
+    stopHomeMusic();
     teardownBattles();
     try {
       localStorage.setItem('sog_overworld_map', mapId);
@@ -93,6 +102,7 @@ SOG.DevMenu = (function () {
         ensureAdventurer();
         setFlags(PREREQS_PREHISTORY);
         removeFlags(['sog_mesopotamia_arrival_complete']); // arrival must replay
+        stopHomeMusic();
         teardownBattles();
         try { localStorage.setItem('sog_overworld_map', 'eastafrica'); localStorage.removeItem('sog_overworld_pos'); } catch (e) {}
         if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
@@ -127,6 +137,7 @@ SOG.DevMenu = (function () {
         });
         removeFlags(['sog_gilgamesh_phase1_complete']); // Battle 1 (fixed deck), not the rematch
         hide();
+        stopHomeMusic();
         teardownBattles();   // clean up any in-progress battle so we start fresh
         if (window.SOG && SOG.GilgameshBattle && SOG.GilgameshBattle.start) SOG.GilgameshBattle.start();
       }
@@ -141,7 +152,8 @@ SOG.DevMenu = (function () {
         setFlags({
           'sog_mesopotamia_arrival_complete': 'true',
           'sog_met_gilgamesh':                'true',
-          'sog_cuneiform_granted':            'true'
+          'sog_cuneiform_granted':            'true',
+          'sog_deckbuilder_unlocked':         'true'   // deck builder usable for testing
         });
         unlockCards([46]);
         gotoOverworld('mesopotamia');
@@ -150,6 +162,19 @@ SOG.DevMenu = (function () {
     },
 
     // ── 🎴 Card / State Toggles ──
+    {
+      section: '🎴 Card / State Toggles',
+      label: 'Toggle Deck Builder Lock',
+      description: 'Flip sog_deckbuilder_unlocked (greys / un-greys the HUD deck button)',
+      run: function () {
+        var on = false;
+        try { on = localStorage.getItem('sog_deckbuilder_unlocked') === 'true'; } catch (e) {}
+        setFlags({ 'sog_deckbuilder_unlocked': on ? 'false' : 'true' });
+        var hud = window.SOG && window.SOG.HUD;
+        if (hud && typeof hud.refreshDecks === 'function') hud.refreshDecks();
+        flash('Deck builder ' + (on ? 'LOCKED' : 'UNLOCKED'));
+      }
+    },
     {
       section: '🎴 Card / State Toggles',
       label: 'Grant Cuneiform',
@@ -173,7 +198,10 @@ SOG.DevMenu = (function () {
           'sog_cuneiform_granted',
           'sog_met_gilgamesh',
           'sog_gilgamesh_opening_seen',
-          'sog_mesopotamia_starter_granted'
+          'sog_mesopotamia_starter_granted',
+          'sog_deckbuilder_unlocked',
+          'sog_market_first_visit_done',
+          'sog_market_intro_seen'
         ]);
         relockCards([46, 38, 39, 40, 41, 42]); // Cuneiform + the 5 Mesopotamia starters
         flash('Gilgamesh arc reset');

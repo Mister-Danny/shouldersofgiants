@@ -62,9 +62,10 @@
     Military:    'military',
     Cultural:    'cultural',
     Exploration: 'exploration',
-    Scientific:  'scientific'
-    // Labor / Economic / Prehistory have no symbol art yet — omitted so the
-    // popup shows a text-only type (no empty icon slot) until art is added.
+    Scientific:  'scientific',
+    Prehistory:  'prehistory'
+    // Labor / Economic have no symbol art yet — omitted so the popup shows a
+    // text-only type (no empty icon slot) until art is added.
   };
 
   // Rename modal
@@ -80,53 +81,45 @@
   function activeCards()         { return window.Decks.getActiveCards(); }
   function activeCardCount()     { return activeCards().length; }
 
-  /* Lane detection (Phase D2d-a). The presence of window.adventureBattleTarget
-     means the deck builder was opened from Adventure Mode (its value names the
-     target battle, e.g. 'gilgamesh'). Absent → Arcadium. */
-  function isAdventureMode()     { return !!window.adventureBattleTarget; }
-  function laneOf(card)          { return (window.SOG && SOG.Cards && SOG.Cards.laneOf) ? SOG.Cards.laneOf(card) : 'arcadium'; }
   function isCardUnlocked(id)    { return !!(window.SOG && SOG.Cards && SOG.Cards.isUnlocked && SOG.Cards.isUnlocked(id)); }
 
-  /* Cards available to pick, per current lane:
-       Adventure — adventure-lane cards granted via sog_unlocked_cards. No
-                   type-locks (always selectable).
-       Arcadium  — arcadium-lane cards that aren't locked (existing behavior),
-                   with Progression type-locks still applied at render time.   */
+  /* UNIFIED POOL — every context (Arcadium, multiplayer, adventure): the deck
+     builder offers ONLY the cards the player has collected (SOG.collection).
+     Adventure Mode is the only way to gain cards, so Arcadium/multiplayer build
+     from that same owned-card collection — there is no longer an "Arcadium full
+     pool vs adventure pool" distinction, and no Progression type-locks (owning a
+     card IS the gate now). Battle/AI/challenge decks source cards elsewhere
+     (e.g. game.js buildAiDeck, fixed adventure-battle decks) and are unaffected. */
   function isCardAvailable(card) {
-    if (!card) return false;
-    if (isAdventureMode()) {
-      return laneOf(card) === 'adventure' && isCardUnlocked(card.id);
-    }
-    return laneOf(card) === 'arcadium' && !card.locked;
+    return !!card && isCardUnlocked(card.id);
   }
 
   /* ── Entry point ─────────────────────────────────────────────── */
 
   function initDeckBuilder() {
-    // Drop any saved cards in any slot that don't belong in the current lane.
-    if (isAdventureMode()) {
-      // Adventure lane: keep only granted adventure-lane cards (prevents an
-      // Arcadium-built deck from carrying over into the Adventure deck view).
-      window.Decks.filterAllCards(function (id) {
-        var card = CARDS.find(function (c) { return c.id === id; });
-        return !!card && laneOf(card) === 'adventure' && isCardUnlocked(id);
-      });
-    } else if (typeof Progression !== 'undefined') {
-      // Arcadium lane: drop locked-type cards (existing behavior) and any
-      // adventure-lane cards that leaked in (they live in the other lane).
-      var unlocked = Progression.getUnlockedTypes();
-      window.Decks.filterAllCards(function (id) {
-        var card = CARDS.find(function (c) { return c.id === id; });
-        return !card || (laneOf(card) === 'arcadium' && unlocked.indexOf(card.type) !== -1);
-      });
-    }
+    // NON-DESTRUCTIVE: we no longer prune saved decks to the current pool. The
+    // old Decks.filterAllCards() call mutated AND persisted every slot, stripping
+    // any card not in the pool — under the collection-only pool that would have
+    // permanently deleted not-yet-collected cards from existing saved decks.
+    // Instead we only filter what's DISPLAYED/addable (see isCardAvailable); a
+    // card already saved in a deck is preserved even if it's not in the
+    // collection (it just won't appear as a selectable tile in the grid).
+    // Left button label follows context: "Back to Map" from the overworld HUD,
+    // "← Home" from Arcadium / versus / multiplayer entries.
+    backBtn.innerHTML = window.deckBuilderFromOverworld
+      ? '&#8592; Back to Map'
+      : '&#8592; Home';
     renderSlotRow();
     renderAllGroups();
     updateUI();
     mainEl.scrollTop = 0;
-    // Fire the deck-builder tutorial if the user hasn't completed it
-    // yet. Self-guards on already-active in-game tutorial.
-    if (window.DeckBuilderTutorial && typeof window.DeckBuilderTutorial.startIfNew === 'function') {
+    // Fire the deck-builder tutorial if the user hasn't completed it yet.
+    // Self-guards on already-active in-game tutorial.
+    // NOTE: suppressed in Adventure mode (opened from the overworld HUD) — the
+    // adventure deck-builder tutorial is being rebuilt; the module is left intact
+    // so other entry points keep working and we can re-enable it here later.
+    if (!window.deckBuilderFromOverworld &&
+        window.DeckBuilderTutorial && typeof window.DeckBuilderTutorial.startIfNew === 'function') {
       window.DeckBuilderTutorial.startIfNew();
     }
   }
@@ -188,65 +181,31 @@
 
   function renderAllGroups() {
     mainEl.innerHTML = '';
-    if (isAdventureMode()) {
-      renderAdventureFlat();
-    } else {
-      renderArcadiumGroups();
-    }
+    renderCardGroups();
   }
 
-  /* Adventure Mode: one continuous, sorted flow — no type group headers.
-     Sort: Capital Cost ascending, then IP ascending, then name A–Z. */
-  function renderAdventureFlat() {
-    var cards = CARDS.filter(function (c) { return isCardAvailable(c); });
-    cards.sort(function (a, b) {
-      if (a.cc !== b.cc) return a.cc - b.cc;
-      if (a.ip !== b.ip) return a.ip - b.ip;
-      return a.name.localeCompare(b.name);
-    });
-    var row = document.createElement('div');
-    row.className = 'db-card-row';
-    cards.forEach(function (card) { row.appendChild(buildCardEl(card, false)); });
-    mainEl.appendChild(row);
-  }
-
-  /* Arcadium Mode: existing type-grouped layout with section headers and
-     Progression type-locks (unchanged behavior). */
-  function renderArcadiumGroups() {
+  /* Single unified layout for every context: the collection grouped by type,
+     in TYPE_ORDER. No Progression type-locks — every shown card is owned, so
+     every shown card is selectable. */
+  function renderCardGroups() {
     TYPE_ORDER.forEach(function (type) {
       var cards = CARDS.filter(function (c) { return c.type === type && isCardAvailable(c); });
       // Empty groups never render.
       if (!cards.length) return;
 
-      var locked = typeof Progression !== 'undefined' && !Progression.isTypeUnlocked(type);
-
       var section = document.createElement('section');
-      section.className = 'db-type-group type-' + type.toLowerCase() + (locked ? ' locked' : '');
+      section.className = 'db-type-group type-' + type.toLowerCase();
 
       var header = document.createElement('div');
       header.className = 'db-type-header';
-      var headerHTML =
+      header.innerHTML =
         '<div class="db-type-pip"></div>' +
         '<span class="db-type-label">' + type + '</span>' +
         '<span class="db-type-count">(' + cards.length + ')</span>';
-      if (locked) {
-        var hint = '';
-        if (type === 'Religious') {
-          var sw = typeof Progression !== 'undefined' ? Progression.getSerfWins() : 0;
-          var remaining = 3 - sw;
-          hint = '🔒 Unlocks with ' + remaining + ' More Win' + (remaining !== 1 ? 's' : '') + ' Against the Serf';
-        } else if (type === 'Exploration') {
-          var gw = typeof Progression !== 'undefined' ? Progression.getGiantWins() : 0;
-          var remaining2 = 3 - gw;
-          hint = '🔒 Unlocks with ' + remaining2 + ' More Win' + (remaining2 !== 1 ? 's' : '') + ' Against the Giant';
-        }
-        headerHTML += '<span class="db-type-lock-badge">' + hint + '</span>';
-      }
-      header.innerHTML = headerHTML;
 
       var row = document.createElement('div');
       row.className = 'db-card-row';
-      cards.forEach(function (card) { row.appendChild(buildCardEl(card, locked)); });
+      cards.forEach(function (card) { row.appendChild(buildCardEl(card, false)); });
 
       section.appendChild(header);
       section.appendChild(row);
@@ -348,12 +307,8 @@
    * or when the card type is locked.
    */
   function toggleCard(id) {
-    // Arcadium type-locks gate selection by card type; Adventure Mode has no
-    // type-locks (lane separation, D2d-a) so every shown card is selectable.
-    if (!isAdventureMode() && typeof Progression !== 'undefined') {
-      var card = CARDS.find(function (c) { return c.id === id; });
-      if (card && !Progression.isTypeUnlocked(card.type)) return false;
-    }
+    // Every displayed card is owned (in the collection), so it's selectable —
+    // no Progression type-locks. (Pool is gated by ownership in isCardAvailable.)
     var ok;
     if (isSelected(id)) {
       ok = window.Decks.removeCard(id);
@@ -395,10 +350,20 @@
     var size  = deckSize();
     counterEl.textContent = count + ' / ' + size;
     counterEl.classList.toggle('complete', count === size);
-    saveBtn.disabled    = count !== size;
-    saveBtn.textContent = window.versusStudentMode ? 'Lock In Deck'
-                        : window.multiplayerMode    ? 'Enter Lobby'
-                        : "Let's Play";
+    if (window.deckBuilderFromOverworld) {
+      // Adventure context: decks are managed here, not played. "Save Decks" is
+      // always available (changes already auto-persist); the player leaves via
+      // "Back to Map". No "must have N cards" gate.
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save Decks';
+      if (saveHint) saveHint.style.visibility = 'hidden';
+    } else {
+      saveBtn.disabled    = count !== size;
+      saveBtn.textContent = window.versusStudentMode ? 'Lock In Deck'
+                          : window.multiplayerMode    ? 'Enter Lobby'
+                          : "Let's Play";
+      if (saveHint) saveHint.style.visibility = '';
+    }
   }
 
   /* ── Popup (read-only ability viewer) ────────────────────────── */
@@ -537,6 +502,20 @@
   var diffBackdropEl = document.getElementById('difficulty-backdrop');
 
   function openDifficultyModal() {
+    // Adventure context: this button is "Save Decks", not "Let's Play".
+    // Deck mutations already auto-persist via the Decks API, so this is an
+    // explicit confirmation — flash feedback and stay in the builder.
+    if (window.deckBuilderFromOverworld) {
+      var prev = saveBtn.textContent;
+      saveBtn.textContent = 'Saved ✓';
+      saveBtn.classList.add('db-saved-flash');
+      setTimeout(function () {
+        saveBtn.classList.remove('db-saved-flash');
+        // updateUI restores the correct label ("Save Decks") for the context.
+        updateUI();
+      }, 1000);
+      return;
+    }
     if (activeCardCount() !== deckSize()) return;
     // Notify the deck-builder tutorial that a real Let's Play happened
     // with a complete deck. The tutorial marks completion here — clicking
@@ -630,6 +609,21 @@
   backBtn.addEventListener('click', function () {
     if (window.DeckBuilderTutorial && typeof window.DeckBuilderTutorial.notifyExit === 'function') {
       window.DeckBuilderTutorial.notifyExit();
+    }
+    // Adventure (overworld HUD) context: "Back to Map" returns the player to the
+    // overworld where they were. The currently-open (active) deck is already the
+    // carried deck — refreshing the HUD shows its name on the deck card-back.
+    if (window.deckBuilderFromOverworld) {
+      window.deckBuilderFromOverworld = false;
+      stopDeckMusic();
+      showScreen('screen-overworld');
+      if (window.SOG && window.SOG.HUD && typeof window.SOG.HUD.refreshDecks === 'function') {
+        window.SOG.HUD.refreshDecks();
+      }
+      if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') {
+        window.Overworld.resumeAfterBattle();
+      }
+      return;
     }
     // Adventure Mode: Back returns to the Mesopotamia overworld (player can
     // re-click Walls of Uruk to re-enter the battle path).

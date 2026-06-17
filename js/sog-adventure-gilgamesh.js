@@ -609,9 +609,15 @@ SOG.GilgameshBattle = (function () {
   function _playSfx(src) { try { var a = new Audio(src); a.play(); } catch (e) {} }
 
   /* Grant the Gilgamesh card (43) on victory via the shared card-acquisition
-     reveal (same animation as the Cuneiform grant). unlock is idempotent. */
+     reveal. On a REPEAT win the player already owns it, so skip the acquisition
+     animation entirely (only the gold reward should play). SOG.Cards.unlock
+     returns true only when something was NEWLY unlocked — use that as the gate. */
   function _grantGilgameshCard(done) {
-    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') SOG.Cards.unlock([GILGAMESH_CARD_ID]);
+    var newlyUnlocked = false;
+    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') {
+      newlyUnlocked = !!SOG.Cards.unlock([GILGAMESH_CARD_ID]);
+    }
+    if (!newlyUnlocked) { if (done) done(); return; }   // already owned → no card reveal
     var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === GILGAMESH_CARD_ID; });
     var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
     if (card && preh && typeof preh.showCardAcquisition === 'function') {
@@ -628,6 +634,13 @@ SOG.GilgameshBattle = (function () {
     overlay.id = 'gilg-gold-reward';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;pointer-events:none;';
 
+    // Same shadowed backdrop the card-acquisition reveal uses (rgba(0,0,0,0.80)),
+    // so the board stays dimmed through the gold reward too. Present from the
+    // first frame (no fade-in) and faded out with the reward at the end. On a
+    // repeat win — where the card reveal is skipped — this is the only dim.
+    var dim = document.createElement('div');
+    dim.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.80);transition:opacity 0.4s ease;';
+
     var box = document.createElement('div');
     box.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;opacity:0;' +
       'transform:translateY(-110px);transition:opacity 0.45s ease, transform 0.7s cubic-bezier(0.2,0.9,0.3,1);';
@@ -643,6 +656,7 @@ SOG.GilgameshBattle = (function () {
       'text-shadow:-2px -2px 0 #1a0a04, 2px -2px 0 #1a0a04, -2px 2px 0 #1a0a04, 2px 2px 0 #1a0a04, 0 4px 6px rgba(0,0,0,0.55);';
 
     box.appendChild(coin); box.appendChild(label);
+    overlay.appendChild(dim);   // shadow backdrop behind the reward
     overlay.appendChild(box);
     (document.getElementById('sog-stage') || document.body).appendChild(overlay);
 
@@ -657,6 +671,7 @@ SOG.GilgameshBattle = (function () {
     setTimeout(function () {
       box.style.transition = 'opacity 0.4s ease';
       box.style.opacity = '0';
+      dim.style.opacity = '0';          // fade the shadow out with the reward
       setTimeout(function () {
         if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
         if (onDone) onDone();
@@ -1092,9 +1107,24 @@ SOG.GilgameshBattle = (function () {
   // Prehistory base (+Cuneiform once granted on a loss); AI = Gilgamesh's 9
   // Mesopotamia cards + Enkidu (always). The 'gilgamesh' script drives it.
   function buildGilgameshConfig() {
-    var pIds = PREHISTORY_IDS.slice();
-    if (_has(KEY_CUNEIFORM_GRANTED)) pIds.push(46);   // Cuneiform once granted
-    var playerDeck = { source: 'explicit', ids: pIds, shuffle: true };
+    // The player fights with their ACTIVE deck. While the deck builder is still
+    // locked this is the default deck (slot 1), which auto-mirrors the collection
+    // — 11 Prehistory cards, +Cuneiform after a loss — so it matches the old
+    // fixed list. Once the builder unlocks, it's whatever the player has built.
+    if (window.SOG && SOG.collection && typeof SOG.collection.syncDefaultDeck === 'function') {
+      SOG.collection.syncDefaultDeck();
+    }
+    var activeIds = (window.Decks && typeof window.Decks.getActiveCards === 'function')
+      ? window.Decks.getActiveCards() : [];
+    var playerDeck;
+    if (activeIds && activeIds.length) {
+      playerDeck = { source: 'active-deck', shuffle: true };   // game.js → Decks.getActiveCards()
+    } else {
+      // Safety net: never start the battle with an empty deck.
+      var pIds = PREHISTORY_IDS.slice();
+      if (_has(KEY_CUNEIFORM_GRANTED)) pIds.push(46);
+      playerDeck = { source: 'explicit', ids: pIds, shuffle: true };
+    }
     var aiDeck     = { source: 'explicit', ids: GILGAMESH_AI_IDS.concat([ENKIDU_ID]), shuffle: true };
     return {
       structure: { turns: 4, locationsCount: 3, slotsPerLocation: 4, handStart: 4, maxHandSize: 4, cardsPerTurn: 2 },
