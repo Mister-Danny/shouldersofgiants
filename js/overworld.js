@@ -29,6 +29,7 @@ var Overworld = (function () {
   var KEY_MESOPOTAMIA_ARRIVAL       = 'sog_mesopotamia_arrival_complete';
   var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set on the Gilgamesh win
   var KEY_MARKET_FIRST_VISIT        = 'sog_market_first_visit_done';   // one-time auto-walk into the market
+  var KEY_MARKET_INTRO_SEEN         = 'sog_market_intro_seen';         // one-time trader intro dialogue
   // Phase D2c
   var KEY_MET_GILGAMESH             = 'sog_met_gilgamesh';              // set after the "You will be." line
   var KEY_MESO_STARTER_GRANTED      = 'sog_mesopotamia_starter_granted'; // set after all 5 card grants complete
@@ -1794,6 +1795,23 @@ var Overworld = (function () {
      Reached by the first-win auto-walk and by clicking the market node.
      TODO(market interior — later): wire gold + buying onto this layout. */
 
+  // True once the trader intro has finished (or was already seen) — card clicks
+  // are suppressed until then so the player can't shop over the intro.
+  var _marketReady = false;
+
+  /* Trader intro dialogue — plays once (first market visit), gated on
+     KEY_MARKET_INTRO_SEEN. DRAFT — edit these lines here. {who} maps to the HUD
+     CHARACTERS portraits ('trader' / 'explorer'). */
+  var MARKET_TRADER_INTRO = [
+    { who: 'trader',   text: 'Ah, a traveler with coin to spend! Welcome to the Mesopotamian Marketplace.' },
+    { who: 'explorer', text: 'What is all this?' },
+    { who: 'trader',   text: 'The finest cards civilization has to offer — and they can be yours, for the right price in gold.' },
+    { who: 'explorer', text: 'How does it work?' },
+    { who: 'trader',   text: "Simple. Tap any card to take a closer look. If you've the gold for it, the Buy button lights up. Tap it, confirm, and the card is yours." },
+    { who: 'explorer', text: 'And then?' },
+    { who: 'trader',   text: "Then it joins your collection — ready for you to build into your deck. Spend wisely, friend. Gold doesn't grow on date palms." }
+  ];
+
   // Positions match samplefinishedmarket.jpg over the (tighter-crop) mesomarket.jpg:
   // shelf 1 = 5 cards on the top shelf, shelf 2 = 4 cards on the lower shelf
   // (Enkidu is the last card on shelf 2 and stays 30 gold — there is no 3rd shelf).
@@ -1835,13 +1853,13 @@ var Overworld = (function () {
       wrap.appendChild(window.buildCardImg(card));
     }
 
-    // Click → shared in-game card-detail popup (no buying yet).
+    wrap.dataset.marketCardId = String(cardId);
+
+    // Click → the market-specific BUY popup (NOT the shared battle popup).
+    // Suppressed until the trader intro (first visit) has finished.
     wrap.addEventListener('click', function () {
-      if (window.SOG && SOG.ui && typeof SOG.ui.openBattlePopup === 'function') {
-        var sd = { cardId: card.id, ip: card.ip, ipMod: 0, ipModSources: [],
-                   contMod: 0, contModSources: [], revealed: true, bonuses: [], turnPlayed: 0 };
-        SOG.ui.openBattlePopup(card, sd, 'player', false);
-      }
+      if (!_marketReady) return;
+      _openMarketBuyPopup(card, price);
     });
 
     // Price tag — built as a SIBLING of the card (positioned in screen space),
@@ -1849,6 +1867,7 @@ var Overworld = (function () {
     // image) would otherwise clip the tag away. Hangs just below the card bottom.
     var tag = document.createElement('div');
     tag.className = 'market-pricetag';
+    tag.dataset.marketCardId = String(cardId);
     tag.style.cssText = 'position:absolute;left:' + (leftPct + 0.5) + '%;' +
       'top:calc(' + (topPct - 2) + '% + ' + (MARKET_CARD_H - 8) + 'px);transform:translateX(-50%);' +
       'width:115px;height:77px;background:url("images/ui_images/pricetag@0.5x.png") center/contain no-repeat;' +
@@ -1876,9 +1895,13 @@ var Overworld = (function () {
     screen.style.cssText = 'position:absolute;inset:0;z-index:100;overflow:hidden;' +
       'background:url("images/ui_images/mesomarket.jpg") center/cover no-repeat;';
 
-    // Lay out the 9 cards on their two shelves (card + its price tag).
+    // Lay out the cards on their two shelves (card + its price tag). Cards the
+    // player already OWNS are skipped — only unowned cards are for sale, so a
+    // bought card stays gone (the empty slot is the "you own it" feedback).
     MARKET_SHELVES.forEach(function (shelf) {
       shelf.cards.forEach(function (c, i) {
+        if (window.SOG && SOG.collection && typeof SOG.collection.isUnlocked === 'function'
+            && SOG.collection.isUnlocked(c.id)) return;   // owned → not for sale
         var leftPct = (shelf.xs[i] != null) ? shelf.xs[i] : (20 + i * 12);
         var built   = _buildMarketCard(c.id, leftPct, shelf.topPct, c.price);
         if (built) { screen.appendChild(built.cardEl); screen.appendChild(built.tagEl); }
@@ -1897,37 +1920,191 @@ var Overworld = (function () {
 
     (document.getElementById('sog-stage') || document.body).appendChild(screen);
 
-    // Trader portrait in the HUD conversation slot — no dialogue yet, just the
-    // portrait in place for a future trader conversation. enterDialogueMode gives
-    // the conversation layout; we then load the trader into the NPC slot, reveal
-    // it, and clear any stale dialogue text so nothing speaks. Degrades gracefully
-    // if the HUD is absent.
+    // On the FIRST visit, play the trader intro dialogue (gated on
+    // KEY_MARKET_INTRO_SEEN) before the player can shop. Once it finishes we drop
+    // the HUD back to its NORMAL resting state so the player can see their gold
+    // balance while shopping (the trader is still visible in the shelf scene). On
+    // revisits we never enter dialogue mode at all. Shopping is suppressed via
+    // _marketReady until the intro finishes. Degrades gracefully without the HUD.
+    _marketReady = false;
     var hud = window.SOG && window.SOG.HUD;
-    if (hud && typeof hud.enterDialogueMode === 'function') {
+    var introSeen = false;
+    try { introSeen = localStorage.getItem(KEY_MARKET_INTRO_SEEN) === 'true'; } catch (e) {}
+
+    if (hud && !introSeen && typeof hud.enterDialogueMode === 'function'
+        && typeof hud.runLines === 'function' && typeof hud.exitDialogueMode === 'function') {
       hud.enterDialogueMode(null, function () {
-        var npcImg = document.getElementById('adv-hud-npc-img');
-        if (npcImg) npcImg.src = 'images/portraits/mesotrader@0.5x.jpg';
-        var slot = document.getElementById('adv-hud-npc-slot');
-        if (slot) { slot.style.opacity = '1'; slot.style.transform = 'translateY(0)'; }
-        ['adv-hud-dialogue-text', 'adv-hud-dialogue-text-npc'].forEach(function (id) {
-          var el = document.getElementById(id); if (el) el.textContent = '';
+        hud.runLines(MARKET_TRADER_INTRO, function () {
+          try { localStorage.setItem(KEY_MARKET_INTRO_SEEN, 'true'); } catch (e) {}
+          // Back to the normal HUD — gold balance is now visible while shopping.
+          hud.exitDialogueMode(function () {
+            if (typeof hud.refreshGold === 'function') hud.refreshGold();
+            _marketReady = true;
+          });
         });
       });
+    } else {
+      // Revisit (or no HUD): normal HUD already showing — just refresh gold + shop.
+      if (hud && typeof hud.refreshGold === 'function') hud.refreshGold();
+      _marketReady = true;
     }
   }
 
   /* Leave the market → back to the Mesopotamia overworld. */
   function _exitMarket() {
-    // Undo the manual NPC-slot reveal (we set it directly in _enterMarket, so
-    // exitDialogueMode's own slide-out doesn't know about it).
-    var slot = document.getElementById('adv-hud-npc-slot');
-    if (slot) { slot.style.opacity = '0'; slot.style.transform = ''; }
+    _closeMarketBuyPopup();
+    var conf = document.getElementById('adv-market-confirm');
+    if (conf && conf.parentNode) conf.parentNode.removeChild(conf);
+    _marketReady = false;
+    // If the player bails mid-intro (Leave Market is clickable during the trader
+    // dialogue), make sure the HUD comes out of dialogue mode; once the intro is
+    // done we're already back in the normal HUD, so this is a no-op.
     var hud = window.SOG && window.SOG.HUD;
     if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(function () {});
     var screen = document.getElementById('adv-market-screen');
     if (screen && screen.parentNode) screen.parentNode.removeChild(screen);
     isDialogueLocked = false;
     scheduleIdle();
+  }
+
+  /* ── Market buy popup (market-specific; NOT the shared battle popup) ─────
+     Clicked card renders large + left-of-centre; a detail box of the same
+     height sits flush against its right edge so card+box read as one entity;
+     a "Buy For <price> [coin]" button on the box's bottom edge (active only if
+     SOG.gold.get() >= price). Buy → confirmation → transaction. */
+  function _closeMarketBuyPopup() {
+    var p = document.getElementById('adv-market-buy');
+    if (p && p.parentNode) p.parentNode.removeChild(p);
+  }
+
+  function _openMarketBuyPopup(card, price) {
+    _closeMarketBuyPopup();
+    var gold = (window.SOG && SOG.gold) ? SOG.gold.get() : 0;
+    var affordable = gold >= price;
+
+    var overlay = document.createElement('div');
+    overlay.id = 'adv-market-buy';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:5000;display:flex;align-items:center;justify-content:center;background:rgba(8,4,0,0.72);';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) _closeMarketBuyPopup(); });
+
+    var unit = document.createElement('div');
+    unit.style.cssText = 'display:flex;align-items:stretch;filter:drop-shadow(0 10px 30px rgba(0,0,0,0.6));';
+
+    // Enlarged card (left of centre).
+    var CARD_H = 440, CARD_W = Math.round(CARD_H * 123 / 184);
+    var big = document.createElement('div');
+    big.style.cssText = 'position:relative;width:' + CARD_W + 'px;height:' + CARD_H + 'px;flex-shrink:0;' +
+      'container-type:inline-size;border:3px solid #1a0a04;border-radius:8px 0 0 8px;overflow:hidden;background:#100a02;';
+    if (window.SOG && SOG.board && typeof SOG.board.buildCardFace === 'function') {
+      SOG.board.buildCardFace(big, card, card.ip);
+    } else if (window.buildCardImg) { big.appendChild(window.buildCardImg(card)); }
+
+    // Detail box (flush against the card's right edge, same height → one entity).
+    var box = document.createElement('div');
+    box.style.cssText = 'width:340px;height:' + CARD_H + 'px;flex-shrink:0;display:flex;flex-direction:column;' +
+      'background:linear-gradient(180deg,#f6efdc 0%,#e8dcb8 100%);border:3px solid #1a0a04;border-left:none;' +
+      'border-radius:0 8px 8px 0;color:#1a0a04;font-family:var(--font,sans-serif);';
+
+    var content = document.createElement('div');
+    content.style.cssText = 'flex:1;min-height:0;overflow:auto;padding:18px 18px 10px;';
+
+    var nameEl = document.createElement('div');
+    nameEl.textContent = card.name;
+    nameEl.style.cssText = 'font-size:26px;font-weight:bold;letter-spacing:0.02em;margin-bottom:4px;';
+    var typeEl = document.createElement('div');
+    typeEl.textContent = (card.type || '') + (card.era ? (card.type ? ' · ' : '') + card.era : '');
+    typeEl.style.cssText = 'font-size:13px;opacity:0.7;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;';
+    content.appendChild(nameEl); content.appendChild(typeEl);
+    if (card.abilityName) {
+      var abNm = document.createElement('div');
+      abNm.textContent = card.abilityName;
+      abNm.style.cssText = 'font-size:16px;font-weight:bold;margin-bottom:4px;';
+      content.appendChild(abNm);
+    }
+    var abTx = document.createElement('div');
+    abTx.textContent = card.ability || 'No special ability.';
+    abTx.style.cssText = 'font-size:15px;line-height:1.45;' + (card.ability ? '' : 'font-style:italic;opacity:0.7;');
+    content.appendChild(abTx);
+
+    var buy = document.createElement('button');
+    buy.className = 'btn-primary';
+    buy.style.cssText = 'margin:0 14px 14px;padding:12px;font-size:18px;font-weight:bold;display:flex;' +
+      'align-items:center;justify-content:center;gap:8px;cursor:' + (affordable ? 'pointer' : 'not-allowed') + ';' +
+      (affordable ? '' : 'opacity:0.45;filter:grayscale(0.7);');
+    buy.disabled = !affordable;
+    buy.innerHTML = 'Buy For ' + price +
+      ' <img src="images/ui_images/coin.png" alt="gold" style="width:24px;height:24px;object-fit:contain;">';
+    if (affordable) {
+      buy.addEventListener('click', function () {
+        _openBuyConfirm(card, function () {
+          _closeMarketBuyPopup();
+          _doMarketPurchase(card, price);
+        });
+      });
+    }
+
+    box.appendChild(content); box.appendChild(buy);
+    unit.appendChild(big); unit.appendChild(box);
+    overlay.appendChild(unit);
+    (document.getElementById('sog-stage') || document.body).appendChild(overlay);
+  }
+
+  /* Purchase confirmation — Yes runs onYes (caller closes the buy popup + runs
+     the transaction); No just dismisses back to the buy popup. */
+  function _openBuyConfirm(card, onYes) {
+    var ov = document.createElement('div');
+    ov.id = 'adv-market-confirm';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:5100;display:flex;align-items:center;justify-content:center;background:rgba(8,4,0,0.5);';
+
+    var panel = document.createElement('div');
+    panel.style.cssText = 'background:linear-gradient(180deg,#f6efdc,#e8dcb8);border:3px solid #1a0a04;border-radius:10px;' +
+      'padding:24px 28px;display:flex;flex-direction:column;align-items:center;gap:18px;color:#1a0a04;' +
+      'font-family:var(--font,sans-serif);max-width:380px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.6);';
+    var q = document.createElement('div');
+    q.textContent = 'Are you sure you want to buy ' + card.name + '?';
+    q.style.cssText = 'font-size:19px;line-height:1.4;';
+    var row = document.createElement('div'); row.style.cssText = 'display:flex;gap:16px;';
+    var yes = document.createElement('button'); yes.className = 'btn-primary'; yes.textContent = 'Yes';
+    yes.style.cssText = 'padding:9px 28px;font-size:17px;cursor:pointer;';
+    var no = document.createElement('button'); no.className = 'btn-primary'; no.textContent = 'No';
+    no.style.cssText = 'padding:9px 28px;font-size:17px;cursor:pointer;';
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    no.addEventListener('click', close);
+    yes.addEventListener('click', function () { close(); if (onYes) onYes(); });
+    row.appendChild(yes); row.appendChild(no);
+    panel.appendChild(q); panel.appendChild(row);
+    ov.appendChild(panel);
+    (document.getElementById('sog-stage') || document.body).appendChild(ov);
+  }
+
+  /* The purchase transaction (exact order): (a) spend gold (guard on false),
+     (b) grant the card to the collection, (c) refresh the HUD gold number,
+     (d) play the card-acquisition animation, (e) remove the card from the shelf. */
+  function _doMarketPurchase(card, price) {
+    // (a) spend — guard (button was active, but never trust it)
+    if (!(window.SOG && SOG.gold && SOG.gold.spend(price))) return;
+    // (b) grant to the collection (owned + persisted — same as battle-win grants)
+    if (window.SOG && SOG.collection && typeof SOG.collection.unlockCard === 'function') {
+      SOG.collection.unlockCard(card.id);
+    } else if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') {
+      SOG.Cards.unlock(card.id);
+    }
+    // (c) update the HUD gold number
+    if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshGold === 'function') SOG.HUD.refreshGold();
+    // (e) remove the purchased card (+ its tag) from the shelf
+    function removeFromShelf() {
+      var screen = document.getElementById('adv-market-screen');
+      if (!screen) return;
+      var els = screen.querySelectorAll('[data-market-card-id="' + card.id + '"]');
+      Array.prototype.forEach.call(els, function (el) { if (el.parentNode) el.parentNode.removeChild(el); });
+    }
+    // (d) card-acquisition animation, then remove from the shelf when it settles
+    var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
+    if (preh && typeof preh.showCardAcquisition === 'function') {
+      preh.showCardAcquisition(card, null, removeFromShelf, { autoDismissMs: 1500 });
+    } else {
+      removeFromShelf();
+    }
   }
 
   /* Post-loss Cuneiform intervention (D3a sub-task 4). Called by the Gilgamesh
