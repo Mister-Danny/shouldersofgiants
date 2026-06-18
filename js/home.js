@@ -18,6 +18,12 @@ var HomeFlow = (function () {
   var KEY_FIRST_VISIT       = 'sog_first_visit_complete';
   var KEY_ADVENTURER        = 'sog_selected_adventurer';
   var KEY_ADV_WARNING       = 'sog_adventure_warning_seen';
+  // First-ever-visit gate. Drives BOTH the home-screen state (lone "I'm Ready"
+  // funnel vs. the full menu) AND the adventure-entry transition (intro video
+  // the first time, sprite-through-door every time after). Set when the intro
+  // video first plays (see startIrisWipe). One flag keeps the two in sync.
+  var KEY_INTRO_SEEN        = 'sog_intro_seen';
+  function introSeen() { return localStorage.getItem(KEY_INTRO_SEEN) === 'true'; }
 
   var SPRITE_PATH  = 'images/metaworld/character sprites/female/';
 
@@ -224,11 +230,19 @@ var HomeFlow = (function () {
   }
 
   function applyVisitState() {
-    var firstVisit = !localStorage.getItem(KEY_FIRST_VISIT);
-    if (firstVisit) {
+    if (!introSeen()) {
+      // FIRST-EVER VISIT — funnel: show ONLY the "I'm Ready" button. The rest of
+      // the menu stays hidden so a brand-new player isn't distracted.
+      btnReady.style.display = '';
       btnLearn.style.display = 'none';
+      btnAbout.style.display = 'none';
+      if (btnFeedback) btnFeedback.style.display = 'none';
     } else {
-      btnLearn.style.display = '';
+      // Returning visitor — normal home menu. (Feedback button is threshold-gated
+      // separately by feedback.js, so we don't force it here.)
+      btnReady.style.display = '';
+      btnAbout.style.display = '';
+      btnLearn.style.display = localStorage.getItem(KEY_FIRST_VISIT) ? '' : 'none';
     }
   }
 
@@ -238,8 +252,19 @@ var HomeFlow = (function () {
 
   /* ── STATE 1 → 2: I'm Ready clicked ────────────────────────── */
   function onReadyClick() {
+    // FIRST-EVER VISIT — "I'm Ready" is the funnel: go straight into Adventure
+    // (adventurer pick → sprite-through-door → intro video → map). The video is
+    // gated to this first time only (see startIrisWipe).
+    if (!introSeen()) {
+      markVisited();
+      try { localStorage.setItem(KEY_ADV_WARNING, 'true'); } catch (e) {}  // skip the dev-warning for the funnel
+      launchReadyFunnel();
+      return;
+    }
+
     markVisited();
 
+    // Returning visitor — reveal the State-2 menu.
     // Fade out intro subtitle + Ready + Learn buttons
     if (typeof gsap === 'undefined') { showPathChoice(); return; }
 
@@ -253,6 +278,24 @@ var HomeFlow = (function () {
         subtitleIntroEl.classList.remove('is-visible');
         gsap.set(subtitleIntroEl, { opacity: '' });
         showPathChoice();
+      }
+    });
+  }
+
+  /* First-visit funnel: fade out the lone "I'm Ready" (+ intro subtitle) and
+     drop straight into the adventurer-select stage — the same sequence the
+     normal Adventure button uses, minus the State-2 menu hop. */
+  function launchReadyFunnel() {
+    if (typeof gsap === 'undefined') { enterAdventureStage(); return; }
+    gsap.to([subtitleIntroEl, btnReady, btnAbout, btnFeedback], {
+      opacity: 0, duration: 0.3, ease: 'power2.out',
+      onComplete: function () {
+        btnReady.style.display = 'none';
+        btnAbout.style.display = 'none';
+        if (btnFeedback) btnFeedback.style.display = 'none';
+        subtitleIntroEl.classList.remove('is-visible');
+        gsap.set(subtitleIntroEl, { opacity: '' });
+        enterAdventureStage();
       }
     });
   }
@@ -524,7 +567,14 @@ var HomeFlow = (function () {
       opacity: 0, duration: 0.3,
       onComplete: function () {
         adventureStageEl.classList.remove('active');
-        // Restore path-choice state
+        if (!introSeen()) {
+          // First-visit funnel: back returns to the lone "I'm Ready", not the menu.
+          btnReady.style.display = '';
+          subtitleIntroEl.classList.add('is-visible');
+          gsap.fromTo(btnReady, { opacity: 0 }, { opacity: 1, duration: 0.4 });
+          return;
+        }
+        // Returning visitor: restore the State-2 path-choice menu.
         btnArcadium.classList.add('btn-visible');
         btnAdventureNew.classList.add('btn-visible');
         btnVersus.classList.add('btn-visible');
@@ -677,11 +727,17 @@ var HomeFlow = (function () {
         irisEl.style.clipPath = 'circle(' + proxy.r + 'px at ' + cxPct + '% ' + cyPct + '%)';
       },
       onComplete: function () {
-        // Fully black now — play the Title Intro video
-        playTitleIntro(function () {
-          // After video, open iris back out then hand off to overworld
+        // Fully black now. FIRST-EVER entry → play the Title Intro video once,
+        // marking it seen. RETURNING entry → the sprite-through-door (this iris)
+        // IS the transition; skip the video and go straight to the map.
+        if (!introSeen()) {
+          try { localStorage.setItem(KEY_INTRO_SEEN, 'true'); } catch (e) {}
+          playTitleIntro(function () {
+            openIrisAndEnterOverworld(cxPct, cyPct, maxRadius);
+          });
+        } else {
           openIrisAndEnterOverworld(cxPct, cyPct, maxRadius);
-        });
+        }
       }
     });
   }
