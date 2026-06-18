@@ -221,7 +221,8 @@ window.SOG.Adventure.Prehistory = (function () {
     if (ow && typeof ow.runPreBattleLines === 'function') {
       ow.runPreBattleLines([
         { who: 'neanderthal', text: 'AARRGH!' },
-        { who: 'explorer',    text: 'Uh oh…' }
+        { who: 'explorer',    text: 'Uh oh…' },
+        { who: 'explorer',    text: 'Help?' }
       ], function () {
         log('Phase C — pre-battle dialogue complete');
         if (onDone) onDone();
@@ -487,7 +488,7 @@ window.SOG.Adventure.Prehistory = (function () {
     { who: 'lucy', text: 'See that number?',                  startIPPulse: true },
     { who: 'lucy', text: 'Those are Influence Points, or IP for short.' },
     { who: 'lucy', text: 'Your goal here is to gain the most IP at The Camp after four turns.' },
-    { who: 'lucy', text: 'Oh, and most cards have special abilities' },
+    { who: 'lucy', text: 'Oh, and most cards have special abilities.' },
     { who: 'lucy', text: 'If you want to win, click on them to read what they have in store.' },
     { who: 'lucy', text: "When you're ready to send this guy back to whatever came before the Stone Age..." },
     { who: 'lucy', text: 'Click and drag your first card into play.' }
@@ -618,7 +619,7 @@ window.SOG.Adventure.Prehistory = (function () {
   /* ── Dialogue line arrays ───────────────────────────────────── */
   var WIN_DIALOGUE = [
     { who: 'neanderthal', text: 'Hey, you not so bad.'        },
-    { who: 'lucy',        text: 'You really know your stuff.'  },
+    { who: 'lucy',        text: 'Yeah, you really know your stuff.'  },
     { who: 'neanderthal', text: 'You join my tribe?'          },
     { who: 'lucy',        text: "Don't let him get any ideas." },
     { who: 'neanderthal', text: 'Oh fine, can I join yours?'  }

@@ -2424,7 +2424,8 @@ img    { display: block; }
   min-width: 0;
   gap: 6px;
   border-radius: 4px;
-  overflow: hidden;
+  /* overflow visible so per-card reveal glows aren't clipped at the column edge */
+  overflow: visible;
   isolation: isolate;
 }
 
@@ -2489,7 +2490,8 @@ img    { display: block; }
   flex-direction: row;
   align-items: stretch;
   position: relative;
-  overflow: hidden;
+  /* overflow visible so reveal glows on perimeter cards aren't clipped */
+  overflow: visible;
   background: transparent;
   /* SNES double-border */
   border: 3px solid var(--border-bright);
@@ -9919,3 +9921,127 @@ body[data-screen="overworld"] #overworld-overlay {
 #adv-hud-btn-options:active { transform: scale(0.97); }
 
 /* End Adventure Mode HUD — Phase H1 */
+
+/* ─────────────────────────────────────────────────────────────────
+   Per-card REVEAL presentation (flavor only — see js/game/reveal-fx.js).
+   Each class is added to a .battle-card-slot during reveal and self-removes.
+   Cards without these classes are completely unaffected.
+   ───────────────────────────────────────────────────────────────── */
+
+/* Fire (29): warm illuminate pulse that flares then settles back to rest. */
+@keyframes revealFxIlluminate {
+  0%   { filter: brightness(1);   box-shadow: none; }
+  30%  { filter: brightness(1.65); box-shadow: 0 0 20px 7px rgba(255, 168, 56, 0.9); }
+  100% { filter: brightness(1);   box-shadow: none; }
+}
+.battle-card-slot.reveal-fx-illuminate {
+  animation: revealFxIlluminate 0.85s ease-out;
+  z-index: 6;
+}
+
+/* Domesticated Animal (32): the BORDERS of adjacent cards glow green, then fade.
+   Mostly an INSET glow so it hugs the target card's border and does NOT bleed
+   across the slot gap onto the Domesticated Animal card beside it. A small,
+   tight outset adds a touch of bloom. */
+@keyframes revealFxNeighborGlow {
+  0%   { box-shadow: inset 0 0 0 0 rgba(150, 240, 150, 0),    0 0 0 0 rgba(120, 220, 120, 0); }
+  30%  { box-shadow: inset 0 0 12px 2px rgba(150, 240, 150, 0.95), 0 0 6px 1px rgba(120, 220, 120, 0.5); }
+  100% { box-shadow: inset 0 0 0 0 rgba(150, 240, 150, 0),    0 0 0 0 rgba(120, 220, 120, 0); }
+}
+.battle-card-slot.reveal-fx-neighbor-glow {
+  animation: revealFxNeighborGlow 0.85s ease-out;
+  z-index: 6;
+}
+
+/* Neanderthal (34): small drop-into-place settle (drops a few px and lands). */
+@keyframes revealFxDropIn {
+  0%   { transform: translateY(-10px); }
+  70%  { transform: translateY(2px); }
+  100% { transform: translateY(0); }
+}
+.battle-card-slot.reveal-fx-dropin {
+  animation: revealFxDropIn 0.42s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* Tool (26): "hammer swing" — rotate upright → full horizontal pivoting on the
+   bottom-right corner (the strike), then rebound/overshoot back to upright.
+   IMPACT (full horizontal) is the 50% keyframe; reveal-fx.js times the SFX, the
+   draw, and the drawn-card pull-in to that 50% mark (500ms into the 1s anim). */
+@keyframes revealFxToolSwing {
+  0%   { transform: rotate(0deg);   animation-timing-function: ease-in; }
+  12%  { transform: rotate(-12deg); animation-timing-function: ease-in;  }  /* wind-up back */
+  50%  { transform: rotate(90deg);  animation-timing-function: ease-out; }  /* IMPACT — full horizontal */
+  64%  { transform: rotate(72deg);  animation-timing-function: ease-in-out; } /* rebound */
+  80%  { transform: rotate(-9deg);  animation-timing-function: ease-in-out; } /* overshoot past upright */
+  92%  { transform: rotate(4deg); }
+  100% { transform: rotate(0deg); }                                        /* settle */
+}
+.battle-card-slot.reveal-fx-tool-swing {
+  transform-origin: 100% 100%;   /* bottom-right corner pivot */
+  animation: revealFxToolSwing 1s;
+  z-index: 7;
+}
+
+/* The card Tool draws "pulls in" — rises from below with a scale-up overshoot,
+   landing on the hammer strike (reveal-fx.js applies this at the impact beat). */
+@keyframes revealFxToolDrawIn {
+  0%   { transform: translateY(40px) scale(0.55); opacity: 0; }
+  55%  { transform: translateY(-6px) scale(1.08); opacity: 1; }
+  100% { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+.battle-hand-card.reveal-fx-tool-draw-in {
+  animation: revealFxToolDrawIn 0.45s cubic-bezier(0.34, 1.4, 0.64, 1);
+  z-index: 5;
+}
+
+/* Cave Art (30): a caveman ARM holding charcoal pops in over the card's face and
+   "scribbles" (a subtle wandering jitter + slight rotation) while caveart.m4a
+   plays, then fades out (see js/game/reveal-fx.js). No marks are drawn — the
+   motion implies it. The PNG's charcoal/drawing tip is ~40%/51% of the image; we
+   anchor that point to the card's centre-slightly-high and pivot the wiggle there.
+   Tuning knobs: width (arm size), left/top (the drawing spot on the card), the
+   translate base + deltas in the keyframes (scribble amount), the 0.32s animation
+   (scribble speed), and the JS fallback duration / sfx 'ended' (overall length). */
+.battle-card-slot .reveal-fx-caveart-arm {
+  position: absolute;
+  left: 50%;
+  top: 38%;                       /* anchor: card centre, slightly above middle */
+  width: 165%;                    /* arm size relative to the card */
+  height: auto;
+  transform-origin: 40% 51%;      /* the charcoal / drawing tip */
+  pointer-events: none;
+  z-index: 9;
+  opacity: 1;                     /* pops in instantly — no fade-in */
+  transition: opacity 0.45s ease;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.5));
+  animation: revealFxCaveArtScribble 0.32s ease-in-out infinite;
+}
+.battle-card-slot .reveal-fx-caveart-arm.reveal-fx-caveart-arm-out {
+  opacity: 0;
+}
+/* The base translate aligns the charcoal tip (~40%/51% of the PNG) to the anchor;
+   the small per-keyframe deltas are the scribble (wander + slight rotation). */
+@keyframes revealFxCaveArtScribble {
+  0%   { transform: translate(-40%, -51%) rotate(0deg); }
+  20%  { transform: translate(-43%, -53%) rotate(-2.5deg); }
+  40%  { transform: translate(-37%, -49%) rotate(2deg); }
+  60%  { transform: translate(-42%, -52%) rotate(-1.5deg); }
+  80%  { transform: translate(-38%, -50%) rotate(2.5deg); }
+  100% { transform: translate(-40%, -51%) rotate(0deg); }
+}
+
+/* Tribe (36): reactive "happy hop" — a small double-bounce upward, fired each
+   time Tribe gains bonus IP from a card played at its location (see abilities.js
+   tribeReactBounce → SOG.RevealFx.reactBounce). Self-removing so it re-triggers
+   on each subsequent bonus. Tuning: hop height (-14px) and duration (0.45s). */
+@keyframes revealFxBounce {
+  0%   { transform: translateY(0); }
+  28%  { transform: translateY(-14px); }
+  52%  { transform: translateY(0); }
+  70%  { transform: translateY(-6px); }
+  100% { transform: translateY(0); }
+}
+.battle-card-slot.reveal-fx-bounce {
+  animation: revealFxBounce 0.45s cubic-bezier(0.3, 0.7, 0.4, 1);
+  z-index: 6;
+}

@@ -512,21 +512,58 @@ SOG.HUD = (function () {
     var char   = CHARACTERS[who];
     if (!char) { if (onDone) setTimeout(onDone, 0); return; }
 
-    if (typeof gsap !== 'undefined') {
-      gsap.to(_npcImgEl, {
-        opacity: 0, duration: halfS, ease: 'power2.inOut',
-        onComplete: function () {
-          _applyNpcPortrait(who);
-          gsap.to(_npcImgEl, {
-            opacity: 1, duration: halfS, ease: 'power2.inOut',
-            onComplete: function () { if (onDone) onDone(); }
-          });
-        }
-      });
-    } else {
+    if (typeof gsap === 'undefined') {
       _applyNpcPortrait(who);
       if (onDone) setTimeout(onDone, 0);
+      return;
     }
+
+    // Opt-in "transformation" variant (config.grow): the portrait RISES + GROWS
+    // to ~2x, plays config.sfx, DISSOLVES old→new at the enlarged size, then
+    // SETTLES back to its exact original spot/size as the new character. Used by
+    // the D2a Hunter→Farmer arrival beat. Presentation only — it ends with the
+    // portrait identical to a normal swap, so following dialogue is unaffected.
+    // Tuning knobs (all overridable via config): growScale (2), risePx (-60),
+    // growMs (500), settleMs (500); the dissolve uses transitionMs as today.
+    if (config.grow && _npcSlotEl) {
+      var GROW_S   = (config.growMs   || 500) / 1000;
+      var SETTLE_S = (config.settleMs || 500) / 1000;
+      var SCALE    = config.growScale || 2;
+      var RISE_PX  = (config.risePx != null) ? config.risePx : -60;
+      if (config.sfx) { try { new Audio(config.sfx).play(); } catch (e) {} }
+      // Un-clip + lift the slot so the enlarged portrait shows above the HUD bar.
+      var prevOverflow = _npcSlotEl.style.overflow;
+      var prevZ        = _npcSlotEl.style.zIndex;
+      _npcSlotEl.style.overflow = 'visible';
+      _npcSlotEl.style.zIndex   = '10060';
+      gsap.set(_npcImgEl, { transformOrigin: '50% 100%' });
+      gsap.timeline({
+        onComplete: function () {
+          _npcSlotEl.style.overflow = prevOverflow;
+          _npcSlotEl.style.zIndex   = prevZ;
+          gsap.set(_npcImgEl, { clearProps: 'transform,transformOrigin' });
+          if (onDone) onDone();
+        }
+      })
+        .to(_npcImgEl, { scale: SCALE, y: RISE_PX, duration: GROW_S, ease: 'power2.out' })  // rise + grow
+        .to(_npcImgEl, { opacity: 0, duration: halfS, ease: 'power2.inOut' })               // dissolve out (enlarged)
+        .call(function () { _applyNpcPortrait(who); })                                       // swap Hunter→Farmer
+        .to(_npcImgEl, { opacity: 1, duration: halfS, ease: 'power2.inOut' })               // dissolve in
+        .to(_npcImgEl, { scale: 1, y: 0, duration: SETTLE_S, ease: 'power2.inOut' });        // settle back
+      return;
+    }
+
+    // Default crossfade: fade out → swap → fade in (unchanged).
+    gsap.to(_npcImgEl, {
+      opacity: 0, duration: halfS, ease: 'power2.inOut',
+      onComplete: function () {
+        _applyNpcPortrait(who);
+        gsap.to(_npcImgEl, {
+          opacity: 1, duration: halfS, ease: 'power2.inOut',
+          onComplete: function () { if (onDone) onDone(); }
+        });
+      }
+    });
   }
 
   /* ══════════════════════════════════════════════════════════════

@@ -48,7 +48,8 @@ SOG.OtziBattle = (function () {
   var POST_SHAKE_LINES = [
     { who: 'explorer', text: 'Oh…'                                                 },
     { who: 'otzi',     text: 'You can now play 2 cards each turn.'                      },
-    { who: 'explorer', text: 'How do I win?'                                             },
+    { who: 'explorer', text: 'Cool.' },
+    { who: 'explorer', text: 'But how do I win?'                                             },
     { who: 'otzi',     text: "You won't"                                            },
     { who: 'otzi',     text: 'But try to gain the most IP at 2 of the 3 locations.'    }
   ];
@@ -56,22 +57,26 @@ SOG.OtziBattle = (function () {
   /* ── Post-battle dialogue scripts ───────────────────────────────── */
   var WIN_DIALOGUE = [
     { who: 'otzi',     text: 'How did you beat me?'                                   },
-    { who: 'explorer', text: 'Hard work and perseverance.'                            },
+    { who: 'explorer', text: 'Hard work and perseverance?'                            },
     { who: 'otzi',     text: 'Whatever that means.'                                   },
     { who: 'explorer', text: 'It means a lot.'                                        },
-    { who: 'otzi',     text: 'Right. Take this token of me — frozen in time.'   }
+    { who: 'otzi',     text: 'Right.' },
+    { who: 'otzi',     text: 'I guess you can have this...' },
+    { who: 'otzi',     text: 'A token of me — frozen in time.'   }
   ];
   var LOSS_DIALOGUE = [
     { who: 'otzi',     text: "As I said. You’re not ready."                      },
     { who: 'explorer', text: 'Let me try again.'                                       },
-    { who: 'otzi',     text: "The world doesn’t give second chances. But I will." },
+    { who: 'otzi',     text: "The world doesn’t give second chances." },
+    { who: 'otzi',     text: "But I will." },
     { who: 'explorer', text: '…thanks?'                                           },
     { who: 'otzi',     text: "Don’t waste it."                                    }
   ];
   var TIE_DIALOGUE = [
     { who: 'otzi',     text: 'A stalemate. Curious.'         },
     { who: 'explorer', text: 'Does that mean I can pass?'   },
-    { who: 'otzi',     text: 'No. It means we go again.'    }
+    { who: 'otzi',     text: 'No.' },
+    { who: 'otzi',     text: 'It means we go again.'    }
   ];
 
   var KEY_CARD_OTZI_UNLOCKED = 'sog_card_otzi_unlocked';

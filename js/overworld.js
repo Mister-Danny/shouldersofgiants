@@ -48,8 +48,8 @@ var Overworld = (function () {
     { who: 'explorer', text: 'Huh\u2026 That was strange.' },
     { who: 'explorer', text: 'I should probably be more careful about going through dark doorways.' },
     { who: 'explorer', text: 'At least this place looks familiar\u2026' },
-    { who: 'explorer', text: 'I\u2019m at Mount Kilimanjaro! And I think that\u2019s Lake Victoria.' },
-    { who: 'explorer', text: 'That means I\u2019m in East Africa. So cool!' },
+    { who: 'explorer', text: 'Is that Mount Kilimanjaro?' },
+    { who: 'explorer', text: 'I think that means I\u2019m in East Africa.' },
     { who: 'explorer', text: 'But where are all the people?' }
   ];
 
@@ -60,9 +60,10 @@ var Overworld = (function () {
     { who: 'explorer', text: 'Wow, I can\u2019t believe I just interacted with a real Neanderthal.' },
     { who: 'lucy',     text: 'That\u2019s an interesting way to describe a near-death experience.'  },
     { who: 'explorer', text: 'I couldn\u2019t have done it without you.'                            },
-    { who: 'lucy',     text: 'Nobody could.'                                                       },
+    { who: 'lucy',     text: 'You Homo sapiens wouldn’t exist if it weren’t for me.'             },
     { who: 'explorer', text: 'I can\u2019t wait to see the rest of the Ancient World.'             },
-    { who: 'lucy',     text: 'About that. I can walk, but these old bones don\u2019t migrate.'    },
+    { who: 'lucy',     text: 'About that.' },
+    { who: 'lucy',     text: 'I can walk, but these old bones don\u2019t migrate.'    },
     { who: 'explorer', text: 'I guess this is goodbye?'                                            },
     { who: 'lucy',     text: 'Take this.'                                                          }
   ];
@@ -76,9 +77,9 @@ var Overworld = (function () {
     { who: "otzi",     text: "You look like you’re ready to take an arrowhead to the back." },
     { who: "explorer", text: "That’s not very nice."                                          },
     { who: "otzi",     text: "The world isn’t very nice."                                    },
-    { who: "explorer", text: "So, how do I get you to let me pass?"                               },
-    { who: "otzi",     text: "You face me. Right here. Right now."                                },
-    { who: "explorer", text: "Again?"                                                               }
+    { who: "explorer", text: "Okay, I’ll just be on my way..."                                      },
+    { who: "otzi",     text: "No, you won’t."                                                       },
+    { who: "explorer", text: "I’m starting to sense a pattern."                                     }
   ];
 
   /* ── Phase D1 — Otzi→Mesopotamia travel dialogue ───────────────────
@@ -102,25 +103,26 @@ var Overworld = (function () {
   ];
 
   var D1_SCENE2_DIALOGUE = [
-    { who: 'explorer', text: 'Wow, that huge river there must be the Nile!'                                   },
-    { who: 'hunter',   text: 'Ah, I see Kemet, the black land. I could never settle here.'                    },
+    { who: 'explorer', text: 'Wow, look at that huge river!'                                   },
+    { who: 'hunter',   text: 'Ah, Kemet, the black land...'                    },
     { who: 'explorer', text: "What's that supposed to mean?"                                                   },
-    { who: 'hunter',   text: "Look at the soil, it's black."                                                  },
+    { who: 'hunter',   text: "Look at the soil. It's so rich. It's black."                                                  },
     { who: 'explorer', text: 'Oh okay.'                                                                        },
-    { who: 'hunter',   text: 'But these people and their gods, Ptah…'                                   },
-    { who: 'hunter',   text: 'Not for me.'                                                                     },
-    { who: 'explorer', text: "It is early. I don't see any pyramids yet."                                     },
+    { who: 'hunter',   text: "I'd heard rumors of this place along the Nile."                                   },
+    { who: 'explorer', text: 'Oh right, the Nile.' },
+    { who: 'explorer', text: 'This is Egypt!' },
+    { who: 'explorer', text: 'But where are all the pyramids?'                                     },
     { who: 'hunter',   text: "What's a pyramid?"                                                               },
-    { who: 'explorer', text: "We'll come back later during the Old Kingdom and I'll show you."                },
+    { who: 'explorer', text: "I think we're too early." },
+    { who: 'explorer', text: "Perhaps, we'll come back later."                },
     { who: 'hunter',   text: 'Whatever you say stranger.'                                                      }
   ];
 
   var D1_SCENE3_DIALOGUE = [
-    { who: 'explorer', text: 'Wow! What a cool place…'                                                    },
-    { who: 'hunter',   text: 'Mesopotomia!'                                                                    },  // spelling preserved verbatim
-    { who: 'explorer', text: 'Hey, yeah, that is what its called. How did you know?'                          },
-    { who: 'hunter',   text: "There's two rivers. Mesopotamia means the land between the rivers."             },
-    { who: 'explorer', text: 'It looks so green.'                                                              }
+    { who: 'hunter',   text: 'Mesopotamia!' },
+    { who: 'explorer', text: "What's a Meso-potato?" },
+    { who: 'hunter',   text: 'Mesopotamia. It means the land between the rivers.' },
+    { who: 'explorer', text: "That must be why it's so green." }
   ];
 
   /* ── Phase D2a — Mesopotamia extended arrival dialogue ─────────────
@@ -132,19 +134,22 @@ var Overworld = (function () {
     { who: 'farmer',   text: 'I feel different.'                                                               },
     { who: 'farmer',   text: "Maybe I don't need to hunt animals all of the time."                            },
     { who: 'explorer', text: 'What will you do instead?'                                                       },
-    { who: 'farmer',   text: 'On this land, I can grow it.'                                                    },
-    { who: 'explorer', text: "And if you grow more than you need, you'll have a surplus."                     },
-    { who: 'farmer',   text: 'And with a surplus, people can specialize in different jobs.'                    },
-    { who: 'explorer', text: 'And with specialization, comes…'                                           }
+    { who: 'farmer',   text: 'On this land, I can grow anything.' },
+    { who: 'explorer', text: 'I see.' },
+    { who: 'farmer',   text: 'And if I grow enough, I could have a surplus to sell.' },
+    { who: 'farmer',   text: 'And from there, people can specialize in different jobs.' },
+    { who: 'farmer',   text: 'And with specialization, comes…' }
   ];
 
   /* \u2500\u2500 Phase D2b \u2014 Gilgamesh encounter dialogue \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
   var D2B_GILGAMESH_DIALOGUE = [
     { who: 'gilgamesh', text: 'Welcome to my city, Uruk.'                          },
     { who: 'explorer',  text: 'Oh hi! You must be the mayor.'                      },
-    { who: 'gilgamesh', text: 'How dare you compare me to some civil servant?!'    },
+    { who: 'gilgamesh', text: 'How dare you confuse me for a civil servant?!'    },
     { who: 'explorer',  text: 'What?'                                              },
-    { who: 'gilgamesh', text: 'I am Gilgamesh. King of this state.'               },
+    { who: 'gilgamesh', text: 'I am Gilgamesh. King Gilgamesh.' },
+    { who: 'explorer',  text: 'But you said it was just a city.' },
+    { who: 'gilgamesh', text: 'Just a city? It’s my city-state.' },
     { who: 'explorer',  text: 'Oh, I\u2019m sorry\u2026'                          },
     { who: 'gilgamesh', text: 'You will be.'                                       }
   ];
@@ -179,14 +184,21 @@ var Overworld = (function () {
   var KEY_CUNEIFORM_GRANTED  = 'sog_cuneiform_granted';
 
   var PHASE2_DIALOGUE = [
-    { who: 'lucy',     text: 'Mmmhm\u2026 I\u2019m standing right here.' },
-    { who: 'explorer', text: 'Woah, you can talk? I thought you were an ape?' },
+    { who: 'lucy',     text: 'Mmmhm\u2026' },
+    { who: 'lucy',     text: 'I\u2019m standing right here.' },
+    { who: 'explorer', text: 'Woah, you can talk?' },
+    { who: 'explorer', text: 'I thought you were an ape?' },
     { who: 'lucy',     text: 'Australopithecus to the uninitiated.' },
-    { who: 'explorer', text: 'Wow, you\u2019re one of the earliest human ancestors to stand on two legs.' },
-    { who: 'lucy',     text: 'Yes, I\u2019m bipedal. Thanks for noticing.' },
-    { who: 'explorer', text: 'That doesn\u2019t explain why you can talk.' },
-    { who: 'lucy',     text: 'Nothing will. Don\u2019t over think it.' },
-    { who: 'explorer', text: 'Fair enough. But that must mean I traveled back in time. Like way back.' },
+    { who: 'explorer', text: 'Uh, yeah... I totally know what that means.' },
+    { who: 'lucy',     text: 'It means I\u2019m one of the earliest human ancestors to stand on two legs.' },
+    { who: 'explorer', text: 'Congratulations!' },
+    { who: 'lucy',     text: 'You\u2019re welcome.' },
+    { who: 'explorer', text: 'But that doesn\u2019t explain why you can talk.' },
+    { who: 'lucy',     text: 'Nothing will.' },
+    { who: 'lucy',     text: 'Don\u2019t over think it.' },
+    { who: 'explorer', text: 'Fair enough.' },
+    { who: 'explorer', text: 'But that must mean I traveled back in time.' },
+    { who: 'explorer', text: 'Like way back.' },
     { who: 'lucy',     text: 'Like I said, don\u2019t over think it.' },
     { who: 'explorer', text: 'Well then, I guess I better get going.' }
   ];
@@ -199,7 +211,10 @@ var Overworld = (function () {
     { who: 'explorer', text: 'Who knew history had so much conflict?'                  },
     { who: 'hunter',   text: 'Tell me about it.'                                       },
     { who: 'explorer', text: 'What do you mean?'                                       },
-    { who: 'hunter',   text: 'These other tribes won’t leave my antelope alone.'  },
+    { who: 'hunter',   text: 'These other tribes won’t leave my antelope alone.' },
+    { who: 'explorer', text: 'Are they like your pets?' },
+    { who: 'hunter',   text: 'They’re like my lunch.' },
+    { who: 'explorer', text: 'Oh, right.' },
     { who: 'explorer', text: 'Couldn’t you share?'                                },
     { who: 'hunter',   text: 'What does that mean?'                                    }
   ];
@@ -214,8 +229,8 @@ var Overworld = (function () {
     { who: 'explorer', text: 'I want to see the rest of the world.'                    },
     { who: 'hunter',   text: 'There’s more world out there?'                      },
     { who: 'explorer', text: 'Of course.'                                              },
-    { who: 'hunter',   text: 'Maybe I won’t have to fight others for resources?' },
-    { who: 'explorer', text: 'Maybe…'                                             },
+    { who: 'hunter',   text: 'Maybe there are places where I won’t have to fight others for resources?' },
+    { who: 'explorer', text: 'There’s only one way to find out...'               },
     { who: 'explorer', text: 'Let’s go!'                                          }
   ];
 
@@ -1311,8 +1326,8 @@ var Overworld = (function () {
         // Hunter "I feel different…" — HUD stays open for crossfade next
         _runLinesKeepOpen([{ who: 'hunter', text: 'I feel different…' }], function () {
           // Portrait crossfade: Hunter → Farmer (~800ms, NPC slot stays visible)
-          hud.swapNpcPortrait({ character: 'farmer', transitionMs: 800 }, function () {
-            log('[D2a] Crossfade to Farmer complete — starting farming dialectic');
+          hud.swapNpcPortrait({ character: 'farmer', transitionMs: 800, grow: true, sfx: 'sfx/transform.m4a' }, function () {
+            log('[D2a] Hunter→Farmer transformation complete — starting farming dialectic');
             _runLinesKeepOpen(D2A_FARMING_DIALOGUE, function () {
               // After last farming line — fade in Walls of Uruk node
               _d2aFadeInUrukNode(function () {
@@ -1342,7 +1357,9 @@ var Overworld = (function () {
     nodeEl.dataset.id = 'walls-of-uruk';
     nodeEl.style.left = '72%';
     nodeEl.style.top  = '82%';
-    nodeEl.style.transform = 'translate(-50%,-50%) scale(1.35)';
+    // Resting transform is translate(-50%,-50%) scale(1.35). When GSAP is present
+    // the entrance below animates into that; otherwise set it directly (fallback).
+    if (typeof gsap === 'undefined') nodeEl.style.transform = 'translate(-50%,-50%) scale(1.35)';
 
     var img = document.createElement('img');
     img.src = NODE_PATH + 'wallsofuruk@0.33x.png';
@@ -1369,15 +1386,23 @@ var Overworld = (function () {
     overlayEl.insertBefore(nodeEl, charEl);
 
     if (typeof gsap !== 'undefined') {
-      gsap.to(nodeEl, {
-        opacity: 1,
-        duration: 1,
-        ease: 'power2.out',
-        onComplete: function () {
-          log('[D2a] Walls of Uruk node faded in');
-          if (onDone) onDone();
-        }
-      });
+      // Entrance: starts at DOUBLE size (scale 2.7 = 1.35×2), raised up, then
+      // FALLS DOWN and settles to its normal position/scale, playing uruk.mp3 as
+      // it lands. xPercent/yPercent keep it centred on the 72%/82% point (the
+      // translate(-50%,-50%) equivalent), so the final state is the resting one.
+      // Tuning knobs: fallDistance (y:-110), fall duration (0.7s), start scale (2.7).
+      gsap.set(nodeEl, { xPercent: -50, yPercent: -50, transformOrigin: '50% 50%' });
+      gsap.fromTo(nodeEl,
+        { opacity: 0, scale: 2.7, y: -110 },
+        { opacity: 1, scale: 1.35, y: 0, duration: 0.7, ease: 'power2.in',
+          onComplete: function () {
+            try { new Audio('sfx/uruk.mp3').play(); } catch (e) {}   // sound on impact
+            // small squash-settle on landing
+            gsap.fromTo(nodeEl, { scale: 1.55 }, { scale: 1.35, duration: 0.22, ease: 'power2.out' });
+            log('[D2a] Walls of Uruk node dropped in');
+            if (onDone) onDone();
+          }
+        });
     } else {
       nodeEl.style.opacity = '1';
       if (onDone) setTimeout(onDone, 0);
@@ -1392,7 +1417,7 @@ var Overworld = (function () {
     // "Cities!" and "Bye!" — Farmer still visible
     _runLinesKeepOpen([
       { who: 'explorer', text: 'Cities!' },
-      { who: 'farmer',   text: "Great, but the land isn't going to farm itself. Bye!" }
+      { who: 'farmer',   text: "But the land isn't going to farm itself. Bye!" }
     ], function () {
       // Farmer slides down — NPC gone, but dialogue mode stays active
       hud.slideOutNpc(function () {
@@ -1820,13 +1845,19 @@ var Overworld = (function () {
      KEY_MARKET_INTRO_SEEN. DRAFT — edit these lines here. {who} maps to the HUD
      CHARACTERS portraits ('trader' / 'explorer'). */
   var MARKET_TRADER_INTRO = [
-    { who: 'trader',   text: 'Ah, a traveler with coin to spend! Welcome to the Mesopotamian Marketplace.' },
+    { who: 'trader',   text: 'Ah, a traveler with coin to spend!' },
+    { who: 'trader',   text: 'Welcome to the Mesopotamian Marketplace.' },
     { who: 'explorer', text: 'What is all this?' },
-    { who: 'trader',   text: 'The finest cards civilization has to offer — and they can be yours, for the right price in gold.' },
+    { who: 'trader',   text: 'The finest cards this civilization has to offer...' },
+    { who: 'trader',   text: 'And they can all be yours, for the right price in gold.' },
     { who: 'explorer', text: 'How does it work?' },
-    { who: 'trader',   text: "Simple. Tap any card to take a closer look. If you've the gold for it, the Buy button lights up. Tap it, confirm, and the card is yours." },
+    { who: 'trader',   text: 'Simple. Tap any card to take a closer look.' },
+    { who: 'trader',   text: 'If you have enough gold, the Buy button lights up.' },
+    { who: 'trader',   text: 'Tap it, confirm, and the card is yours.' },
     { who: 'explorer', text: 'And then?' },
-    { who: 'trader',   text: "Then it joins your collection — ready for you to build into your deck. Spend wisely, friend. Gold doesn't grow on date palms." }
+    { who: 'trader',   text: 'Then it joins your collection — ready for you to build into your deck.' },
+    { who: 'trader',   text: 'Spend wisely.' },
+    { who: 'trader',   text: "Gold doesn't grow on date palms." }
   ];
 
   // Positions match samplefinishedmarket.jpg over the (tighter-crop) mesomarket.jpg:

@@ -298,10 +298,8 @@ SOG.GilgameshBattle = (function () {
      normally; "Click on me" pauses for a portrait click → rules popup → resume
      with "Thank you". Skipped on Attempt 2+ / re-entries. */
   var OPENING_PRE = [
-    { who: 'otzi',     text: 'I am Gilgamesh.' },
-    { who: 'explorer', text: 'Hi.' },
-    { who: 'otzi',     text: 'I will smite you into the great beyond.' },
-    { who: 'explorer', text: 'Gulp.' },
+    { who: 'otzi',     text: 'Prepare to be smited into the great beyond.' },
+    { who: 'explorer', text: 'Gulp' },
     { who: 'explorer', text: 'How do you play this, again?' }
   ];
   var OPENING_PROMPT = 'Click on me, if you need a reminder.';
@@ -706,7 +704,7 @@ SOG.GilgameshBattle = (function () {
           { who: 'explorer', text: 'Wow!' },
           { who: 'otzi',     text: 'See what you can get yourself at the Mesopotamian Marketplace.' },
           { who: 'explorer', text: "Thank you! You're such a gracious king." },
-          { who: 'otzi',     text: "We'll see next time you face me..." }
+          { who: 'otzi',     text: "Until the next time..." }
         ], function () {
           // The win dialogue (above) teases the Marketplace; now fade to the
           // Mesopotamia map at Uruk, reveal the market node, and — first time
@@ -839,11 +837,12 @@ SOG.GilgameshBattle = (function () {
     { who: 'explorer', text: "What's this?" },
     { who: 'farmer',   text: 'Cuneiform, the first written language.' },
     { who: 'explorer', text: 'Oh wow, how does it work?' },
-    { who: 'farmer',   text: 'Obviously, you should read it.' },
+    { who: 'farmer',   text: 'You should read it, obviously.' },
     { who: 'explorer', text: 'Oh, right.' },
     { who: 'farmer',   text: 'But in effect, it will empower those old prehistoric cards you have.' },
     { who: 'explorer', text: 'Thank you.' },
-    { who: 'farmer',   text: "Don't mention. Seriously." }
+    { who: 'farmer',   text: "Don't mention." },
+    { who: 'farmer',   text: "Seriously, he'll kill me." }
   ];
   var GILGAMESH_POSTLOSS_CHALLENGE = [
     { who: 'otzi',     text: 'Back for more?' },

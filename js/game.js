@@ -574,6 +574,17 @@
         extraDelay = Math.max(extraDelay, 300);
       }
 
+      // Per-card REVEAL presentation (flavor only; separate from CARD_ABILITIES).
+      // Registered cards get custom SFX/animation that OVERLAYS the flip without
+      // stalling the loop (handlers return 0). Unregistered cards are untouched.
+      if (window.SOG && SOG.RevealFx && typeof SOG.RevealFx.fire === 'function') {
+        var fxDelay = SOG.RevealFx.fire({
+          cardId: cardId, owner: owner, locId: locId, slotIndex: slotIndex,
+          card: card, slotEl: slotEl, getSlotEl: getSlotEl
+        });
+        extraDelay = Math.max(extraDelay, fxDelay || 0);
+      }
+
       // Signal done after per-card effects have had time to play
       if (done) setTimeout(done, extraDelay);
     }, 320);
@@ -780,8 +791,17 @@
     var toSlotEl = getSlotEl(owner, toLocId, toIndex);
 
     // SFX at start of slide
+    // _advSteps holds Lucy's looping footstep audio so the GSAP onComplete (and
+    // the no-gsap fallback) can stop it the instant she arrives.
+    var _advSteps = null;
     if (opts.sfxOnStart) {
       opts.sfxOnStart();
+    } else if (cardId === 33) {
+      // Lucy (First Steps): slow wobbling walk — loop footsteps for the move's duration.
+      try { _advSteps = new Audio('sfx/adventuresteps.m4a'); _advSteps.loop = true; _advSteps.play(); } catch (e) {}
+    } else if (cardId === 35) {
+      // Ötzi (flee): quick "yoink" as he darts away (movement itself unchanged).
+      try { new Audio('sfx/yoink.mp3').play(); } catch (e) {}
     } else if (cardId === 24 && typeof SFX !== 'undefined') {
       SFX.sailingSound();
     }
@@ -916,18 +936,36 @@
       document.body.appendChild(clone);
       fromSlotEl.style.opacity = '0';
 
+      // Per-card travel feel. Default cards keep the straight 0.55s slide.
+      // Lucy (33) walks slowly (~1.5s) with a gentle side-to-side "teeter-totter"
+      // wobble pivoting at her feet — reads as a deliberate waddle. The position
+      // tween animates left/top; the wobble animates rotation (transform), so the
+      // two run concurrently without conflict.
+      var slideDuration = (cardId === 33) ? 1.5 : 0.55;
+      var wobbleTween   = null;
+      if (cardId === 33) {
+        gsap.set(clone, { transformOrigin: '50% 100%', rotation: -5 });
+        wobbleTween = gsap.to(clone, {
+          rotation: 5, duration: 0.3, ease: 'sine.inOut', yoyo: true, repeat: 4
+        });
+      }
+
       gsap.to(clone, {
         left:     toRect.left,
         top:      toRect.top,
-        duration: 0.55,
+        duration: slideDuration,
         ease:     'power2.inOut',
         onComplete: function () {
+          if (wobbleTween) wobbleTween.kill();
+          if (_advSteps) { try { _advSteps.pause(); _advSteps.currentTime = 0; } catch (e) {} }
           document.body.removeChild(clone);
           fromSlotEl.style.opacity = '';
           applyMove();
         }
       });
     } else {
+      // No-gsap fallback: still stop Lucy's footstep loop if it started.
+      if (_advSteps) { try { _advSteps.pause(); } catch (e) {} }
       applyMove();
     }
   }

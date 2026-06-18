@@ -1801,6 +1801,32 @@
     }
   }
 
+  /* Tribe (id 36) — REACTIVE PRESENTATION ONLY (no IP/state/timing change).
+     Tribe's actual +IP is computed in evaluateContinuous (a lump-sum continuous
+     recompute), which isn't a clean per-card event. Instead this onCardLandedHere
+     fires once per card that LANDS at Tribe's location, AFTER that card's reveal +
+     At Once have resolved (the fireOnCardLandedHere dispatcher runs post-reveal).
+     We gate on the EXACT same condition evaluateContinuous uses for Tribe's bonus
+     — the landed card is same-owner as Tribe AND was played the turn right after
+     Tribe (turnPlayed === tribe.turnPlayed + 1) — so the bounce fires exactly when
+     Tribe gains bonus IP from that card. Visual/audio only via SOG.RevealFx. */
+  function tribeReactBounce(ctx) {
+    if (!ctx || ctx.landedOwner !== ctx.owner) return;            // Tribe counts same-owner cards only
+    var tribe = ctx.slot;
+    if (!tribe || typeof tribe.turnPlayed !== 'number') return;
+    var slots = (ctx.owner === 'player' ? G.playerSlots : G.aiSlots)[ctx.locId];
+    if (!slots) return;
+    var landed = null;
+    for (var i = 0; i < slots.length; i++) {
+      if (slots[i] && slots[i].cardId === ctx.landedCardId) { landed = slots[i]; break; }
+    }
+    if (!landed || landed.turnPlayed !== tribe.turnPlayed + 1) return;  // this card grants Tribe no bonus
+    var el = getSlotEl(ctx.owner, ctx.locId, ctx.slotIndex);
+    if (el && window.SOG && SOG.RevealFx && typeof SOG.RevealFx.reactBounce === 'function') {
+      SOG.RevealFx.reactBounce(el, 'sfx/tribe.m4a');
+    }
+  }
+
   var CARD_ABILITIES = {
     2:  { onAtOnce: abilityScholarOfficials },
     3:  { onAtOnce: abilityJustinian        },
@@ -1812,6 +1838,7 @@
     23: { onAtOnce: abilityZhengHe          },
     26: { onAtOnce: abilityTool             },  // Prehistory tutorial
     35: { onCardLandedHere: abilityOtziFlee },  // Ötzi — reactive flee (any card lands at his loc after he's revealed)
+    36: { onCardLandedHere: tribeReactBounce },  // Tribe — reactive bounce+sfx (presentation only; IP stays in evaluateContinuous)
 
     /* ── Mesopotamia era ───────────────────────────────────────────
        Phase C cards (37 Sargon, 40 Scribe, 43 Gilgamesh) remain
@@ -1840,10 +1867,11 @@
   function fireAtOnce(owner, cardId, locId, done) {
     // Cards with actual At Once abilities: play sound + pulse animation.
     // Cards 2, 3, 5, 13 have custom sfx — skip the generic 8-bit chime for those.
-    // Tool (26) joins the generic-chime list: no custom SFX yet, simple draw effect.
+    // Tool (26) now has its own SFX (the hammer strike via SOG.RevealFx), so skip
+    // the generic 8-bit chime for it too (keep the pulse).
     var hasAtOnce = [4, 8, 9, 23, 26, 38, 42, 46, 47, 49].indexOf(cardId) !== -1;
     if (hasAtOnce) {
-      if (typeof SFX !== 'undefined') SFX.atOnce();
+      if (typeof SFX !== 'undefined' && cardId !== 26) SFX.atOnce();
       var atSlotEl = findSlotEl(owner, cardId);
       if (atSlotEl && typeof Anim !== 'undefined') Anim.pulseYellow(atSlotEl);
     }
