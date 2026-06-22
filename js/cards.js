@@ -266,7 +266,7 @@ const CARDS = [
     image: "images/cards/prehistorycards/lucycard.jpg", locked: true
   },
   {
-    id: 34, name: "Neanderthal", cc: 4, ip: 3,
+    id: 34, name: "Neanderthal", cc: 3, ip: 3,
     type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: null, ability: null,
     image: "images/cards/prehistorycards/neanderthalcard.jpg", locked: true
@@ -293,7 +293,7 @@ const CARDS = [
      file when no @sm variant exists.
      Abilities are stubbed in Phase A — no gameplay logic yet.       */
   {
-    id: 37, name: "Sargon", cc: 5, ip: 2,
+    id: 37, name: "Sargon", cc: 5, ip: 3,
     type: "Political", type2: null, era: "Mesopotamia",
     abilityName: "The Empire State",
     ability: "Continuous: Sargon grants +3 IP to adjacent location(s).",
@@ -373,7 +373,7 @@ const CARDS = [
     id: 48, name: "Chariot", cc: 2, ip: 3,
     type: "Military", type2: null, era: "Mesopotamia",
     abilityName: "Wheels of Conquest",
-    ability: "Can move once on its own. When it arrives at a new location, strike one of your opponent's cards there and reduce it by -1 IP.",
+    ability: "Can move once on its own.\nWhen it moves, strike an opposing card and reduce it by -1 IP.",
     image: "images/mesopotamiacards/chariot@0.5x.jpg", locked: true
   },
   {

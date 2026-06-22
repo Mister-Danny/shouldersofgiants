@@ -796,6 +796,7 @@ window.SOG.Adventure.Prehistory = (function () {
     var wrapEl   = document.getElementById('adv-card-reveal-card-wrap');
     var imgEl    = document.getElementById('adv-card-reveal-img');
     var ipEl     = document.getElementById('adv-card-reveal-ip');
+    var ccEl     = document.getElementById('adv-card-reveal-cc');
     var bannerEl = document.getElementById('adv-card-reveal-banner');
 
     // wrapEl is preferred GSAP target (img + IP overlay move together);
@@ -807,6 +808,21 @@ window.SOG.Adventure.Prehistory = (function () {
     // Point the image at this card and stamp the IP number
     imgEl.src = card.image || '';
     if (ipEl) ipEl.textContent = card.ip != null ? String(card.ip) : '';
+
+    // Capital cost (top-left). Shown for capital-era cards, but HIDDEN for the
+    // pre-capital companion / boss cards that have no Capital cost in play:
+    // Lucy (33), Neanderthal (34), Ötzi (35), Gilgamesh (43). Every other card —
+    // Sargon, marketplace purchases, and all future cards — shows its CC.
+    if (ccEl) {
+      var NO_CC_REVEAL_IDS = [33, 34, 35, 43];
+      if (card.cc != null && NO_CC_REVEAL_IDS.indexOf(card.id) === -1) {
+        ccEl.textContent   = String(card.cc);
+        ccEl.style.display = '';
+      } else {
+        ccEl.textContent   = '';
+        ccEl.style.display = 'none';
+      }
+    }
 
     // Show and fade-in the dim overlay
     if (dimEl) {

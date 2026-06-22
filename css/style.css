@@ -1548,6 +1548,7 @@ img    { display: block; }
   line-height: 1.65;
   margin-bottom: 14px;
   text-shadow: 1px 1px 0 #000;
+  white-space: pre-line;   /* honour explicit "\n" line breaks in ability text (e.g. Chariot); long lines still wrap */
 }
 
 /* Vanilla card: muted dimmed text */
@@ -2580,6 +2581,13 @@ img    { display: block; }
 body.gilgamesh-battle .battle-col[data-loc-id="8"]::before { background: url('../images/locations/cedarforest.jpg') center / cover no-repeat; } /* Cedar Forest */
 body.gilgamesh-battle .battle-col[data-loc-id="7"]::before { background: url('../images/locations/uruk.jpg')        center / cover no-repeat; } /* Uruk */
 body.gilgamesh-battle .battle-col[data-loc-id="2"]::before { background: url('../images/locations/mountmashu.jpg')  center / cover no-repeat; } /* Mount Mashu */
+
+/* Sargon battle — its own Mesopotamia location art (Upper Sea / Akkad / Lower
+   Sea). Reuses loc-ids 8/7/2 but scoped to body.sargon-battle so it overrides
+   only here, leaving the Gilgamesh + Otzi battles untouched. */
+body.sargon-battle .battle-col[data-loc-id="8"]::before { background: url('../images/locations/uppersea.jpg') center / cover no-repeat; } /* Upper Sea  (Mediterranean Coast) */
+body.sargon-battle .battle-col[data-loc-id="7"]::before { background: url('../images/locations/akkad.jpg')    center / cover no-repeat; } /* Akkad */
+body.sargon-battle .battle-col[data-loc-id="2"]::before { background: url('../images/locations/lowersea.jpg') center / cover no-repeat; } /* Lower Sea  (Persian Gulf Coast) */
 
 .battle-loc-score-opp,
 .battle-loc-score-player {
@@ -8186,6 +8194,31 @@ body.tut-locked #battle-reset-turn {
   }
 }
 
+/* Phase D4 — Sargon dust-storm reveal. A short-lived layer of sand grains that
+   SWIRL outward from the node's spot and dissipate, "uncovering" the node (which
+   fades in mid-storm; JS removes the layer at the end). Each grain carries its own
+   randomized --ang / --dist / --dur / --delay (set inline in overworld.js). */
+.sargon-duststorm {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 0; height: 0;
+  pointer-events: none;
+}
+.sargon-duststorm-grain {
+  position: absolute;
+  left: 0; top: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ecd49a 0%, #c89a55 70%, rgba(180,140,80,0) 100%);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: sargonDustSwirl var(--dur, 1.2s) ease-out var(--delay, 0s) 1 both;
+}
+@keyframes sargonDustSwirl {
+  0%   { opacity: 0;    transform: rotate(var(--ang)) translateX(0)            scale(0.6); }
+  20%  { opacity: 0.95; }
+  100% { opacity: 0;    transform: rotate(calc(var(--ang) + 230deg)) translateX(var(--dist)) scale(1.15); }
+}
+
 /* Player character sprite — pixel-art crisp rendering */
 #overworld-character {
   position: absolute;
@@ -8864,7 +8897,8 @@ body.otzi-battle #adv-bubble-explorer::after {
    adventure hand). Narrow it so the right edge (168+200=368px) clears the hand
    with a small gap; longer lines just wrap taller, staying left of the cards.
    Scoped to gilgamesh-battle so the verified Otzi battle is untouched. */
-body.gilgamesh-battle #adv-bubble-explorer { width: 200px; }
+body.gilgamesh-battle #adv-bubble-explorer,
+body.sargon-battle    #adv-bubble-explorer { width: 200px; }
 
 /* In battle context: portrait is handled by the avatar circle — hide the
    inline portrait inside the bubble itself. */
@@ -8879,6 +8913,92 @@ body.otzi-battle .adv-bubble .adv-bubble-text {
   min-height: 28px;
 }
 body.otzi-battle .adv-bubble .adv-bubble-hint {
+  color: #666;
+  margin-top: 6px;
+}
+
+/* ── Sargon battle speech bubbles — same comic-book treatment as the Otzi /
+   Gilgamesh battles. Sargon uses its own body class (so the otzi-battle bubble
+   rules above don't reach it) and keeps the capital UI (CC overlays), so we
+   mirror ONLY the bubble styling here. Avatars sit in their default spots
+   (opponent top-right 20/20, ally bottom-left 40/40), matching these anchors. */
+body.sargon-battle #adv-bubble-otzi {
+  top: 80px;
+  transform: translateY(-50%);
+  right: 152px;
+  left: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 270px;
+  gap: 0;
+  background: #f0ebe0;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: -4px 4px 0 #111;
+}
+body.sargon-battle #adv-bubble-otzi::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-left-color: #111;
+}
+body.sargon-battle #adv-bubble-otzi::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-left-color: #f0ebe0;
+}
+body.sargon-battle #adv-bubble-explorer {
+  top: 624px;
+  transform: translateY(-50%);
+  left: 168px;
+  right: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 200px;
+  gap: 0;
+  background: #fffef5;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: 4px 4px 0 #111;
+}
+body.sargon-battle #adv-bubble-explorer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-right-color: #111;
+}
+body.sargon-battle #adv-bubble-explorer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-right-color: #fffef5;
+}
+body.sargon-battle .adv-bubble .adv-bubble-portrait { display: none; }
+body.sargon-battle .adv-bubble .adv-bubble-text {
+  font-size: 18px;
+  line-height: 1.45;
+  color: #111;
+  text-shadow: none;
+  min-height: 28px;
+}
+body.sargon-battle .adv-bubble .adv-bubble-hint {
   color: #666;
   margin-top: 6px;
 }

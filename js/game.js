@@ -944,7 +944,7 @@
       // wobble pivoting at her feet — reads as a deliberate waddle. The position
       // tween animates left/top; the wobble animates rotation (transform), so the
       // two run concurrently without conflict.
-      var slideDuration = (cardId === 33) ? 1.5 : (cardId === 48) ? 1.0 : 0.55;   // Chariot travels ~1s (Phase 1)
+      var slideDuration = (cardId === 33) ? 1.5 : (cardId === 48) ? 1.0 : (cardId === 35) ? 0.633 : 0.55;   // Chariot ~1s; Ötzi flee 15% slower than the 0.55s default
       var wobbleTween   = null;
       if (cardId === 33) {
         gsap.set(clone, { transformOrigin: '50% 100%', rotation: -5 });
@@ -1179,11 +1179,15 @@
           // (d) Reactive: fire onCardLandedHere for OTHER already-revealed cards
           //     at this location (e.g. Ötzi's flee). Excludes the just-landed
           //     card, so it never fires on a card's own reveal. No card 35 in an
-          //     Arcadium deck → unreached there.
+          //     Arcadium deck → unreached there. AWAIT it: an async reactor (Ötzi's
+          //     flee slide) fully finishes before proceed() schedules the next
+          //     reveal, so the flee never overlaps a card reveal. With no reactor,
+          //     proceed runs immediately (behaviour-identical for other battles).
           if (SOG.abilities && typeof SOG.abilities.fireOnCardLandedHere === 'function') {
-            SOG.abilities.fireOnCardLandedHere(item.owner, item.cardId, rLocId);
+            SOG.abilities.fireOnCardLandedHere(item.owner, item.cardId, rLocId, proceed);
+          } else {
+            proceed();
           }
-          proceed();
         });
       });
     } else {

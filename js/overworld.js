@@ -34,6 +34,8 @@ var Overworld = (function () {
   // Phase D2c
   var KEY_MET_GILGAMESH             = 'sog_met_gilgamesh';              // set after the "You will be." line
   var KEY_MESO_STARTER_GRANTED      = 'sog_mesopotamia_starter_granted'; // set after all 5 card grants complete
+  // Phase D4 — Sargon encounter
+  var KEY_SARGON_NODE_REVEALED      = 'sog_sargon_node_revealed';       // dust-storm reveal played → node persists, no replay
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -179,6 +181,53 @@ var Overworld = (function () {
   var D3_FARMER_POSTLOSS_B = [
     { who: 'farmer',   text: 'With Cuneiform, you give your cards the ability to record what we know and pass it on.' },
     { who: 'explorer', text: 'Thank you.'                                  }
+  ];
+
+  /* ── Phase D4 — Sargon encounter (DRAFT dialogue; edit freely) ────────────
+     Lines are plain { who, text } entries. who maps to a HUD CHARACTERS entry
+     ('sargon' already exists with sargonportrait.jpg). The reveal plays once on
+     the first marketplace return (after the deck-builder unlock); the node-click
+     branches on the active deck size (see onNodeClick 'sargon').                */
+  // (a) Reveal — bookend Explorer lines around the dust-storm node reveal.
+  var D4_SARGON_REVEAL_INTRO = [
+    { who: 'explorer', text: "Wow, I can't wait to use my new cards!" }
+  ];
+  var D4_SARGON_REVEAL_OUTRO = [
+    { who: 'explorer', text: 'Uh, that was mysterious…' },
+    { who: 'explorer', text: 'Better go check it out.'       }
+  ];
+  // (b) Deck NOT ready (< 15 cards): Sargon turns the Explorer away. Split so
+  //     Sargon's portrait can slide out before the Explorer's closing line.
+  var D4_SARGON_TURNED_AWAY_A = [
+    { who: 'sargon',   text: "You think you're ready to face Sargon?" },
+    { who: 'explorer', text: 'I guess…'                          },
+    { who: 'sargon',   text: 'Guess again.'                           },
+    { who: 'sargon',   text: 'You need a deck of at least 15 cards before you can face Sargon, the Great.' }
+  ];
+  var D4_SARGON_TURNED_AWAY_B = [
+    { who: 'explorer', text: 'Maybe I need to earn more gold to buy more cards.' }
+  ];
+  // (c) Deck ready (exactly 15 cards): the full Emperor encounter, then battle.
+  var D4_SARGON_ENCOUNTER = [
+    { who: 'sargon',   text: 'Who dares to cross, Sargon the Great?' },
+    { who: 'explorer', text: 'It is I, just an explorer seeking to learn about history…' },
+    { who: 'explorer', text: 'Great King Sargon.'                    },
+    { who: 'sargon',   text: 'King?!'                                },
+    { who: 'sargon',   text: 'Sargon is no King.'                    },
+    { who: 'explorer', text: 'Oh'                                    },
+    { who: 'sargon',   text: "Sargon is the world's first Emperor!"  },
+    { who: 'explorer', text: "What's the difference?"                },
+    { who: 'sargon',   text: "I don't rule over one city-state."     },
+    { who: 'sargon',   text: "I rule over all of Mesopotamia's city-states." },
+    { who: 'explorer', text: 'Right.'                                },
+    { who: 'sargon',   text: 'That includes you!'                    },
+    { who: 'explorer', text: 'Of course it does.'                    }
+  ];
+  // Closing reflection on the map after losing to Sargon (before defeating him).
+  // The Sargon-side smack-talk plays on the battle screen (sog-adventure-sargon);
+  // this Explorer line plays once back on the overworld via returnFromSargonLoss.
+  var D4_SARGON_LOSS_REFLECT = [
+    { who: 'explorer', text: 'Perhaps, I need to build up my deck before I take on an Empire.' }
   ];
   var D2C_AUTO_DISMISS_MS    = 1500;
   var KEY_GILGAMESH_PHASE1   = 'sog_gilgamesh_phase1_complete';
@@ -419,6 +468,19 @@ var Overworld = (function () {
           flipX: true, // mirror the stall sprite horizontally to face the other way
           showIf: function () {
             try { return localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; } catch (e) { return false; }
+          }
+        },
+        {
+          // Phase D4 — Sargon (Akkad). Dust-storm-revealed on the first marketplace
+          // return; persists via KEY_SARGON_NODE_REVEALED. Position is provisional
+          // (south/near Uruk) — fine-tune later. Click → deck-size gate (onNodeClick).
+          id:    'sargon',
+          name:  'Akkad',
+          image: NODE_PATH + 'sargon.png',
+          x: 61, y: 55,
+          scale: 1.61,   // 704×384 art rendered at 84px base — scale up a touch (knob)
+          showIf: function () {
+            try { return localStorage.getItem(KEY_SARGON_NODE_REVEALED) === 'true'; } catch (e) { return false; }
           }
         }
       ],
@@ -823,6 +885,18 @@ var Overworld = (function () {
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
         _enterMarket();
+      });
+      return;
+    }
+
+    // ── Sargon (Akkad) — Phase D4: walk to the node, then GATE on active deck
+    //    size. Full deck is 15; < 15 → "come back when you're ready" (no battle,
+    //    sprite stays); exactly 15 → full encounter → battle STUB. ──
+    if (node.id === 'sargon' && currentMapId === 'mesopotamia') {
+      isDialogueLocked = true;
+      cancelIdle();
+      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+        _runSargonEncounter(node);
       });
       return;
     }
@@ -1739,6 +1813,187 @@ var Overworld = (function () {
     });
   }
 
+  /* ── Phase D4 — Sargon node reveal (dust storm) ──────────────────────────
+     One-time, fired from _exitMarket on the first marketplace return (after the
+     deck-builder unlock). Sequence: Explorer "can't wait" → sargonintro.mp3 +
+     a swirling dust storm at the Sargon node's spot that dissipates to uncover
+     the node (fades in) → Explorer "mysterious / go check it out" → set the flag
+     so the node persists and the reveal never replays.                        */
+  function _maybeRevealSargonNode(done) {
+    var already = false;
+    try { already = localStorage.getItem(KEY_SARGON_NODE_REVEALED) === 'true'; } catch (e) {}
+    if (already || currentMapId !== 'mesopotamia') { if (done) done(); return; }
+
+    isDialogueLocked = true;
+    cancelIdle();
+    runDialogue(D4_SARGON_REVEAL_INTRO, function () {
+      // HUD closed → the map is visible for the storm.
+      _dustStormRevealSargon(function () {
+        runDialogue(D4_SARGON_REVEAL_OUTRO, function () {
+          try { localStorage.setItem(KEY_SARGON_NODE_REVEALED, 'true'); } catch (e) {}
+          isDialogueLocked = false;
+          if (done) done();
+        });
+      });
+    });
+  }
+
+  /* Dust-storm reveal: play the sfx, spawn swirling sand particles at the Sargon
+     node's % position, fade the node in mid-storm, then let the storm dissipate.
+     Self-cleaning (particle layer removed at the end). Mirrors _d2aFadeInUrukNode's
+     node-element creation, but with a fade-in instead of a drop-in. */
+  /* Run cb only once the audio element has finished playing. Resolves on the
+     'ended' event, with a duration-based (or capped) fallback in case 'ended'
+     never fires (load error / blocked autoplay). */
+  function _afterAudioEnds(audio, cb) {
+    if (!audio) { if (cb) cb(); return; }
+    var done = false;
+    var fin  = function () { if (done) return; done = true; if (cb) cb(); };
+    if (audio.ended) { fin(); return; }
+    audio.addEventListener('ended', fin, { once: true });
+    var remainMs = (isFinite(audio.duration) && audio.duration > 0)
+      ? Math.max(0, (audio.duration - audio.currentTime) * 1000) + 150
+      : 8000;   // fallback cap when duration is unknown
+    setTimeout(fin, remainMs);
+  }
+
+  function _dustStormRevealSargon(onDone) {
+    var node = _findMesoNode('sargon');
+    if (!overlayEl || !node) { if (onDone) onDone(); return; }
+
+    var introAudio = null;
+    try { introAudio = new Audio('sfx/sargonintro.mp3'); introAudio.play(); } catch (e) {}
+
+    // 1) Build (or find) the Sargon node element, hidden, ready to fade in.
+    var nodeEl = overlayEl.querySelector('[data-id="sargon"]');
+    if (!nodeEl) {
+      nodeEl = document.createElement('div');
+      nodeEl.className = 'overworld-node';
+      nodeEl.dataset.id = 'sargon';
+      nodeEl.style.left = node.x + '%';
+      nodeEl.style.top  = node.y + '%';
+      nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
+      var img = document.createElement('img');
+      img.src = NODE_PATH + 'sargon.png';
+      img.alt = node.name || 'Akkad';
+      img.draggable = false;
+      nodeEl.appendChild(img);
+      nodeEl.addEventListener('click', (function (nd) {
+        return function () { onNodeClick(nd); };
+      })(node));
+      overlayEl.insertBefore(nodeEl, charEl);   // under the Explorer sprite
+    }
+    nodeEl.style.opacity = '0';
+
+    // 2) Dust-storm particle layer at the node's position.
+    var storm = document.createElement('div');
+    storm.className = 'sargon-duststorm';
+    storm.style.left = node.x + '%';
+    storm.style.top  = node.y + '%';
+    var GRAINS = 26;
+    for (var i = 0; i < GRAINS; i++) {
+      var g = document.createElement('span');
+      g.className = 'sargon-duststorm-grain';
+      var ang  = (Math.random() * 360);
+      var dist = 26 + Math.random() * 44;          // px swirl radius
+      var dur  = 0.9 + Math.random() * 0.7;        // s
+      var delay = Math.random() * 0.5;             // s stagger
+      var size = 3 + Math.random() * 5;            // px
+      g.style.setProperty('--ang',  ang + 'deg');
+      g.style.setProperty('--dist', dist + 'px');
+      g.style.setProperty('--dur',  dur.toFixed(2) + 's');
+      g.style.setProperty('--delay', delay.toFixed(2) + 's');
+      g.style.width = g.style.height = size.toFixed(1) + 'px';
+      storm.appendChild(g);
+    }
+    overlayEl.insertBefore(storm, charEl);
+
+    // 3) Mid-storm: fade the node in. End: remove the storm, finish.
+    var STORM_MS = 1700;
+    if (typeof gsap !== 'undefined') {
+      gsap.to(nodeEl, { opacity: 1, duration: 0.8, delay: 0.6, ease: 'power1.out' });
+    } else {
+      setTimeout(function () { nodeEl.style.opacity = '1'; }, 600);
+    }
+    setTimeout(function () {
+      if (storm.parentNode) storm.parentNode.removeChild(storm);
+      nodeEl.style.opacity = '1';
+      log('[D4] Sargon node dust-revealed');
+      // Let the intro SFX fully finish before the Explorer's outro line.
+      _afterAudioEnds(introAudio, function () { if (onDone) onDone(); });
+    }, STORM_MS);
+  }
+
+  /* ── Sargon node click → DECK-SIZE GATE ──────────────────────────────────
+     Read the ACTIVE deck's card count (window.Decks). Full deck = 15. Under 15
+     → Sargon turns the Explorer away (portrait slides out before the closing
+     Explorer line), no battle, sprite stays on the map. Exactly 15 → the full
+     Emperor encounter, then the battle STUB. */
+  function _runSargonEncounter(node) {
+    // After the first Sargon victory, skip the Emperor encounter dialogue (and the
+    // deck-size gate) entirely — clicking the node goes straight into a rematch.
+    var beatenSargon = false;
+    try { beatenSargon = localStorage.getItem('sog_battle_sargon_complete') === 'true'; } catch (e) {}
+    if (beatenSargon) { _launchSargonBattle(); return; }
+
+    var hud = window.SOG && window.SOG.HUD;
+    if (!hud || typeof hud.enterDialogueMode !== 'function') { isDialogueLocked = false; scheduleIdle(); return; }
+
+    var full = 15, deckSize = 0;
+    try {
+      if (window.Decks) {
+        full     = window.Decks.DECK_SIZE || 15;
+        deckSize = (typeof window.Decks.getActiveCards === 'function')
+          ? window.Decks.getActiveCards().length : 0;
+      }
+    } catch (e) {}
+    log('[D4] Sargon clicked — active deck ' + deckSize + '/' + full);
+
+    if (deckSize < full) {
+      // NOT ready — turned away. Sargon talks, his portrait leaves, then the
+      // Explorer gets one closing line; no battle, return to idle on the map.
+      hud.enterDialogueMode(null, function () {
+        _runLinesKeepOpen(D4_SARGON_TURNED_AWAY_A, function () {
+          var afterSlide = function () {
+            _runLinesKeepOpen(D4_SARGON_TURNED_AWAY_B, function () {
+              if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+              isDialogueLocked = false;
+              scheduleIdle();
+            });
+          };
+          if (typeof hud.slideOutNpc === 'function') hud.slideOutNpc(afterSlide);
+          else afterSlide();
+        });
+      });
+      return;
+    }
+
+    // READY (15) — full encounter, then the battle stub.
+    hud.enterDialogueMode(null, function () {
+      _runLinesKeepOpen(D4_SARGON_ENCOUNTER, function () {
+        if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+        _launchSargonBattle();
+      });
+    });
+  }
+
+  /* STUB — the real Sargon battle is not built yet. Reached only when the active
+     deck has the full 15 cards and the encounter dialogue completes. Returns the
+     player to the overworld idle. Replace this with the Sargon battle launch. */
+  function _launchSargonBattle() {
+    _fireWipeFromNode('sargon', function () {
+      var sb = window.SOG && window.SOG.SargonBattle;
+      if (sb && typeof sb.start === 'function') {
+        sb.start();   // start() does showScreen('screen-battle') + initGame + fade the wipe out
+      } else {
+        console.warn('[Overworld] SOG.SargonBattle not found — aborting');
+        _clearWipe();
+        isDialogueLocked = false;
+        scheduleIdle();
+      }
+    });
+  }
+
   /* Fire the radial wipe from the node, then start the real Gilgamesh battle. */
   function _launchGilgameshBattle() {
     _fireWipeFromNode('walls-of-uruk', function () {
@@ -2014,8 +2269,12 @@ var Overworld = (function () {
     if (screen && screen.parentNode) screen.parentNode.removeChild(screen);
     isDialogueLocked = false;
     // First time back from the marketplace, the explorer notes the growing
-    // collection and the deck builder un-greys. One-time; gated below.
-    _maybePlayDeckBuilderUnlock(function () { scheduleIdle(); });
+    // collection and the deck builder un-greys. One-time; gated below. THEN, on
+    // the same first return, the Sargon node dust-reveals (also one-time, gated),
+    // sequenced AFTER the deck-builder beat so the two don't collide.
+    _maybePlayDeckBuilderUnlock(function () {
+      _maybeRevealSargonNode(function () { scheduleIdle(); });
+    });
   }
 
   // One-time deck-builder unlock: after the player has won Gilgamesh and visited
@@ -2474,6 +2733,23 @@ var Overworld = (function () {
     // Post-win return: land at Uruk, reveal the market node, first-time auto-walk
     // into the market. Called by the Gilgamesh battle after its win sequence.
     returnFromGilgameshWin: returnFromGilgameshWin,
+    // Called by the Sargon battle module after a PRE-WIN loss: the Sargon-side
+    // smack-talk has played on the battle screen; this returns to the Mesopotamia
+    // map and plays the Explorer's closing reflection line, then resumes control.
+    returnFromSargonLoss: function () {
+      isDialogueLocked = true;
+      isTransitioning  = false;
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+      _clearWipe();
+      var hud = window.SOG && window.SOG.HUD;
+      if (hud && typeof hud.show === 'function') hud.show();
+      setTimeout(function () {
+        runDialogue(D4_SARGON_LOSS_REFLECT, function () {
+          isDialogueLocked = false;
+          scheduleIdle();
+        });
+      }, 250);
+    },
     // Reusable candle visual for the Gilgamesh post-loss intervention (the
     // battle module fades to black itself, then drives these): bloom the flame
     // over the black + raise the candlelit backdrop, then dismiss it.

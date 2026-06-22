@@ -551,21 +551,40 @@ SOG.GilgameshBattle = (function () {
   var _gWinWasFirstTime = false;
 
   function _routePostBattle(won, isTie, locResults) {
-    // One-and-done: the same battle is retried until won. Win → set the
-    // completion flags (overworld re-entry + isBattleComplete) and run the
-    // victory reward; loss/tie → smack-talk + DEFEAT (PLAY AGAIN → intervention).
+    // The FIRST win/loss keep their full narrative; once Gilgamesh has been
+    // beaten, every later battle is streamlined (no post-game dialogue):
+    //   • repeat win  → +10 gold animation → Play Again / Gameboard / Back To Map.
+    //   • repeat loss → straight to that same scoreboard.
+    var alreadyBeaten = _has(KEY_BATTLE_GILGAMESH_COMPLETE);
     if (won) {
-      _gWinWasFirstTime = !_has(KEY_BATTLE_GILGAMESH_COMPLETE);   // capture BEFORE setting it
+      _gWinWasFirstTime = !alreadyBeaten;   // capture BEFORE setting the flag
       try { localStorage.setItem(KEY_PHASE1_COMPLETE, 'true'); } catch (e) {}
       try { localStorage.setItem(KEY_BATTLE_GILGAMESH_COMPLETE, 'true'); } catch (e) {}
-      _showResultPopup(true, locResults);   // CONTINUE → _runPostVictorySequence
+      if (_gWinWasFirstTime) {
+        _showResultPopup(true, locResults);   // CONTINUE → _runPostVictorySequence
+      } else {
+        // Repeat win: +10 gold acquisition, then the streamlined scoreboard.
+        _grantRepeatWinGold(function () {
+          _showResultPopup(true, locResults, { repeat: true });
+        });
+      }
+    } else if (alreadyBeaten) {
+      // Loss after the initial victory: straight to the scoreboard (no smack-talk).
+      _showResultPopup(false, locResults, { repeat: true });
     } else {
-      // Loss/tie: Gilgamesh smack-talk on the board, THEN the DEFEAT scoreboard
-      // (PLAY AGAIN → Cuneiform intervention).
+      // First-encounter loss: Gilgamesh smack-talk on the board, THEN the DEFEAT
+      // scoreboard (PLAY AGAIN → Cuneiform intervention).
       runLines(GILGAMESH_LOSS_SMACK, function () {
         _showResultPopup(false, locResults);
       });
     }
+  }
+
+  /* Repeat-win gold: bank +10, refresh the HUD number, play the coin animation. */
+  function _grantRepeatWinGold(done) {
+    if (window.SOG && SOG.gold && typeof SOG.gold.add === 'function') SOG.gold.add(10);
+    if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshGold === 'function') SOG.HUD.refreshGold();
+    _runGoldRewardAnimation(10, function () { if (done) done(); });
   }
 
   /* Grant Cuneiform: idempotent flag + unlock + acquisition reveal. */
@@ -671,24 +690,36 @@ SOG.GilgameshBattle = (function () {
         // captured before the win flag was set). Bank it, refresh the HUD gold
         // number, play the coin animation, then continue. Gold lives only on the
         // Gilgamesh win path; Prehistory/Otzi/Arcadium award none.
-        var goldAmount = _gWinWasFirstTime ? 25 : 10;
-        if (window.SOG && SOG.gold) SOG.gold.add(goldAmount);
-        if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshGold === 'function') SOG.HUD.refreshGold();
-        _runGoldRewardAnimation(goldAmount, function () {
-        runLines([
-          { who: 'explorer', text: 'Wow!' },
-          { who: 'otzi',     text: 'See what you can get yourself at the Mesopotamian Marketplace.' },
-          { who: 'explorer', text: "Thank you! You're such a gracious king." },
-          { who: 'otzi',     text: "Until the next time..." }
-        ], function () {
-          // The win dialogue (above) teases the Marketplace; now fade to the
-          // Mesopotamia map at Uruk, reveal the market node, and — first time
-          // only — auto-walk the Explorer into the market. (The market SCREEN
-          // itself is a placeholder until next session — see overworld
-          // _enterMarket's TODO.)
-          _returnToMesopotamiaMarket();
-        });
-        });   // _runGoldRewardAnimation callback
+        var grantGoldThenFinish = function () {
+          var goldAmount = _gWinWasFirstTime ? 25 : 10;
+          if (window.SOG && SOG.gold) SOG.gold.add(goldAmount);
+          if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshGold === 'function') SOG.HUD.refreshGold();
+          _runGoldRewardAnimation(goldAmount, function () {
+          runLines([
+            { who: 'explorer', text: 'Wow!' },
+            { who: 'otzi',     text: 'See what you can get yourself at the Mesopotamian Marketplace.' },
+            { who: 'explorer', text: "Thank you! You're such a gracious king." },
+            { who: 'otzi',     text: "Until the next time..." }
+          ], function () {
+            // The win dialogue (above) teases the Marketplace; now fade to the
+            // Mesopotamia map at Uruk, reveal the market node, and — first time
+            // only — auto-walk the Explorer into the market. (The market SCREEN
+            // itself is a placeholder until next session — see overworld
+            // _enterMarket's TODO.)
+            _returnToMesopotamiaMarket();
+          });
+          });   // _runGoldRewardAnimation callback
+        };
+        // (a.5) FLUKE-WIN guard: a player who beat Gilgamesh on the first try
+        // (never lost) never received the candle-intervention Cuneiform. If they
+        // still don't own Cuneiform (46) at win time, grant it HERE — between the
+        // Gilgamesh-card and gold grants — using the SAME acquisition animation
+        // (_grantCuneiform). Normal-path players already own it, so this is a no-op
+        // and they get Gilgamesh + gold exactly as before.
+        var ownsCuneiform = !!(window.SOG && SOG.Cards &&
+          typeof SOG.Cards.isUnlocked === 'function' && SOG.Cards.isUnlocked(46));
+        if (ownsCuneiform) { grantGoldThenFinish(); }
+        else { _grantCuneiform(grantGoldThenFinish); }
       });
     });
   }
@@ -748,7 +779,8 @@ SOG.GilgameshBattle = (function () {
   // .result-wrap → .result-headline / .result-locs / .result-actions) so the
   // visual treatment (parchment panel, gold double-border, fonts) matches the
   // Otzi/Arcadium end-game scoreboard. Only the per-battle content differs.
-  function _showResultPopup(won, locResults) {
+  function _showResultPopup(won, locResults, opts) {
+    opts = opts || {};
     _removeResultPopup();
     var overlay = document.createElement('div');
     overlay.id = RESULT_ID;
@@ -774,8 +806,13 @@ SOG.GilgameshBattle = (function () {
       b.addEventListener('click', cb);
       return b;
     }
-    if (won) {
-      // Victory → the post-victory reward sequence (Gilgamesh-card grant +
+    if (opts.repeat) {
+      // Streamlined post-initial-victory scoreboard (win or loss): no narrative.
+      actions.appendChild(mkBtn('PLAY AGAIN',  function () { _removeResultPopup(); _onPlayAgain(); }));
+      actions.appendChild(mkBtn('GAMEBOARD',   function () { _hideResultForReview(); }));
+      actions.appendChild(mkBtn('BACK TO MAP', function () { _removeResultPopup(); _exitToOverworld(); }));
+    } else if (won) {
+      // First victory → the post-victory reward sequence (Gilgamesh-card grant +
       // closing dialogue; gold + market in part 4).
       actions.appendChild(mkBtn('CONTINUE', function () { _removeResultPopup(); _runPostVictorySequence(); }));
       // Game Board: hide the scoreboard to review the final board; a floating

@@ -1967,7 +1967,8 @@
      The slot data + DOM move synchronously (mirrors executeMoveAnimated's
      applyMove, minus the slide + IP-mods), so scoring sees Ötzi at his new
      location. ctx = { owner, locId, slotIndex, slot, landedOwner, landedCardId }. */
-  function abilityOtziFlee(ctx) {
+  function abilityOtziFlee(ctx, done) {
+    done = typeof done === 'function' ? done : function () {};
     var owner      = ctx.owner;
     var fromLoc    = ctx.locId;
     var ownerSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
@@ -1975,22 +1976,26 @@
     var candidates = G.locations.filter(function (loc) {
       return loc.id !== fromLoc && ownerSlots[loc.id] && ownerSlots[loc.id].indexOf(null) !== -1;
     });
-    if (!candidates.length) return;  // nowhere to flee
+    if (!candidates.length) { done(); return; }  // nowhere to flee — release the reveal pipeline
     var dest = candidates[Math.floor(Math.random() * candidates.length)];
 
-    // Let the just-landed card's reveal animation play out BEFORE Ötzi darts away,
-    // so the flee doesn't overlap it. The reactive trigger fires right as the card
-    // lands, so we wait FLEE_DELAY_MS first. This is safe for scoring: after the
-    // final reveal there is REVEAL_DELAY (800ms) + POST_REVEAL (1200ms) ≈ 2000ms
-    // before end-of-turn/endGame, and the flee (delay + 550ms slide) finishes well
-    // inside that — executeMoveAnimated's applyMove still updates the score in time.
-    var FLEE_DELAY_MS = 1000;   // knob: how long to let the landed card's anim play
+    // The reveal pipeline fires this only AFTER the just-landed card's flip +
+    // reveal-fx + At Once animations have fully resolved (flipSlot/fireAtOnce
+    // callbacks), so all of that is already done. FLEE_DELAY_MS is now purely a
+    // readable reaction beat — "…then Ötzi darts away" — before the slide. The
+    // pipeline AWAITS done() (passed through the onCardLandedHere barrier), so the
+    // next card never reveals until the slide finishes: no overlap in either
+    // direction. applyMove updates the score during the slide, well before turn end.
+    var FLEE_DELAY_MS = 500;   // knob: reaction beat before he darts
     if (SOG.game && typeof SOG.game.executeMoveAnimated === 'function') {
       setTimeout(function () {
         SOG.game.executeMoveAnimated(owner, 35, fromLoc, dest.id, {}, function () {
           if (typeof console !== 'undefined') console.log('[Otzi] flee: card 35 (' + owner + ') relocated from loc ' + fromLoc + ' to loc ' + dest.id);
+          done();
         });
       }, FLEE_DELAY_MS);
+    } else {
+      done();
     }
   }
 
@@ -2003,21 +2008,23 @@
      — the landed card is same-owner as Tribe AND was played the turn right after
      Tribe (turnPlayed === tribe.turnPlayed + 1) — so the bounce fires exactly when
      Tribe gains bonus IP from that card. Visual/audio only via SOG.RevealFx. */
-  function tribeReactBounce(ctx) {
-    if (!ctx || ctx.landedOwner !== ctx.owner) return;            // Tribe counts same-owner cards only
+  function tribeReactBounce(ctx, done) {
+    done = typeof done === 'function' ? done : function () {};
+    if (!ctx || ctx.landedOwner !== ctx.owner) { done(); return; }   // Tribe counts same-owner cards only
     var tribe = ctx.slot;
-    if (!tribe || typeof tribe.turnPlayed !== 'number') return;
+    if (!tribe || typeof tribe.turnPlayed !== 'number') { done(); return; }
     var slots = (ctx.owner === 'player' ? G.playerSlots : G.aiSlots)[ctx.locId];
-    if (!slots) return;
+    if (!slots) { done(); return; }
     var landed = null;
     for (var i = 0; i < slots.length; i++) {
       if (slots[i] && slots[i].cardId === ctx.landedCardId) { landed = slots[i]; break; }
     }
-    if (!landed || landed.turnPlayed !== tribe.turnPlayed + 1) return;  // this card grants Tribe no bonus
+    if (!landed || landed.turnPlayed !== tribe.turnPlayed + 1) { done(); return; }  // this card grants Tribe no bonus
     var el = getSlotEl(ctx.owner, ctx.locId, ctx.slotIndex);
     if (el && window.SOG && SOG.RevealFx && typeof SOG.RevealFx.reactBounce === 'function') {
       SOG.RevealFx.reactBounce(el, 'sfx/tribe.m4a');
     }
+    done();   // bounce is fire-and-forget presentation — don't stall the reveal pipeline
   }
 
   var CARD_ABILITIES = {
@@ -2087,8 +2094,9 @@
      revealed" (e.g. Ötzi's flee, id 35). One definition, fired identically in
      every battle whose reveal runs through this pipeline.
   ═══════════════════════════════════════════════════════════════ */
-  function fireOnCardLandedHere(landedOwner, landedCardId, locId) {
-    if (locId == null) return;
+  function fireOnCardLandedHere(landedOwner, landedCardId, locId, allDone) {
+    var finish = function () { if (typeof allDone === 'function') allDone(); };
+    if (locId == null) { finish(); return; }
     // Snapshot the reactors first (the abilities mutate the board).
     var reactors = [];
     ['player', 'opp'].forEach(function (side) {
@@ -2105,11 +2113,18 @@
         }
       });
     });
+    if (!reactors.length) { finish(); return; }
+    // Barrier: each reactor receives its own done(); allDone (the reveal
+    // pipeline's continuation) fires only once EVERY reactor has completed — so
+    // an async reactor like Ötzi's flee slide fully finishes before the next
+    // card reveals. Synchronous reactors (e.g. Tribe's bounce) call done() at once.
+    var pending = reactors.length;
+    var one = function () { if (--pending === 0) finish(); };
     reactors.forEach(function (r) {
       CARD_ABILITIES[r.cardId].onCardLandedHere({
         owner: r.owner, locId: r.locId, slotIndex: r.slotIndex, slot: r.slot,
         landedOwner: landedOwner, landedCardId: landedCardId
-      });
+      }, one);
     });
   }
 

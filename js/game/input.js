@@ -820,10 +820,19 @@
       }
       toSeen[mv.toLocId] = true;
     });
-    // Compact + sync destination locations
+    // Sync destination locations — but do NOT compact them. Removing a moved-in
+    // preview must leave ITS slot open right where it was, so that:
+    //   (a) any card played into a LATER slot at this destination stays put, and
+    //   (b) the queued move re-fills its own gap during reveal (executeMoveAnimated
+    //       → slots[toLocId].indexOf(null) finds the preview's slot first).
+    // Compacting here pulled later plays up into the vacated slot, so the move then
+    // landed in the wrong (later) slot — e.g. move Lucy → slot 3, then play a card
+    // behind her in slot 4: snapBack compacted the card up to slot 3 and Lucy
+    // re-entered slot 4. Selection keeps slots left-packed, so the preview's gap is
+    // the only one — exactly where the move should return. Applies to every
+    // player-moved card (Lucy, Chariot, …), not just this example.
     Object.keys(toSeen).forEach(function (idStr) {
       var lid = parseInt(idStr, 10);
-      compactPlayerSlots(lid);
       syncPlayerSlots(lid);
     });
 
