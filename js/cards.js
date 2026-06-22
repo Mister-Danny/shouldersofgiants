@@ -309,14 +309,14 @@ const CARDS = [
   {
     id: 39, name: "Farmer", cc: 1, ip: 1,
     type: "Labor", type2: null, era: "Mesopotamia",
-    abilityName: null, ability: null,
+    abilityName: "Harvest", ability: "At Once: Provides +1 Capital next turn.",
     image: "images/mesopotamiacards/farmer@0.5x.jpg", locked: true
   },
   {
     id: 40, name: "Scribe", cc: 2, ip: 2,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Record Keeper",
-    ability: "Continuous: The cards you've played before Scribe here gain +1 IP.",
+    ability: "At Once: Provides +1 IP to all of your other cards at this location.",
     image: "images/mesopotamiacards/scribe@0.5x.jpg", locked: true
   },
   {

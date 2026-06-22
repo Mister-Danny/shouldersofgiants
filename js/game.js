@@ -804,6 +804,9 @@
       try { new Audio('sfx/yoink.mp3').play(); } catch (e) {}
     } else if (cardId === 24 && typeof SFX !== 'undefined') {
       SFX.sailingSound();
+    } else if (cardId === 48) {
+      // Chariot (Phase 1 travel): play chariot.mp3 as it rolls to the new location.
+      try { new Audio('sfx/chariot.mp3').play(); } catch (e) {}
     }
 
     // Apply IP mods (Cape of Good Hope, Magellan +1)
@@ -941,7 +944,7 @@
       // wobble pivoting at her feet — reads as a deliberate waddle. The position
       // tween animates left/top; the wobble animates rotation (transform), so the
       // two run concurrently without conflict.
-      var slideDuration = (cardId === 33) ? 1.5 : 0.55;
+      var slideDuration = (cardId === 33) ? 1.5 : (cardId === 48) ? 1.0 : 0.55;   // Chariot travels ~1s (Phase 1)
       var wobbleTween   = null;
       if (cardId === 33) {
         gsap.set(clone, { transformOrigin: '50% 100%', rotation: -5 });

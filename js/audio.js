@@ -130,6 +130,7 @@ var SFX = (function () {
   var _sailingHowl   = null;
   var _columbusHowl  = null;
   var _voltaireHowl  = null;
+  var _waterflowHowl = null;
 
   function cortesHowl() {
     if (typeof Howl === 'undefined') return null;
@@ -277,6 +278,14 @@ var SFX = (function () {
       _voltaireHowl = new Howl({ src: ['sfx/voltaire-break.mp3'], volume: 1.0, html5: true });
     }
     return _voltaireHowl;
+  }
+
+  function waterflowHowl() {
+    if (typeof Howl === 'undefined') return null;
+    if (!_waterflowHowl) {
+      _waterflowHowl = new Howl({ src: ['sfx/waterflow.m4a'], volume: 1.0, html5: true });
+    }
+    return _waterflowHowl;
   }
 
   function francisHowl() {
@@ -622,6 +631,29 @@ var SFX = (function () {
       var howl = voltaireHowl();
       if (howl) { howl.stop(); howl.play(); return; }
       try { new Audio('sfx/voltaire-break.mp3').play(); } catch (e) {}
+    },
+
+    /** Canals starts boosting a newly-qualifying Labor card — flowing water with a
+     *  short fade-out on its tail (applied at playback via Howler; asset unchanged). */
+    waterflowSound: function () {
+      if (_muted) return;
+      var howl = waterflowHowl();
+      if (howl) {
+        howl.stop();
+        howl.volume(1.0);                 // reset: a prior tail-fade may have left it at 0
+        var id = howl.play();
+        var FADE_MS = 800;                // tail fade length
+        howl.once('play', function () {
+          var durMs = (howl.duration() || 0) * 1000;
+          if (durMs > FADE_MS) {
+            setTimeout(function () {
+              try { howl.fade(howl.volume(), 0, FADE_MS, id); } catch (e) {}
+            }, durMs - FADE_MS);
+          }
+        }, id);
+        return;
+      }
+      try { new Audio('sfx/waterflow.m4a').play(); } catch (e) {}
     },
 
     /** Columbus arrives at a location with Cultural cards — plays church bell */

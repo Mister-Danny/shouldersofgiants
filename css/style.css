@@ -9939,18 +9939,83 @@ body[data-screen="overworld"] #overworld-overlay {
   z-index: 6;
 }
 
-/* Domesticated Animal (32): the BORDERS of adjacent cards glow green, then fade.
-   Mostly an INSET glow so it hugs the target card's border and does NOT bleed
-   across the slot gap onto the Domesticated Animal card beside it. A small,
-   tight outset adds a touch of bloom. */
-@keyframes revealFxNeighborGlow {
-  0%   { box-shadow: inset 0 0 0 0 rgba(150, 240, 150, 0),    0 0 0 0 rgba(120, 220, 120, 0); }
-  30%  { box-shadow: inset 0 0 12px 2px rgba(150, 240, 150, 0.95), 0 0 6px 1px rgba(120, 220, 120, 0.5); }
-  100% { box-shadow: inset 0 0 0 0 rgba(150, 240, 150, 0),    0 0 0 0 rgba(120, 220, 120, 0); }
+/* Fire (29) embers: a handful of glowing particles that rise from the card's
+   CENTRE, drift slightly OUTWARD as they rise (per-particle randomized angle),
+   flicker, and fade. The LAYER is anchored at the card centre; each
+   .reveal-fx-ember carries randomized custom props set in reveal-fx.js
+   spawnEmbers() — --rise (how high), --dx (outward drift, +/-), --dur (speed),
+   --delay (stagger), --peak (max opacity) — driving the rise+drift+fade envelope.
+   Its .reveal-fx-ember-core is the glowing dot doing a fast opacity/scale flicker;
+   nested opacity MULTIPLIES, so the flicker rides on top of the fade envelope.
+   Tuning knobs: ember COUNT / COLORS / size / all random ranges live in
+   spawnEmbers(); the envelope shape + start/end scale live in the keyframes here. */
+.battle-card-slot .reveal-fx-ember-layer {
+  position: absolute;
+  left: 50%;
+  top: 50%;                       /* embers emanate from the card centre */
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 10;                    /* above the card face + the illuminate glow */
 }
-.battle-card-slot.reveal-fx-neighbor-glow {
+.reveal-fx-ember {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  will-change: transform, opacity;
+  /* rise + drift + fade; `both` holds the faded-out end state until cleanup */
+  animation: revealFxEmberRise var(--dur, 0.85s) ease-out var(--delay, 0s) 1 both;
+}
+.reveal-fx-ember-core {
+  border-radius: 50%;
+  /* fast flicker (period set inline per-ember); alternate = gentle pulse */
+  animation: revealFxEmberFlicker 0.15s ease-in-out infinite alternate;
+}
+@keyframes revealFxEmberRise {
+  0%   { transform: translate(-50%, -50%) scale(0.55); opacity: 0; }
+  18%  { opacity: var(--peak, 1); }
+  100% {
+    transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% - var(--rise, 60px))) scale(0.85);
+    opacity: 0;
+  }
+}
+@keyframes revealFxEmberFlicker {
+  0%   { opacity: 0.55; transform: scale(0.82); }
+  100% { opacity: 1;    transform: scale(1.05); }
+}
+
+/* Shared neighbor-border glow — the BORDERS of adjacent cards glow, then fade.
+   Mostly an INSET glow so it hugs the target card's border and does NOT bleed
+   across the slot gap onto the source card beside it; a small tight outset adds a
+   touch of bloom. The COLOUR is factored into CSS variables so multiple cards can
+   reuse the SAME keyframe with their own colour:
+     • Domesticated Animal (32) — green (the original look, unchanged)
+     • Enkidu (44)              — warm amber/bronze
+   Each card's handler adds exactly one of the colour classes below. */
+@keyframes revealFxNeighborGlow {
+  0%   { box-shadow: inset 0 0 0 0    var(--ng-inset-off), 0 0 0 0   var(--ng-out-off); }
+  30%  { box-shadow: inset 0 0 12px 2px var(--ng-inset-on),  0 0 6px 1px var(--ng-out-on); }
+  100% { box-shadow: inset 0 0 0 0    var(--ng-inset-off), 0 0 0 0   var(--ng-out-off); }
+}
+.battle-card-slot.reveal-fx-neighbor-glow,
+.battle-card-slot.reveal-fx-neighbor-glow-enkidu {
   animation: revealFxNeighborGlow 0.85s ease-out;
   z-index: 6;
+}
+/* Domesticated Animal — green (identical to the original) */
+.battle-card-slot.reveal-fx-neighbor-glow {
+  --ng-inset-on:  rgba(150, 240, 150, 0.95);
+  --ng-inset-off: rgba(150, 240, 150, 0);
+  --ng-out-on:    rgba(120, 220, 120, 0.5);
+  --ng-out-off:   rgba(120, 220, 120, 0);
+}
+/* Enkidu — warm amber/bronze (distinct from DA's green) */
+.battle-card-slot.reveal-fx-neighbor-glow-enkidu {
+  --ng-inset-on:  rgba(255, 170, 60, 0.95);
+  --ng-inset-off: rgba(255, 170, 60, 0);
+  --ng-out-on:    rgba(235, 130, 45, 0.55);
+  --ng-out-off:   rgba(235, 130, 45, 0);
 }
 
 /* Neanderthal (34): small drop-into-place settle (drops a few px and lands). */
@@ -9961,6 +10026,47 @@ body[data-screen="overworld"] #overworld-overlay {
 }
 .battle-card-slot.reveal-fx-dropin {
   animation: revealFxDropIn 0.42s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* Ziggurat (45): "struck bell" ring-out — a DAMPED oscillation. The card swings
+   (pivoting at the top, like a hanging bell) and sways side-to-side with steadily
+   DECREASING amplitude, then settles to rest — a single strike that rings out, not
+   a sustained/looping shake. The decay lives in the keyframe amplitudes (6px/2.2°
+   down to 0). Tuning knobs: peak amplitude (the 8% keyframe), how fast it decays
+   (the falloff across keyframes), and the 1.1s duration. */
+@keyframes revealFxZigguratRing {
+  0%   { transform: translateX(0)      rotate(0deg); }
+  8%   { transform: translateX(-6px)   rotate(-2.2deg); }
+  19%  { transform: translateX(5px)    rotate(1.8deg); }
+  30%  { transform: translateX(-3.6px) rotate(-1.4deg); }
+  42%  { transform: translateX(2.6px)  rotate(1.0deg); }
+  55%  { transform: translateX(-1.7px) rotate(-0.65deg); }
+  68%  { transform: translateX(1.0px)  rotate(0.4deg); }
+  82%  { transform: translateX(-0.5px) rotate(-0.18deg); }
+  100% { transform: translateX(0)      rotate(0deg); }
+}
+.battle-card-slot.reveal-fx-ziggurat-ring {
+  animation: revealFxZigguratRing 1.1s ease-out;
+  transform-origin: center top;   /* swing from the top, like a hanging bell */
+  z-index: 6;
+}
+
+/* Domesticated Animal (32) + Enkidu (44) "howl" — both sfx are a wolf howl, so the
+   card REARS its head UP: pivoting on its BOTTOM-LEFT corner it tilts back/up (like
+   a wolf raising its snout to howl at the moon), HOLDS the pose, then lowers back to
+   rest. Shared by both cards. Tuning knobs: peak tilt (the -21° keyframe), how long
+   it holds up (the 26%→68% plateau), and the 1.8s duration. */
+@keyframes revealFxHowl {
+  0%   { transform: rotate(0deg); }
+  16%  { transform: rotate(-18deg); }   /* raise head up */
+  26%  { transform: rotate(-21deg); }   /* peak */
+  68%  { transform: rotate(-18deg); }   /* sustained howl (head held up) */
+  100% { transform: rotate(0deg); }     /* lower back down to rest */
+}
+.battle-card-slot.reveal-fx-howl {
+  animation: revealFxHowl 1.8s ease-in-out;
+  transform-origin: left bottom;   /* pivot on the BOTTOM-LEFT corner */
+  z-index: 7;
 }
 
 /* Tool (26): "hammer swing" — rotate upright → full horizontal pivoting on the
@@ -10044,4 +10150,167 @@ body[data-screen="overworld"] #overworld-overlay {
 .battle-card-slot.reveal-fx-bounce {
   animation: revealFxBounce 0.45s cubic-bezier(0.3, 0.7, 0.4, 1);
   z-index: 6;
+}
+
+/* Farmer (39): an onion that POPS UP from the card's CENTRE and DISSIPATES as it
+   rises (see reveal-fx.js handler 39 + the revealFxOnionPop keyframes). The <img>
+   is centred on the card; the keyframe pops it in with a slight scale overshoot,
+   floats it upward, and fades it out — then JS removes the element. Tuning knobs:
+   width (onion size), the translateY at 100% (rise height), the animation duration
+   (pop+fade speed), and the opacity/scale stops (pop snappiness vs fade). */
+/* Scribe (40) stamping: ONE travelling stamp (fixed-position so it floats above
+   the whole board, independent of any slot's clipping) presses onto each target
+   card; a cuneiform MARK is left inside the card for ~markMs then fades. The JS
+   (reveal-fx.js scribeStampSequence) drives position/timing via inline styles;
+   these rules only set the look. Tuning of timing lives in abilities.js (the opts
+   passed to scribeStampSequence) and in the JS; sizes/shadows are tuned here. */
+/* Soldier (42) charge: a spear (fixed-position so it flies over the whole board)
+   travels from the Soldier to the chosen target and back; the struck card shakes
+   on impact. JS (reveal-fx.js soldierCharge) drives position/rotation/timing via
+   inline styles — these rules only set the look. Tuning of timing/rotation lives
+   in soldierCharge's opts; size/shadow here. */
+/* The Soldier card itself charges (a fixed-position clone); the spear is ATTACHED
+   to it at the leading edge, pointing at the target. */
+.reveal-fx-soldier-flyer {
+  z-index: 9998;                  /* above the board */
+  will-change: left, top, transform;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.6));   /* lifted-card elevation */
+  border-radius: 8px;
+}
+/* Chariot (48) arrow — a fixed-position projectile flung at the target on arrival;
+   slide/rotate/dissolve driven by reveal-fx.js inline styles. */
+.reveal-fx-chariot-arrow {
+  position: fixed;
+  width: 150px;                   /* arrow size (knob) */
+  height: auto;
+  pointer-events: none;
+  z-index: 9999;                  /* above the board */
+  will-change: left, top, transform, opacity;
+  filter: drop-shadow(0 4px 7px rgba(0, 0, 0, 0.65));
+}
+/* Phoenicians (49) merge — the card clones into a fixed flyer that slides over the
+   target and dissolves (slide/fade driven by reveal-fx.js inline styles). */
+.reveal-fx-phoenicians-fly {
+  z-index: 9998;                  /* above the board, in front of the target's face */
+  will-change: left, top, transform, opacity;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.6));
+  border-radius: 8px;
+}
+.reveal-fx-soldier-spear {
+  position: absolute;             /* child of the charging card */
+  width: 180px;                   /* spear size (knob) — long enough to lead the charge */
+  height: auto;
+  pointer-events: none;
+  z-index: 1;                     /* in front of the card face */
+  filter: drop-shadow(0 4px 7px rgba(0, 0, 0, 0.65));
+}
+@keyframes revealFxSoldierHit {
+  0%   { transform: translate(0, 0); }
+  15%  { transform: translate(-8px, 4px); }
+  35%  { transform: translate(8px, -4px); }
+  55%  { transform: translate(-6px, 3px); }
+  75%  { transform: translate(5px, -2px); }
+  100% { transform: translate(0, 0); }
+}
+.battle-card-slot.reveal-fx-soldier-hit {
+  animation: revealFxSoldierHit 0.34s ease-in-out;
+  z-index: 6;
+}
+
+/* Gilgamesh (43) reveal — the card grows in, then PULSES with a heartbeat throb
+   for the duration of gilgamesh.mp3 (the JS removes the class + dissolves back to
+   rest when the sfx ends). Two animations on transform: a one-shot grow-in (0–0.32s)
+   then the looping throb (0.32s delay, infinite) which takes over once active.
+   Tuning knobs: grow scale (grow-in 100% + throb scales), throb depth/rate (the
+   keyframe scales + 0.9s duration). z-index lifts it above neighbours. */
+.battle-card-slot.reveal-fx-gilgamesh {
+  z-index: 9;
+  animation: revealFxGilgameshGrow 0.32s ease-out,
+             revealFxGilgameshThrob 0.9s ease-in-out 0.32s infinite;
+  transform-origin: center center;
+}
+@keyframes revealFxGilgameshGrow {
+  0%   { transform: scale(1); }
+  100% { transform: scale(1.22); }     /* grow scale (knob) */
+}
+@keyframes revealFxGilgameshThrob {    /* lub-dub heartbeat between enlarged sizes */
+  0%   { transform: scale(1.20); }
+  14%  { transform: scale(1.32); }     /* throb peak (knob) */
+  28%  { transform: scale(1.21); }
+  42%  { transform: scale(1.29); }
+  58%  { transform: scale(1.20); }
+  100% { transform: scale(1.20); }     /* rest between beats */
+}
+
+/* Canals (41) water border — PERSISTENT, STATE-DRIVEN (added/removed by
+   evaluateContinuous, NOT a one-shot animation). A blue stream cycles around the
+   border of every card Canals is CURRENTLY boosting, and is removed the moment the
+   boost stops. The ring is a conic gradient masked to the card's edge; animating its
+   start angle 0deg->360deg sweeps the bright band around the perimeter like flowing
+   water. (@property lets the angle animate; browsers without it show a static ring.) */
+@property --canals-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.battle-card-slot.canals-water::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  padding: 3px;                          /* water-ring thickness (knob) */
+  background: conic-gradient(from var(--canals-angle),
+              rgba(70, 170, 235, 0.10), #2aa8e6, #9becff, #2aa8e6, rgba(70, 170, 235, 0.10));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  animation: canalsWaterFlow 2.6s linear infinite;   /* flow speed (knob) */
+  pointer-events: none;
+  z-index: 7;
+}
+@keyframes canalsWaterFlow { to { --canals-angle: 360deg; } }
+
+/* The Scribe card itself becomes the stamp: a fixed-position clone that lifts out
+   of its slot and presses onto each target (driven by reveal-fx.js inline styles). */
+.reveal-fx-scribe-flyer {
+  z-index: 9999;                  /* above the board */
+  will-change: left, top, transform;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.6));   /* lifted-card elevation */
+  border-radius: 8px;
+}
+.battle-card-slot .reveal-fx-scribe-mark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 80%;                     /* mark size relative to the card (knob, 25% bigger) */
+  height: auto;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 8;                     /* on the card face, beneath the pressing card */
+  opacity: 0.95;
+  transition: opacity 0.26s ease;
+  /* Invert the (black) cuneiform art to WHITE so it reads on the card; a dark
+     drop-shadow keeps it legible on light cards too. */
+  filter: invert(1) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+}
+.battle-card-slot .reveal-fx-scribe-mark.reveal-fx-scribe-mark-out {
+  opacity: 0;
+}
+
+.battle-card-slot .reveal-fx-onion {
+  position: absolute;
+  left: 50%;
+  top: 50%;                       /* sits on the card centre */
+  width: 82%;                     /* onion size relative to the card (50% bigger) */
+  height: auto;
+  pointer-events: none;
+  z-index: 9;                     /* above the card face */
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+  animation: revealFxOnionPop 1.25s ease-out forwards;
+}
+@keyframes revealFxOnionPop {
+  0%   { transform: translate(-50%, -50%)  scale(0.6);  opacity: 0; }   /* small, hidden */
+  14%  { transform: translate(-50%, -58%)  scale(1.05); opacity: 1; }   /* pop in (overshoot) */
+  55%  { transform: translate(-50%, -78%)  scale(1.02); opacity: 1; }   /* linger visible, slow rise */
+  100% { transform: translate(-50%, -122%) scale(0.9);  opacity: 0; }   /* rise + dissipate */
 }

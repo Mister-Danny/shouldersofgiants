@@ -31,6 +31,22 @@ SOG.RevealFx = (function () {
     try { new Audio(src).play(); } catch (e) {}
   }
 
+  // ── Reveal SERIALIZATION ──────────────────────────────────────────────
+  // Each reveal's animation+sfx is one sequence that must fully RESOLVE before
+  // the next reveal's begins (no overlapping animations or piled-up sounds).
+  // A handler's return value is the extra ms the reveal pipeline waits before
+  // advancing. The pipeline ALREADY spaces consecutive reveals by ~INTER_REVEAL_GAP
+  // (the flip scale-in + REVEAL_DELAY), so a handler only needs to ask for the
+  // amount its sequence EXCEEDS that gap — short effects (≤ gap) add nothing and
+  // stay snappy; long ones (Gilgamesh, Cave Art…) hold just long enough that the
+  // next animation can't start until this one has resolved. Ability-coupled
+  // animations (Scribe/Soldier/Cuneiform/Phoenicians/Chariot) already gate via
+  // their own done(), so they serialize the same way.
+  var REVEAL_DELAY     = (SOG.state && SOG.state.REVEAL_DELAY) || 800;
+  var FLIP_IN_MS       = 320;                          // game.js flipSlot scale-in before effects fire
+  var INTER_REVEAL_GAP = REVEAL_DELAY + FLIP_IN_MS;    // spacing the pipeline already inserts between reveals
+  function holdFor(animMs) { return Math.max(0, (animMs || 0) - INTER_REVEAL_GAP); }
+
   // Add a CSS class, then strip it after ms so the animation can re-trigger on
   // a future reveal. Defensive against a missing element.
   function flashClass(el, cls, ms) {
@@ -40,6 +56,75 @@ SOG.RevealFx = (function () {
     void el.offsetWidth;
     el.classList.add(cls);
     setTimeout(function () { if (el) el.classList.remove(cls); }, ms);
+  }
+
+  // Shared neighbor-border glow (Domesticated Animal 32 + Enkidu 44): the borders of
+  // ADJACENT occupied cards (same owner, ±1 slot at this location — the cards' own
+  // adjacency rule) briefly glow, then fade. The adjacency + glow are identical for
+  // both cards; only the COLOUR (via glowClass) and the sfx differ. Self-cleaning
+  // (flashClass strips the class after the fade). Returns nothing; callers return 0.
+  function neighborGlow(ctx, glowClass, sfxSrc) {
+    if (sfxSrc) playSfx(sfxSrc);
+    [ctx.slotIndex - 1, ctx.slotIndex + 1].forEach(function (adjIdx) {
+      if (adjIdx < 0 || adjIdx >= SLOTS_PER_LOC) return;
+      if (adjIdx === ctx.slotIndex) return;   // never glow the source card itself
+      var el = ctx.getSlotEl(ctx.owner, ctx.locId, adjIdx);
+      if (el && el !== ctx.slotEl && el.classList.contains('occupied')) {
+        flashClass(el, glowClass, 850);
+      }
+    });
+  }
+
+  // A handful of glowing embers that rise from the card's CENTRE, drift slightly
+  // OUTWARD as they rise, flicker, and fade — layered over Fire's illuminate.
+  // Pure overlay: a container of particle divs appended to the slot, each driven
+  // by CSS with per-ember RANDOMIZED custom properties (rise height, outward
+  // drift, speed, stagger, peak opacity) + a randomized colour/size so the cluster
+  // looks organic, not mechanical. The whole layer self-removes after the embers
+  // fade so nothing lingers and it re-triggers cleanly on the next Fire reveal.
+  function spawnEmbers(slotEl) {
+    if (!slotEl) return;
+    var COUNT  = 7;                                    // a handful (knob)
+    var COLORS = ['#ffd24a', '#ffae3b', '#ff8a2b'];    // yellow / amber / orange (knob)
+    var layer = document.createElement('div');
+    layer.className = 'reveal-fx-ember-layer';
+    layer.setAttribute('aria-hidden', 'true');
+
+    var maxEnd = 0;   // longest (delay + duration) → when to clean up the layer
+    for (var i = 0; i < COUNT; i++) {
+      var rise  = 48 + Math.random() * 34;          // px risen before winking out (knob)
+      var drift = (Math.random() * 2 - 1) * 22;     // outward sway, +/- & randomized (knob)
+      var size  = 4 + Math.random() * 3;            // px ember size (knob)
+      var dur   = 0.7 + Math.random() * 0.35;       // s rise+fade duration (knob)
+      var delay = Math.random() * 0.28;             // s stagger so they don't move in lockstep
+      var flick = 0.12 + Math.random() * 0.08;      // s flicker period (knob)
+      var peak  = 0.8 + Math.random() * 0.2;        // max opacity of this ember
+      var color = COLORS[Math.floor(Math.random() * COLORS.length)];
+      maxEnd = Math.max(maxEnd, dur + delay);
+
+      var ember = document.createElement('div');
+      ember.className = 'reveal-fx-ember';
+      ember.style.setProperty('--rise',  rise.toFixed(1) + 'px');
+      ember.style.setProperty('--dx',    drift.toFixed(1) + 'px');
+      ember.style.setProperty('--dur',   dur.toFixed(3) + 's');
+      ember.style.setProperty('--delay', delay.toFixed(3) + 's');
+      ember.style.setProperty('--peak',  peak.toFixed(2));
+
+      var core = document.createElement('div');
+      core.className = 'reveal-fx-ember-core';
+      core.style.width = core.style.height = size.toFixed(1) + 'px';
+      core.style.background = color;
+      core.style.boxShadow = '0 0 ' + (size * 1.7).toFixed(1) + 'px ' +
+                             (size * 0.7).toFixed(1) + 'px ' + color;
+      core.style.animationDuration = flick.toFixed(3) + 's';   // randomized flicker rate
+
+      ember.appendChild(core);
+      layer.appendChild(ember);
+    }
+    slotEl.appendChild(layer);
+    setTimeout(function () {
+      if (layer.parentNode) layer.parentNode.removeChild(layer);
+    }, (maxEnd + 0.4) * 1000);
   }
 
   /* ── Registry: cardId → handler(ctx) → extraDelay(ms) ──────────── */
@@ -81,11 +166,13 @@ SOG.RevealFx = (function () {
       return IMPACT_MS;       // pace the reveal's done (→ Tool's draw) to the impact beat
     },
 
-    // Fire (29): matchstrike SFX + a warm illuminate pulse that settles back.
+    // Fire (29): matchstrike SFX + a warm illuminate pulse that settles back,
+    // plus a few glowing embers rising off the card's centre (see spawnEmbers).
     29: function (ctx) {
       playSfx('sfx/matchstrike.m4a');
       flashClass(ctx.slotEl, 'reveal-fx-illuminate', 850);
-      return 0;
+      spawnEmbers(ctx.slotEl);
+      return holdFor(1300);   // illuminate 0.85s + embers rise/fade ~1.3s
     },
 
     // Cave Art (30): a caveman ARM holding charcoal pops in over the card's face
@@ -118,30 +205,107 @@ SOG.RevealFx = (function () {
       } catch (e) {}
       setTimeout(finish, 2600);   // fallback duration (knob) if 'ended' never fires
 
-      return 0;
+      return holdFor(2340);   // caveart.m4a ~1.89s scribble + 0.45s fade-out
     },
 
-    // Domesticated Animal (32): the borders of ADJACENT cards (same owner,
-    // ±1 slot at this location — mirrors the ability's own adjacency rule)
-    // briefly glow, then fade. Only occupied neighbors glow.
+    // Domesticated Animal (32): adjacent occupied neighbors' borders glow GREEN,
+    // then fade (shared neighborGlow helper + its own sfx).
     32: function (ctx) {
-      playSfx('sfx/domesticatedanimal.m4a');
-      [ctx.slotIndex - 1, ctx.slotIndex + 1].forEach(function (adjIdx) {
-        if (adjIdx < 0 || adjIdx >= SLOTS_PER_LOC) return;
-        if (adjIdx === ctx.slotIndex) return;   // never glow the DA card itself
-        var el = ctx.getSlotEl(ctx.owner, ctx.locId, adjIdx);
-        if (el && el !== ctx.slotEl && el.classList.contains('occupied')) {
-          flashClass(el, 'reveal-fx-neighbor-glow', 850);
-        }
-      });
-      return 0;
+      neighborGlow(ctx, 'reveal-fx-neighbor-glow', 'sfx/domesticatedanimal.m4a');
+      flashClass(ctx.slotEl, 'reveal-fx-howl', 1850);   // card rears its head up to howl
+      return holdFor(1800);
+    },
+
+    // Enkidu (44): same neighbor-border glow as Domesticated Animal, but in AMBER
+    // (the -enkidu colour class) with enkidu.mp3 — the shared glow, different colour.
+    44: function (ctx) {
+      neighborGlow(ctx, 'reveal-fx-neighbor-glow-enkidu', 'sfx/enkidu.mp3');
+      flashClass(ctx.slotEl, 'reveal-fx-howl', 1850);   // card rears its head up to howl
+      return holdFor(1800);
+    },
+
+    // Ziggurat (45): a single bell-strike — zigguratbell.mp3 + a "struck bell"
+    // resonating wobble that DAMPS DOWN to rest (decaying oscillation in the CSS
+    // keyframe). Pure presentation overlay; the class self-removes after the ring-out
+    // so nothing sticks. Returns 0 — never stalls the loop, fires for either owner.
+    45: function (ctx) {
+      playSfx('sfx/zigguratbell.mp3');
+      flashClass(ctx.slotEl, 'reveal-fx-ziggurat-ring', 1150);
+      return holdFor(1150);   // ring-out wobble 1.1s (bell sfx tail rings into the gap)
     },
 
     // Neanderthal (34): neanderthal SFX + a small drop-into-place settle.
     34: function (ctx) {
       playSfx('sfx/neanderthal.m4a');
       flashClass(ctx.slotEl, 'reveal-fx-dropin', 450);
-      return 0;
+      return holdFor(450);   // drop-in settle 0.42s (fits the gap → no extra wait)
+    },
+
+    // Farmer (39): "Harvest" coin SFX + an onion that POPS UP from the card's
+    // centre and DISSIPATES as it rises. Pure overlay: an <img> appended to the
+    // slot, animated by CSS (rise + fade via @keyframes revealFxOnionPop), then
+    // self-removed so it re-triggers cleanly on the next Farmer reveal. Returns 0
+    // — overlays the reveal without stalling the turn loop.
+    39: function (ctx) {
+      playSfx('sfx/scholar-officials-coin.mp3');
+      var onion = document.createElement('img');
+      onion.className = 'reveal-fx-onion';
+      onion.src = 'images/assets/onion@0.25x.png';
+      onion.draggable = false;
+      onion.setAttribute('aria-hidden', 'true');
+      ctx.slotEl.appendChild(onion);
+      // Remove after the pop+fade finishes (must outlast revealFxOnion's duration).
+      setTimeout(function () {
+        if (onion.parentNode) onion.parentNode.removeChild(onion);
+      }, 1400);
+      return holdFor(1400);   // onion pop + rise/fade ~1.4s
+    },
+
+    // Gilgamesh (43): the card grows and PULSES with a heartbeat throb for the
+    // duration of gilgamesh.mp3, then DISSOLVES back to its resting size as the sfx
+    // ends. Pure presentation overlay (no ability coupling): a CSS class drives the
+    // grow-in + infinite throb; when the audio 'ends' we freeze the current scale and
+    // transition it smoothly back to 1 (the dissolve-back), restoring the slot's
+    // inline transform so nothing sticks. A fallback timer covers blocked/silent
+    // audio. Returns 0 — overlays the flip without stalling the turn loop, and fires
+    // for either owner (RevealFx.fire is keyed on cardId, not who played the card).
+    43: function (ctx) {
+      var slot = ctx.slotEl;
+      if (!slot) { playSfx('sfx/gilgamesh.mp3'); return 0; }
+
+      var prevTransform  = slot.style.transform;
+      var prevTransition = slot.style.transition;
+      var prevZ          = slot.style.zIndex;
+      slot.classList.add('reveal-fx-gilgamesh');   // grow-in + heartbeat throb
+
+      var settled = false;
+      function settle() {
+        if (settled) return; settled = true;
+        // Freeze the current (animated) scale, then ease it back down to rest.
+        var cur = getComputedStyle(slot).transform;
+        slot.classList.remove('reveal-fx-gilgamesh');
+        slot.style.transition = 'none';
+        slot.style.transform  = (cur && cur !== 'none') ? cur : 'scale(1)';
+        slot.style.zIndex     = '9';
+        void slot.offsetWidth;                       // commit the frozen scale
+        slot.style.transition = 'transform 0.55s ease-out';
+        slot.style.transform  = 'scale(1)';          // dissolve back to resting size
+        setTimeout(function () {                      // then restore the slot's own styles
+          slot.style.transition = prevTransition;
+          slot.style.transform  = prevTransform;
+          slot.style.zIndex     = prevZ;
+        }, 600);
+      }
+
+      // Dissolve-back coincides with the sound ending; fallback covers silent/blocked audio.
+      try {
+        var audio = new Audio('sfx/gilgamesh.mp3');
+        audio.addEventListener('ended', settle);
+        audio.play().catch(function () {});
+      } catch (e) {}
+      setTimeout(settle, 2700);   // fallback ≈ gilgamesh.mp3 length (~2.53s) + margin (knob)
+
+      return holdFor(2530);   // pulse runs for gilgamesh.mp3 ~2.53s (dissolve-back rings into the gap)
     }
   };
 
@@ -167,5 +331,492 @@ SOG.RevealFx = (function () {
     }, 140);
   }
 
-  return { fire: fire, has: has, reactBounce: reactBounce };
+  // Scribe (40) stamping sequence (PRESENTATION; the IP is applied by the ability
+  // layer via each target's onLand callback — this only paces the visuals).
+  // ONE stamp element (fixed-position, so it's independent of slot DOM) travels to
+  // each target in order, presses DOWN onto the card, and at the bottom of the
+  // press fires onLand() (the ability applies the real +1 there) + plays the sfx +
+  // leaves a cuneiform mark on the card for ~markMs, then lifts and moves on. After
+  // the last card it fades out and is removed. onComplete() fires when the whole
+  // sequence is done — the ability passes its `done` here, so the reveal pipeline
+  // waits for all stamps. Everything (stamp + marks) is self-cleaning.
+  //   targets: [{ el: <slot element>, onLand: function }]
+  //   opts:    { sfx, travelMs, pressMs, markMs, gapMs, liftPx, riseMs }
+  //
+  // The SCRIBE CARD ITSELF is the stamp: we clone its slot into a fixed-position
+  // flyer, hide the original in its played spot, lift the flyer up, then press it
+  // DOWN onto each target in slot order. At the bottom of each press it fires
+  // onLand() (the ability applies the real +1) + plays the sfx + leaves a cuneiform
+  // mark (inverted to white so it reads). After the last card the flyer returns to
+  // the Scribe's slot and is removed, restoring the original. Self-cleaning.
+  function scribeStampSequence(scribeEl, targets, opts, onComplete) {
+    opts = opts || {};
+    var travelMs = opts.travelMs || 300;
+    var pressMs  = opts.pressMs  || 140;
+    var markMs   = opts.markMs   || 300;
+    var gapMs    = opts.gapMs    || 120;
+    var liftPx   = opts.liftPx   || 40;   // how high the card hovers above a card before pressing
+    var riseMs   = opts.riseMs   || 240;  // initial lift out of its own slot
+    var markDelayMs = opts.markDelayMs != null ? opts.markDelayMs : 500;  // show the mark AFTER the
+                                          // flyer lifts off, so the card itself doesn't cover it (knob)
+    var markHoldMs  = opts.markHoldMs  != null ? opts.markHoldMs  : (markMs + 500);  // how long the mark
+                                          // STAYS visible before fading — decoupled from the press pace (knob)
+
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+    if (!targets || !targets.length) { finish(); return; }
+
+    // Leave a cuneiform mark on the just-stamped card; self-removing.
+    function showMark(el) {
+      if (!el) return;
+      var mark = document.createElement('img');
+      mark.className = 'reveal-fx-scribe-mark';
+      mark.src = 'images/assets/cuneiformstamp.png';
+      mark.setAttribute('aria-hidden', 'true');
+      el.appendChild(mark);
+      setTimeout(function () { mark.classList.add('reveal-fx-scribe-mark-out'); }, markHoldMs);
+      setTimeout(function () { if (mark.parentNode) mark.parentNode.removeChild(mark); }, markHoldMs + 280);
+    }
+
+    // No Scribe element to fly (defensive) — still apply each +1 and leave marks,
+    // paced, so the IP is never skipped and the turn flow advances.
+    if (!scribeEl) {
+      var k = 0;
+      (function plain() {
+        if (k >= targets.length) { finish(); return; }
+        var t = targets[k];
+        if (opts.sfx) playSfx(opts.sfx);
+        if (typeof t.onLand === 'function') t.onLand();
+        setTimeout(function () { showMark(t.el); }, markDelayMs);
+        k++;
+        setTimeout(plain, markMs + gapMs);
+      })();
+      return;
+    }
+
+    // Clone the Scribe card into a fixed flyer; hide the original in its slot so it
+    // looks like the card itself lifted out to do the stamping.
+    var startRect = scribeEl.getBoundingClientRect();
+    var fly = scribeEl.cloneNode(true);
+    fly.className = (scribeEl.className || '') + ' reveal-fx-scribe-flyer';
+    // Set positioning props individually (don't clobber the clone's own inline
+    // styles) so the cloned card face renders exactly like the real card.
+    fly.style.position      = 'fixed';
+    fly.style.width         = startRect.width + 'px';
+    fly.style.height        = startRect.height + 'px';
+    fly.style.margin        = '0';
+    fly.style.zIndex        = '9999';
+    fly.style.pointerEvents = 'none';
+    fly.style.visibility    = 'visible';   // in case the source slot is mid-hide
+    document.body.appendChild(fly);
+    scribeEl.style.visibility = 'hidden';
+
+    // Position the flyer's CENTRE over a card, at a vertical offset, with a scale.
+    function place(el, scale, offY) {
+      var r = el.getBoundingClientRect();
+      fly.style.left = (r.left + r.width / 2) + 'px';
+      fly.style.top  = (r.top + r.height / 2 + (offY || 0)) + 'px';
+      fly.style.transform = 'translate(-50%, -50%) scale(' + (scale || 1) + ')';
+    }
+
+    function cleanup() {
+      if (fly.parentNode) fly.parentNode.removeChild(fly);
+      scribeEl.style.visibility = '';
+      finish();
+    }
+
+    // 1) sit exactly over the played slot, then LIFT up (hover above own slot).
+    fly.style.transition = 'none';
+    place(scribeEl, 1, 0);
+    void fly.offsetWidth;
+    fly.style.transition = 'left ' + riseMs + 'ms ease-out, top ' + riseMs +
+                           'ms ease-out, transform ' + riseMs + 'ms ease-out';
+    place(scribeEl, 1.04, -(liftPx + 6));
+
+    var i = 0;
+    function step() {
+      if (i >= targets.length) {
+        // 5) return to its played slot and settle, then clean up.
+        fly.style.transition = 'left ' + travelMs + 'ms ease-in-out, top ' + travelMs +
+                               'ms ease-in-out, transform ' + travelMs + 'ms ease-in-out';
+        place(scribeEl, 1, 0);
+        setTimeout(cleanup, travelMs + 40);
+        return;
+      }
+      var t = targets[i];
+      if (!t.el) {   // target slot vanished — still apply the IP, skip its visual
+        if (typeof t.onLand === 'function') t.onLand();
+        i++; step(); return;
+      }
+      // 2) travel to hover above the target card
+      fly.style.transition = 'left ' + travelMs + 'ms ease, top ' + travelMs +
+                             'ms ease, transform ' + travelMs + 'ms ease';
+      place(t.el, 1.0, -liftPx);
+      setTimeout(function () {
+        // 3) press DOWN onto the card (slight squash on contact)
+        fly.style.transition = 'top ' + pressMs + 'ms ease-in, transform ' + pressMs + 'ms ease-in';
+        place(t.el, 0.96, 0);
+        setTimeout(function () {
+          // 4) LANDING beat: sfx + the real +1 (onLand) now; the cuneiform MARK is
+          // delayed (markDelayMs) so it appears AFTER the card lifts off and stops
+          // covering it — so the mark is fully visible.
+          if (opts.sfx) playSfx(opts.sfx);
+          if (typeof t.onLand === 'function') t.onLand();
+          setTimeout(function () { showMark(t.el); }, markDelayMs);
+          // hold on the card, then lift back up and move to the next one
+          setTimeout(function () {
+            fly.style.transition = 'top ' + pressMs + 'ms ease-out, transform ' + pressMs + 'ms ease-out';
+            place(t.el, 1.0, -liftPx);
+            setTimeout(function () { i++; step(); }, pressMs + gapMs);
+          }, markMs);
+        }, pressMs);
+      }, travelMs);
+    }
+    setTimeout(step, riseMs + 30);   // start stamping after the initial lift
+  }
+
+  // Soldier (42) charge (PRESENTATION; the IP reduction is applied by the ability
+  // layer via opts.onImpact — this only paces the visual). A spear flies from the
+  // Soldier's slot ACROSS to the EXACT target slot the ability chose, and at the
+  // moment of contact fires opts.onImpact() (the ability applies the real -1 there)
+  // + plays the hit sfx + shakes the struck card. The spear then retreats to the
+  // Soldier and dissipates; the Soldier slot gives a small synced lunge. onComplete
+  // fires after the return — the ability passes its `done` here, so the reveal
+  // pipeline waits for the charge (same coupling as Scribe's stamping). The spear
+  // element is self-cleaning.
+  //   opts: { sfx, onImpact, travelMs, returnMs, impactHoldMs, naturalTipDeg }
+  //
+  // The SOLDIER CARD ITSELF charges: we clone its slot into a fixed flyer (with the
+  // spear attached at its leading edge, pointing at the target), hide the original
+  // in its slot, then drive the whole card ACROSS the location until it meets the
+  // target card. At contact it fires onImpact() (the ability applies the real -1) +
+  // hit sfx + shakes the struck card, then the Soldier charges back to its slot and
+  // is removed (original restored). onComplete fires after the return, so the reveal
+  // pipeline waits for the charge. Self-cleaning.
+  function soldierCharge(soldierEl, targetEl, opts, onComplete) {
+    opts = opts || {};
+    var travelMs     = opts.travelMs     || 480;   // charge-across speed (knob)
+    var returnMs     = opts.returnMs     || 340;   // charge-back speed (knob)
+    var impactHoldMs = opts.impactHoldMs || 300;   // dwell at the target on impact (knob)
+    var tipDeg       = (opts.naturalTipDeg != null) ? opts.naturalTipDeg : -29; // spear art's tip angle
+
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+
+    // No geometry to animate against → still fire the real effect, then complete,
+    // so IP is never skipped and the turn flow always advances.
+    if (!soldierEl || !targetEl) {
+      if (typeof opts.onImpact === 'function') opts.onImpact();
+      finish();
+      return;
+    }
+
+    var sRect = soldierEl.getBoundingClientRect();
+    var tRect = targetEl.getBoundingClientRect();
+    var from = { x: sRect.left + sRect.width / 2, y: sRect.top + sRect.height / 2 };
+    var to   = { x: tRect.left + tRect.width / 2, y: tRect.top + tRect.height / 2 };
+    var dx = to.x - from.x, dy = to.y - from.y;
+    var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ux = dx / dist, uy = dy / dist;                         // unit travel direction
+    var travelAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+    var rot = travelAngle - tipDeg;                             // point the spear art along travel
+
+    // Stop the charging card when its leading edge meets the target's near edge
+    // (each card's half-extent measured ALONG the travel direction), nudged a touch
+    // further so the spear clearly bites into the target.
+    var halfS = Math.abs(ux) * sRect.width / 2 + Math.abs(uy) * sRect.height / 2;
+    var halfT = Math.abs(ux) * tRect.width / 2 + Math.abs(uy) * tRect.height / 2;
+    var advance = Math.max(0, dist - halfS - halfT) + Math.min(halfT * 0.7, 30);
+    var impactPt = { x: from.x + ux * advance, y: from.y + uy * advance };
+
+    // Clone the Soldier card into a fixed flyer; hide the original in its slot.
+    var fly = soldierEl.cloneNode(true);
+    fly.className = (soldierEl.className || '') + ' reveal-fx-soldier-flyer';
+    fly.style.position      = 'fixed';
+    fly.style.width         = sRect.width + 'px';
+    fly.style.height        = sRect.height + 'px';
+    fly.style.margin        = '0';
+    fly.style.zIndex        = '9998';
+    fly.style.pointerEvents = 'none';
+    fly.style.visibility    = 'visible';
+
+    // Spear ATTACHED to the card, at its leading edge, pointing toward the target.
+    var spear = document.createElement('img');
+    spear.className = 'reveal-fx-soldier-spear';
+    spear.src = 'images/assets/mesospear@0.25x.png';
+    spear.draggable = false;
+    spear.setAttribute('aria-hidden', 'true');
+    spear.style.left = (50 + ux * 50) + '%';   // at the leading edge, half of it leads the charge
+    spear.style.top  = (50 + uy * 50) + '%';
+    spear.style.transform = 'translate(-50%, -50%) rotate(' + rot + 'deg)';
+    fly.appendChild(spear);
+
+    document.body.appendChild(fly);
+    soldierEl.style.visibility = 'hidden';
+
+    function placeFly(p, scale) {
+      fly.style.left = p.x + 'px';
+      fly.style.top  = p.y + 'px';
+      fly.style.transform = 'translate(-50%, -50%) scale(' + (scale || 1) + ')';
+    }
+
+    function cleanup() {
+      if (fly.parentNode) fly.parentNode.removeChild(fly);
+      soldierEl.style.visibility = '';
+      finish();
+    }
+
+    // Start exactly over the played slot.
+    fly.style.transition = 'none';
+    placeFly(from, 1);
+    void fly.offsetWidth;
+
+    // Fire IMPACT when the card ARRIVES (transitionend), with a timeout fallback.
+    var impacted = false;
+    function onArriveTE(e) { if (e.propertyName === 'left' || e.propertyName === 'top') impact(); }
+    fly.addEventListener('transitionend', onArriveTE);
+
+    function impact() {
+      if (impacted) return;
+      impacted = true;
+      fly.removeEventListener('transitionend', onArriveTE);
+      // IMPACT: hit sfx + the REAL -1 (onImpact) + struck-card shake — one beat.
+      if (opts.sfx) playSfx(opts.sfx);
+      if (typeof opts.onImpact === 'function') opts.onImpact();
+      flashClass(targetEl, 'reveal-fx-soldier-hit', 360);
+
+      setTimeout(function () {
+        // charge back to the slot, then clean up.
+        fly.style.transition = 'left ' + returnMs + 'ms ease-out, top ' + returnMs +
+                               'ms ease-out, transform ' + returnMs + 'ms ease-out';
+        placeFly(from, 1);
+        setTimeout(cleanup, returnMs + 40);
+      }, impactHoldMs);
+    }
+
+    // 1) charge ACROSS to the impact point (slight lift via scale).
+    fly.style.transition = 'left ' + travelMs + 'ms ease-in, top ' + travelMs +
+                           'ms ease-in, transform ' + travelMs + 'ms ease-in';
+    placeFly(impactPt, 1.05);
+    setTimeout(impact, travelMs + 90);   // fallback if transitionend is missed
+  }
+
+  // Cuneiform (46) synchronized group LIFT (PRESENTATION; the IP boost is applied by
+  // the ability layer via opts.onPeak — this only paces the visual). Every target
+  // card rises IN PLACE in its own slot, all in unison (the slots span multiple
+  // locations; each just translates up, none move toward each other). At the PEAK
+  // opts.onPeak() fires — the ability applies the real +1s there, so the visible IP
+  // tick-up IS the game-state change. Then they all fall back together. The rise →
+  // peak → fall is timed to transform.m4a. Each slot's inline transform / transition
+  // / z-index is saved and restored, so nothing sticks after they settle. onComplete
+  // fires after the fall, so the reveal pipeline waits for the whole sequence.
+  //   targetEls: [ <slot element>, ... ]
+  //   opts:      { sfx, onPeak, riseMs, holdMs, fallMs, liftPx }
+  function cuneiformLift(targetEls, opts, onComplete) {
+    opts = opts || {};
+    var riseMs = opts.riseMs || 1150;   // way up
+    var holdMs = opts.holdMs || 600;    // dwell at the peak (IP change beat)
+    var fallMs = opts.fallMs || 1150;   // back down — rise+hold+fall ≈ transform.m4a (~2.97s)
+    var liftPx = opts.liftPx || 26;
+
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+    var els = (targetEls || []).filter(Boolean);
+
+    // No elements to animate → still fire the peak (so IP is never skipped), complete.
+    if (!els.length) {
+      if (typeof opts.onPeak === 'function') opts.onPeak();
+      finish();
+      return;
+    }
+
+    if (opts.sfx) playSfx(opts.sfx);
+
+    // Save each slot's inline transform/transition/z-index so we can restore exactly.
+    var saved = els.map(function (el) {
+      return { el: el, transform: el.style.transform || '', transition: el.style.transition || '', zIndex: el.style.zIndex || '' };
+    });
+
+    function setLift(up) {
+      var ms   = up ? riseMs : fallMs;
+      var ease = up ? 'cubic-bezier(0.22,0.61,0.36,1)' : 'cubic-bezier(0.55,0.06,0.68,0.19)';
+      saved.forEach(function (s) {
+        s.el.style.transition = 'transform ' + ms + 'ms ' + ease;
+        s.el.style.transform  = up
+          ? ((s.transform ? s.transform + ' ' : '') + 'translateY(-' + liftPx + 'px)')
+          : s.transform;
+      });
+    }
+
+    // Raise above neighbours for the duration of the lift.
+    saved.forEach(function (s) { s.el.style.zIndex = '8'; });
+
+    // 1) RISE in unison
+    setLift(true);
+
+    // 2) PEAK: apply the real +1s (one beat, once), at the top of the rise.
+    setTimeout(function () {
+      if (typeof opts.onPeak === 'function') opts.onPeak();
+    }, riseMs);
+
+    // 3) FALL in unison after the hold
+    setTimeout(function () { setLift(false); }, riseMs + holdMs);
+
+    // 4) Settle: restore each slot's saved inline styles so nothing sticks.
+    setTimeout(function () {
+      saved.forEach(function (s) {
+        s.el.style.transition = s.transition;
+        s.el.style.transform  = s.transform;
+        s.el.style.zIndex     = s.zIndex;
+      });
+      finish();
+    }, riseMs + holdMs + fallMs + 30);
+  }
+
+  // Chariot (48) ARROW (PRESENTATION; the IP reduction is applied by the ability via
+  // opts.onImpact — this only paces the visual). Same projectile coordination as
+  // soldierCharge: a fixed-position arrow flies from the arrived Chariot's slot to the
+  // EXACT chosen target slot; at arrival it fires opts.onImpact() (the ability applies
+  // the real -1 there) + an optional sfx + a hit-shake on the struck card, then the
+  // arrow DISSOLVES (fade + shrink) and self-cleans. onComplete fires after, so the
+  // turn waits. Impact fires on transitionend (true arrival) with a timeout fallback.
+  //   opts: { sfx, onImpact, flyMs, naturalTipDeg }
+  function chariotArrow(fromEl, targetEl, opts, onComplete) {
+    opts = opts || {};
+    var flyMs  = opts.flyMs || 360;                                   // flight speed (knob)
+    var tipDeg = (opts.naturalTipDeg != null) ? opts.naturalTipDeg : -29;  // arrow art's tip angle
+
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+
+    // No geometry → still fire the real reduction (never skipped), then complete.
+    if (!fromEl || !targetEl) {
+      if (typeof opts.onImpact === 'function') opts.onImpact();
+      finish();
+      return;
+    }
+
+    function centerOf(el) { var r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+    var from = centerOf(fromEl), to = centerOf(targetEl);
+    var travelAngle = Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI;
+    var rot = travelAngle - tipDeg;   // point the arrow art along the flight
+
+    var arrow = document.createElement('img');
+    arrow.className = 'reveal-fx-chariot-arrow';
+    arrow.src = 'images/assets/arrow@0.25x.png';
+    arrow.draggable = false;
+    arrow.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(arrow);
+
+    function place(p) { arrow.style.left = p.x + 'px'; arrow.style.top = p.y + 'px'; }
+    arrow.style.transform = 'translate(-50%, -50%) rotate(' + rot + 'deg)';
+    arrow.style.transition = 'none';
+    place(from);
+    void arrow.offsetWidth;   // commit start position
+
+    var impacted = false;
+    function onArriveTE(e) { if (e.propertyName === 'left' || e.propertyName === 'top') impact(); }
+    arrow.addEventListener('transitionend', onArriveTE);
+
+    function impact() {
+      if (impacted) return;
+      impacted = true;
+      arrow.removeEventListener('transitionend', onArriveTE);
+      // IMPACT: optional sfx + the REAL -1 (onImpact) + struck-card shake — one beat.
+      if (opts.sfx) playSfx(opts.sfx);
+      if (typeof opts.onImpact === 'function') opts.onImpact();
+      flashClass(targetEl, 'reveal-fx-soldier-hit', 360);   // reuse Soldier's hit-shake
+      // DISSOLVE the arrow, then self-clean + complete.
+      arrow.style.transition = 'opacity 220ms ease-out, transform 220ms ease-out';
+      arrow.style.opacity = '0';
+      arrow.style.transform = 'translate(-50%, -50%) rotate(' + rot + 'deg) scale(0.6)';
+      setTimeout(function () {
+        if (arrow.parentNode) arrow.parentNode.removeChild(arrow);
+        finish();
+      }, 240);
+    }
+
+    // Fling toward the target.
+    arrow.style.transition = 'left ' + flyMs + 'ms ease-in, top ' + flyMs + 'ms ease-in';
+    place(to);
+    setTimeout(impact, flyMs + 90);   // fallback if transitionend is missed
+  }
+
+  // Phoenicians (49) MERGE (PRESENTATION; the real consumption + host boost are done
+  // by the ability layer via opts.onMerge — this only paces the visual). Phoenicians
+  // sits a beat, then plays the sfx, clones itself into a fixed flyer, slides over the
+  // FRONT of the target card and DISSOLVES (fades) as it overlaps. At the end of the
+  // dissolve opts.onMerge() fires — the ability removes Phoenicians and boosts the host
+  // there, so the visible dissolve coincides with the real consumption. onComplete
+  // fires after, so the reveal pipeline waits. The original Phoenicians slot is hidden
+  // during the slide and restored after the merge (the merge clears it for real).
+  //   opts: { sfx, onMerge, sitMs, slideMs }
+  function phoeniciansMerge(phoenEl, targetEl, opts, onComplete) {
+    opts = opts || {};
+    var sitMs   = opts.sitMs   || 500;   // sit in place before moving (knob)
+    var slideMs = opts.slideMs || 600;   // slide-over + dissolve (knob)
+
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+
+    // No geometry → still do the real merge (so logic never skipped), then complete.
+    if (!phoenEl || !targetEl) {
+      if (typeof opts.onMerge === 'function') opts.onMerge();
+      finish();
+      return;
+    }
+
+    // 1) sit in place, THEN move.
+    setTimeout(function () {
+      if (opts.sfx) playSfx(opts.sfx);
+
+      var sRect = phoenEl.getBoundingClientRect();
+      var tRect = targetEl.getBoundingClientRect();
+
+      // Clone Phoenicians into a fixed flyer; hide the original so the card itself moves.
+      var fly = phoenEl.cloneNode(true);
+      fly.className = (phoenEl.className || '') + ' reveal-fx-phoenicians-fly';
+      fly.style.position      = 'fixed';
+      fly.style.width         = sRect.width + 'px';
+      fly.style.height        = sRect.height + 'px';
+      fly.style.left          = (sRect.left + sRect.width / 2) + 'px';
+      fly.style.top           = (sRect.top + sRect.height / 2) + 'px';
+      fly.style.margin        = '0';
+      fly.style.transform     = 'translate(-50%, -50%)';
+      fly.style.zIndex        = '9998';
+      fly.style.pointerEvents = 'none';
+      fly.style.visibility    = 'visible';
+      document.body.appendChild(fly);
+
+      var prevVis = phoenEl.style.visibility;
+      phoenEl.style.visibility = 'hidden';
+
+      void fly.offsetWidth;   // commit start position
+
+      // 2) slide over the target's front + dissolve (fade).
+      fly.style.transition = 'left ' + slideMs + 'ms ease-in, top ' + slideMs +
+                             'ms ease-in, opacity ' + slideMs + 'ms ease-in, transform ' + slideMs + 'ms ease-in';
+      fly.style.left      = (tRect.left + tRect.width / 2) + 'px';
+      fly.style.top       = (tRect.top + tRect.height / 2) + 'px';
+      fly.style.transform = 'translate(-50%, -50%) scale(0.92)';
+      fly.style.opacity   = '0';
+
+      // 3) at the end of the dissolve: the REAL merge (consumption + host boost), synced.
+      var done = false;
+      function complete() {
+        if (done) return; done = true;
+        if (fly.parentNode) fly.parentNode.removeChild(fly);
+        if (typeof opts.onMerge === 'function') opts.onMerge();   // removes Phoenicians + boosts host
+        phoenEl.style.visibility = prevVis;   // restore (merge may have compacted into this slot)
+        finish();
+      }
+      fly.addEventListener('transitionend', function te(e) {
+        if (e.propertyName === 'opacity') complete();
+      });
+      setTimeout(complete, slideMs + 120);   // fallback if transitionend is missed
+
+    }, sitMs);
+  }
+
+  return { fire: fire, has: has, reactBounce: reactBounce,
+           scribeStampSequence: scribeStampSequence,
+           soldierCharge: soldierCharge,
+           cuneiformLift: cuneiformLift,
+           phoeniciansMerge: phoeniciansMerge,
+           chariotArrow: chariotArrow };
 })();

@@ -479,26 +479,9 @@
         });
       });
 
-      // Scribe (id 40): +1 IP to each card at this location that was played from hand
-      // here (originalLocId === this location) BEFORE Scribe was played here
-      // (playTime < Scribe.playTime).  Each Scribe in the slot array is its own
-      // independent boost source.
-      ['player', 'opp'].forEach(function (own) {
-        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        sl[loc.id].forEach(function (scribe, scribeIdx) {
-          if (!scribe || !scribe.revealed || scribe.cardId !== 40) return;
-          var scribeTime = scribe.playTime;
-          if (scribeTime === undefined) return;   // metadata not yet set — skip
-          sl[loc.id].forEach(function (s, si) {
-            if (!s || !s.revealed || si === scribeIdx) return;
-            if (s.originalLocId !== loc.id) return;   // not originally played here
-            if ((s.playTime || 0) >= scribeTime) return;  // played same time or after Scribe
-            s.contMod = (s.contMod || 0) + 1;
-            s.contModSources.push({ source: 'Scribe', delta: 1 });
-            addBonus(s, 1, 'card', 40, nextEventId(), 'A', true);
-          });
-        });
-      });
+      // Scribe (id 40) is no longer Continuous — it is now an At Once ability
+      // (abilityScribe) that applies a one-time +1 IP to the owner's other cards
+      // here as each stamp lands. See CARD_ABILITIES[40] / reveal-fx stamping.
 
       // Gilgamesh (id 43): +1 IP for all OTHER Cultural cards the owner has played
       // this game — Gilgamesh does NOT boost himself. culturalCount is all-time
@@ -559,6 +542,35 @@
         });
       });
     });
+
+    // Canals (id 41) water border + sfx — PRESENTATION ONLY, derived from the SAME
+    // continuous pass that computes the boost, so it is correct in every stop-condition
+    // (Canals leaves, a boosted card moves, Canals moves, a card stops qualifying).
+    // A card is Canals-boosted iff its contModSources contains a 'Canals' source. Each
+    // eval: boosted cards get/keep the persistent .canals-water class; all others have
+    // it removed. The waterflow sfx fires ONCE per eval in which ANY card NEWLY
+    // transitions not-boosted -> boosted (tracked via the persistent s.canalsBoosted
+    // flag) — so a reveal that boosts several cards plays once, and a later single
+    // arrival plays once for that card; a card that was already boosted never replays.
+    var canalsNewBoost = false;
+    G.locations.forEach(function (loc) {
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        sl[loc.id].forEach(function (s, si) {
+          var boosted = !!(s && s.revealed && s.contModSources &&
+            s.contModSources.some(function (src) { return src.source === 'Canals'; }));
+          if (s) {
+            if (boosted && !s.canalsBoosted) canalsNewBoost = true;   // not-boosted -> boosted
+            s.canalsBoosted = boosted;
+          }
+          var slotEl = getSlotEl(own, loc.id, si);
+          if (slotEl) slotEl.classList.toggle('canals-water', boosted);   // also clears empty/old slots
+        });
+      });
+    });
+    if (canalsNewBoost && typeof SFX !== 'undefined' && typeof SFX.waterflowSound === 'function') {
+      SFX.waterflowSound();
+    }
 
     // Update continuous glow on all revealed slots
     if (typeof Anim !== 'undefined') {
@@ -647,8 +659,12 @@
    * Discard a card from an owner's hand.
    * Removes from hand state/DOM and fires If/When-discarded triggers.
    */
-  function discardFromHand(owner, cardId, callback) {
-    if (typeof SFX !== 'undefined') SFX.cardDiscarded();
+  function discardFromHand(owner, cardId, callback, opts) {
+    opts = opts || {};
+    // Discard sound: a caller-supplied sfx (e.g. Priest's priest.m4a) replaces the
+    // generic whoosh for THAT discard only; every other caller keeps the whoosh.
+    if (opts.sfx) { try { new Audio(opts.sfx).play(); } catch (e) {} }
+    else if (typeof SFX !== 'undefined') SFX.cardDiscarded();
     var jesusEl  = null;
     var janHusEl = null;
     if (owner === 'player') {
@@ -657,10 +673,24 @@
       if (hEl) {
         if (cardId === 10) { jesusEl  = hEl; }  // hold for Jesus ascend animation
         else if (cardId === 7) { janHusEl = hEl; }  // hold for Jan Hus split animation
+        else if (opts.animate && typeof Anim !== 'undefined' &&
+                 typeof Anim.cardDiscarded === 'function') {
+          Anim.cardDiscarded(hEl, opts.riseSec);   // rise + fade (removes the element itself); riseSec slows it
+        }
         else               { hEl.remove(); }    // other discards: silent removal (no generic animation)
       }
     } else {
       G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
+      // Presentation: when requested (Priest), rise+disappear one of the opponent's
+      // face-down hand backs so the discard is visible no matter who triggers it.
+      // The anim clones a fixed-position ghost, so a later updateOppHand() rebuild
+      // doesn't disturb it.
+      if (opts.animate && typeof Anim !== 'undefined' &&
+          typeof Anim.cardDiscarded === 'function') {
+        var oppHandEl = document.getElementById('battle-opp-hand');
+        var backs = oppHandEl ? oppHandEl.querySelectorAll('.battle-card-back') : null;
+        if (backs && backs.length) Anim.cardDiscarded(backs[backs.length - 1], opts.riseSec);
+      }
     }
     if (cardId === 7) {
       triggerJanHus(owner, janHusEl, function () {
@@ -677,13 +707,96 @@
      AT ONCE ABILITY IMPLEMENTATIONS  (id 2, 3, 4, 5, 8, 9, 13, 23)
   ═══════════════════════════════════════════════════════════════ */
 
+  /* ── Reusable: grant +N capital to a player's NEXT turn ───────────────
+     Adds to the per-player "pending next-turn capital" accumulator
+     (G.bonusCapitalNextTurn for the player, G.aiBonusCapitalNextTurn for the
+     AI). nextTurn() applies the accumulator when the next turn's capital pool
+     is set up, then clears it — so it's a ONE-TURN bump, not permanent. Because
+     it accumulates, multiple grants in a turn STACK naturally (two Farmers →
+     +2 next turn) and future multi-fire cards work with no extra plumbing.
+     In capital-OFF battles (resource.model 'none' — Gilgamesh/prehistory/Ötzi)
+     nextTurn forces capital to 0 and never reads the accumulator, so this is a
+     harmless no-op there; it also never errors (the fields are always
+     initialized). Shared by Scholar-Officials (2) and Farmer (39). */
+  function grantCapitalNextTurn(owner, amount) {
+    var n = amount | 0;
+    if (n <= 0) return;
+    if (owner === 'player') G.bonusCapitalNextTurn   += n;
+    else                    G.aiBonusCapitalNextTurn += n;
+  }
+
+  /* Farmer (39) — "Harvest". At Once: grant the OWNER +1 capital next turn via
+     the shared accumulator above. No board reads, so nothing to animate beyond
+     the standard At-Once pulse/chime; harmlessly no-ops where capital is off. */
+  function abilityFarmer(owner, locId, done) {
+    grantCapitalNextTurn(owner, 1);
+    done();
+  }
+
+  /* Scribe (40) — "Record Keeper". At Once: +1 IP to the OWNER's OTHER revealed
+     cards at this location (not the opponent's, not Scribe itself), as a one-time
+     snapshot of who is present at reveal. The +1s resolve SEQUENTIALLY, paced by
+     a stamping animation: the stamp travels to each target in slot order, presses
+     down, and AT THE LANDING BEAT the real addIPMod(+1) is applied (same event as
+     the visible mark / float / sfx — never a faked number). done() is passed as
+     the sequence's onComplete, so the reveal pipeline waits for all stamps before
+     advancing. No other cards here → harmless no-op (done() immediately). */
+  function abilityScribe(owner, locId, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+
+    // The owner's OTHER revealed cards here, in slot order. Exclude Scribe by id
+    // (matches Scholar-Officials' by-id self-exclusion), per the At-Once rule.
+    var targets = [];
+    forEachRevealedAt(slots, locId, function (s, i) {
+      if (s.cardId === 40) return;                 // not Scribe itself
+      var el = getSlotEl(owner, locId, i);
+      targets.push({
+        el: el,
+        // The stamp LANDING is the +1: apply the real IP, refresh, score, float.
+        onLand: function () {
+          addIPMod(s, 1, 'Scribe');                // permanent one-time +1 IP
+          evaluateContinuous();
+          refreshSlotIPDisplays();
+          updateScores();
+          if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
+            SOG.ui.showIPFloat(owner, s.cardId, 1);
+          }
+        }
+      });
+    });
+
+    if (!targets.length) { done(); return; }       // nothing to stamp → no-op
+
+    // Scribe's own slot element — the stamp's starting position.
+    var scribeIdx = -1;
+    forEachRevealedAt(slots, locId, function (s, i) {
+      if (scribeIdx === -1 && s.cardId === 40) scribeIdx = i;
+    });
+    var scribeEl = scribeIdx !== -1 ? getSlotEl(owner, locId, scribeIdx) : null;
+
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.scribeStampSequence === 'function') {
+      rfx.scribeStampSequence(scribeEl, targets, {
+        sfx:      'sfx/cuneiformstamp.mp3',
+        travelMs: 300,   // stamp glide between cards (knob)
+        pressMs:  140,   // down/up press motion (knob)
+        markMs:   300,   // how long the mark lingers before it fades (knob)
+        gapMs:    120    // beat between one card and the next (knob)
+      }, done);
+    } else {
+      // Defensive fallback (no animation available): apply the +1s instantly,
+      // still correct, then advance.
+      targets.forEach(function (t) { t.onLand(); });
+      done();
+    }
+  }
+
   function abilityScholarOfficials(owner, locId, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     // Count revealed cards at this location, excluding Scholar-Officials (id 2) itself
     var count = 0;
     forEachRevealedAt(slots, locId, function (s) { if (s.cardId !== 2) count++; });
-    if (owner === 'player') G.bonusCapitalNextTurn   += count;
-    else                    G.aiBonusCapitalNextTurn += count;
+    grantCapitalNextTurn(owner, count);   // shared next-turn-capital accumulator
     if (count > 0) {
       var slotIdx = slots[locId].findIndex(function (s) { return s && s.cardId === 2; });
       var slotEl  = slotIdx !== -1 ? getSlotEl(owner, locId, slotIdx) : null;
@@ -1249,44 +1362,54 @@
       if (c && c.cc < lowestCC) { lowestCC = c.cc; lowestId = id; }
     });
     if (lowestId === null) { done(); return; }
-    discardFromHand(owner, lowestId, done);
+    // Presentation only: reuse the shared rise-and-disappear (Anim.cardDiscarded)
+    // on the discarded card + priest.m4a. The discard LOGIC (lowest-CC selection,
+    // hand removal) is unchanged; opts just adds the visual/sound for both sides.
+    discardFromHand(owner, lowestId, done, { animate: true, sfx: 'sfx/priest.m4a', riseSec: 1.0 });
   }
 
-  // Soldier (id 42) — At Once: Strike one of your opponent's cards here
-  // and reduce it by -1 IP.  Player gets a chooser; AI auto-picks
-  // the highest-IP opponent card.
+  // Soldier (id 42) — At Once: Strike one of your opponent's revealed cards here
+  // and reduce it by -1 IP.  The target is chosen RANDOMLY for BOTH sides (no
+  // player chooser) — the spear flies at that same randomly-picked card.
   function abilitySoldier(owner, locId, done) {
     var oppSide  = owner === 'player' ? 'opp' : 'player';
     var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
+    // Keep each target's SLOT INDEX alongside its data so the charge animation can
+    // fly the spear at the exact card the ability chose (idx → its slot element).
     var targets  = [];
-    forEachRevealedAt(oppSlots, locId, function (s) { targets.push(s); });
-    if (targets.length === 0) { done(); return; }
+    forEachRevealedAt(oppSlots, locId, function (s, i) { targets.push({ sd: s, idx: i }); });
+    if (targets.length === 0) { done(); return; }   // no opponent cards → no-op
 
-    function applyStrike(targetSd) {
-      addIPMod(targetSd, -1, 'Soldier');
-      SOG.ui.showIPFloat(oppSide, targetSd.cardId, -1);
-      evaluateContinuous();
-      refreshSlotIPDisplays();
-      updateScores();
-      setTimeout(done, 400);
+    // Apply the strike, PACED by the charge: the spear flies to the chosen target's
+    // slot, and the real -1 IP fires at the impact beat (onImpact) — same card, same
+    // event as the visible drop. done() runs after the Soldier returns, so the reveal
+    // pipeline waits for the charge (same coupling pattern as Scribe's stamping).
+    function applyStrike(t) {
+      var targetSd  = t.sd;
+      var targetEl  = getSlotEl(oppSide, locId, t.idx);   // the SAME card the ability chose
+      var soldierEl = findSlotEl(owner, 42);              // the charging Soldier's slot
+
+      function strike() {   // the real, one-time IP reduction (shown at impact)
+        addIPMod(targetSd, -1, 'Soldier');
+        SOG.ui.showIPFloat(oppSide, targetSd.cardId, -1);
+        evaluateContinuous();
+        refreshSlotIPDisplays();
+        updateScores();
+      }
+
+      var rfx = window.SOG && SOG.RevealFx;
+      if (rfx && typeof rfx.soldierCharge === 'function') {
+        rfx.soldierCharge(soldierEl, targetEl, { sfx: 'sfx/hit.m4a', onImpact: strike }, done);
+      } else {
+        // Defensive fallback (no animation available): apply instantly, still correct.
+        strike();
+        setTimeout(done, 400);
+      }
     }
 
-    if (owner === 'opp') {
-      // AI: pick the highest-IP player card
-      var best = targets.reduce(function (a, b) {
-        return effectiveIP(a) >= effectiveIP(b) ? a : b;
-      });
-      applyStrike(best);
-      return;
-    }
-    // Player: chooser over opponent's revealed cards at this location
-    var targetIds = targets.map(function (t) { return t.cardId; });
-    showDiscardChooser('Choose a card to strike (-1 IP)', targetIds, function (chosenId) {
-      if (chosenId === null) { done(); return; }
-      var target = targets.find(function (t) { return t.cardId === chosenId; });
-      if (!target) { done(); return; }
-      applyStrike(target);
-    });
+    // Random target for both player and AI (no chooser).
+    var target = targets[Math.floor(Math.random() * targets.length)];
+    applyStrike(target);
   }
 
   // Hammurabi (id 47) — At Once: Destroy you and your opponent's lowest
@@ -1332,19 +1455,45 @@
       return !!c && c.type === 'Prehistory';
     }
 
-    var eid = nextEventId();
+    // Target set (UNCHANGED): the owner's revealed Prehistory cards across ALL
+    // locations. We also capture each one's slot element so the SAME cards that get
+    // boosted are exactly the cards that lift.
+    var targets = [];
     G.locations.forEach(function (loc) {
-      forEachRevealedAt(slots, loc.id, function (s) {
-        if (isPrehistory(s.cardId)) {
-          addIPMod(s, 1, 'Cuneiform', eid);
-          if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
-            SOG.ui.showIPFloat(owner, s.cardId, 1);
-          }
-        }
+      forEachRevealedAt(slots, loc.id, function (s, i) {
+        if (isPrehistory(s.cardId)) targets.push({ sd: s, el: getSlotEl(owner, loc.id, i) });
       });
     });
+    if (!targets.length) { done(); return; }   // no Prehistory cards → no-op, no error
 
-    done();
+    // PEAK beat: apply the REAL +1s once (same event id shared, as before) and tick
+    // the displays — the visible change IS the game-state change.
+    var eid = nextEventId();
+    function applyBoost() {
+      targets.forEach(function (t) {
+        addIPMod(t.sd, 1, 'Cuneiform', eid);
+        if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
+          SOG.ui.showIPFloat(owner, t.sd.cardId, 1);
+        }
+      });
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+    }
+
+    // Synchronized group lift, paced to transform.m4a; +1s apply at the peak, done()
+    // fires after the fall so the reveal pipeline waits (same coupling as Scribe/Soldier).
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.cuneiformLift === 'function') {
+      rfx.cuneiformLift(
+        targets.map(function (t) { return t.el; }),
+        { sfx: 'sfx/transform.m4a', onPeak: applyBoost, riseMs: 1150, holdMs: 600, fallMs: 1150, liftPx: 26 },
+        done
+      );
+    } else {
+      applyBoost();   // fallback: no animation, still correct
+      done();
+    }
   }
 
   // The Phoenicians (id 49) — At Once: Attaches itself to one of your
@@ -1358,10 +1507,12 @@
       var c = CARDS.find(function (x) { return x.id === s.cardId; });
       if (c && c.type === 'Cultural') culturalTargets.push({ sd: s, si: si });
     });
-    if (culturalTargets.length === 0) { done(); return; }
+    if (culturalTargets.length === 0) { done(); return; }   // no merge target → reveals normally
 
-    function attach(hostSd) {
-      // Remove Phoenicians from its slot
+    // The REAL merge (UNCHANGED logic): consume Phoenicians from its slot and
+    // permanently boost the host (+3). Runs at the DISSOLVE beat so the visible
+    // consumption equals the game-state change.
+    function doMerge(hostSd) {
       var phoenIdx = mySlots[locId].findIndex(function (s) { return s && s.cardId === 49; });
       if (phoenIdx !== -1) {
         mySlots[locId][phoenIdx] = null;
@@ -1369,20 +1520,36 @@
         if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
         else                    { compactOppSlots(locId);    syncOppSlots(locId);    }
       }
-      // Permanently boost the host (+3 ipMod)
       addIPMod(hostSd, 3, 'The Phoenicians');
       SOG.ui.showIPFloat(owner, hostSd.cardId, 3);
       evaluateContinuous();
       refreshSlotIPDisplays();
       updateScores();
-      setTimeout(done, 400);
+    }
+
+    // Pace the merge with the slide-over-and-dissolve: Phoenicians sits, slides onto
+    // the SAME target the ability chose, dissolves, and onMerge applies the real merge
+    // at that beat. done() fires after, so the reveal pipeline waits for the sequence.
+    function attach(target) {   // target = { sd, si }
+      var phoenIdx = mySlots[locId].findIndex(function (s) { return s && s.cardId === 49; });
+      var phoenEl  = phoenIdx !== -1 ? getSlotEl(owner, locId, phoenIdx) : null;
+      var targetEl = getSlotEl(owner, locId, target.si);
+      var rfx = window.SOG && SOG.RevealFx;
+      if (rfx && typeof rfx.phoeniciansMerge === 'function') {
+        rfx.phoeniciansMerge(phoenEl, targetEl,
+          { sfx: 'sfx/phoenician.mp3', sitMs: 500, slideMs: 600, onMerge: function () { doMerge(target.sd); } },
+          function () { setTimeout(done, 200); });
+      } else {
+        doMerge(target.sd);   // fallback: no animation, still correct
+        setTimeout(done, 400);
+      }
     }
 
     if (owner === 'opp') {
       var best = culturalTargets.reduce(function (a, b) {
         return effectiveIP(a.sd) >= effectiveIP(b.sd) ? a : b;
       });
-      attach(best.sd);
+      attach(best);
       return;
     }
     var targetIds = culturalTargets.map(function (t) { return t.sd.cardId; });
@@ -1390,7 +1557,7 @@
       if (chosenId === null) { done(); return; }
       var target = culturalTargets.find(function (t) { return t.sd.cardId === chosenId; });
       if (!target) { done(); return; }
-      attach(target.sd);
+      attach(target);
     });
   }
 
@@ -1400,21 +1567,42 @@
   function chariotArrival(owner, toLocId, sd, done) {
     var oppSide  = owner === 'player' ? 'opp' : 'player';
     var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
-    var best = null;
-    oppSlots[toLocId].forEach(function (s) {
+    var mySlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
+    // Pick the target (UNCHANGED) — highest-IP revealed opponent card here — and
+    // capture its slot index so the arrow flies at the SAME card that loses IP.
+    var best = null, bestIdx = -1;
+    oppSlots[toLocId].forEach(function (s, si) {
       if (!s || !s.revealed) return;
-      if (!best || effectiveIP(s) > effectiveIP(best)) best = s;
+      if (!best || effectiveIP(s) > effectiveIP(best)) { best = s; bestIdx = si; }
     });
     if (!best) {
+      // Travelled but no opponent card here → no arrow, no error.
       evaluateContinuous(); refreshSlotIPDisplays(); updateScores();
       done(); return;
     }
-    addIPMod(best, -1, 'Chariot');
-    SOG.ui.showIPFloat(oppSide, best.cardId, -1);
-    evaluateContinuous();
-    refreshSlotIPDisplays();
-    updateScores();
-    setTimeout(done, 400);
+
+    // The real strike, applied at the arrow's IMPACT beat (same card, same event).
+    function applyStrike() {
+      addIPMod(best, -1, 'Chariot');
+      SOG.ui.showIPFloat(oppSide, best.cardId, -1);
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+    }
+
+    // Fling the arrow from the arrived Chariot's slot at the chosen target; the -1
+    // applies at impact, then the arrow dissolves. done() after, so the reveal flow
+    // waits for the arrow phase (Phase 1 travel already finished before this runs).
+    var chIdx     = mySlots[toLocId].findIndex(function (s) { return s === sd; });
+    var chariotEl = chIdx !== -1 ? getSlotEl(owner, toLocId, chIdx) : null;
+    var targetEl  = getSlotEl(oppSide, toLocId, bestIdx);
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.chariotArrow === 'function') {
+      rfx.chariotArrow(chariotEl, targetEl, { onImpact: applyStrike }, function () { setTimeout(done, 150); });
+    } else {
+      applyStrike();   // fallback: no animation, still correct
+      setTimeout(done, 400);
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -1790,14 +1978,19 @@
     if (!candidates.length) return;  // nowhere to flee
     var dest = candidates[Math.floor(Math.random() * candidates.length)];
 
-    // Animated relocate. The reactive trigger fires mid-reveal, and POST_REVEAL
-    // (1200ms) leaves the slide ample time to finish — and executeMoveAnimated's
-    // applyMove updates the score on landing — before any end-of-turn scoring,
-    // so no synchronous-data workaround is needed.
+    // Let the just-landed card's reveal animation play out BEFORE Ötzi darts away,
+    // so the flee doesn't overlap it. The reactive trigger fires right as the card
+    // lands, so we wait FLEE_DELAY_MS first. This is safe for scoring: after the
+    // final reveal there is REVEAL_DELAY (800ms) + POST_REVEAL (1200ms) ≈ 2000ms
+    // before end-of-turn/endGame, and the flee (delay + 550ms slide) finishes well
+    // inside that — executeMoveAnimated's applyMove still updates the score in time.
+    var FLEE_DELAY_MS = 1000;   // knob: how long to let the landed card's anim play
     if (SOG.game && typeof SOG.game.executeMoveAnimated === 'function') {
-      SOG.game.executeMoveAnimated(owner, 35, fromLoc, dest.id, {}, function () {
-        if (typeof console !== 'undefined') console.log('[Otzi] flee: card 35 (' + owner + ') relocated from loc ' + fromLoc + ' to loc ' + dest.id);
-      });
+      setTimeout(function () {
+        SOG.game.executeMoveAnimated(owner, 35, fromLoc, dest.id, {}, function () {
+          if (typeof console !== 'undefined') console.log('[Otzi] flee: card 35 (' + owner + ') relocated from loc ' + fromLoc + ' to loc ' + dest.id);
+        });
+      }, FLEE_DELAY_MS);
     }
   }
 
@@ -1841,11 +2034,11 @@
     36: { onCardLandedHere: tribeReactBounce },  // Tribe — reactive bounce+sfx (presentation only; IP stays in evaluateContinuous)
 
     /* ── Mesopotamia era ───────────────────────────────────────────
-       Phase C cards (37 Sargon, 40 Scribe, 43 Gilgamesh) remain
-       stubbed.  Farmer (39) has no ability — no entry.           */
+       Phase C cards (37 Sargon, 43 Gilgamesh) remain stubbed.      */
     37: {},  // Sargon — Continuous only; handled in evaluateContinuous via G.locationBoosts
     38: { onAtOnce: abilityPriest       },
-    40: {},  // Scribe    — Continuous only; handled in evaluateContinuous
+    39: { onAtOnce: abilityFarmer       },  // Harvest — +1 capital next turn (shared accumulator)
+    40: { onAtOnce: abilityScribe },  // Record Keeper — At Once: stamps +1 IP onto owner's other cards here
     41: { onAtOnce: function (o, l, done) { done(); } },  // Canals   — Continuous only
     42: { onAtOnce: abilitySoldier      },
     43: {},  // Gilgamesh — Continuous only; handled in evaluateContinuous
@@ -1869,7 +2062,7 @@
     // Cards 2, 3, 5, 13 have custom sfx — skip the generic 8-bit chime for those.
     // Tool (26) now has its own SFX (the hammer strike via SOG.RevealFx), so skip
     // the generic 8-bit chime for it too (keep the pulse).
-    var hasAtOnce = [4, 8, 9, 23, 26, 38, 42, 46, 47, 49].indexOf(cardId) !== -1;
+    var hasAtOnce = [4, 8, 9, 23, 26, 38, 39, 42, 46, 47, 49].indexOf(cardId) !== -1;
     if (hasAtOnce) {
       if (typeof SFX !== 'undefined' && cardId !== 26) SFX.atOnce();
       var atSlotEl = findSlotEl(owner, cardId);

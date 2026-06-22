@@ -211,8 +211,11 @@ var Anim = (function () {
     /**
      * Card discarded — hand card slides upward and fades out.
      * Removes the original element immediately and animates a ghost in its place.
+     * @param {Element} el           The hand-card element to dissolve.
+     * @param {number}  [durationSec] Rise/fade duration in seconds (default 0.40).
+     *                                Callers can slow it (e.g. Priest passes 1.0).
      */
-    cardDiscarded: function (el) {
+    cardDiscarded: function (el, durationSec) {
       if (!el) return;
       if (!hasGSAP()) { removeEl(el); return; }
       var ghost = makeGhost(el, 500);
@@ -220,7 +223,7 @@ var Anim = (function () {
       gsap.to(ghost, {
         y:       -80,
         opacity: 0,
-        duration: 0.40,
+        duration: durationSec || 0.40,
         ease:    'power2.out',
         onComplete: function () { removeEl(ghost); }
       });
