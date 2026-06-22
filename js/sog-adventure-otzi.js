@@ -173,15 +173,6 @@ SOG.OtziBattle = (function () {
     osc.stop(now + p.dur);
   }
 
-  /* ── Fisher-Yates shuffle (in-place) ────────────────────────── */
-  function shuffleInPlace(arr) {
-    for (var i = arr.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
-    }
-    return arr;
-  }
-
   /* ── Bubble helpers ──────────────────────────────────────────── */
   function getBubbleEl(who) {
     return document.getElementById('adv-bubble-' + who);
@@ -411,23 +402,6 @@ SOG.OtziBattle = (function () {
 
     // All animations complete by ~0.85s; give them 1s to settle
     setTimeout(function () { if (onDone) onDone(); }, 1000);
-  }
-
-  // _hasPlayedThisTurn is written by notifyPlayerPlayed (now orphaned — see
-  // below); the bespoke End-Turn/Reset handlers that read it are gone.
-  var _hasPlayedThisTurn = false;
-
-  /* ORPHANED (flagged for cleanup): was called by input.js's commitPlay via the
-     old adventure-battle notify bridge, which is gone. Ötzi now runs config-
-     driven via the 'otzi' script (onPlayerPlayed hook → _otziEnableButtons), so
-     nothing calls this. Left as a harmless no-op; safe to delete. */
-  function notifyPlayerPlayed(cardId, locId) {
-    log('Player played card ' + cardId + ' at loc ' + locId);
-    _hasPlayedThisTurn = true;
-    var endTurnBtn = document.getElementById('battle-end-turn');
-    var resetBtn   = document.getElementById('battle-reset-turn');
-    if (endTurnBtn) endTurnBtn.disabled = false;
-    if (resetBtn)   resetBtn.disabled   = false;
   }
 
   /* ── Post-battle dialogue → card reveal → scoreboard ──────────── */
@@ -804,8 +778,7 @@ SOG.OtziBattle = (function () {
   return {
     start:                start,
     isBattleComplete:     isBattleComplete,
-    teardown:             teardown,
-    notifyPlayerPlayed:   notifyPlayerPlayed
+    teardown:             teardown
   };
 
 })();

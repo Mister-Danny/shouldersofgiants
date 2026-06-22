@@ -3468,16 +3468,6 @@ body.gilgamesh-battle .battle-col[data-loc-id="2"]::before { background: url('..
   100% { transform: translateX(0); }
 }
 
-@keyframes float-up {
-  0%   { opacity: 1; transform: translateX(-50%) translateY(0); }
-  100% { opacity: 0; transform: translateX(-50%) translateY(-44px); }
-}
-
-@keyframes float-down {
-  0%   { opacity: 1; transform: translateX(-50%) translateY(0); }
-  100% { opacity: 0; transform: translateX(-50%) translateY(24px); }
-}
-
 @keyframes loc-win-glow {
   0%   { background-color: transparent; }
   25%  { background-color: rgba(255, 215, 0, 0.32); }

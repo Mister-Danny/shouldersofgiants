@@ -156,8 +156,9 @@ var Overworld = (function () {
 
   /* ── Phase D3a — Gilgamesh "challenge again" + post-loss Farmer/Cuneiform ──
      The pre-battle Farmer 5-card-grant + Deck Builder sequence was removed in
-     D3a; the candle + Farmer dialogue helpers are reused for the post-loss
-     Cuneiform intervention (runGilgameshCuneiformIntervention).              */
+     D3a; the candle + Farmer dialogue helpers are reused. The post-loss Cuneiform
+     intervention now lives in the Gilgamesh battle module (_runCuneiformIntervention
+     in sog-adventure-gilgamesh.js).                                          */
   var D3_GILGAMESH_CHALLENGE_AGAIN = [
     { who: 'gilgamesh', text: 'You dare to challenge me again?!'                 },
     { who: 'explorer',  text: 'I have learned from my mistakes.'                 },
@@ -2196,45 +2197,6 @@ var Overworld = (function () {
     }
   }
 
-  /* Post-loss Cuneiform intervention (D3a sub-task 4). Called by the Gilgamesh
-     battle's "Play Again" when Cuneiform isn't yet granted. Reuses the candle
-     transition + HUD Farmer dialogue. The battle module has already torn itself
-     down; we run on the overworld screen (under the candle cover) so the HUD
-     renders, then onDone() restarts Battle 1 Attempt 2. */
-  function runGilgameshCuneiformIntervention(onDone) {
-    var hud = window.SOG && window.SOG.HUD;
-    isDialogueLocked = true;
-    try { var shh = new Audio('sfx/shh.m4a'); shh.play(); } catch (e) {}
-
-    _d2cCandleTransition(function () {
-      // Black hold: reveal the overworld screen (hidden behind black) so the
-      // HUD can render, and bring Farmer up.
-      if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
-      if (hud && typeof hud.enterDialogueMode === 'function') hud.enterDialogueMode(null, function () {});
-      if (hud && typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'farmer' });
-    }, function () {
-      // Candle lit: Farmer dialogue → Cuneiform grant → Gilgamesh challenge.
-      _runLinesKeepOpen(D3_FARMER_POSTLOSS_A, function () {
-        _grantCuneiform(function () {
-          _runLinesKeepOpen(D3_FARMER_POSTLOSS_B, function () {
-            // "Thank you" done. Slide the Farmer HUD down, fade the flame out so
-            // the overworld board returns, THEN Gilgamesh challenges anew from
-            // the overworld (same encounter helper as the first meeting).
-            function gilgameshChallenge() {
-              _runGilgameshEncounter(D3_GILGAMESH_CHALLENGE_AGAIN, function () {
-                isDialogueLocked = false;
-                if (onDone) onDone();
-              });
-            }
-            function revealBoard() { _fadeOutCandleBackdrop(gilgameshChallenge); }
-            if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(revealBoard);
-            else revealBoard();
-          });
-        });
-      });
-    });
-  }
-
   /* Grant Cuneiform (id 46): idempotent flag + unlock + acquisition reveal. */
   function _grantCuneiform(cb) {
     try { localStorage.setItem(KEY_CUNEIFORM_GRANTED, 'true'); } catch (e) {}
@@ -2509,8 +2471,6 @@ var Overworld = (function () {
     // Post-Otzi-win return: re-render East Africa in place (checkmark + To Egypt
     // box) and play the one-time return dialogue. Replaces the old auto-travel.
     returnToEastAfricaAfterOtzi: returnToEastAfricaAfterOtzi,
-    // D3a — post-loss Cuneiform intervention, called by the Gilgamesh battle.
-    runGilgameshCuneiformIntervention: runGilgameshCuneiformIntervention,
     // Post-win return: land at Uruk, reveal the market node, first-time auto-walk
     // into the market. Called by the Gilgamesh battle after its win sequence.
     returnFromGilgameshWin: returnFromGilgameshWin,

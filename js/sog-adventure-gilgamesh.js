@@ -83,15 +83,6 @@ SOG.GilgameshBattle = (function () {
     osc.stop(now + p.dur);
   }
 
-  /* ── Fisher-Yates shuffle (in-place) ────────────────────────── */
-  function shuffleInPlace(arr) {
-    for (var i = arr.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
-    }
-    return arr;
-  }
-
   /* ── Bubble helpers ──────────────────────────────────────────── */
   function getBubbleEl(who) {
     return document.getElementById('adv-bubble-' + who);
@@ -373,22 +364,6 @@ SOG.GilgameshBattle = (function () {
       .to(el, { x:  -7, y:  3, duration: 0.05, ease: 'none' })
       .to(el, { x:   5, y: -2, duration: 0.05, ease: 'none' })
       .to(el, { x:   0, y:  0, duration: 0.05, ease: 'none' });
-  }
-
-  /* ── Slide Desert (left) and GRV (right) into view ───────────── */
-  function revealSideLocations(onDone) {
-    var boardEl = document.getElementById('battle-board');
-    if (!boardEl || typeof gsap === 'undefined') {
-      if (onDone) onDone();
-      return;
-    }
-    var desertCol = boardEl.querySelector('[data-loc-id="8"]');
-    var grvCol    = boardEl.querySelector('[data-loc-id="2"]');
-
-    var tl = gsap.timeline({ onComplete: onDone || function () {} });
-    if (desertCol) tl.to(desertCol, { x: 0, opacity: 1, duration: 0.65, ease: 'power2.out' }, 0);
-    if (grvCol)    tl.to(grvCol,    { x: 0, opacity: 1, duration: 0.65, ease: 'power2.out' }, 0.08);
-    if (!desertCol && !grvCol && onDone) setTimeout(onDone, 0);
   }
 
   /* ── Card deal animation ─────────────────────────────────────── */
