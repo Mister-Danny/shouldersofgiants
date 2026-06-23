@@ -136,7 +136,12 @@
       var _hSettings    = (G.config.ai.settings) || {};
       var _hSelectPlays = _hSettings.selectPlays;
       if (typeof _hSelectPlays === 'function') {
-        var _hCtx   = { G: G, turn: G.turn, hand: G.aiHand.slice(), locations: G.locations };
+        // Expose the per-turn capital budget the engine already computed above
+        // (CAPITAL + G.aiBonusCapitalNextTurn, with the accumulator then zeroed) so
+        // a capital-aware heuristic selector can SPEND bonus capital it earned (e.g.
+        // Hammurabi's Fertile-Crescent CAPITAL_WHEN_FULL). Additive — selectors that
+        // ignore ctx.capital (Sargon) are unaffected.
+        var _hCtx   = { G: G, turn: G.turn, hand: G.aiHand.slice(), locations: G.locations, capital: budget };
         var _hPlays = _hSelectPlays(_hCtx) || [];
         for (var _hp = 0; _hp < _hPlays.length; _hp++) {
           var _hPlay = _hPlays[_hp];

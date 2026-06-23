@@ -563,9 +563,12 @@ SOG.GilgameshBattle = (function () {
       if (_gWinWasFirstTime) {
         _showResultPopup(true, locResults);   // CONTINUE → _runPostVictorySequence
       } else {
-        // Repeat win: +10 gold acquisition, then the streamlined scoreboard.
-        _grantRepeatWinGold(function () {
-          _showResultPopup(true, locResults, { repeat: true });
+        // Repeat win: VICTORY chime + pop-up (2.5s) → +10 gold acquisition →
+        // the streamlined scoreboard.
+        _victoryFlourish(function () {
+          _grantRepeatWinGold(function () {
+            _showResultPopup(true, locResults, { repeat: true });
+          });
         });
       }
     } else if (alreadyBeaten) {
@@ -578,6 +581,32 @@ SOG.GilgameshBattle = (function () {
         _showResultPopup(false, locResults);
       });
     }
+  }
+
+  /* Repeat-win flourish: the word VICTORY — same gold colour / font / glow as the
+     scoreboard headline (.result-headline.result-player) — pops in with the victory
+     chime, holds 2.5s, then fades and hands off to the gold acquisition. Only the
+     REPEAT-win path uses it (the first win has its full post-victory sequence). */
+  function _victoryFlourish(onDone) {
+    if (typeof SFX !== 'undefined' && typeof SFX.gameWon === 'function') SFX.gameWon();
+    var overlay = document.createElement('div');
+    overlay.id = 'gilg-victory-flourish';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10045;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:1;transition:opacity 0.3s ease;';
+    var txt = document.createElement('div');
+    txt.className   = 'result-headline result-player';
+    txt.textContent = 'VICTORY';
+    txt.style.cssText = 'opacity:0;transform:scale(0.7);transition:opacity 0.3s ease, transform 0.45s cubic-bezier(0.2,0.9,0.3,1);';
+    overlay.appendChild(txt);
+    (document.getElementById('sog-stage') || document.body).appendChild(overlay);
+    void txt.offsetHeight;
+    txt.style.opacity = '1'; txt.style.transform = 'scale(1)';
+    setTimeout(function () {
+      overlay.style.opacity = '0';
+      setTimeout(function () {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (onDone) onDone();
+      }, 300);
+    }, 2500);
   }
 
   /* Repeat-win gold: bank +10, refresh the HUD number, play the coin animation. */

@@ -435,6 +435,18 @@ SOG.SargonBattle = (function () {
     }, 100);
   }
 
+  /* First-win exit: tear down, then hand off to the overworld's Sargon-win return,
+     which rises the Hammurabi node out of the dirt. Falls back to the plain exit. */
+  function _exitToOverworldAfterFirstWin() {
+    _removeResultPopup();
+    _sargonTeardown();
+    if (window.Overworld && typeof window.Overworld.returnFromSargonWin === 'function') {
+      window.Overworld.returnFromSargonWin();
+    } else {
+      _exitToOverworld();
+    }
+  }
+
   /* ── Rewards ───────────────────────────────────────────────────── */
   function _playSfx(src) { try { var a = new Audio(src); a.play(); } catch (e) {} }
 
@@ -502,7 +514,7 @@ SOG.SargonBattle = (function () {
       _grantSargonCard(function () {
         _grantGold(GOLD_FIRST_WIN, function () {
           runLines(WIN_DIALOGUE_CLOSER, function () {
-            _exitToOverworld();
+            _exitToOverworldAfterFirstWin();
           });
         });
       });
@@ -576,14 +588,43 @@ SOG.SargonBattle = (function () {
        • Repeat win  → +10 gold, then the Play Again / Gameboard / Back To Map board.
        • Loss/tie    → Play Again / Gameboard / Back To Map; a pre-win loss runs the
                        Sargon smack-talk + map reflection off BACK TO MAP. */
+  /* Repeat-win flourish: the word VICTORY — same gold colour / font / glow as the
+     scoreboard headline (.result-headline.result-player) — pops in with the victory
+     chime, holds 2.5s, then fades and hands off to the gold acquisition. Only the
+     REPEAT-win path uses it (the first win has its full victory sequence instead). */
+  function _victoryFlourish(onDone) {
+    if (typeof SFX !== 'undefined' && typeof SFX.gameWon === 'function') SFX.gameWon();
+    var overlay = document.createElement('div');
+    overlay.id = 'sargon-victory-flourish';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10045;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:1;transition:opacity 0.3s ease;';
+    var txt = document.createElement('div');
+    txt.className   = 'result-headline result-player';
+    txt.textContent = 'VICTORY';
+    txt.style.cssText = 'opacity:0;transform:scale(0.7);transition:opacity 0.3s ease, transform 0.45s cubic-bezier(0.2,0.9,0.3,1);';
+    overlay.appendChild(txt);
+    (document.getElementById('sog-stage') || document.body).appendChild(overlay);
+    void txt.offsetHeight;
+    txt.style.opacity = '1'; txt.style.transform = 'scale(1)';
+    setTimeout(function () {
+      overlay.style.opacity = '0';
+      setTimeout(function () {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (onDone) onDone();
+      }, 300);
+    }, 2500);
+  }
+
   function _onWin(locResults) {
     var firstWin = !_has(KEY_SARGON_COMPLETE);
     _set(KEY_SARGON_COMPLETE);
     if (firstWin) {
       _showResultScoreboard(true, false, locResults, { firstWin: true });
     } else {
-      _grantGold(GOLD_REPEAT_WIN, function () {
-        _showResultScoreboard(true, false, locResults, {});
+      // Repeat win: VICTORY chime + pop-up (2.5s) → +10 gold acquisition → scoreboard.
+      _victoryFlourish(function () {
+        _grantGold(GOLD_REPEAT_WIN, function () {
+          _showResultScoreboard(true, false, locResults, {});
+        });
       });
     }
   }

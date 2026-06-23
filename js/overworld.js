@@ -36,6 +36,7 @@ var Overworld = (function () {
   var KEY_MESO_STARTER_GRANTED      = 'sog_mesopotamia_starter_granted'; // set after all 5 card grants complete
   // Phase D4 — Sargon encounter
   var KEY_SARGON_NODE_REVEALED      = 'sog_sargon_node_revealed';       // dust-storm reveal played → node persists, no replay
+  var KEY_HAMMURABI_NODE_REVEALED   = 'sog_hammurabi_node_revealed';    // earth-rise reveal played (after beating Sargon) → node persists, no replay
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -228,6 +229,36 @@ var Overworld = (function () {
   // this Explorer line plays once back on the overworld via returnFromSargonLoss.
   var D4_SARGON_LOSS_REFLECT = [
     { who: 'explorer', text: 'Perhaps, I need to build up my deck before I take on an Empire.' }
+  ];
+  // After beating Sargon, once the Hammurabi node has risen from the dirt.
+  var D4_SARGON_WIN_REFLECT = [
+    { who: 'explorer', text: 'As one empire falls, another one rises.' }
+  ];
+  // Hammurabi (Babylon) encounter — plays on node click when the active deck has
+  // the full 15 cards, then the battle launches.
+  var D4_HAMMURABI_ENCOUNTER = [
+    { who: 'hammurabi', text: 'Halt.' },
+    { who: 'hammurabi', text: 'State your business before the law.' },
+    { who: 'explorer',  text: 'What law?' },
+    { who: 'explorer',  text: 'I was just admiring this big stone tablet.' },
+    { who: 'hammurabi', text: 'That "tablet" is the Code.' },
+    { who: 'explorer',  text: 'Code for what?' },
+    { who: 'hammurabi', text: 'My code for two hundred and eighty-two laws.' },
+    { who: 'explorer',  text: "That's a lot of rules." },
+    { who: 'hammurabi', text: 'Not if you want to keep order.' },
+    { who: 'explorer',  text: 'And if someone breaks one?' },
+    { who: 'hammurabi', text: 'They pay the price.' },
+    { who: 'explorer',  text: 'That sounds fair.' },
+    { who: 'hammurabi', text: 'Now time to put you on trial.' }
+  ];
+  // Turned away when the deck is under 15 cards (split so Hammurabi's portrait can
+  // slide out before the Explorer's closing line). PLACEHOLDER — edit freely.
+  var D4_HAMMURABI_TURNED_AWAY_A = [
+    { who: 'hammurabi', text: 'The court is not yet in session.' },
+    { who: 'hammurabi', text: 'Return when your deck is whole — fifteen cards.' }
+  ];
+  var D4_HAMMURABI_TURNED_AWAY_B = [
+    { who: 'explorer',  text: 'I should finish building my deck first.' }
   ];
   var D2C_AUTO_DISMISS_MS    = 1500;
   var KEY_GILGAMESH_PHASE1   = 'sog_gilgamesh_phase1_complete';
@@ -481,6 +512,20 @@ var Overworld = (function () {
           scale: 1.61,   // 704×384 art rendered at 84px base — scale up a touch (knob)
           showIf: function () {
             try { return localStorage.getItem(KEY_SARGON_NODE_REVEALED) === 'true'; } catch (e) { return false; }
+          }
+        },
+        {
+          // Phase D4+ — Hammurabi (Babylon). Rises from the dirt on the first
+          // overworld return AFTER defeating Sargon; persists via
+          // KEY_HAMMURABI_NODE_REVEALED. Placed up-and-left of Akkad along the
+          // Euphrates. Click → stub (battle not built yet). Position/scale are knobs.
+          id:    'hammurabi',
+          name:  'Babylon',
+          image: NODE_PATH + 'hammurabinodesm@0.5x.png',
+          x: 48, y: 40,
+          scale: 1.6,
+          showIf: function () {
+            try { return localStorage.getItem(KEY_HAMMURABI_NODE_REVEALED) === 'true'; } catch (e) { return false; }
           }
         }
       ],
@@ -897,6 +942,17 @@ var Overworld = (function () {
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
         _runSargonEncounter(node);
+      });
+      return;
+    }
+
+    // ── Hammurabi (Babylon) — walk to the node, then GATE on active deck size
+    //    (15) → full encounter → battle. Under 15 → turned away (no battle). ──
+    if (node.id === 'hammurabi' && currentMapId === 'mesopotamia') {
+      isDialogueLocked = true;
+      cancelIdle();
+      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+        _runHammurabiEncounter(node);
       });
       return;
     }
@@ -1924,6 +1980,96 @@ var Overworld = (function () {
     }, STORM_MS);
   }
 
+  /* ── Phase D4+ — Hammurabi node reveal (rises from the dirt) ──────────────
+     One-time, fired on the first overworld return AFTER defeating Sargon
+     (Overworld.returnFromSargonWin). Plays earthspell.mp3 + a dirt-clod burst at
+     the node's spot while the node rises out of the ground, then sets the flag so
+     it persists and never replays. */
+  function _maybeRevealHammurabiNode(done) {
+    var already = false;
+    try { already = localStorage.getItem(KEY_HAMMURABI_NODE_REVEALED) === 'true'; } catch (e) {}
+    if (already || currentMapId !== 'mesopotamia') { if (done) done(); return; }
+    _earthRiseRevealHammurabi(function () {
+      try { localStorage.setItem(KEY_HAMMURABI_NODE_REVEALED, 'true'); } catch (e) {}
+      if (done) done();
+    });
+  }
+
+  /* Earth-rise reveal: play the sfx, kick up a burst of dirt clods at the node's
+     % position, and rise the node up out of the ground (with a small settle pop).
+     Self-cleaning (dirt layer removed at the end). Mirrors _dustStormRevealSargon's
+     node-element creation, but rises from below instead of fading in. */
+  function _earthRiseRevealHammurabi(onDone) {
+    var node = _findMesoNode('hammurabi');
+    if (!overlayEl || !node) { if (onDone) onDone(); return; }
+
+    try { new Audio('sfx/earthspell.mp3').play(); } catch (e) {}
+
+    // 1) Build (or find) the Hammurabi node element, hidden, ready to rise.
+    var nodeEl = overlayEl.querySelector('[data-id="hammurabi"]');
+    if (!nodeEl) {
+      nodeEl = document.createElement('div');
+      nodeEl.className = 'overworld-node';
+      nodeEl.dataset.id = 'hammurabi';
+      nodeEl.style.left = node.x + '%';
+      nodeEl.style.top  = node.y + '%';
+      nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
+      var img = document.createElement('img');
+      img.src = NODE_PATH + 'hammurabinodesm@0.5x.png';
+      img.alt = node.name || 'Babylon';
+      img.draggable = false;
+      nodeEl.appendChild(img);
+      nodeEl.addEventListener('click', (function (nd) {
+        return function () { onNodeClick(nd); };
+      })(node));
+      overlayEl.insertBefore(nodeEl, charEl);   // under the Explorer sprite
+    }
+    nodeEl.style.opacity = '0';
+
+    // 2) Dirt-clod burst layer at the node's position.
+    var dirt = document.createElement('div');
+    dirt.className = 'hammurabi-dirt';
+    dirt.style.left = node.x + '%';
+    dirt.style.top  = node.y + '%';
+    var CLODS = 24;
+    for (var i = 0; i < CLODS; i++) {
+      var c = document.createElement('span');
+      c.className = 'hammurabi-dirt-grain';
+      var spread = (Math.random() - 0.5) * 96;       // px horizontal scatter
+      var peak   = -(22 + Math.random() * 40);       // px up at the arc's peak
+      var dur    = 0.7 + Math.random() * 0.5;        // s
+      var delay  = Math.random() * 0.22;             // s stagger
+      var size   = 4 + Math.random() * 6;            // px
+      var rot    = (Math.random() * 220) | 0;
+      c.style.setProperty('--dx',  spread.toFixed(1) + 'px');
+      c.style.setProperty('--dy',  peak.toFixed(1) + 'px');
+      c.style.setProperty('--dur', dur.toFixed(2) + 's');
+      c.style.setProperty('--delay', delay.toFixed(2) + 's');
+      c.style.setProperty('--rot', rot + 'deg');
+      c.style.width = c.style.height = size.toFixed(1) + 'px';
+      dirt.appendChild(c);
+    }
+    overlayEl.insertBefore(dirt, charEl);
+
+    // 3) Rise the node up out of the ground (slight delay so the dirt erupts
+    //    first), with a small back-out settle. End: remove dirt, finish.
+    var RISE_MS = 1500;
+    if (typeof gsap !== 'undefined') {
+      gsap.set(nodeEl, { xPercent: -50, yPercent: -50, scale: node.scale || 1, transformOrigin: '50% 100%' });
+      gsap.fromTo(nodeEl,
+        { y: 50, opacity: 0 },
+        { y: 0, opacity: 1, duration: 1.0, delay: 0.22, ease: 'back.out(1.3)' });
+    } else {
+      setTimeout(function () { nodeEl.style.opacity = '1'; }, 220);
+    }
+    setTimeout(function () {
+      if (dirt.parentNode) dirt.parentNode.removeChild(dirt);
+      nodeEl.style.opacity = '1';
+      log('[D4] Hammurabi node earth-revealed');
+      if (onDone) onDone();
+    }, RISE_MS);
+  }
+
   /* ── Sargon node click → DECK-SIZE GATE ──────────────────────────────────
      Read the ACTIVE deck's card count (window.Decks). Full deck = 15. Under 15
      → Sargon turns the Explorer away (portrait slides out before the closing
@@ -1987,6 +2133,68 @@ var Overworld = (function () {
         sb.start();   // start() does showScreen('screen-battle') + initGame + fade the wipe out
       } else {
         console.warn('[Overworld] SOG.SargonBattle not found — aborting');
+        _clearWipe();
+        isDialogueLocked = false;
+        scheduleIdle();
+      }
+    });
+  }
+
+  /* ── Hammurabi (Babylon) node click → DECK-SIZE GATE ─────────────────────
+     Mirrors the Sargon encounter: full deck (15) → the Hammurabi encounter, then
+     the battle; under 15 → turned away (no battle), sprite stays on the map. */
+  function _runHammurabiEncounter(node) {
+    var hud = window.SOG && window.SOG.HUD;
+    if (!hud || typeof hud.enterDialogueMode !== 'function') { isDialogueLocked = false; scheduleIdle(); return; }
+
+    var full = 15, deckSize = 0;
+    try {
+      if (window.Decks) {
+        full     = window.Decks.DECK_SIZE || 15;
+        deckSize = (typeof window.Decks.getActiveCards === 'function')
+          ? window.Decks.getActiveCards().length : 0;
+      }
+    } catch (e) {}
+    log('[D4] Hammurabi clicked — active deck ' + deckSize + '/' + full);
+
+    if (deckSize < full) {
+      // NOT ready — turned away. Hammurabi talks, his portrait leaves, then the
+      // Explorer gets one closing line; no battle, return to idle on the map.
+      hud.enterDialogueMode(null, function () {
+        _runLinesKeepOpen(D4_HAMMURABI_TURNED_AWAY_A, function () {
+          var afterSlide = function () {
+            _runLinesKeepOpen(D4_HAMMURABI_TURNED_AWAY_B, function () {
+              if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+              isDialogueLocked = false;
+              scheduleIdle();
+            });
+          };
+          if (typeof hud.slideOutNpc === 'function') hud.slideOutNpc(afterSlide);
+          else afterSlide();
+        });
+      });
+      return;
+    }
+
+    // READY (15) — full encounter, then the battle.
+    hud.enterDialogueMode(null, function () {
+      _runLinesKeepOpen(D4_HAMMURABI_ENCOUNTER, function () {
+        if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+        _launchHammurabiBattle();
+      });
+    });
+  }
+
+  /* Fire the radial wipe from the node, then start the Hammurabi battle. The
+     battle module isn't built yet — fall back to the map until SOG.HammurabiBattle
+     exists (mirrors how the Sargon launch was a stub before its battle landed). */
+  function _launchHammurabiBattle() {
+    _fireWipeFromNode('hammurabi', function () {
+      var hb = window.SOG && window.SOG.HammurabiBattle;
+      if (hb && typeof hb.start === 'function') {
+        hb.start();
+      } else {
+        console.warn('[Overworld] SOG.HammurabiBattle not found — battle not built yet');
         _clearWipe();
         isDialogueLocked = false;
         scheduleIdle();
@@ -2750,6 +2958,27 @@ var Overworld = (function () {
         });
       }, 250);
     },
+    // Called by the Sargon battle module after the FIRST victory: return to the
+    // Mesopotamia map, then rise the Hammurabi node out of the dirt (one-time),
+    // then restore player control.
+    returnFromSargonWin: function () {
+      isDialogueLocked = true;
+      isTransitioning  = false;
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+      _clearWipe();
+      var hud = window.SOG && window.SOG.HUD;
+      if (hud && typeof hud.show === 'function') hud.show();
+      setTimeout(function () {
+        _maybeRevealHammurabiNode(function () {
+          // The node has risen — Explorer chimes in, then control is restored so
+          // the player can choose to click the node.
+          runDialogue(D4_SARGON_WIN_REFLECT, function () {
+            isDialogueLocked = false;
+            scheduleIdle();
+          });
+        });
+      }, 350);
+    },
     // Reusable candle visual for the Gilgamesh post-loss intervention (the
     // battle module fades to black itself, then drives these): bloom the flame
     // over the black + raise the candlelit backdrop, then dismiss it.
@@ -2768,12 +2997,36 @@ var Overworld = (function () {
     // Called by battle stubs / battle modules when returning to the overworld.
     // Re-engages idle walk and refreshes the HUD without a full map reload.
     resumeAfterBattle: function () {
-      isDialogueLocked = false;
       isTransitioning  = false;
       _clearWipe();
       _removeCandleBackdrop();   // defensive: clear any lingering candlelit backdrop
       var hud = window.SOG && window.SOG.HUD;
       if (hud) { hud.show(); }
+
+      // Catch-up Hammurabi node reveal. The node normally rises via
+      // returnFromSargonWin (the FIRST Sargon win). But a save that beat Sargon
+      // before this feature existed — and EVERY repeat Sargon win (which returns
+      // through here, not returnFromSargonWin) — would otherwise never see it. So:
+      // if Sargon is beaten, the node hasn't risen yet, and we're on the
+      // Mesopotamia map, rise it now (+ the Explorer line), then resume.
+      var _sargonDone = false, _hammRevealed = false;
+      try { _sargonDone   = localStorage.getItem('sog_battle_sargon_complete') === 'true'; } catch (e) {}
+      try { _hammRevealed = localStorage.getItem(KEY_HAMMURABI_NODE_REVEALED) === 'true'; } catch (e) {}
+      if (_sargonDone && !_hammRevealed && currentMapId === 'mesopotamia') {
+        isDialogueLocked = true;
+        setTimeout(function () {
+          _maybeRevealHammurabiNode(function () {
+            runDialogue(D4_SARGON_WIN_REFLECT, function () {
+              isDialogueLocked = false;
+              scheduleIdle();
+            });
+          });
+        }, 350);
+        log('resumeAfterBattle() — Hammurabi catch-up reveal');
+        return;
+      }
+
+      isDialogueLocked = false;
       scheduleIdle();
       log('resumeAfterBattle() — player control restored');
     }

@@ -1062,6 +1062,14 @@
       refreshHandIPDisplays();
       refreshHandCostDisplays();
       updateScores();
+      /* Once-per-turn location abilities (e.g. CAPITAL_WHEN_FULL). Evaluated HERE
+         — exactly once, after all flips/At-Once/continuous have resolved — NOT in
+         evaluateContinuous (which re-runs many times per turn and would over-grant).
+         Grants next-turn capital to each side whose slots at such a location are
+         full. Inert in battles with no location carrying the key. */
+      if (SOG.abilities && typeof SOG.abilities.applyCapitalWhenFull === 'function') {
+        SOG.abilities.applyCapitalWhenFull();
+      }
       /* onAfterReveal (script hook): all flips + At-Once + continuous mods are
          done. `revealed` lists the cards newly played this turn (both sides) so
          a script (e.g. Ötzi flee) can act per-card. Sync, fire-and-forget.

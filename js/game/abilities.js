@@ -349,6 +349,45 @@
         });
       }
 
+      // ── Type-boost-at-location location abilities (general, reusable keys) ──
+      // Symmetric: boost BOTH owners' matching revealed cards here, via the same
+      // contMod path Canals/Sahara use (consumed by updateScores/tallyResult).
+      // Inert unless a location carries the key.
+
+      // Banks of the Euphrates (LABOR_PLUS_2_HERE): +2 IP to revealed Labor cards here.
+      if (loc.abilityKey === 'LABOR_PLUS_2_HERE') {
+        var euphName = loc.name || 'Banks of the Euphrates';
+        ['player', 'opp'].forEach(function (own) {
+          var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+          sl[loc.id].forEach(function (s) {
+            if (!s || !s.revealed) return;
+            var c = CARDS.find(function (x) { return x.id === s.cardId; });
+            if (c && c.type === 'Labor') {
+              s.contMod = (s.contMod || 0) + 2;
+              s.contModSources.push({ source: euphName, delta: 2 });
+              addBonus(s, 2, 'location', loc.id, nextEventId(), 'A', true);
+            }
+          });
+        });
+      }
+
+      // Banks of the Tigris (MILITARY_PLUS_1_HERE): +1 IP to revealed Military cards here.
+      if (loc.abilityKey === 'MILITARY_PLUS_1_HERE') {
+        var tigrisName = loc.name || 'Banks of the Tigris';
+        ['player', 'opp'].forEach(function (own) {
+          var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+          sl[loc.id].forEach(function (s) {
+            if (!s || !s.revealed) return;
+            var c = CARDS.find(function (x) { return x.id === s.cardId; });
+            if (c && c.type === 'Military') {
+              s.contMod = (s.contMod || 0) + 1;
+              s.contModSources.push({ source: tigrisName, delta: 1 });
+              addBonus(s, 1, 'location', loc.id, nextEventId(), 'A', true);
+            }
+          });
+        });
+      }
+
       // ── Prehistory abilities (Adventure Mode tutorial) ──────────
       // Slot-index proxies for turn-order: each slot's array index
       // reflects when it was played relative to its siblings in the
@@ -723,6 +762,30 @@
     if (n <= 0) return;
     if (owner === 'player') G.bonusCapitalNextTurn   += n;
     else                    G.aiBonusCapitalNextTurn += n;
+  }
+
+  /* ── Once-per-turn location abilities (CAPITAL_WHEN_FULL) ──────────────────
+     MUST be evaluated EXACTLY ONCE per turn (NOT in evaluateContinuous, which
+     re-runs many times per turn and would over-grant). The engine calls this from
+     the reveal-phase completion (game.js revealNext, after the final
+     updateScores) — once, after all flips/At-Once/continuous have resolved.
+
+     CAPITAL_WHEN_FULL: for each location carrying the key, check each side's
+     fullness INDEPENDENTLY (all of that owner's slots here occupied). A full side
+     grants THAT owner +1 capital NEXT turn via the shared accumulator
+     (player → G.bonusCapitalNextTurn; AI → G.aiBonusCapitalNextTurn). Symmetric.
+     General/reusable — keyed on abilityKey, not battle-specific; inert in any
+     battle whose locations don't carry the key (so Arcadium/Sargon/etc. are
+     unaffected). Stacks naturally if multiple such locations are full. */
+  function applyCapitalWhenFull() {
+    if (!G.locations) return;
+    G.locations.forEach(function (loc) {
+      if (loc.abilityKey !== 'CAPITAL_WHEN_FULL') return;
+      var pSlots = G.playerSlots[loc.id];
+      var aSlots = G.aiSlots[loc.id];
+      if (pSlots && pSlots.indexOf(null) === -1) grantCapitalNextTurn('player', 1);
+      if (aSlots && aSlots.indexOf(null) === -1) grantCapitalNextTurn('opp',    1);
+    });
   }
 
   /* Farmer (39) — "Harvest". At Once: grant the OWNER +1 capital next turn via
@@ -2136,6 +2199,7 @@
     fireAtOnce:                fireAtOnce,
     fireOnCardLandedHere:      fireOnCardLandedHere,
     evaluateContinuous:        evaluateContinuous,
+    applyCapitalWhenFull:      applyCapitalWhenFull,
     /* Shared ability helpers (callable from game.js if needed) */
     isKenteProtected:          isKenteProtected,
     destroyCard:               destroyCard,
