@@ -1527,11 +1527,30 @@ var Overworld = (function () {
         { opacity: 0, scale: 2.7, y: -110 },
         { opacity: 1, scale: 1.35, y: 0, duration: 0.7, ease: 'power2.in',
           onComplete: function () {
-            try { new Audio('sfx/uruk.mp3').play(); } catch (e) {}   // sound on impact
-            // small squash-settle on landing
-            gsap.fromTo(nodeEl, { scale: 1.55 }, { scale: 1.35, duration: 0.22, ease: 'power2.out' });
             log('[D2a] Walls of Uruk node dropped in');
-            if (onDone) onDone();
+            // Hold the Explorer's next line until BOTH the landing animation AND the
+            // impact sfx have COMPLETELY finished — otherwise "Cities!" talks over them.
+            var done = false;
+            function proceed() { if (done) return; done = true; if (onDone) onDone(); }
+            var settleDone = false, sfxDone = false;
+            function maybeProceed() { if (settleDone && sfxDone) proceed(); }
+            // Squash-settle on landing — wait for it to complete.
+            gsap.fromTo(nodeEl, { scale: 1.55 },
+              { scale: 1.35, duration: 0.22, ease: 'power2.out',
+                onComplete: function () { settleDone = true; maybeProceed(); } });
+            // Impact sfx — wait for the audio to fully end. Graceful fallbacks so a
+            // blocked/erroring play() can't stall the arrival sequence.
+            var sfx = null;
+            try { sfx = new Audio('sfx/uruk.mp3'); } catch (e) {}
+            if (sfx) {
+              sfx.addEventListener('ended', function () { sfxDone = true; maybeProceed(); });
+              sfx.addEventListener('error', function () { sfxDone = true; maybeProceed(); });
+              var pp = sfx.play();
+              if (pp && pp.catch) pp.catch(function () { sfxDone = true; maybeProceed(); });
+            } else { sfxDone = true; }
+            maybeProceed();
+            // Safety cap: never hang the sequence if 'ended' never fires (e.g. blocked autoplay).
+            setTimeout(proceed, 7000);
           }
         });
     } else {
@@ -1964,10 +1983,22 @@ var Overworld = (function () {
     }
     overlayEl.insertBefore(storm, charEl);
 
-    // 3) Mid-storm: fade the node in. End: remove the storm, finish.
-    var STORM_MS = 1700;
+    // 3) Mid-storm: fade the node in (flourish kept). Over the LENGTH OF THE SFX,
+    //    the node also GROWS to 3x its resting size then SHRINKS back to its spot —
+    //    centred so it swells in place. End: remove the storm, finish.
+    var STORM_MS   = 1700;
+    var REST_SCALE = (node.scale || 1);
+    var SFX_MS     = (introAudio && isFinite(introAudio.duration) && introAudio.duration > 0)
+      ? introAudio.duration * 1000
+      : 7372;   // sargonintro.mp3 length (fallback when duration isn't known yet)
     if (typeof gsap !== 'undefined') {
       gsap.to(nodeEl, { opacity: 1, duration: 0.8, delay: 0.6, ease: 'power1.out' });
+      // Grow → shrink across the intro SFX, anchored on the node's centre/spot.
+      gsap.set(nodeEl, { xPercent: -50, yPercent: -50, transformOrigin: '50% 50%', scale: REST_SCALE });
+      var halfS = (SFX_MS / 1000) / 2;
+      gsap.timeline()
+        .to(nodeEl, { scale: REST_SCALE * 3, duration: halfS, ease: 'sine.inOut' })
+        .to(nodeEl, { scale: REST_SCALE,     duration: halfS, ease: 'sine.inOut' });
     } else {
       setTimeout(function () { nodeEl.style.opacity = '1'; }, 600);
     }

@@ -46,7 +46,7 @@ SOG.HUD = (function () {
     otzi:        { portrait: 'images/portraits/otzi.jpg',           bleepHz: 280, side: 'npc', frame: 'otzi' },
     hunter:      { portrait: 'images/portraits/hunterportrait.jpg', bleepHz: 380, side: 'npc'    },
     farmer:      { portrait: 'images/portraits/farmerportrait.jpg', bleepHz: 360, side: 'npc'    },
-    gilgamesh:   { portrait: 'images/portraits/gilgameshportrait.jpeg', bleepHz: 260, side: 'npc' },
+    gilgamesh:   { portrait: 'images/portraits/gilgameshportrait.jpeg', bleepHz: 210, side: 'npc' },  // bleep routed through the 'otzi' synth branch (matches his battle voice)
     sargon:      { portrait: 'images/portraits/sargonportrait.jpg', bleepHz: 440, side: 'npc'    },
     hammurabi:   { portrait: 'images/portraits/hammurabi.jpg', bleepHz: 240, side: 'npc' },
     trader:      { portrait: 'images/portraits/mesotrader@0.5x.jpg', bleepHz: 300, side: 'npc'   }
@@ -112,7 +112,10 @@ SOG.HUD = (function () {
       gain.gain.linearRampToValueAtTime(0,    now + 0.035);
       osc.connect(gain).connect(ctx.destination);
       osc.start(now); osc.stop(now + 0.04);
-    } else if (who === 'otzi') {
+    } else if (who === 'otzi' || who === 'gilgamesh') {
+      // Ötzi's bleep — also used for Gilgamesh so his OVERWORLD voice matches his
+      // BATTLE voice (in the Gilgamesh battle he speaks through the shared 'otzi'
+      // bubble + BLEEP_PROFILES.otzi: triangle, 210±20 Hz). Keep these in sync.
       var freq = 210 + (Math.random() - 0.5) * 20;
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, now);
@@ -526,18 +529,23 @@ SOG.HUD = (function () {
     // portrait identical to a normal swap, so following dialogue is unaffected.
     // Tuning knobs (all overridable via config): growScale (2), risePx (-60),
     // growMs (500), settleMs (500); the dissolve uses transitionMs as today.
+    // The NPC portrait sits near the right edge, so the growth is anchored at the
+    // portrait's RIGHT edge (growOriginX '100%') — it expands up and TOWARD the
+    // screen centre instead of symmetrically, so the enlarged portrait can't be
+    // clipped by the right edge. Override growOriginX for a different anchor.
     if (config.grow && _npcSlotEl) {
       var GROW_S   = (config.growMs   || 500) / 1000;
       var SETTLE_S = (config.settleMs || 500) / 1000;
       var SCALE    = config.growScale || 2;
       var RISE_PX  = (config.risePx != null) ? config.risePx : -60;
+      var ORIGIN_X = (config.growOriginX != null) ? config.growOriginX : '100%';
       if (config.sfx) { try { new Audio(config.sfx).play(); } catch (e) {} }
       // Un-clip + lift the slot so the enlarged portrait shows above the HUD bar.
       var prevOverflow = _npcSlotEl.style.overflow;
       var prevZ        = _npcSlotEl.style.zIndex;
       _npcSlotEl.style.overflow = 'visible';
       _npcSlotEl.style.zIndex   = '10060';
-      gsap.set(_npcImgEl, { transformOrigin: '50% 100%' });
+      gsap.set(_npcImgEl, { transformOrigin: ORIGIN_X + ' 100%' });
       gsap.timeline({
         onComplete: function () {
           _npcSlotEl.style.overflow = prevOverflow;

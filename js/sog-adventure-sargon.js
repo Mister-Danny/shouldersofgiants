@@ -709,10 +709,28 @@ SOG.SargonBattle = (function () {
 
     var hand      = G.aiHand.slice();
     var simFilled = {};   // locId → placements simulated this turn (so we don't over-fill a slot)
+    var simIP     = {};   // locId → IP the AI has committed THIS turn (for spreading)
     function slotsLeft(locId) {
       var arr = G.aiSlots[locId] || [], open = 0;
       for (var i = 0; i < arr.length; i++) if (arr[i] === null) open++;
       return open - (simFilled[locId] || 0);
+    }
+    // The AI's committed IP at a location: cards placed in prior turns + this turn's
+    // simulated plays. Driving placement off this SPREADS the AI across locations.
+    function aiCommittedIP(locId) {
+      var ip = 0, arr = G.aiSlots[locId] || [];
+      for (var i = 0; i < arr.length; i++) { var s = arr[i]; if (s) ip += (s.ip || 0); }
+      return ip + (simIP[locId] || 0);
+    }
+    // Pick the open location where the AI is currently WEAKEST, so each play
+    // contests a different location instead of piling into the leftmost one.
+    function weakestOpenLoc(locs) {
+      var best = locs[0], bestIP = aiCommittedIP(best.id);
+      for (var i = 1; i < locs.length; i++) {
+        var ip = aiCommittedIP(locs[i].id);
+        if (ip < bestIP) { bestIP = ip; best = locs[i]; }
+      }
+      return best.id;
     }
 
     var plays = [], guard = 0;
@@ -731,14 +749,15 @@ SOG.SargonBattle = (function () {
       var pick = aff[0], locId;
       if (pick.id === 37) {
         var mid = G.locations[Math.floor(G.locations.length / 2)];           // Sargon → middle
-        locId = (mid && slotsLeft(mid.id) > 0) ? mid.id : openLocs[0].id;
+        locId = (mid && slotsLeft(mid.id) > 0) ? mid.id : weakestOpenLoc(openLocs);
       } else {
-        locId = openLocs[0].id;
+        locId = weakestOpenLoc(openLocs);   // strongest card → weakest location (spread)
       }
 
       plays.push({ cardId: pick.id, locId: locId });
       capital -= pick.cc;
       simFilled[locId] = (simFilled[locId] || 0) + 1;
+      simIP[locId]     = (simIP[locId] || 0) + (pick.ip || 0);
       var idx = hand.indexOf(pick.id);
       if (idx !== -1) hand.splice(idx, 1);
     }

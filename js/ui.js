@@ -228,18 +228,33 @@
     el.appendChild(ccEl);
     el.appendChild(ipEl);
 
-    // GSAP hover: pop card to full original size on enter, smooth return on leave
+    // GSAP hover: pop card to full original size on enter, smooth return on leave.
     if (typeof gsap !== 'undefined') {
+      // True while a NON-hover tween (the deal-in fly-up, a reveal fx, etc.) is still
+      // running on this card. Hover must not hijack those: if the cursor happens to be
+      // over a slot as the board loads, the deal-in animates the card up UNDER the
+      // cursor, firing mouseenter — and killing the deal mid-flight left the card stuck
+      // raised + displaced (only `scale` was reset on leave) until the next turn.
+      // Hover tweens tag themselves `data:'hover'` so they're excluded from this check.
+      function _entranceActive() {
+        var tweens = gsap.getTweensOf(el);
+        for (var i = 0; i < tweens.length; i++) {
+          if (tweens[i].isActive() && tweens[i].data !== 'hover') return true;
+        }
+        return false;
+      }
       el.addEventListener('mouseenter', function () {
         if (el.classList.contains('selected')) return;
+        if (_entranceActive()) return;            // let the deal-in / fx settle first
         gsap.killTweensOf(el);
         gsap.set(el, { zIndex: 100 });
-        gsap.to(el, { scale: 1.35, duration: 0.14, ease: 'power2.out' });
+        gsap.to(el, { scale: 1.35, duration: 0.14, ease: 'power2.out', data: 'hover' });
       });
       el.addEventListener('mouseleave', function () {
+        if (_entranceActive()) return;            // don't interrupt the deal-in / fx
         gsap.killTweensOf(el);
         gsap.to(el, {
-          scale: 1, duration: 0.22, ease: 'power2.inOut',
+          scale: 1, duration: 0.22, ease: 'power2.inOut', data: 'hover',
           onComplete: function () { gsap.set(el, { zIndex: 1 }); }
         });
       });

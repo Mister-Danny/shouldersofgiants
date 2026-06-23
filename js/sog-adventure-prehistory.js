@@ -331,11 +331,11 @@ window.SOG.Adventure.Prehistory = (function () {
      Shuffled on entry; initial hand of 4 drawn off the top.
 
      AI hand/deck (parallel-to-player model):
-       Game start: AI hand=[26,27,31,34] (4 scripted cards), AI deck=[29,30,32,36,28] (5 cosmetic).
-       T1 plays Tool (26): hand 4→3; Tool's draw fires → hand 3→4, deck 5→4.
-       T2 start draw → hand 5; plays Hunter (27) → hand 4, deck 3.
-       T3 start draw → hand 5; plays Megalith (31) → hand 4, deck 2.
-       T4 start draw → hand 5; plays Neanderthal (34) → hand 4, deck 1.
+       Game start: AI hand=[27,28,31,34] (4 scripted cards), AI deck=[29,30,32,36,26] (5 cosmetic).
+       T1 plays Hunter (27): hand 4→3; start-of-turn flat +1 keeps the hand topped up.
+       T2 plays Gatherer (28) → hand 4, deck 3.
+       T3 plays Megalith (31) → hand 4, deck 2.
+       T4 plays Neanderthal (34) → hand 4, deck 1.
   ═══════════════════════════════════════════════════════════════ */
 
   /* ══════════════════════════════════════════════════════════════
@@ -351,10 +351,10 @@ window.SOG.Adventure.Prehistory = (function () {
        (1-6) so .battle-col[data-loc-id="100"] targets only this tile.
      • decks.player.ids per cards.js (no duplicates, no Lucy id 33).
      • ai.settings.playOrder is the scripted opponent sequence T1→T4:
-       Tool(26) → Hunter(27) → Megalith(31) → Neanderthal(34). Tool fires
-       its "draw 1" At-Once during reveal, mirroring a player opening Tool.
-       handPadding seeds G.aiDeck with 5 cosmetic cards (faces never shown)
-       so the opp-hand display starts hand=4 / deck=5, matching the player.
+       Hunter(27) → Gatherer(28) → Megalith(31) → Neanderthal(34).
+       handPadding seeds G.aiDeck with 5 cosmetic cards (faces never shown,
+       no overlap with the play order) so the opp-hand display starts
+       hand=4 / deck=5, matching the player.
      • scriptHook 'prehistory' is the target; the script module is registered
        in the deferred Stage 3, so it is INERT this session (no script is
        registered → the BattleHooks seam resolves to null and falls through).
@@ -388,8 +388,8 @@ window.SOG.Adventure.Prehistory = (function () {
       opponentAvatar:   'images/portraits/neanderthalportait.jpeg'
     },
     ai: { profile: 'scriptedSequence',
-          settings: { playOrder: [26, 27, 31, 34], faceDown: true,
-                      handPadding: [29, 30, 32, 36, 28] } },
+          settings: { playOrder: [27, 28, 31, 34], faceDown: true,
+                      handPadding: [29, 30, 32, 36, 26] } },
     // The battle runs through game.js's initGame lifecycle + the registered
     // 'prehistory' script (below), which supplies all narrative via the hooks.
     scriptHook: 'prehistory'

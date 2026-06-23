@@ -1373,26 +1373,29 @@ img    { display: block; }
 .popup-backdrop.visible .card-popup { transform: scale(1); }
 
 /* ── Battle Rules popup (SOG.BattleRulesPopup) ──────────────────────
-   Reuses .card-popup dimensions/double-border; warm gold/parchment tint
-   so it reads as "rules" rather than a neutral card-info popup. */
+   Shares the dark-wood + bronze-gold panel of the card-detail popup (the
+   panel bg/border/shadow are applied via the retint group further below,
+   which now lists .rules-popup) so all three boss rules popups read as part
+   of the same UI. Only the title/body text treatment lives here. */
 .rules-popup {
-  background: linear-gradient(180deg, #4a3a14 0%, #342708 100%);
-  border-color: #f8d000;
   text-align: center;
 }
 .rules-popup-title {
   font-family: var(--font);
-  font-size: 26px;
-  color: #ffe98a;
-  letter-spacing: 0.04em;
-  text-shadow: 1px 1px 0 #000;
+  font-size: 24px;
+  color: #e8c060;                                /* warm gold — matches .popup-card-name */
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #000, 0 0 8px rgba(220, 170, 60, 0.30);
+  line-height: 1.25;
   margin: 4px 0 16px;
 }
 .rules-popup-body {
   font-family: var(--font);
   font-size: 17px;
   line-height: 1.55;
-  color: #f3e6bd;
+  color: #f3e6c4;                                /* cream — matches card-popup ability text */
+  text-shadow: 1px 1px 0 #000;
   text-align: left;
 }
 .rules-popup-list { margin: 0 auto; padding-left: 1.3em; max-width: 90%; }
@@ -1946,7 +1949,8 @@ img    { display: block; }
 #card-popup-backdrop,
 #battle-popup-backdrop,
 #difficulty-backdrop,
-#rename-deck-backdrop {
+#rename-deck-backdrop,
+.rules-popup-backdrop {
   background: rgba(20, 10, 2, 0.82);
 }
 
@@ -1960,7 +1964,8 @@ img    { display: block; }
 #card-popup-backdrop .card-popup,
 #battle-popup-backdrop .card-popup,
 #difficulty-backdrop .card-popup,
-#rename-deck-backdrop .card-popup {
+#rename-deck-backdrop .card-popup,
+.rules-popup {
   background:
     repeating-linear-gradient(
       0deg,
@@ -9037,6 +9042,89 @@ body.sargon-battle .adv-bubble .adv-bubble-hint {
   margin-top: 6px;
 }
 
+/* ── Hammurabi battle speech bubbles — same comic-book treatment as Sargon
+   (its own body class, so the otzi-battle bubble rules don't reach it). */
+body.hammurabi-battle #adv-bubble-otzi {
+  top: 80px;
+  transform: translateY(-50%);
+  right: 152px;
+  left: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 270px;
+  gap: 0;
+  background: #f0ebe0;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: -4px 4px 0 #111;
+}
+body.hammurabi-battle #adv-bubble-otzi::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-left-color: #111;
+}
+body.hammurabi-battle #adv-bubble-otzi::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-left-color: #f0ebe0;
+}
+body.hammurabi-battle #adv-bubble-explorer {
+  top: 624px;
+  transform: translateY(-50%);
+  left: 168px;
+  right: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 200px;
+  gap: 0;
+  background: #fffef5;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: 4px 4px 0 #111;
+}
+body.hammurabi-battle #adv-bubble-explorer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-right-color: #111;
+}
+body.hammurabi-battle #adv-bubble-explorer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-right-color: #fffef5;
+}
+body.hammurabi-battle .adv-bubble .adv-bubble-portrait { display: none; }
+body.hammurabi-battle .adv-bubble .adv-bubble-text {
+  font-size: 18px;
+  line-height: 1.45;
+  color: #111;
+  text-shadow: none;
+  min-height: 28px;
+}
+body.hammurabi-battle .adv-bubble .adv-bubble-hint {
+  color: #666;
+  margin-top: 6px;
+}
+
 /* Radial wipe — fullscreen black, clipped to an expanding circle.
    Inline clip-path style is set by JS each frame during the GSAP
    tween. .active toggles visibility; opacity stays at 1 throughout
@@ -10423,7 +10511,7 @@ body[data-screen="overworld"] #overworld-overlay {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 80%;                     /* mark size relative to the card (knob, 25% bigger) */
+  width: 104%;                    /* mark size relative to the card (knob; was 80%, +30%) */
   height: auto;
   transform: translate(-50%, -50%);
   pointer-events: none;

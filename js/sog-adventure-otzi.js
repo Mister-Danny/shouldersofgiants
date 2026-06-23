@@ -111,6 +111,100 @@ SOG.OtziBattle = (function () {
     return [desert, savannah, grvCopy];  // Desert (left) · Savannah (center) · GRV (right)
   }
 
+  /* ══════════════════════════════════════════════════════════════
+     Strategic Ötzi selector (heuristic AI profile). Cost-free; plays up to
+     cardsPerTurn (2) cards per turn. Smarter than the old random-n profile,
+     which dumped cards in random order/locations (e.g. Cave Art BEFORE Fire,
+     wasting both). It now plays with intent — but deliberately NOT flawlessly:
+
+       • Fire/Cave Art COMBO sequencing. Fire(29) buffs cards played AFTER it
+         here (+1); Cave Art(30) buffs cards played BEFORE it here (+1). So Fire
+         is scored as a setup that leads (only worth playing if slots remain to
+         exploit it), Cave Art captures +1 for every AI card ALREADY here (so it
+         trails a stack), and ordinary cards prefer a location that already has
+         Fire. Net effect: Fire first → strong cards → Cave Art last.
+       • SPREAD to contest 2 of 3 locations (the win condition) rather than
+         piling everything into one — each play is nudged toward the location
+         where the AI is currently weaker.
+
+     Ignores the fiddlier abilities (Domesticated Animal adjacency, Tribe's
+     next-turn bonus, Ötzi-migrate) — it values those at face IP. Good enough to
+     put up a fight without playing a perfect game. */
+  function otziSelectPlays(ctx) {
+    var G = ctx.G;
+    var CARDS_ = (typeof CARDS !== 'undefined') ? CARDS : [];
+    function cardById(id) { for (var i = 0; i < CARDS_.length; i++) if (CARDS_[i].id === id) return CARDS_[i]; return null; }
+    var perTurn = (G.config && G.config.ai && G.config.ai.settings && G.config.ai.settings.cardsPerTurn) || 2;
+
+    var FIRE = 29, CAVE = 30;
+    var hand = G.aiHand.slice();
+
+    // Per-location AI state = committed (revealed prior turns) + this turn's sims.
+    var simCount = {}, simIP = {}, simFire = {}, simCave = {};
+    function arrAt(locId) { return G.aiSlots[locId] || []; }
+    function openSlots(locId) {
+      var a = arrAt(locId), n = 0; for (var i = 0; i < a.length; i++) if (a[i] === null) n++;
+      return n - (simCount[locId] || 0);
+    }
+    function aiCount(locId) {
+      var a = arrAt(locId), n = 0; for (var i = 0; i < a.length; i++) if (a[i]) n++;
+      return n + (simCount[locId] || 0);
+    }
+    function aiIP(locId) {
+      var a = arrAt(locId), s = 0; for (var i = 0; i < a.length; i++) if (a[i]) s += (a[i].ip || 0);
+      return s + (simIP[locId] || 0);
+    }
+    function hasCard(locId, id, simFlag) {
+      var a = arrAt(locId); for (var i = 0; i < a.length; i++) if (a[i] && a[i].cardId === id) return true;
+      return !!simFlag[locId];
+    }
+
+    function scorePlay(card, locId) {
+      var fireHere = hasCard(locId, FIRE, simFire);
+      var caveHere = hasCard(locId, CAVE, simCave);
+      var cnt      = aiCount(locId);
+      var open     = openSlots(locId);
+      var eff;
+      if (card.id === FIRE) {                 // setup — only valuable if cards can still follow it here
+        eff = card.ip + (open >= 2 ? 1.5 : -1.0);
+        if (fireHere) eff -= 3;               // never double Fire
+      } else if (card.id === CAVE) {          // captures +1 for every AI card already here (played before it)
+        eff = card.ip + cnt;
+        if (caveHere) eff -= 3;               // never double Cave Art
+      } else {
+        eff = card.ip;
+        if (fireHere) eff += 1;               // benefits from Fire's "after" buff
+        if (caveHere) eff -= 1;               // Cave Art combo here is closed — a later card earns nothing
+      }
+      eff -= 0.5 * aiIP(locId);               // mild spread → contest 2-3 locations, don't stack one
+      return eff;
+    }
+
+    var plays = [];
+    for (var p = 0; p < perTurn && hand.length; p++) {
+      var openLocs = G.locations.filter(function (l) { return openSlots(l.id) > 0; });
+      if (!openLocs.length) break;
+
+      var best = null, bestScore = -Infinity;
+      for (var h = 0; h < hand.length; h++) {
+        var card = cardById(hand[h]); if (!card) continue;
+        for (var L = 0; L < openLocs.length; L++) {
+          var sc = scorePlay(card, openLocs[L].id);
+          if (sc > bestScore) { bestScore = sc; best = { cardId: card.id, locId: openLocs[L].id, ip: card.ip }; }
+        }
+      }
+      if (!best) break;
+
+      plays.push({ cardId: best.cardId, locId: best.locId });
+      simCount[best.locId] = (simCount[best.locId] || 0) + 1;
+      simIP[best.locId]    = (simIP[best.locId] || 0) + (best.ip || 0);
+      if (best.cardId === FIRE) simFire[best.locId] = true;
+      if (best.cardId === CAVE) simCave[best.locId] = true;
+      var idx = hand.indexOf(best.cardId); if (idx !== -1) hand.splice(idx, 1);
+    }
+    return plays;
+  }
+
   var OTZI_CONFIG = {
     structure: { turns: 4, locationsCount: 3, slotsPerLocation: 4,
                  handStart: 4, maxHandSize: 4, cardsPerTurn: 2 },
@@ -122,7 +216,7 @@ SOG.OtziBattle = (function () {
     },
     locationAbilities: { select: { mode: 'explicit', locations: _otziLocations() } },
     scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },  // tie-as-loss
-    ai: { profile: 'random-n', settings: { cardsPerTurn: 2 } },
+    ai: { profile: 'heuristic', settings: { selectPlays: otziSelectPlays, cardsPerTurn: 2 } },
     presentation: {
       bodyClass:        'otzi-battle',
       preCoachingClass: 'otzi-pre-deal',
@@ -566,6 +660,16 @@ SOG.OtziBattle = (function () {
       el.style.display = 'none';
       _exitOtziBattleToOverworld(outcome === 'win');
     };
+
+    // Victory uses a single CONTINUE button (mark complete + return to the map),
+    // in place of the loss/tie Play Again + Back to Map. Only present on win.
+    if (outcome === 'win') {
+      var continueBtn = document.getElementById('adv-otzi-result-victory-continue');
+      if (continueBtn) continueBtn.onclick = function () {
+        el.style.display = 'none';
+        _exitOtziBattleToOverworld(true);
+      };
+    }
   }
 
   /* Plain-text fallback if HTML elements are missing (shouldn't happen). */
