@@ -1003,6 +1003,14 @@ var Overworld = (function () {
       isDialogueLocked = true;
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+        // Post-victory: skip the intro dialogue (A lines → knock → B lines → door) —
+        // walk up, then straight into the battle via the radial wipe.
+        var hgBattle = window.SOG && window.SOG.HangingGardensBattle;
+        if (hgBattle && typeof hgBattle.isBattleComplete === 'function' && hgBattle.isBattleComplete()) {
+          log('Hanging Gardens node — battle already won, skipping intro dialogue');
+          _launchHangingGardensBattle();
+          return;
+        }
         var hud = window.SOG && window.SOG.HUD;
         if (!hud || typeof hud.enterDialogueMode !== 'function') {
           _launchHangingGardensBattle();   // no HUD → skip straight to the wipe/stub

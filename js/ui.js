@@ -266,7 +266,7 @@
   /* ── Card art helper ─────────────────────────────────────────────
      Single source of truth for rendering a card's <img> element.
      Compact surfaces (hand row, discard chooser) pass { size: 'sm' }
-     to load a pre-rendered 123x184 variant — see images/cards/<Name>@sm.jpg.
+     to load a pre-rendered 123x184 variant — see images/cards/first25/<Name>@sm.jpg.
      If the @sm variant doesn't exist on disk, onerror transparently
      falls back to the full-size original, then to display:none if
      even that is missing. Callers don't need to know which assets

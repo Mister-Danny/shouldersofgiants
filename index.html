@@ -343,7 +343,7 @@
     <!-- Lucy portrait circle (bottom-left, absolute) -->
     <div class="battle-avatar battle-avatar-ally">
       <div class="battle-avatar-frame">
-        <img src="images/Lucy.png" alt="Lucy" onerror="this.style.display='none'">
+        <img src="images/portraits/Lucy.png" alt="Lucy" onerror="this.style.display='none'">
       </div>
       <div id="battle-timer-bar-wrap" class="battle-timer-bar-wrap" style="display:none">
         <div id="battle-timer-bar" class="battle-timer-bar"></div>
@@ -433,7 +433,7 @@
     <div class="adv-bubble-hint">&#9654; Click to continue</div>
   </div>
   <div id="adv-bubble-explorer" class="adv-bubble adv-bubble-bl">
-    <img class="adv-bubble-portrait" src="images/femaleexplorer portrait.jpeg" alt="">
+    <img class="adv-bubble-portrait" src="images/portraits/femaleexplorer portrait.jpeg" alt="">
     <div class="adv-bubble-text"></div>
     <div class="adv-bubble-hint">&#9654; Click to continue</div>
   </div>
@@ -442,7 +442,7 @@
        (controlled by .is-visible). Distinct DOM so we don't have
        to swap portraits mid-flight during the coaching runner. -->
   <div id="adv-bubble-lucy" class="adv-bubble adv-bubble-bl">
-    <img class="adv-bubble-portrait" src="images/Lucy.png" alt="">
+    <img class="adv-bubble-portrait" src="images/portraits/Lucy.png" alt="">
     <div class="adv-bubble-text"></div>
     <div class="adv-bubble-hint">&#9654; Click to continue</div>
   </div>
@@ -790,7 +790,7 @@
   <!-- Lucy dialogue box (home screen intro only) -->
   <div id="tut-box" style="display:none">
     <div class="tut-portrait">
-      <img src="images/Lucy.png" alt="Lucy" class="tut-lucy-img">
+      <img src="images/portraits/Lucy.png" alt="Lucy" class="tut-lucy-img">
       <!-- legacy SVG kept as fallback if image fails to load, hidden by default -->
       <svg viewBox="0 0 80 110" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" class="tut-lucy-svg" style="display:none">
         <!-- Wild hair — dark outer halo -->
@@ -1494,7 +1494,7 @@
     <div id="adv-hud-left">
       <!-- Avatar + static player title -->
       <div id="adv-hud-portrait" title="Avatar — future customisation">
-        <img src="images/femaleexplorer%20portrait.jpeg" alt="Explorer" draggable="false">
+        <img src="images/portraits/femaleexplorer%20portrait.jpeg" alt="Explorer" draggable="false">
         <!-- Static default; a future name system can feed this via SOG.HUD.setName(). -->
         <div id="adv-hud-player-name">Explorer</div>
       </div>
@@ -1518,12 +1518,10 @@
         <!-- Left half: player/Explorer lines -->
         <div id="adv-hud-dlg-player" class="adv-hud-dlg-zone">
           <div id="adv-hud-dialogue-text"></div>
-          <span class="adv-hud-dlg-arrow">&#9654;</span>
         </div>
         <!-- Right half: NPC lines -->
         <div id="adv-hud-dlg-npc" class="adv-hud-dlg-zone adv-hud-dlg-zone--npc">
           <div id="adv-hud-dialogue-text-npc"></div>
-          <span class="adv-hud-dlg-arrow adv-hud-dlg-arrow--npc">&#9654;</span>
         </div>
       </div>
     </div>
@@ -1537,7 +1535,7 @@
         <span id="adv-hud-gold-num">0</span>
       </div>
       <div id="adv-hud-deck" title="Deck Builder">
-        <img class="adv-hud-deck-back" src="images/ui_images/SOG_Card_Back_Medium.jpeg"
+        <img class="adv-hud-deck-back" src="images/cards/cardsmisc/SOG_Card_Back_Medium.jpeg"
              alt="Deck" draggable="false">
         <!-- Active deck's saved name (Decks.getActive().name) via refreshDecks(). -->
         <div id="adv-hud-deck-name">Deck</div>

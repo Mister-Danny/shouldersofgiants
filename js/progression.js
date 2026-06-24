@@ -256,7 +256,7 @@ var Progression = (function () {
       var back = document.createElement('div');
       back.className = 'unlock-card-back';
       back.style.cssText = 'position:absolute;inset:0;backface-visibility:hidden;' +
-        'background:url(images/SOG_Card_Back.jpg) center/cover no-repeat;border-radius:5px;';
+        'background:url(images/cards/cardsmisc/SOG_Card_Back.jpg) center/cover no-repeat;border-radius:5px;';
 
       // Front face (card artwork + overlays)
       var front = document.createElement('div');

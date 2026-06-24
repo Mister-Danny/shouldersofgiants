@@ -52,7 +52,7 @@ SOG.HangingGardensBattle = (function () {
 
   var HG_PRESENTATION = {
     bodyClass:      'hanging-gardens-battle',
-    allyAvatar:     'images/femaleexplorer%20portrait.jpeg',
+    allyAvatar:     'images/portraits/femaleexplorer%20portrait.jpeg',
     opponentAvatar: NEB_BUBBLE_PORTRAIT,
     popAlly:        true
   };
@@ -106,7 +106,7 @@ SOG.HangingGardensBattle = (function () {
     // Stage 4c flood presentation — strip the crossfade class + any overlay elements.
     Array.prototype.forEach.call(document.querySelectorAll('.battle-col.hg-flooded'),
       function (col) { col.classList.remove('hg-flooded'); });
-    Array.prototype.forEach.call(document.querySelectorAll('.hg-flood-overlay, .hg-flood-rush'),
+    Array.prototype.forEach.call(document.querySelectorAll('.hg-flood-overlay, .hg-flood-rush, .hg-flood-tint'),
       function (el) { if (el.parentNode) el.parentNode.removeChild(el); });
   }
 
@@ -547,7 +547,7 @@ SOG.HangingGardensBattle = (function () {
 
   /* Opening dialogue (first-time only; skipped → immediate onComplete on re-entry). */
   function _runOpeningDialogue(onComplete) {
-    if (_has(KEY_HG_OPENING_SEEN)) { if (onComplete) onComplete(); return; }
+    if (_has(KEY_HG_OPENING_SEEN) || _has(KEY_HG_COMPLETE)) { if (onComplete) onComplete(); return; }
     runLines(OPENING_DIALOGUE, function () {
       _set(KEY_HG_OPENING_SEEN);
       if (onComplete) onComplete();
@@ -587,8 +587,9 @@ SOG.HangingGardensBattle = (function () {
     if (target != null && target !== prev)   _floodPresentation(target);
     _floodedRiver = target;
     // First-flood interjection (first-time only): block input, run the exchange,
-    // then release. Fires only when a river actually floods (target != null).
-    if (target != null && !_has(KEY_HG_FLOOD_INTRO_SEEN)) {
+    // then release. Fires only when a river actually floods (target != null), and
+    // never once the battle's been beaten (skip all intros on a victorious rematch).
+    if (target != null && !_has(KEY_HG_FLOOD_INTRO_SEEN) && !_has(KEY_HG_COMPLETE)) {
       _set(KEY_HG_FLOOD_INTRO_SEEN);
       _dialogueActive = true;
       _disableButtons();
@@ -618,7 +619,22 @@ SOG.HangingGardensBattle = (function () {
     rush.className = 'hg-flood-rush';
     rush.setAttribute('aria-hidden', 'true');
     col.appendChild(rush);
-    setTimeout(function () { if (rush.parentNode) rush.parentNode.removeChild(rush); }, 1500);  // outlast the 1.25s wipe
+    setTimeout(function () { if (rush.parentNode) rush.parentNode.removeChild(rush); }, 2250);  // outlast the 1.875s wipe
+  }
+
+  /* A persistent 20% blue tint over the flooded location (CSS .hg-flood-tint), kept
+     for the whole time the river stays flooded and removed on un-flood / teardown. */
+  function _spawnFloodTint(col) {
+    if (!col || col.querySelector('.hg-flood-tint')) return;   // idempotent
+    var tint = document.createElement('div');
+    tint.className = 'hg-flood-tint';
+    tint.setAttribute('aria-hidden', 'true');
+    col.appendChild(tint);
+  }
+  function _removeFloodTint(col) {
+    if (!col) return;
+    var tint = col.querySelector('.hg-flood-tint');
+    if (tint && tint.parentNode) tint.parentNode.removeChild(tint);
   }
 
   function _floodPresentation(locId) {
@@ -630,6 +646,7 @@ SOG.HangingGardensBattle = (function () {
       var nm = col.querySelector('.battle-loc-name');    if (nm && loc) nm.textContent = loc.name + ' - Flooded';
       var ab = col.querySelector('.battle-loc-ability'); if (ab)        ab.textContent = 'No cards can be played here';
       _spawnFloodRush(col);                                                   // blue water surge sweeps over it
+      _spawnFloodTint(col);                                                   // persistent 20% blue tint
     }
     _playSfx('sfx/waterflow.m4a');
   }
@@ -641,6 +658,7 @@ SOG.HangingGardensBattle = (function () {
       col.classList.remove('hg-flooded');                                     // crossfade back
       var nm = col.querySelector('.battle-loc-name');    if (nm && loc) nm.textContent = loc.name;
       var ab = col.querySelector('.battle-loc-ability'); if (ab && loc) ab.textContent = loc.abilityText;
+      _removeFloodTint(col);                                                  // drop the blue tint
     }
   }
 
@@ -675,8 +693,8 @@ SOG.HangingGardensBattle = (function () {
       }
       _swapOpponentBubblePortrait();
 
-      if (_has(KEY_HG_OPENING_SEEN)) {
-        // Repeat entry — skip the dialogue, go straight to turn 1.
+      if (_has(KEY_HG_OPENING_SEEN) || _has(KEY_HG_COMPLETE)) {
+        // Repeat entry (or a victorious rematch) — skip the dialogue, go straight to turn 1.
         fadeOutCover(function () { done(); });
         return;
       }

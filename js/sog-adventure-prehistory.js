@@ -384,7 +384,7 @@ window.SOG.Adventure.Prehistory = (function () {
     presentation: {
       bodyClass:        'prehistory-battle',        // gates all CSS overrides (applied pre-board)
       preCoachingClass: 'prehistory-pre-coaching',  // additionally hides hand+deck+HUD until slide-in
-      allyAvatar:       'images/Lucy.png',          // ally is Lucy (HTML default — no visible swap)
+      allyAvatar:       'images/portraits/Lucy.png',          // ally is Lucy (HTML default — no visible swap)
       opponentAvatar:   'images/portraits/neanderthalportait.jpeg'
     },
     ai: { profile: 'scriptedSequence',
@@ -1097,6 +1097,7 @@ window.SOG.Adventure.Prehistory = (function () {
     log('Phase E — coaching starting (phase 1: intro exchange)');
     runCoachingLines(COACHING_PHASE_1, function () {
       log('Phase E — phase 1 complete, shake + UI slide-in');
+      try { new Audio('sfx/earthspell.mp3').play(); } catch (e) {}   // rumble as the cards shake into place
       shakeCamera(function () {
         slideInUI(function () {
           log('Phase E — UI in place, starting phase 2 (Lucy coaching)');

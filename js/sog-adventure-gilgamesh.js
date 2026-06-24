@@ -211,7 +211,7 @@ SOG.GilgameshBattle = (function () {
      Gilgamesh. Both slots are set explicitly via the shared engine path
      (SOG.HUD.applyBattleAvatars / restoreBattleAvatars). */
   var PRESENTATION = {
-    allyAvatar:     'images/femaleexplorer%20portrait.jpeg',
+    allyAvatar:     'images/portraits/femaleexplorer%20portrait.jpeg',
     opponentAvatar: 'images/portraits/gilgameshportrait.jpeg',
     popAlly:        true
   };
@@ -1178,7 +1178,7 @@ SOG.GilgameshBattle = (function () {
         bodyClass:        'gilgamesh-battle',                  // Mesopotamia location art
         bodyClassExtra:   'otzi-battle',                       // shared adventure-battle styling
         preCoachingClass: 'otzi-pre-deal',                     // hides hand until the deal
-        allyAvatar:       'images/femaleexplorer%20portrait.jpeg',
+        allyAvatar:       'images/portraits/femaleexplorer%20portrait.jpeg',
         opponentAvatar:   'images/portraits/gilgameshportrait.jpeg',
         popAlly:          true
       },

@@ -220,7 +220,7 @@ SOG.OtziBattle = (function () {
     presentation: {
       bodyClass:        'otzi-battle',
       preCoachingClass: 'otzi-pre-deal',
-      allyAvatar:       'images/femaleexplorer%20portrait.jpeg',
+      allyAvatar:       'images/portraits/femaleexplorer%20portrait.jpeg',
       opponentAvatar:   'images/Otzi.jpg',
       popAlly:          true
     },
@@ -840,6 +840,7 @@ SOG.OtziBattle = (function () {
       _otziParkSideLocations();
       fadeOutCover(function () {
         runLines(PRE_SHAKE_LINES, function () {
+          try { new Audio('sfx/earthspell.mp3').play(); } catch (e) {}   // rumble as the side locations shake into place
           shakeCamera(function () {
             revealSideLocations(function () {
               runLines(POST_SHAKE_LINES, function () {

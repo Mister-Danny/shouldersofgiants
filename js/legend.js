@@ -289,7 +289,7 @@
       var dir = DIRS[(i + 1) % DIRS.length];   // offset 1 so directions vary vs locations
       tl.call((function (cardName) {
         return function () {
-          slideEl.style.backgroundImage    = 'url("images/cards/' + cardName + '.jpg")';
+          slideEl.style.backgroundImage    = 'url("images/cards/first25/' + cardName + '.jpg")';
           slideEl.style.backgroundPosition = 'center 30%';
           playWhoosh();
         };

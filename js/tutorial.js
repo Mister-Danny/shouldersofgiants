@@ -284,7 +284,7 @@
     lucyFrame.className = 'matchup-portrait-frame';
     var lucyImg = document.createElement('img');
     lucyImg.className = 'matchup-portrait-img';
-    lucyImg.src = 'images/Lucy.png';
+    lucyImg.src = 'images/portraits/Lucy.png';
     lucyImg.alt = 'Lucy';
     lucyImg.onerror = function () { this.style.display = 'none'; };
     lucyFrame.appendChild(lucyImg);
@@ -1563,7 +1563,7 @@
       slotEl.innerHTML = '';
       var _w = document.createElement('div'); _w.className = 'db-card-img-wrap';
       var _p = document.createElement('div'); _p.className = 'db-card-img-placeholder'; _p.textContent = card.name.charAt(0);
-      var _i = document.createElement('img'); _i.className = 'db-card-img'; _i.src = 'images/cards/' + card.name + '.jpg'; _i.onerror = function () { this.style.display = 'none'; };
+      var _i = document.createElement('img'); _i.className = 'db-card-img'; _i.src = 'images/cards/first25/' + card.name + '.jpg'; _i.onerror = function () { this.style.display = 'none'; };
       _w.appendChild(_p); _w.appendChild(_i);
       var _cc = document.createElement('div'); _cc.className = 'db-overlay-cc'; _cc.textContent = card.cc;
       var _ip = document.createElement('div'); _ip.className = 'db-overlay-ip'; _ip.textContent = card.ip;
@@ -1632,7 +1632,7 @@
         var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
         var ph2  = document.createElement('div'); ph2.className = 'db-card-img-placeholder'; ph2.textContent = card.name.charAt(0);
         var img2 = document.createElement('img'); img2.className = 'db-card-img';
-        img2.src = 'images/cards/' + card.name + '.jpg';
+        img2.src = 'images/cards/first25/' + card.name + '.jpg';
         img2.onerror = function () { this.style.display = 'none'; };
         wrap.appendChild(ph2); wrap.appendChild(img2);
         var cc2 = document.createElement('div'); cc2.className = 'db-overlay-cc'; cc2.textContent = card.cc;
@@ -1690,7 +1690,7 @@
         ph.textContent = card.name.charAt(0);
         var img = document.createElement('img');
         img.className = 'db-card-img';
-        img.src       = 'images/cards/' + card.name + '.jpg';
+        img.src       = 'images/cards/first25/' + card.name + '.jpg';
         img.onerror   = function () { this.style.display = 'none'; };
         wrap.appendChild(ph); wrap.appendChild(img);
         var ccEl = document.createElement('div');
@@ -1732,7 +1732,7 @@
         var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
         var ph = document.createElement('div'); ph.className = 'db-card-img-placeholder'; ph.textContent = card.name.charAt(0);
         var img = document.createElement('img'); img.className = 'db-card-img';
-        img.src = 'images/cards/' + card.name + '.jpg';
+        img.src = 'images/cards/first25/' + card.name + '.jpg';
         img.onerror = function () { this.style.display = 'none'; };
         wrap.appendChild(ph); wrap.appendChild(img);
         var ccEl = document.createElement('div'); ccEl.className = 'db-overlay-cc'; ccEl.textContent = card.cc;
@@ -1847,7 +1847,7 @@
             var _w = document.createElement('div'); _w.className = 'db-card-img-wrap';
             var _p = document.createElement('div'); _p.className = 'db-card-img-placeholder'; _p.textContent = card.name.charAt(0);
             var _i = document.createElement('img'); _i.className = 'db-card-img';
-            _i.src = 'images/cards/' + card.name + '.jpg'; _i.onerror = function () { this.style.display = 'none'; };
+            _i.src = 'images/cards/first25/' + card.name + '.jpg'; _i.onerror = function () { this.style.display = 'none'; };
             _w.appendChild(_p); _w.appendChild(_i);
             var _cc = document.createElement('div'); _cc.className = 'db-overlay-cc'; _cc.textContent = card.cc;
             var _ip = document.createElement('div'); _ip.className = 'db-overlay-ip'; _ip.textContent = tEffectiveIP(sd);
@@ -1927,7 +1927,7 @@
         var _w2 = document.createElement('div'); _w2.className = 'db-card-img-wrap';
         var _p2 = document.createElement('div'); _p2.className = 'db-card-img-placeholder'; _p2.textContent = card.name.charAt(0);
         var _i2 = document.createElement('img'); _i2.className = 'db-card-img';
-        _i2.src = 'images/cards/' + card.name + '.jpg'; _i2.onerror = function () { this.style.display = 'none'; };
+        _i2.src = 'images/cards/first25/' + card.name + '.jpg'; _i2.onerror = function () { this.style.display = 'none'; };
         _w2.appendChild(_p2); _w2.appendChild(_i2);
         var _cc2 = document.createElement('div'); _cc2.className = 'db-overlay-cc'; _cc2.textContent = card.cc;
         var _ip2 = document.createElement('div'); _ip2.className = 'db-overlay-ip'; _ip2.textContent = tEffectiveIP(sd);
@@ -2091,7 +2091,7 @@
     ph.textContent = card.name.charAt(0);
     var img = document.createElement('img');
     img.className = 'db-card-img';
-    img.src       = 'images/cards/' + card.name + '.jpg';
+    img.src       = 'images/cards/first25/' + card.name + '.jpg';
     img.onerror   = function () { this.style.display = 'none'; };
     wrap.appendChild(ph);
     wrap.appendChild(img);
@@ -2560,7 +2560,7 @@
       var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
       var ph2  = document.createElement('div'); ph2.className = 'db-card-img-placeholder'; ph2.textContent = samCard.name.charAt(0);
       var img2 = document.createElement('img'); img2.className = 'db-card-img';
-      img2.src = 'images/cards/' + samCard.name + '.jpg';
+      img2.src = 'images/cards/first25/' + samCard.name + '.jpg';
       img2.onerror = function () { this.style.display = 'none'; };
       wrap.appendChild(ph2); wrap.appendChild(img2);
       var cc2 = document.createElement('div'); cc2.className = 'db-overlay-cc'; cc2.textContent = samCard.cc;
@@ -2666,7 +2666,7 @@
             var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
             var ph = document.createElement('div'); ph.className = 'db-card-img-placeholder'; ph.textContent = movedCard.name.charAt(0);
             var img = document.createElement('img'); img.className = 'db-card-img';
-            img.src = 'images/cards/' + movedCard.name + '.jpg';
+            img.src = 'images/cards/first25/' + movedCard.name + '.jpg';
             img.onerror = function () { this.style.display = 'none'; };
             wrap.appendChild(ph); wrap.appendChild(img);
             var ccEl = document.createElement('div'); ccEl.className = 'db-overlay-cc'; ccEl.textContent = movedCard.cc;
