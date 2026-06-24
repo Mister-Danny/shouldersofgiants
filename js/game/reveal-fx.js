@@ -318,17 +318,44 @@ SOG.RevealFx = (function () {
 
   function has(cardId) { return typeof REGISTRY[cardId] === 'function'; }
 
+  // FULL reveal-animation/sfx duration (ms) per card id — the whole sequence each
+  // REGISTRY handler kicks off, NOT the paced `holdFor()` value it returns. Used to
+  // delay reactions (Tribe's bounce) until the triggering card's reveal has fully
+  // finished. Keep in sync with the matching handler above.
+  var FULL_MS = {
+    26: 1000,   // Tool swing+rebound
+    29: 1300,   // Fire illuminate + embers
+    30: 2340,   // Cave Art scribble + fade
+    32: 1850,   // Domesticated Animal howl
+    34: 450,    // Neanderthal drop-in
+    39: 1400,   // Farmer onion pop
+    43: 2530,   // Gilgamesh pulse
+    44: 1850,   // Enkidu howl
+    45: 1150    // Ziggurat ring-out
+  };
+  function fullRevealMs(cardId) { return FULL_MS[cardId] || 0; }
+
   // Reactive flourish (NOT a reveal): a small upward "happy hop" + optional SFX,
   // used by Tribe (36) when it gains bonus IP from a card played at its location.
   // Called by the ability layer (abilities.js onCardLandedHere) AFTER the
   // triggering card has resolved; a short delay sequences it as a reaction beat.
   // Self-removing so it re-triggers cleanly on each subsequent bonus.
-  function reactBounce(slotEl, sfxSrc) {
+  //
+  // landedCardId (optional): the card that triggered this bonus. If it has a reveal
+  // animation/sfx that's still playing, hold the bounce until that finishes so the
+  // Tribe reaction never steps on the landed card's own reveal. flipSlot's done()
+  // already consumed holdFor(full) = full - INTER_REVEAL_GAP, so the time remaining
+  // when we get here is exactly min(full, INTER_REVEAL_GAP); 0 for plain cards (no
+  // reveal fx), which keeps them snappy. A 140ms reaction beat follows either way.
+  function reactBounce(slotEl, sfxSrc, landedCardId) {
     if (!slotEl) return;
+    var pre = (landedCardId != null)
+      ? Math.min(fullRevealMs(landedCardId), INTER_REVEAL_GAP)
+      : 0;
     setTimeout(function () {
       if (sfxSrc) playSfx(sfxSrc);
       flashClass(slotEl, 'reveal-fx-bounce', 480);
-    }, 140);
+    }, pre + 140);
   }
 
   // Scribe (40) stamping sequence (PRESENTATION; the IP is applied by the ability
@@ -599,6 +626,75 @@ SOG.RevealFx = (function () {
     setTimeout(impact, travelMs + 90);   // fallback if transitionend is missed
   }
 
+  // Hammurabi (47) sacrifice STRIKE (PRESENTATION; the real destroys happen in the
+  // ability layer via opts.onStrike, fired at the down-stroke). Hammurabi's card RISES
+  // a little then SLAMS down (a sword/gavel strike) — strikeSfx on the down-stroke. On
+  // the strike the doomed cards each SPLIT down the middle; the halves fall to the
+  // sides and dissolve (splitSfx). The halves are cloned from the live slots an instant
+  // BEFORE onStrike clears them, so the cards that split are exactly the cards removed
+  // (same-target integrity, like Scribe/Soldier). onComplete (the ability's done) fires
+  // after the halves clear, so the reveal pipeline waits. Self-cleaning.
+  //   hammurabiEl: the played Hammurabi's slot element (the striker)
+  //   targetEls:   [ <doomed slot element>, ... ] (the sacrifice + the opponent card)
+  //   opts:        { strikeSfx, splitSfx, onStrike }
+  function hammurabiStrike(hammurabiEl, targetEls, opts, onComplete) {
+    opts = opts || {};
+    targetEls = (targetEls || []).filter(Boolean);
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+
+    // Split ONE card element into two halves that fall outward + down and dissolve.
+    // Reads the element's current visual; call this BEFORE the real destroy clears it.
+    function splitCard(el) {
+      if (!el || typeof gsap === 'undefined') return;
+      var rect = el.getBoundingClientRect();
+      var w = rect.width, h = rect.height;
+      function half(clip, dir) {
+        var g = document.createElement('div');
+        g.innerHTML = el.innerHTML;
+        g.className = (el.className || '') + ' reveal-fx-hammurabi-half';
+        g.style.cssText = 'position:fixed;left:' + rect.left + 'px;top:' + rect.top + 'px;' +
+          'width:' + w + 'px;height:' + h + 'px;margin:0;clip-path:' + clip + ';' +
+          'z-index:9997;pointer-events:none;overflow:hidden;';
+        document.body.appendChild(g);
+        gsap.to(g, {
+          x: dir * Math.round(w * 0.6), y: Math.round(h * 0.55), rotation: dir * 16,
+          opacity: 0, duration: 0.69, ease: 'power2.in',   // 15% slower, matching the strike
+          onComplete: function () { if (g.parentNode) g.parentNode.removeChild(g); }
+        });
+      }
+      half('polygon(0 0,50% 0,50% 100%,0 100%)', -1);     // left half → falls left
+      half('polygon(50% 0,100% 0,100% 100%,50% 100%)', 1); // right half → falls right
+    }
+
+    // The strike beat: clone the doomed cards (still live), run the REAL destroys,
+    // then animate the halves + splitSfx. Order matters — clone BEFORE onStrike.
+    function doStrike() {
+      targetEls.forEach(splitCard);
+      if (typeof opts.onStrike === 'function') opts.onStrike();
+      if (opts.splitSfx) playSfx(opts.splitSfx);
+    }
+
+    // No striker element or no GSAP (defensive): still destroy + split, then finish.
+    if (!hammurabiEl || typeof gsap === 'undefined') {
+      doStrike();
+      setTimeout(finish, 650);
+      return;
+    }
+
+    gsap.timeline({
+      delay: 0.2,                                                                     // brief beat before the strike begins
+      onComplete: function () { gsap.set(hammurabiEl, { clearProps: 'transform,zIndex' }); finish(); }
+    })
+      .set(hammurabiEl, { zIndex: 50, transformOrigin: '50% 100%' })
+      .to(hammurabiEl, { y: -28, scale: 1.06, duration: 0.22, ease: 'power2.out' })   // RISE
+      .to(hammurabiEl, { y: 12,  scale: 1.0,  duration: 0.11, ease: 'power3.in',      // SLAM down
+        onStart:    function () { if (opts.strikeSfx) playSfx(opts.strikeSfx); },
+        onComplete: doStrike })                                                       // STRIKE beat
+      .to(hammurabiEl, { y: 0, duration: 0.5, ease: 'power2.out' })                   // settle back
+      .to({}, { duration: 0.28 })                                                     // hold for halves to dissolve
+      .timeScale(1 / 1.15);                                                           // 15% slower overall
+  }
+
   // Cuneiform (46) synchronized group LIFT (PRESENTATION; the IP boost is applied by
   // the ability layer via opts.onPeak — this only paces the visual). Every target
   // card rises IN PLACE in its own slot, all in unison (the slots span multiple
@@ -816,6 +912,7 @@ SOG.RevealFx = (function () {
   return { fire: fire, has: has, reactBounce: reactBounce,
            scribeStampSequence: scribeStampSequence,
            soldierCharge: soldierCharge,
+           hammurabiStrike: hammurabiStrike,
            cuneiformLift: cuneiformLift,
            phoeniciansMerge: phoeniciansMerge,
            chariotArrow: chariotArrow };

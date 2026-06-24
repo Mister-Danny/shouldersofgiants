@@ -2598,9 +2598,110 @@ body.sargon-battle .battle-col[data-loc-id="2"]::before { background: url('../im
    art (reusing the Sargon Mesopotamia backgrounds) — swap these for the real
    Euphrates / Fertile Crescent / Tigris art when it lands (also update the `image`
    field in _hammurabiLocations()). */
-body.hammurabi-battle .battle-col[data-loc-id="101"]::before { background: url('../images/locations/uppersea.jpg') center / cover no-repeat; } /* Banks of the Euphrates (placeholder) */
-body.hammurabi-battle .battle-col[data-loc-id="102"]::before { background: url('../images/locations/akkad.jpg')    center / cover no-repeat; } /* The Fertile Crescent   (placeholder) */
-body.hammurabi-battle .battle-col[data-loc-id="103"]::before { background: url('../images/locations/lowersea.jpg') center / cover no-repeat; } /* Banks of the Tigris    (placeholder) */
+/* Hammurabi locations use pseudo-ids 101/102/103, which have NO base
+   .battle-col[data-loc-id]::before rule — so these must declare the full pseudo
+   (content/position/inset/opacity/z-index), not just the background, or the strip
+   never renders. Matches the base 1–8 ::before treatment (50% dim, behind cards). */
+body.hammurabi-battle .battle-col[data-loc-id="101"]::before,
+body.hammurabi-battle .battle-col[data-loc-id="102"]::before,
+body.hammurabi-battle .battle-col[data-loc-id="103"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.hammurabi-battle .battle-col[data-loc-id="101"]::before { background: url('../images/locations/euphrates.jpg')       center / cover no-repeat; } /* Banks of the Euphrates */
+body.hammurabi-battle .battle-col[data-loc-id="102"]::before { background: url('../images/locations/fertilecrescent.jpg') center / cover no-repeat; } /* The Fertile Crescent */
+body.hammurabi-battle .battle-col[data-loc-id="103"]::before { background: url('../images/locations/tigris.jpg')          center / cover no-repeat; } /* Banks of the Tigris */
+
+/* Hanging Gardens (Nebuchadnezzar) battle location backgrounds. Pseudo-ids
+   101/102/103 (one battle at a time) need the full ::before like Hammurabi's.
+   Left → Euphrates River, center → Babylon, right → Tigris River. */
+body.hanging-gardens-battle .battle-col[data-loc-id="101"]::before,
+body.hanging-gardens-battle .battle-col[data-loc-id="102"]::before,
+body.hanging-gardens-battle .battle-col[data-loc-id="103"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.hanging-gardens-battle .battle-col[data-loc-id="101"]::before { background: url('../images/locations/euphrates.jpg') center / cover no-repeat; } /* Euphrates River */
+body.hanging-gardens-battle .battle-col[data-loc-id="102"]::before { background: url('../images/locations/babylon.jpg')   center / cover no-repeat; } /* Babylon */
+body.hanging-gardens-battle .battle-col[data-loc-id="103"]::before { background: url('../images/locations/tigris.jpg')    center / cover no-repeat; } /* Tigris River */
+
+/* FLOOD crossfade layer (Stage 4c) — a ::after over the river art (101/103 only),
+   opacity 0 normally, fading to the river ::before's 0.5 dim when JS adds .hg-flooded.
+   ::after paints above the ::before river art (tree order) but stays behind the
+   nameplate/cards (z-index -1). The opacity transition IS the crossfade. */
+body.hanging-gardens-battle .battle-col[data-loc-id="101"]::after,
+body.hanging-gardens-battle .battle-col[data-loc-id="103"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.7s ease;
+  pointer-events: none;
+}
+body.hanging-gardens-battle .battle-col[data-loc-id="101"]::after { background: url('../images/locations/euphratesflood.jpg') center / cover no-repeat; } /* Euphrates flooded */
+body.hanging-gardens-battle .battle-col[data-loc-id="103"]::after { background: url('../images/locations/tigrisflood.jpg')    center / cover no-repeat; } /* Tigris flooded */
+body.hanging-gardens-battle .battle-col.hg-flooded::after { opacity: 0.5; }
+
+/* FLOOD water-RUSH (Stage 4d) — a transient blue surge that sweeps DOWN over the
+   river column the instant it floods, then fades, leaving the persistent .hg-flooded
+   art behind. JS (_spawnFloodRush) appends one .hg-flood-rush per flood event and
+   removes it when the animation ends. overflow:hidden clips the wipe to the column
+   (the column is overflow:visible for reveal glows). */
+body.hanging-gardens-battle .battle-col .hg-flood-rush {
+  position: absolute;
+  inset: 0;
+  z-index: 3;                /* over the river art + cards, under the bubbles */
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+/* The water body: a blue gradient (lighter foam crest up top) that wipes down to
+   cover the column, holds a beat, then dissolves. */
+body.hanging-gardens-battle .battle-col .hg-flood-rush::before {
+  content: '';
+  position: absolute;
+  left: -12%; right: -12%; top: 0; bottom: 0;
+  background:
+    linear-gradient(180deg,
+      rgba(225, 244, 255, 0.92) 0%,
+      rgba(120, 192, 236, 0.80) 9%,
+      rgba(46, 130, 206, 0.74) 30%,
+      rgba(26,  96, 182, 0.80) 70%,
+      rgba(16,  72, 156, 0.86) 100%);
+  transform: translateY(-108%);
+  animation: hgFloodRushIn 1.25s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+/* A drifting current shimmer layered over the body so the water reads as moving. */
+body.hanging-gardens-battle .battle-col .hg-flood-rush::after {
+  content: '';
+  position: absolute;
+  left: -30%; right: -30%; top: 0; bottom: 0;
+  background:
+    repeating-linear-gradient(115deg,
+      rgba(255, 255, 255, 0) 0px,
+      rgba(255, 255, 255, 0.10) 6px,
+      rgba(255, 255, 255, 0) 16px);
+  transform: translateY(-108%);
+  animation: hgFloodRushIn 1.25s cubic-bezier(0.22, 0.61, 0.36, 1) forwards,
+             hgFloodCurrent 0.9s linear 0.35s 2;
+}
+@keyframes hgFloodRushIn {
+  0%   { transform: translateY(-108%); opacity: 1; }
+  62%  { transform: translateY(0);     opacity: 1; }
+  78%  { transform: translateY(0);     opacity: 1; }
+  100% { transform: translateY(0);     opacity: 0; }
+}
+@keyframes hgFloodCurrent {
+  from { background-position: 0 0; }
+  to   { background-position: 64px 0; }
+}
 
 .battle-loc-score-opp,
 .battle-loc-score-player {
@@ -8258,6 +8359,43 @@ body.tut-locked #battle-reset-turn {
   100% { opacity: 0;   transform: translate(var(--dx), 16px) scale(0.8) rotate(var(--rot)); }
 }
 
+/* Hanging Gardens node reveal — a magical sparkle/shimmer (distinct from the
+   Sargon dust-storm and Hammurabi earth-rise). Star-shaped sparkles twinkle in,
+   drift outward (--sx/--sy) and rotate, then fade; the node itself fades in with a
+   soft blue-white glow pulse. Self-removing layer. */
+.hanging-gardens-sparkle {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 0; height: 0;
+  pointer-events: none;
+}
+.hanging-gardens-sparkle-grain {
+  position: absolute;
+  left: 0; top: 0;
+  background: radial-gradient(circle, #ffffff 0%, #d6f2ff 42%, rgba(150, 220, 255, 0) 72%);
+  /* 8-point star sparkle */
+  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: hangingGardensSparkle var(--dur, 1.3s) ease-in-out var(--delay, 0s) 1 both;
+}
+@keyframes hangingGardensSparkle {
+  0%   { opacity: 0;   transform: translate(0, 0) scale(0.2) rotate(0deg); }
+  30%  { opacity: 1;   transform: translate(calc(var(--sx) * 0.5), calc(var(--sy) * 0.5)) scale(1.1) rotate(45deg); }
+  60%  { opacity: 0.9; }
+  100% { opacity: 0;   transform: translate(var(--sx), var(--sy)) scale(0.45) rotate(90deg); }
+}
+/* Soft magical glow pulse on the node while it fades in (filter only — does not
+   touch the node's transform, which GSAP owns during the reveal). */
+.overworld-node.hanging-gardens-reveal-glow {
+  animation: hangingGardensGlow 2.1s ease-out 1 both;
+}
+@keyframes hangingGardensGlow {
+  0%   { filter: brightness(1.8)  drop-shadow(0 0 2px  rgba(170, 225, 255, 0.0)); }
+  35%  { filter: brightness(1.25) drop-shadow(0 0 16px rgba(170, 225, 255, 0.9)); }
+  100% { filter: brightness(1)    drop-shadow(0 0 0    rgba(170, 225, 255, 0.0)); }
+}
+
 /* Player character sprite — pixel-art crisp rendering */
 #overworld-character {
   position: absolute;
@@ -9121,6 +9259,89 @@ body.hammurabi-battle .adv-bubble .adv-bubble-text {
   min-height: 28px;
 }
 body.hammurabi-battle .adv-bubble .adv-bubble-hint {
+  color: #666;
+  margin-top: 6px;
+}
+
+/* ── Hanging Gardens (Nebuchadnezzar) battle speech bubbles — same comic-book
+   treatment as Hammurabi/Sargon (its own body class). */
+body.hanging-gardens-battle #adv-bubble-otzi {
+  top: 80px;
+  transform: translateY(-50%);
+  right: 152px;
+  left: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 270px;
+  gap: 0;
+  background: #f0ebe0;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: -4px 4px 0 #111;
+}
+body.hanging-gardens-battle #adv-bubble-otzi::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-left-color: #111;
+}
+body.hanging-gardens-battle #adv-bubble-otzi::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-left-color: #f0ebe0;
+}
+body.hanging-gardens-battle #adv-bubble-explorer {
+  top: 624px;
+  transform: translateY(-50%);
+  left: 168px;
+  right: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 200px;
+  gap: 0;
+  background: #fffef5;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: 4px 4px 0 #111;
+}
+body.hanging-gardens-battle #adv-bubble-explorer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-right-color: #111;
+}
+body.hanging-gardens-battle #adv-bubble-explorer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-right-color: #fffef5;
+}
+body.hanging-gardens-battle .adv-bubble .adv-bubble-portrait { display: none; }
+body.hanging-gardens-battle .adv-bubble .adv-bubble-text {
+  font-size: 18px;
+  line-height: 1.45;
+  color: #111;
+  text-shadow: none;
+  min-height: 28px;
+}
+body.hanging-gardens-battle .adv-bubble .adv-bubble-hint {
   color: #666;
   margin-top: 6px;
 }

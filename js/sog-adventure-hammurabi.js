@@ -5,9 +5,9 @@
  * This is the third boss (after Gilgamesh and Sargon). Its wrinkle is THREE
  * locations that each carry a per-location ability (the engine keys built in
  * Stage 1, all SYMMETRIC):
- *   • Banks of the Euphrates (left)   → LABOR_PLUS_2_HERE    (Labor cards +2 IP here)
- *   • The Fertile Crescent (center)   → CAPITAL_WHEN_FULL    (+1 capital next turn when a side is full)
- *   • Banks of the Tigris (right)     → MILITARY_PLUS_1_HERE (Military cards +1 IP here)
+ *   • Euphrates River (left)      → LABOR_PLUS_2_HERE    (Labor cards reveal here +2 IP, AT-ONCE)
+ *   • The Fertile Crescent (center) → CAPITAL_WHEN_FULL  (+1 capital next turn when a side is full)
+ *   • Tigris River (right)        → MILITARY_PLUS_1_HERE (Military cards reveal here +1 IP, AT-ONCE)
  *
  * STAGE 2 scope: the battle MODULE + CONFIG only. The location abilities FIRE
  * (the engine keys do the work), but their text is NOT shown yet — abilityText is
@@ -63,15 +63,14 @@ SOG.HammurabiBattle = (function () {
   //    populates it; Stage 3 styles the nameplate area).
   //    Left = Euphrates, center = Fertile Crescent, right = Tigris.
   //
-  //    PLACEHOLDER BACKGROUNDS: the `image` paths + the body.hammurabi-battle CSS
-  //    (style.css) reuse the Sargon Mesopotamia art for now. Swap these three
-  //    (uppersea/akkad/lowersea) for the real Euphrates/Crescent/Tigris art when
-  //    it lands — change the `image` field here AND the data-loc-id CSS rules.
+  //    BACKGROUNDS: the `image` paths here + the body.hammurabi-battle CSS rules
+  //    (style.css, .battle-col[data-loc-id]) both point at the real location art —
+  //    euphrates.jpg / fertilecrescent.jpg / tigris.jpg. Keep the two in sync.
   function _hammurabiLocations() {
     return [
-      { id: 101, name: 'Banks of the Euphrates', region: 'Mesopotamia', abilityText: 'Labor cards gain +2 IP.',                     abilityKey: 'LABOR_PLUS_2_HERE',    image: 'images/locations/uppersea.jpg', thumbnailCrop: null },
-      { id: 102, name: 'The Fertile Crescent',   region: 'Mesopotamia', abilityText: '+1 Capital next turn when full.', abilityKey: 'CAPITAL_WHEN_FULL',    image: 'images/locations/akkad.jpg',    thumbnailCrop: null },
-      { id: 103, name: 'Banks of the Tigris',    region: 'Mesopotamia', abilityText: 'Military cards gain +1 IP.',                  abilityKey: 'MILITARY_PLUS_1_HERE', image: 'images/locations/lowersea.jpg', thumbnailCrop: null }
+      { id: 101, name: 'Euphrates River',      region: 'Mesopotamia', abilityText: 'Labor cards reveal here with +2 IP',    abilityKey: 'LABOR_PLUS_2_HERE',    image: 'images/locations/euphrates.jpg',      thumbnailCrop: null },
+      { id: 102, name: 'The Fertile Crescent', region: 'Mesopotamia', abilityText: '+1 Capital next turn when full.', abilityKey: 'CAPITAL_WHEN_FULL',    image: 'images/locations/fertilecrescent.jpg', thumbnailCrop: null },
+      { id: 103, name: 'Tigris River',         region: 'Mesopotamia', abilityText: 'Military cards reveal here with +1 IP', abilityKey: 'MILITARY_PLUS_1_HERE', image: 'images/locations/tigris.jpg',         thumbnailCrop: null }
     ];
   }
 
@@ -426,24 +425,24 @@ SOG.HammurabiBattle = (function () {
   function _revealLocationAbilities(onDone) {
     var tiles = Array.prototype.slice.call(document.querySelectorAll('.battle-location'));
     if (!tiles.length) { if (onDone) onDone(); return; }
-    tiles.forEach(function (tile, i) {
-      var delay = i * 0.14;                                   // left → right stagger
-      var ab    = tile.querySelector('.battle-loc-ability');
-      // A stone-stamp as each law is struck into the Code (swappable / removable).
-      setTimeout(function () { try { new Audio('sfx/cuneiformstamp.mp3').play(); } catch (e) {} }, delay * 1000);
+    // All three laws are struck into the Code at ONCE — a single stone-stamp, every
+    // tile shaking and its ability fading in together (no left→right stagger).
+    try { new Audio('sfx/cuneiformstamp.mp3').play(); } catch (e) {}
+    tiles.forEach(function (tile) {
+      var ab = tile.querySelector('.battle-loc-ability');
       if (typeof gsap !== 'undefined') {
-        gsap.timeline({ delay: delay })
+        gsap.timeline()
           .to(tile, { x: -5, duration: 0.05, ease: 'none' })
           .to(tile, { x:  5, duration: 0.06, ease: 'none' })
           .to(tile, { x: -3, duration: 0.05, ease: 'none' })
           .to(tile, { x:  3, duration: 0.05, ease: 'none' })
           .to(tile, { x:  0, duration: 0.05, ease: 'none' });
-        if (ab) gsap.fromTo(ab, { opacity: 0 }, { opacity: 1, duration: 0.4, delay: delay });
+        if (ab) gsap.fromTo(ab, { opacity: 0 }, { opacity: 1, duration: 0.4 });
       } else if (ab) {
         ab.style.opacity = '1';
       }
     });
-    setTimeout(function () { if (onDone) onDone(); }, 1000);   // after the last shake + fade
+    setTimeout(function () { if (onDone) onDone(); }, 1000);   // after the shake + fade
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -460,7 +459,7 @@ SOG.HammurabiBattle = (function () {
     { who: 'explorer',  text: 'What did I do?' },
     { who: 'hammurabi', text: 'You answer to no city.' },
     { who: 'explorer',  text: 'Sure, I do.' },
-    { who: 'hammurabi', text: 'Then name the law of the land at the center location.' },
+    { who: 'hammurabi', text: 'Then name the law of the land of the Fertile Crescent.' },
     { who: 'explorer',  text: 'The… land has laws?' },
     { who: 'hammurabi', text: 'As Shamash, the God of Justice, has declared it.', revealBefore: true },
     { who: 'explorer',  text: 'I see. Every location plays by its own rules.' },

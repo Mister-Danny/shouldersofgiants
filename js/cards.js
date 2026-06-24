@@ -366,7 +366,7 @@ const CARDS = [
     id: 47, name: "Hammurabi", cc: 5, ip: 5,
     type: "Political", type2: null, era: "Mesopotamia",
     abilityName: "Eye For An Eye",
-    ability: "At Once: Destroy you and your opponent's lowest Capital card at this location.",
+    ability: "At Once: Destroy your lowest CC card here in order to destroy your opponent's lowest CC card.",
     image: "images/mesopotamiacards/hammurabi@0.5x.jpg", locked: true
   },
   {

@@ -48,6 +48,9 @@
     function commitPlay(cardId, locId) {
       var card = CARDS.find(function (c) { return c.id === cardId; });
       if (!card) return;
+      // Flooded location (Nebuchadnezzar flood) blocks NEW plays — the AI has its own
+      // play path, so it must check too. Inert elsewhere (no location ever flooded).
+      if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(locId)) return;
       var slotIndex = G.aiSlots[locId].indexOf(null);
       if (slotIndex === -1) return;
       // Resurrection bonus stored as named ipMod entry (parity with player commitPlay)

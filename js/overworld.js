@@ -37,6 +37,7 @@ var Overworld = (function () {
   // Phase D4 — Sargon encounter
   var KEY_SARGON_NODE_REVEALED      = 'sog_sargon_node_revealed';       // dust-storm reveal played → node persists, no replay
   var KEY_HAMMURABI_NODE_REVEALED   = 'sog_hammurabi_node_revealed';    // earth-rise reveal played (after beating Sargon) → node persists, no replay
+  var KEY_HANGING_GARDENS_REVEALED  = 'sog_hanging_gardens_revealed';   // sparkle reveal played (after beating Hammurabi) → node persists, no replay
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -68,7 +69,7 @@ var Overworld = (function () {
     { who: 'lucy',     text: 'About that.' },
     { who: 'lucy',     text: 'I can walk, but these old bones don\u2019t migrate.'    },
     { who: 'explorer', text: 'I guess this is goodbye?'                                            },
-    { who: 'lucy',     text: 'Take this.'                                                          }
+    { who: 'lucy',     text: 'So you always remember me…'                                      }
   ];
 
   /* Otzi encounter dialogue — fires when the player first clicks the
@@ -234,6 +235,30 @@ var Overworld = (function () {
   var D4_SARGON_WIN_REFLECT = [
     { who: 'explorer', text: 'As one empire falls, another one rises.' }
   ];
+  // After beating Hammurabi — bookend Explorer lines around the Hanging Gardens
+  // sparkle reveal. REFLECT plays before the shimmer; REACTION after the node
+  // sparkle-fades in. Editable.
+  var D5_HANGING_GARDENS_REFLECT = [
+    { who: 'explorer', text: 'That was a close one.' },
+    { who: 'explorer', text: 'True justice really is blind.' }
+  ];
+  var D5_HANGING_GARDENS_REACTION = [
+    { who: 'explorer', text: 'Wow, look at that palace!' },
+    { who: 'explorer', text: 'All the gardens…' },
+    { who: 'explorer', text: 'That has to be a safe place to explore.' }
+  ];
+  // Hanging Gardens node-CLICK sequence (walk-up → dialogue + knock/door sfx → wipe
+  // into the battle STUB). The lines come in two groups: group A, then knocking.m4a
+  // plays in full, then group B, then opendoor.m4a plays in full, then the wipe.
+  // Editable.
+  var D5_HANGING_GARDENS_CLICK_A = [
+    { who: 'explorer', text: 'Wow, this place is wonderful!' },
+    { who: 'explorer', text: 'And no sign of a mean King.' }
+  ];
+  var D5_HANGING_GARDENS_CLICK_B = [
+    { who: 'explorer', text: 'If no one is going to answer the door' },
+    { who: 'explorer', text: "I'm going to explore myself." }
+  ];
   // Hammurabi (Babylon) encounter — plays on node click when the active deck has
   // the full 15 cards, then the battle launches.
   var D4_HAMMURABI_ENCOUNTER = [
@@ -339,7 +364,7 @@ var Overworld = (function () {
       image: MAP_PATH + 'eastafrica.jpeg',
       // Spawn: at the foot of Kilimanjaro — right of the explorer dialogue box
       // (box is at left:35% viewport; character at x:65 puts her clearly east of it).
-      spawn: { x: 70, y: 90 },
+      spawn: { x: 65, y: 90 },
       startsFogged: false,
       nodes: [
         {
@@ -479,7 +504,7 @@ var Overworld = (function () {
           id:    'walls-of-uruk',
           name:  'Walls of Uruk',
           image: NODE_PATH + 'wallsofuruk@0.33x.png',
-          x: 72, y: 82,
+          x: 74, y: 85,
           scale: 1.35,
           showIf: function () {
             try { return localStorage.getItem(KEY_MESOPOTAMIA_ARRIVAL) === 'true'; } catch (e) { return false; }
@@ -522,10 +547,23 @@ var Overworld = (function () {
           id:    'hammurabi',
           name:  'Babylon',
           image: NODE_PATH + 'hammurabinodesm@0.5x.png',
-          x: 48, y: 40,
+          x: 48, y: 33,
           scale: 1.6,
           showIf: function () {
             try { return localStorage.getItem(KEY_HAMMURABI_NODE_REVEALED) === 'true'; } catch (e) { return false; }
+          }
+        },
+        {
+          // The Hanging Gardens — sparkle-revealed on the first overworld return
+          // AFTER defeating Hammurabi; persists via KEY_HANGING_GARDENS_REVEALED.
+          // Click → STUB (destination not built yet). Position/scale are knobs.
+          id:    'hanging-gardens',
+          name:  'The Hanging Gardens',
+          image: NODE_PATH + 'hanginggardens@0.33x.png',
+          x: 67, y: 69,   // midpoint between Walls of Uruk (73,83) and Akkad (61,55)
+          scale: 1.275,   // 15% smaller than the original 1.5
+          showIf: function () {
+            try { return localStorage.getItem(KEY_HANGING_GARDENS_REVEALED) === 'true'; } catch (e) { return false; }
           }
         }
       ],
@@ -953,6 +991,37 @@ var Overworld = (function () {
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
         _runHammurabiEncounter(node);
+      });
+      return;
+    }
+
+    // ── The Hanging Gardens — walk up → dialogue + knock/door sfx → radial wipe →
+    //    battle STUB. Each SFX must FULLY finish before the next line / the wipe:
+    //      walk → A lines → knocking.m4a (wait) → B lines → opendoor.m4a (wait) →
+    //      wipe centred on the node → _launchHangingGardensBattle (stub). ─────────
+    if (node.id === 'hanging-gardens' && currentMapId === 'mesopotamia') {
+      isDialogueLocked = true;
+      cancelIdle();
+      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+        var hud = window.SOG && window.SOG.HUD;
+        if (!hud || typeof hud.enterDialogueMode !== 'function') {
+          _launchHangingGardensBattle();   // no HUD → skip straight to the wipe/stub
+          return;
+        }
+        hud.enterDialogueMode(null, function () {
+          _runLinesKeepOpen(D5_HANGING_GARDENS_CLICK_A, function () {
+            // Knock — WAIT for the sound to fully finish before the next lines.
+            _playSfxThen('sfx/knocking.m4a', function () {
+              _runLinesKeepOpen(D5_HANGING_GARDENS_CLICK_B, function () {
+                if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+                // Door opening — WAIT for the sound to fully finish before the wipe.
+                _playSfxThen('sfx/opendoor.m4a', function () {
+                  _launchHangingGardensBattle();
+                });
+              });
+            });
+          });
+        });
       });
       return;
     }
@@ -1932,6 +2001,16 @@ var Overworld = (function () {
     setTimeout(fin, remainMs);
   }
 
+  /* Play a one-shot sfx and run cb only once it has FULLY finished (via
+     _afterAudioEnds' 'ended' event + fallback cap). Used to gate a dialogue/
+     transition on a sound completing. If the audio can't be created/played, cb
+     runs immediately so the sequence can never stall. */
+  function _playSfxThen(src, cb) {
+    var audio = null;
+    try { audio = new Audio(src); audio.play(); } catch (e) { audio = null; }
+    _afterAudioEnds(audio, cb);
+  }
+
   function _dustStormRevealSargon(onDone) {
     var node = _findMesoNode('sargon');
     if (!overlayEl || !node) { if (onDone) onDone(); return; }
@@ -2034,7 +2113,8 @@ var Overworld = (function () {
     var node = _findMesoNode('hammurabi');
     if (!overlayEl || !node) { if (onDone) onDone(); return; }
 
-    try { new Audio('sfx/earthspell.mp3').play(); } catch (e) {}
+    var riseAudio = null;
+    try { riseAudio = new Audio('sfx/earthspell.mp3'); riseAudio.play(); } catch (e) {}
 
     // 1) Build (or find) the Hammurabi node element, hidden, ready to rise.
     var nodeEl = overlayEl.querySelector('[data-id="hammurabi"]');
@@ -2084,21 +2164,117 @@ var Overworld = (function () {
 
     // 3) Rise the node up out of the ground (slight delay so the dirt erupts
     //    first), with a small back-out settle. End: remove dirt, finish.
-    var RISE_MS = 1500;
+    var RISE_MS = 1850;   // a touch slower so the reveal doesn't rush by
     if (typeof gsap !== 'undefined') {
       gsap.set(nodeEl, { xPercent: -50, yPercent: -50, scale: node.scale || 1, transformOrigin: '50% 100%' });
       gsap.fromTo(nodeEl,
         { y: 50, opacity: 0 },
-        { y: 0, opacity: 1, duration: 1.0, delay: 0.22, ease: 'back.out(1.3)' });
+        { y: 0, opacity: 1, duration: 1.25, delay: 0.3, ease: 'back.out(1.3)' });
     } else {
-      setTimeout(function () { nodeEl.style.opacity = '1'; }, 220);
+      setTimeout(function () { nodeEl.style.opacity = '1'; }, 300);
     }
     setTimeout(function () {
       if (dirt.parentNode) dirt.parentNode.removeChild(dirt);
       nodeEl.style.opacity = '1';
       log('[D4] Hammurabi node earth-revealed');
-      if (onDone) onDone();
+      // Let the earth-rise sfx fully finish before the Explorer's reflection line
+      // (mirrors the Sargon reveal), so the dialogue never talks over it.
+      _afterAudioEnds(riseAudio, function () { if (onDone) onDone(); });
     }, RISE_MS);
+  }
+
+  /* ── Phase D5 — Hanging Gardens node reveal (magical sparkle/shimmer) ──────
+     One-time, fired on the first overworld return AFTER defeating Hammurabi (see
+     resumeAfterBattle's catch-up). Bookended like the Sargon reveal: REFLECT lines
+     → magicshimmer + the node sparkle-fades in → REACTION lines → set the flag so
+     it persists and never replays. */
+  function _maybeRevealHangingGardensNode(done) {
+    var already = false;
+    try { already = localStorage.getItem(KEY_HANGING_GARDENS_REVEALED) === 'true'; } catch (e) {}
+    if (already || currentMapId !== 'mesopotamia') { if (done) done(); return; }
+
+    cancelIdle();
+    runDialogue(D5_HANGING_GARDENS_REFLECT, function () {
+      _shimmerRevealHangingGardens(function () {
+        runDialogue(D5_HANGING_GARDENS_REACTION, function () {
+          try { localStorage.setItem(KEY_HANGING_GARDENS_REVEALED, 'true'); } catch (e) {}
+          if (done) done();
+        });
+      });
+    });
+  }
+
+  /* Sparkle reveal: play magicshimmer, scatter twinkling sparkles at the node's
+     % position, and FADE the node in with a soft magical glow. Distinct from the
+     Sargon dust-storm and Hammurabi earth-rise — a gentle wonder-of-the-world
+     shimmer. Self-cleaning (sparkle layer removed at the end). Mirrors the other
+     two reveals' node-element creation. */
+  function _shimmerRevealHangingGardens(onDone) {
+    var node = _findMesoNode('hanging-gardens');
+    if (!overlayEl || !node) { if (onDone) onDone(); return; }
+
+    try { new Audio('sfx/magicshimmer.m4a').play(); } catch (e) {}
+
+    // 1) Build (or find) the Hanging Gardens node element, hidden, ready to fade in.
+    var nodeEl = overlayEl.querySelector('[data-id="hanging-gardens"]');
+    if (!nodeEl) {
+      nodeEl = document.createElement('div');
+      nodeEl.className = 'overworld-node';
+      nodeEl.dataset.id = 'hanging-gardens';
+      nodeEl.style.left = node.x + '%';
+      nodeEl.style.top  = node.y + '%';
+      nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
+      var img = document.createElement('img');
+      img.src = NODE_PATH + 'hanginggardens@0.33x.png';
+      img.alt = node.name || 'The Hanging Gardens';
+      img.draggable = false;
+      nodeEl.appendChild(img);
+      nodeEl.addEventListener('click', (function (nd) {
+        return function () { onNodeClick(nd); };
+      })(node));
+      overlayEl.insertBefore(nodeEl, charEl);   // under the Explorer sprite
+    }
+    nodeEl.style.opacity = '0';
+
+    // 2) Sparkle particle layer at the node's position (twinkle in → drift → fade).
+    var sparkle = document.createElement('div');
+    sparkle.className = 'hanging-gardens-sparkle';
+    sparkle.style.left = node.x + '%';
+    sparkle.style.top  = node.y + '%';
+    var SPARKS = 32;
+    for (var i = 0; i < SPARKS; i++) {
+      var s = document.createElement('span');
+      s.className = 'hanging-gardens-sparkle-grain';
+      var sx   = (Math.random() - 0.5) * 160;        // px horizontal spread around the node
+      var sy   = (Math.random() - 0.5) * 120;        // px vertical spread
+      var dur  = 0.8 + Math.random() * 0.9;          // s twinkle
+      var delay = Math.random() * 1.2;               // s stagger across the reveal
+      var size = 5 + Math.random() * 9;              // px
+      s.style.setProperty('--sx', sx.toFixed(1) + 'px');
+      s.style.setProperty('--sy', sy.toFixed(1) + 'px');
+      s.style.setProperty('--dur', dur.toFixed(2) + 's');
+      s.style.setProperty('--delay', delay.toFixed(2) + 's');
+      s.style.width = s.style.height = size.toFixed(1) + 'px';
+      sparkle.appendChild(s);
+    }
+    overlayEl.insertBefore(sparkle, charEl);
+
+    // 3) Soft magical fade-in + glow, then clean up the sparkles and finish.
+    var SHIMMER_MS = 2100;
+    if (typeof gsap !== 'undefined') {
+      gsap.set(nodeEl, { xPercent: -50, yPercent: -50, scale: node.scale || 1, transformOrigin: '50% 50%' });
+      nodeEl.classList.add('hanging-gardens-reveal-glow');           // CSS pulse-glow (filter only)
+      gsap.fromTo(nodeEl, { opacity: 0 }, { opacity: 1, duration: 1.4, delay: 0.35, ease: 'sine.out' });
+    } else {
+      setTimeout(function () { nodeEl.style.opacity = '1'; }, 350);
+    }
+    setTimeout(function () {
+      if (sparkle.parentNode) sparkle.parentNode.removeChild(sparkle);
+      nodeEl.style.opacity = '1';
+      nodeEl.classList.remove('hanging-gardens-reveal-glow');
+      log('[D5] Hanging Gardens node sparkle-revealed');
+      if (onDone) onDone();
+    }, SHIMMER_MS);
   }
 
   /* ── Sargon node click → DECK-SIZE GATE ──────────────────────────────────
@@ -2226,6 +2402,24 @@ var Overworld = (function () {
         hb.start();
       } else {
         console.warn('[Overworld] SOG.HammurabiBattle not found — battle not built yet');
+        _clearWipe();
+        isDialogueLocked = false;
+        scheduleIdle();
+      }
+    });
+  }
+
+  /* Fire the radial wipe from the Hanging Gardens node, then start its battle. The
+     battle module isn't built yet → this lands on a STUB: fall back to the map until
+     SOG.HangingGardensBattle exists (mirrors the Sargon/Hammurabi pre-battle stubs). */
+  function _launchHangingGardensBattle() {
+    _fireWipeFromNode('hanging-gardens', function () {
+      var gb = window.SOG && window.SOG.HangingGardensBattle;
+      if (gb && typeof gb.start === 'function') {
+        gb.start();
+      } else {
+        // TODO (Hanging Gardens battle): not built yet. Graceful no-op back to idle.
+        console.warn('[Overworld] SOG.HangingGardensBattle not found — battle not built yet (STUB)');
         _clearWipe();
         isDialogueLocked = false;
         scheduleIdle();
@@ -3054,6 +3248,26 @@ var Overworld = (function () {
           });
         }, 350);
         log('resumeAfterBattle() — Hammurabi catch-up reveal');
+        return;
+      }
+
+      // Catch-up Hanging Gardens reveal. Same robust pattern as the Hammurabi node
+      // above: fires on return to Mesopotamia whether it's the FIRST Hammurabi win
+      // or a return on an already-beaten save. Gated once via the reveal flag. (By
+      // the time Hammurabi is beaten his own node is already revealed, so this runs
+      // after the Hammurabi catch-up above has been satisfied.)
+      var _hammDone = false, _hgRevealed = false;
+      try { _hammDone   = localStorage.getItem('sog_battle_hammurabi_complete') === 'true'; } catch (e) {}
+      try { _hgRevealed = localStorage.getItem(KEY_HANGING_GARDENS_REVEALED) === 'true'; } catch (e) {}
+      if (_hammDone && !_hgRevealed && currentMapId === 'mesopotamia') {
+        isDialogueLocked = true;
+        setTimeout(function () {
+          _maybeRevealHangingGardensNode(function () {
+            isDialogueLocked = false;
+            scheduleIdle();
+          });
+        }, 350);
+        log('resumeAfterBattle() — Hanging Gardens catch-up reveal');
         return;
       }
 

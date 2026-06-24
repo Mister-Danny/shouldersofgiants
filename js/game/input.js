@@ -53,6 +53,7 @@
   var syncPlayerSlots       = SOG.board.syncPlayerSlots;
   var effectiveCost         = SOG.board.effectiveCost;
   var effectiveIP           = SOG.board.effectiveIP;
+  var isLocationPlayable    = SOG.board.isLocationPlayable;
   var nextEventId           = SOG.board.nextEventId;
   var addBonus              = SOG.board.addBonus;
   var SOURCE_ID_MAP         = SOG.board.SOURCE_ID_MAP;
@@ -663,6 +664,9 @@
     if (!G.playerSlots[locId]) return false;
     var firstEmpty   = G.playerSlots[locId].indexOf(null);
     if (firstEmpty === -1) return false;
+    // Flooded location (Nebuchadnezzar flood mechanic) blocks NEW plays. Inert
+    // elsewhere — no location is ever flooded outside that battle.
+    if (!isLocationPlayable(locId)) return false;
     // Cost-zero via config (resource.model 'none').
     if (!_resourceFree() && effectiveCost(card, locId) > G.capital) return false;
     // Cards-per-turn cap via config (cfg.structure.cardsPerTurn; null = no cap).
@@ -711,6 +715,8 @@
   function commitPlay(cardId, locId) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return;
+    // Flooded location → reject the play defensively (mirrors isLegalPlayTarget).
+    if (!isLocationPlayable(locId)) { var df = getSlotEl('player', locId, 0); if (df) SOG.ui.flashDeny(df); return; }
     // Cost-zero via config (resource.model 'none').
     var cost = _resourceFree() ? 0 : effectiveCost(card, locId);
     if (cost > G.capital) { var d = getSlotEl('player', locId, 0); if (d) SOG.ui.flashDeny(d); return; }
@@ -967,6 +973,11 @@
     var nebuchadnezzarOnBoard = G.locations.some(function (l) {
       return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 50; });
     });
+    // Babylon location (BABYLON_COST_5) present → base-cost-5 cards display -1. Keyed
+    // off the LOCATION (present its whole battle), not a card. Stacks with the Neb-50
+    // Mesopotamia discount. Inert in battles with no Babylon location. Mirrors
+    // effectiveCost so the in-hand number matches the on-play charge.
+    var babylonOnBoard        = G.locations.some(function (l) { return l.abilityKey === 'BABYLON_COST_5'; });
     G.playerHand.forEach(function (cardId) {
       var card = CARDS.find(function (c) { return c.id === cardId; });
       if (!card) return;
@@ -974,6 +985,7 @@
       if (card.type === 'Exploration' && henryOnBoard)           displayCC = Math.max(0, displayCC - 1);
       if (card.type === 'Cultural'    && cosimoOnBoard)          displayCC = Math.max(0, displayCC - 1);
       if (card.era  === 'Mesopotamia' && nebuchadnezzarOnBoard)  displayCC = Math.max(0, displayCC - 1);
+      if (card.cc   === 5             && babylonOnBoard)         displayCC = Math.max(0, displayCC - 1);
       var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"] .db-overlay-cc');
       if (hEl) hEl.textContent = displayCC;
     });

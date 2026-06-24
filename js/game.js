@@ -1062,6 +1062,38 @@
       refreshHandIPDisplays();
       refreshHandCostDisplays();
       updateScores();
+      /* Cards PLAYED THIS TURN, both sides — built ONCE and reused by the At-Once
+         river stamp and the onAfterReveal hook below. The card's location + slot are
+         found by SEARCHING the owner's slots for the cardId, NOT read from the action
+         log (the AI log omits toLocId). A card played this turn hasn't relocated yet
+         at reveal-end, so its current slot IS its play location; cardId is unique
+         within one owner's deck, so owner+cardId pins it exactly. */
+      var revealed = [];
+      seq.forEach(function (it) {
+        if (it.type !== 'play') return;
+        var oSlots  = (it.owner === 'player') ? G.playerSlots : G.aiSlots;
+        var foundLoc = null, foundIdx = -1;
+        for (var li = 0; li < G.locations.length && foundLoc === null; li++) {
+          var arr = oSlots[G.locations[li].id];
+          if (!arr) continue;
+          for (var si = 0; si < arr.length; si++) {
+            if (arr[si] && arr[si].cardId === it.cardId) { foundLoc = G.locations[li].id; foundIdx = si; break; }
+          }
+        }
+        revealed.push({ owner: it.owner, cardId: it.cardId, locId: foundLoc, slotIndex: foundIdx });
+      });
+      /* AT-ONCE river type-boosts (LABOR_PLUS_2_HERE / MILITARY_PLUS_1_HERE): stamp
+         the bonus PERMANENTLY on each matching card that REVEALED at a river this turn
+         — once, here, after all flips. Re-tally so the score reflects the stamp. The
+         per-turn `revealed` gate means a card relocated onto a river later is never
+         stamped. Inert in battles with no river-keyed location. */
+      if (SOG.abilities && typeof SOG.abilities.applyRiverAtOnce === 'function') {
+        if (SOG.abilities.applyRiverAtOnce(revealed) > 0) {   // re-tally only if something stamped
+          evaluateContinuous();
+          refreshSlotIPDisplays();
+          updateScores();
+        }
+      }
       /* Once-per-turn location abilities (e.g. CAPITAL_WHEN_FULL). Evaluated HERE
          — exactly once, after all flips/At-Once/continuous have resolved — NOT in
          evaluateContinuous (which re-runs many times per turn and would over-grant).
@@ -1075,19 +1107,6 @@
          a script (e.g. Ötzi flee) can act per-card. Sync, fire-and-forget.
          No script → no-op. */
       if (SOG.BattleHooks.has('onAfterReveal')) {
-        var revealed = [];
-        seq.forEach(function (it) {
-          if (it.type !== 'play') return;
-          var rLocId = it.toLocId;
-          var rSlots = (it.owner === 'player') ? G.playerSlots[rLocId] : G.aiSlots[rLocId];
-          var rIdx = -1;
-          if (rSlots) {
-            for (var k = 0; k < rSlots.length; k++) {
-              if (rSlots[k] && rSlots[k].cardId === it.cardId) { rIdx = k; break; }
-            }
-          }
-          revealed.push({ owner: it.owner, cardId: it.cardId, locId: rLocId, slotIndex: rIdx });
-        });
         SOG.BattleHooks.fire('onAfterReveal', [{ turn: G.turn, revealed: revealed }]);
       }
       var _proceedAfterReveal = function () {

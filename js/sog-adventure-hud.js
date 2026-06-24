@@ -49,6 +49,7 @@ SOG.HUD = (function () {
     gilgamesh:   { portrait: 'images/portraits/gilgameshportrait.jpeg', bleepHz: 210, side: 'npc' },  // bleep routed through the 'otzi' synth branch (matches his battle voice)
     sargon:      { portrait: 'images/portraits/sargonportrait.jpg', bleepHz: 440, side: 'npc'    },
     hammurabi:   { portrait: 'images/portraits/hammurabi.jpg', bleepHz: 240, side: 'npc' },
+    nebuchadnezzar: { portrait: 'images/portraits/nebuchadnezzar.jpg', bleepHz: 200, side: 'npc' },
     trader:      { portrait: 'images/portraits/mesotrader@0.5x.jpg', bleepHz: 300, side: 'npc'   }
   };
 

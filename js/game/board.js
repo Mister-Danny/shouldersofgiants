@@ -357,7 +357,10 @@
     'Hammurabi':             { type: 'card',     id: 47, pattern: 'A' },
     'Chariot':               { type: 'card',     id: 48, pattern: 'A' },
     'The Phoenicians':       { type: 'card',     id: 49, pattern: 'A' },
-    'Nebuchadnezzar':        { type: 'card',     id: 50, pattern: 'A' }
+    'Nebuchadnezzar':        { type: 'card',     id: 50, pattern: 'A' },
+    // At-Once river boosts (Hammurabi + Nebuchadnezzar battles both use loc 101/103)
+    'Euphrates River':       { type: 'location', id: 101, pattern: 'A' },
+    'Tigris River':          { type: 'location', id: 103, pattern: 'A' }
   };
 
   /**
@@ -422,11 +425,29 @@
           return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 50; });
         }))
       cost = Math.max(0, cost - 1);
+    // Babylon (BABYLON_COST_5 location, Nebuchadnezzar battle): BASE-cost-5 cards cost
+    // -1 while a Babylon location is present. Global (not at-Babylon-only). Keyed off
+    // card.cc (base), so it STACKS with the Neb-50 discount above. Inert in battles
+    // with no Babylon location.
+    if (card.cc === 5 &&
+        G.locations.some(function (l) { return l.abilityKey === 'BABYLON_COST_5'; }))
+      cost = Math.max(0, cost - 1);
     return cost;
   }
 
   function effectiveIP(sd) {
     return sd.ip + (sd.ipMod || 0) + (sd.contMod || 0);
+  }
+
+  /* Is a location currently open to NEW plays? False only when a battle has marked
+     the location's `flooded` flag (the Nebuchadnezzar flood mechanic sets it via its
+     onTurnStart scheduler). Inert everywhere else — no battle sets the flag, so this
+     always returns true. Read by the play-gates (player + AI) to block flooded rivers
+     without touching cards already revealed there. */
+  function isLocationPlayable(locId) {
+    if (!G.locations) return true;
+    var loc = G.locations.find(function (l) { return l.id === locId; });
+    return !(loc && loc.flooded);
   }
 
   /**
@@ -520,6 +541,7 @@
     SOURCE_ID_MAP:         SOURCE_ID_MAP,
     effectiveCost:         effectiveCost,
     effectiveIP:           effectiveIP,
+    isLocationPlayable:    isLocationPlayable,
     nextEventId:           nextEventId,
     addBonus:              addBonus,
     addIPMod:              addIPMod,

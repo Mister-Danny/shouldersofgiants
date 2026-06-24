@@ -300,23 +300,36 @@ var HomeFlow = (function () {
     });
   }
 
+  /* After the player's first run, Adventure is a normal, primary option: drop the
+     in-development greyscale and float it ahead of Arcadium so it's the FIRST path
+     button. Idempotent — safe to call on every State-2 reveal. The State-2 menu is
+     only ever shown to returning visitors (introSeen), i.e. after the first play. */
+  function _promoteAdventureButton() {
+    if (!btnAdventureNew) return;
+    btnAdventureNew.classList.remove('adventure-mode-in-development');
+    if (btnArcadium && btnAdventureNew.parentNode === btnArcadium.parentNode) {
+      btnArcadium.parentNode.insertBefore(btnAdventureNew, btnArcadium);   // Adventure first
+    }
+  }
+
   function showPathChoice() {
+    _promoteAdventureButton();
     // Show the three path buttons + back arrow + the "Choose your path" subtitle
-    btnArcadium.classList.add('btn-visible');
     btnAdventureNew.classList.add('btn-visible');
+    btnArcadium.classList.add('btn-visible');
     btnVersus.classList.add('btn-visible');
     btnState2Back.style.display = '';
     if (typeof gsap !== 'undefined') {
-      gsap.set([btnArcadium, btnAdventureNew, btnVersus, btnState2Back], { opacity: 0 });
+      gsap.set([btnAdventureNew, btnArcadium, btnVersus, btnState2Back], { opacity: 0 });
     }
     subtitlePathEl.classList.add('is-visible');
 
     if (typeof gsap !== 'undefined') {
-      gsap.to([btnArcadium, btnAdventureNew, btnVersus, btnState2Back], {
+      gsap.to([btnAdventureNew, btnArcadium, btnVersus, btnState2Back], {
         opacity: 1, duration: 0.4, ease: 'power2.out', stagger: 0.08
       });
     } else {
-      [btnArcadium, btnAdventureNew, btnVersus, btnState2Back].forEach(function (b) { b.style.opacity = 1; });
+      [btnAdventureNew, btnArcadium, btnVersus, btnState2Back].forEach(function (b) { b.style.opacity = 1; });
     }
   }
 
@@ -575,10 +588,11 @@ var HomeFlow = (function () {
           return;
         }
         // Returning visitor: restore the State-2 path-choice menu.
-        btnArcadium.classList.add('btn-visible');
+        _promoteAdventureButton();
         btnAdventureNew.classList.add('btn-visible');
+        btnArcadium.classList.add('btn-visible');
         btnVersus.classList.add('btn-visible');
-        gsap.fromTo([btnArcadium, btnAdventureNew, btnVersus],
+        gsap.fromTo([btnAdventureNew, btnArcadium, btnVersus],
           { opacity: 0 }, { opacity: 1, duration: 0.4, stagger: 0.08 });
         subtitlePathEl.classList.add('is-visible');
       }

@@ -349,44 +349,12 @@
         });
       }
 
-      // ── Type-boost-at-location location abilities (general, reusable keys) ──
-      // Symmetric: boost BOTH owners' matching revealed cards here, via the same
-      // contMod path Canals/Sahara use (consumed by updateScores/tallyResult).
-      // Inert unless a location carries the key.
-
-      // Banks of the Euphrates (LABOR_PLUS_2_HERE): +2 IP to revealed Labor cards here.
-      if (loc.abilityKey === 'LABOR_PLUS_2_HERE') {
-        var euphName = loc.name || 'Banks of the Euphrates';
-        ['player', 'opp'].forEach(function (own) {
-          var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-          sl[loc.id].forEach(function (s) {
-            if (!s || !s.revealed) return;
-            var c = CARDS.find(function (x) { return x.id === s.cardId; });
-            if (c && c.type === 'Labor') {
-              s.contMod = (s.contMod || 0) + 2;
-              s.contModSources.push({ source: euphName, delta: 2 });
-              addBonus(s, 2, 'location', loc.id, nextEventId(), 'A', true);
-            }
-          });
-        });
-      }
-
-      // Banks of the Tigris (MILITARY_PLUS_1_HERE): +1 IP to revealed Military cards here.
-      if (loc.abilityKey === 'MILITARY_PLUS_1_HERE') {
-        var tigrisName = loc.name || 'Banks of the Tigris';
-        ['player', 'opp'].forEach(function (own) {
-          var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-          sl[loc.id].forEach(function (s) {
-            if (!s || !s.revealed) return;
-            var c = CARDS.find(function (x) { return x.id === s.cardId; });
-            if (c && c.type === 'Military') {
-              s.contMod = (s.contMod || 0) + 1;
-              s.contModSources.push({ source: tigrisName, delta: 1 });
-              addBonus(s, 1, 'location', loc.id, nextEventId(), 'A', true);
-            }
-          });
-        });
-      }
+      // ── River type-boosts (LABOR_PLUS_2_HERE / MILITARY_PLUS_1_HERE) are now AT
+      //    ONCE, not continuous: stamped exactly once at a card's reveal-on-the-river
+      //    via applyRiverAtOnce() (reveal-end, mirroring applyCapitalWhenFull). Moved
+      //    OUT of evaluateContinuous so the bonus bakes in permanently (addIPMod) and
+      //    a card relocated ONTO a river later is NOT boosted. Shared by the Hammurabi
+      //    + Nebuchadnezzar battles. See applyRiverAtOnce below.
 
       // ── Prehistory abilities (Adventure Mode tutorial) ──────────
       // Slot-index proxies for turn-order: each slot's array index
@@ -680,8 +648,13 @@
       G[savedKey] = { ipMod: sd.ipMod || 0, ipModSources: (sd.ipModSources || []).slice() };
     }
 
-    if (typeof SFX !== 'undefined') SFX.cardDestroyed();
-    if (dSlotEl && typeof Anim !== 'undefined') Anim.shake(dSlotEl);
+    // opts.skipAnim: the CALLER owns the destroy presentation (e.g. Hammurabi's
+    // sword-strike + card-split FX), so suppress the generic destroyed sfx + shake
+    // to avoid doubling. All state side effects below still run.
+    if (!opts.skipAnim) {
+      if (typeof SFX !== 'undefined') SFX.cardDestroyed();
+      if (dSlotEl && typeof Anim !== 'undefined') Anim.shake(dSlotEl);
+    }
 
     slots[locId][slotIndex] = null;
     clearSlotDOM(owner, locId, slotIndex);
@@ -786,6 +759,47 @@
       if (pSlots && pSlots.indexOf(null) === -1) grantCapitalNextTurn('player', 1);
       if (aSlots && aSlots.indexOf(null) === -1) grantCapitalNextTurn('opp',    1);
     });
+  }
+
+  /* ── At-Once river type-boosts (LABOR_PLUS_2_HERE / MILITARY_PLUS_1_HERE) ──────
+     Called ONCE per turn from the reveal-phase completion (game.js revealNext,
+     alongside applyCapitalWhenFull) — NOT from evaluateContinuous. `newlyRevealed`
+     is the list of cards PLAYED THIS TURN: [{ owner, cardId, locId, slotIndex }, …].
+     For each such card whose location carries a river key and whose TYPE matches,
+     stamp the bonus PERMANENTLY via addIPMod — Euphrates → Labor +2, Tigris →
+     Military +1, both owners (symmetric).
+
+     WHY newly-revealed (not "every revealed card at the river"): the stamp must fire
+     only when a card REVEALS at the river. Gating on the per-turn play list means a
+     card that revealed elsewhere and later RELOCATED onto a river is never stamped
+     (it isn't in any later turn's newlyRevealed). And because addIPMod is permanent,
+     a card stamped at a river keeps the bonus if it later moves away — both behaviors
+     fall out naturally, no special-casing. sd._riverStamped is a belt-and-suspenders
+     idempotency guard so a card can never be double-stamped. Inert in battles with no
+     river-keyed location. */
+  function applyRiverAtOnce(newlyRevealed) {
+    var stamps = 0;
+    if (!G.locations || !newlyRevealed || !newlyRevealed.length) return stamps;
+    newlyRevealed.forEach(function (r) {
+      var loc = G.locations.find(function (l) { return l.id === r.locId; });
+      if (!loc) return;
+      var key = loc.abilityKey;
+      if (key !== 'LABOR_PLUS_2_HERE' && key !== 'MILITARY_PLUS_1_HERE') return;
+      var slots = (r.owner === 'player') ? G.playerSlots : G.aiSlots;
+      var arr   = slots[r.locId];
+      var sd    = arr && arr[r.slotIndex];
+      if (!sd || !sd.revealed || sd._riverStamped) return;   // guard: stamp exactly once
+      var c = CARDS.find(function (x) { return x.id === sd.cardId; });
+      if (!c) return;
+      if (key === 'LABOR_PLUS_2_HERE' && c.type === 'Labor') {
+        addIPMod(sd, 2, loc.name || 'Euphrates River');
+        sd._riverStamped = true; stamps++;
+      } else if (key === 'MILITARY_PLUS_1_HERE' && c.type === 'Military') {
+        addIPMod(sd, 1, loc.name || 'Tigris River');
+        sd._riverStamped = true; stamps++;
+      }
+    });
+    return stamps;
   }
 
   /* Farmer (39) — "Harvest". At Once: grant the OWNER +1 capital next turn via
@@ -1475,9 +1489,19 @@
     applyStrike(target);
   }
 
-  // Hammurabi (id 47) — At Once: Destroy you and your opponent's lowest
-  // CC card at this location.  Hammurabi himself is excluded from the
-  // search on the owner's side.
+  // Hammurabi (id 47) — At Once: "Destroy your lowest CC card here in order to
+  // destroy your opponent's lowest CC card." A SACRIFICE / trade, symmetric for
+  // whoever plays Hammurabi (player or AI):
+  //   • SACRIFICE = the OWNER's lowest-CC REVEALED card here, EXCLUDING Hammurabi
+  //     himself (47) — guarantee 1: Hammurabi can never be the sacrifice.
+  //   • If a sacrifice exists AND the opponent has a card to take, destroy BOTH
+  //     (the sacrifice + the opponent's lowest-CC card here).
+  //   • If the owner has no eligible card to sacrifice, destroy NOTHING — the
+  //     opponent's card is safe (guarantee 2: no sacrifice → no kill). Likewise no
+  //     opponent card → no trade ("…in order to destroy your opponent's lowest").
+  // Only REVEALED cards are eligible (forEachRevealedAt), same as every At-Once.
+  // The two destroys are fired at the strike beat by the FX (presentation coupled to
+  // logic, like Scribe/Soldier): the cards that SPLIT are the cards that really die.
   function abilityHammurabi(owner, locId, done) {
     var mySlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
     var oppSide  = owner === 'player' ? 'opp' : 'player';
@@ -1493,16 +1517,38 @@
       return lowestIdx;
     }
 
-    var myIdx  = findLowestCCIndex(mySlots,  47);  // skip Hammurabi himself
-    var oppIdx = findLowestCCIndex(oppSlots);        // include all opponent cards
+    var sacIdx = findLowestCCIndex(mySlots, 47);   // sacrifice — never Hammurabi (47)
+    var oppIdx = findLowestCCIndex(oppSlots);      // the opponent's lowest-CC victim
 
-    if (myIdx  !== -1) destroyCard(owner,   locId, myIdx);
-    if (oppIdx !== -1) destroyCard(oppSide, locId, oppIdx);
+    // No sacrifice, or nothing to take → destroy nothing, no strike.
+    if (sacIdx === -1 || oppIdx === -1) { done(); return; }
 
-    evaluateContinuous();
-    refreshSlotIPDisplays();
-    updateScores();
-    setTimeout(done, 600);
+    // Capture the EXACT slot elements the strike will destroy, so the animation
+    // splits the same two cards the logic removes (same-target integrity).
+    var sacEl = getSlotEl(owner,   locId, sacIdx);
+    var oppEl = getSlotEl(oppSide, locId, oppIdx);
+    var hamEl = findSlotEl(owner, 47);
+
+    // The REAL destruction, fired at the down-stroke. skipAnim → no generic
+    // shake/sfx; the strike FX supplies swordslice + the split + bodyfalling.
+    function strike() {
+      destroyCard(owner,   locId, sacIdx, { skipAnim: true });
+      destroyCard(oppSide, locId, oppIdx, { skipAnim: true });
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+    }
+
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.hammurabiStrike === 'function') {
+      rfx.hammurabiStrike(hamEl, [sacEl, oppEl],
+        { strikeSfx: 'sfx/swordslice.m4a', splitSfx: 'sfx/bodyfalling.m4a', onStrike: strike },
+        done);
+    } else {
+      // Defensive fallback (no FX available): destroy instantly, still correct.
+      strike();
+      setTimeout(done, 400);
+    }
   }
 
   // Cuneiform (id 46) — "Writing" — At Once: +1 IP to all of the owner's
@@ -2085,7 +2131,7 @@
     if (!landed || landed.turnPlayed !== tribe.turnPlayed + 1) { done(); return; }  // this card grants Tribe no bonus
     var el = getSlotEl(ctx.owner, ctx.locId, ctx.slotIndex);
     if (el && window.SOG && SOG.RevealFx && typeof SOG.RevealFx.reactBounce === 'function') {
-      SOG.RevealFx.reactBounce(el, 'sfx/tribe.m4a');
+      SOG.RevealFx.reactBounce(el, 'sfx/tribe.m4a', ctx.landedCardId);
     }
     done();   // bounce is fire-and-forget presentation — don't stall the reveal pipeline
   }
@@ -2200,6 +2246,7 @@
     fireOnCardLandedHere:      fireOnCardLandedHere,
     evaluateContinuous:        evaluateContinuous,
     applyCapitalWhenFull:      applyCapitalWhenFull,
+    applyRiverAtOnce:          applyRiverAtOnce,
     /* Shared ability helpers (callable from game.js if needed) */
     isKenteProtected:          isKenteProtected,
     destroyCard:               destroyCard,
