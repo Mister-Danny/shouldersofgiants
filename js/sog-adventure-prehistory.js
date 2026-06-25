@@ -85,7 +85,7 @@ window.SOG.Adventure.Prehistory = (function () {
   }
   function playWoosh() {
     ensureWoosh();
-    if (wooshHowl) { try { wooshHowl.stop(); wooshHowl.play(); } catch (e) {} }
+    if (wooshHowl) { try { wooshHowl.volume(0.8 * ((window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1)); wooshHowl.stop(); wooshHowl.play(); } catch (e) {} }
   }
 
   function ensureCardAcquire() {
@@ -94,7 +94,7 @@ window.SOG.Adventure.Prehistory = (function () {
   }
   function playCardAcquire() {
     ensureCardAcquire();
-    if (cardAcquireHowl) { try { cardAcquireHowl.stop(); cardAcquireHowl.play(); } catch (e) {} }
+    if (cardAcquireHowl) { try { cardAcquireHowl.volume(0.9 * ((window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1)); cardAcquireHowl.stop(); cardAcquireHowl.play(); } catch (e) {} }
   }
 
   /* ── Text-bleep audio (Web Audio API, no asset required) ──────
@@ -142,7 +142,7 @@ window.SOG.Adventure.Prehistory = (function () {
       losc.type = 'sine';
       losc.frequency.setValueAtTime(480, now);
       lgain.gain.setValueAtTime(0,    now);
-      lgain.gain.linearRampToValueAtTime(0.10, now + 0.005);
+      lgain.gain.linearRampToValueAtTime(0.10 * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1), now + 0.005);
       lgain.gain.linearRampToValueAtTime(0,    now + 0.035);
       losc.connect(lgain).connect(ctx.destination);
       losc.start(now); losc.stop(now + 0.04);
@@ -155,7 +155,7 @@ window.SOG.Adventure.Prehistory = (function () {
     osc.type = p.wave;
     osc.frequency.setValueAtTime(freq, now);
     gain.gain.setValueAtTime(0,      now);
-    gain.gain.linearRampToValueAtTime(p.peak,  now + 0.005);
+    gain.gain.linearRampToValueAtTime(p.peak * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1),  now + 0.005);
     gain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);
@@ -1097,7 +1097,7 @@ window.SOG.Adventure.Prehistory = (function () {
     log('Phase E — coaching starting (phase 1: intro exchange)');
     runCoachingLines(COACHING_PHASE_1, function () {
       log('Phase E — phase 1 complete, shake + UI slide-in');
-      try { new Audio('sfx/earthspell.mp3').play(); } catch (e) {}   // rumble as the cards shake into place
+      SOG.sfx.play('sfx/earthspell.mp3');   // rumble as the cards shake into place
       shakeCamera(function () {
         slideInUI(function () {
           log('Phase E — UI in place, starting phase 2 (Lucy coaching)');

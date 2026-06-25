@@ -101,8 +101,39 @@ SOG.HammurabiBattle = (function () {
   /* Battle-exit teardown — removes the body class so it can't leak into a later
      battle, restores avatars, clears any lingering wipe. (Stage 4/5 will extend
      this for bubbles / popups.) */
+  /* ── Battle rules popup + click-opponent trigger (standardized across bosses).
+     [CREATED rules copy — refine.] Core rules only (no per-location abilities). ── */
+  var RULES_TITLE = 'The Law of the Land';
+  var RULES_BODY  = [
+    '4 Turns',
+    'Each card costs Capital (CC) to play.',
+    '5 Capital to spend each turn.',
+    '<u>Win Condition</u> — Gain the most IP at the most locations to defeat Hammurabi.'
+  ];
+  function _openRulesPopup(onDismiss) {
+    if (window.SOG && SOG.BattleRulesPopup && typeof SOG.BattleRulesPopup.show === 'function') {
+      SOG.BattleRulesPopup.show({ title: RULES_TITLE, body: RULES_BODY, onDismiss: onDismiss });
+    } else if (onDismiss) { onDismiss(); }
+  }
+  function _opponentAvatarEl() { return document.querySelector('.battle-avatar-opponent'); }
+  var _portraitClickHandler = null;
+  function _wireOpponentPortraitClick() {
+    var el = _opponentAvatarEl();
+    if (!el || _portraitClickHandler) return;
+    el.classList.add('rules-clickable');
+    _portraitClickHandler = function () { _openRulesPopup(); };
+    el.addEventListener('click', _portraitClickHandler);
+  }
+  function _unwireOpponentPortraitClick() {
+    var el = _opponentAvatarEl();
+    if (el && _portraitClickHandler) el.removeEventListener('click', _portraitClickHandler);
+    if (el) el.classList.remove('rules-clickable');
+    _portraitClickHandler = null;
+  }
+
   function _hammurabiTeardown() {
     document.body.classList.remove('hammurabi-battle');
+    _unwireOpponentPortraitClick();
     _restoreOpponentBubblePortrait();
     hideBubbles();
     if (window.SOG && SOG.HUD && typeof SOG.HUD.restoreBattleAvatars === 'function') {
@@ -229,7 +260,7 @@ SOG.HammurabiBattle = (function () {
   }
 
   /* ── Rewards (SHARED card-acquisition + gold animations) ─────────── */
-  function _playSfx(src) { try { var a = new Audio(src); a.play(); } catch (e) {} }
+  function _playSfx(src) { if (window.SOG && SOG.sfx) { SOG.sfx.play(src); return; } try { new Audio(src).play(); } catch (e) {} }
 
   /* Grant Hammurabi's card (47) via the shared card-acquisition reveal — FIRST WIN
      ONLY: SOG.Cards.unlock returns truthy only on a NEW unlock, so on a repeat win
@@ -427,7 +458,7 @@ SOG.HammurabiBattle = (function () {
     if (!tiles.length) { if (onDone) onDone(); return; }
     // All three laws are struck into the Code at ONCE — a single stone-stamp, every
     // tile shaking and its ability fading in together (no left→right stagger).
-    try { new Audio('sfx/cuneiformstamp.mp3').play(); } catch (e) {}
+    SOG.sfx.play('sfx/cuneiformstamp.mp3');
     tiles.forEach(function (tile) {
       var ab = tile.querySelector('.battle-loc-ability');
       if (typeof gsap !== 'undefined') {
@@ -496,7 +527,7 @@ SOG.HammurabiBattle = (function () {
     osc.type = 'square';
     osc.frequency.setValueAtTime(freq, now);
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(p.peak, now + 0.005);
+    gain.gain.linearRampToValueAtTime(p.peak * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1), now + 0.005);
     gain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);
@@ -679,7 +710,7 @@ SOG.HammurabiBattle = (function () {
 
       if (_has(KEY_HAMMURABI_OPENING_SEEN)) {
         // Repeat entry — no dialogue; ability text shows statically (names + effects).
-        fadeOutCover(function () { done(); });
+        fadeOutCover(function () { _wireOpponentPortraitClick(); done(); });
         return;
       }
 
@@ -690,6 +721,7 @@ SOG.HammurabiBattle = (function () {
         _runOpeningDialogue(function () {     // reveal fires mid-dialogue on the Shamash line
           _dialogueActive = false;
           _enableButtons();
+          _wireOpponentPortraitClick();
           done();
         });
       });

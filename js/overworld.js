@@ -601,7 +601,10 @@ var Overworld = (function () {
   }
   function startFootsteps() {
     ensureFootsteps();
-    if (footstepsHowl && !footstepsHowl.playing()) footstepsHowl.play();
+    if (footstepsHowl && !footstepsHowl.playing()) {
+      footstepsHowl.volume(0.7 * ((window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1));   // SFX-slider scaled
+      footstepsHowl.play();
+    }
   }
   function stopFootsteps() {
     if (footstepsHowl && footstepsHowl.playing()) footstepsHowl.stop();
@@ -615,7 +618,7 @@ var Overworld = (function () {
   }
   function _playWoosh() {
     _ensureWoosh();
-    if (_wooshHowl) { try { _wooshHowl.stop(); _wooshHowl.play(); } catch (e) {} }
+    if (_wooshHowl) { try { _wooshHowl.volume(0.8 * ((window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1)); _wooshHowl.stop(); _wooshHowl.play(); } catch (e) {} }
   }
 
   /* ── DOM refs + state ──────────────────────────────────────── */
@@ -1618,7 +1621,7 @@ var Overworld = (function () {
             // Impact sfx — wait for the audio to fully end. Graceful fallbacks so a
             // blocked/erroring play() can't stall the arrival sequence.
             var sfx = null;
-            try { sfx = new Audio('sfx/uruk.mp3'); } catch (e) {}
+            try { sfx = new Audio('sfx/uruk.mp3'); if (sfx) sfx.volume = (window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1; } catch (e) {}
             if (sfx) {
               sfx.addEventListener('ended', function () { sfxDone = true; maybeProceed(); });
               sfx.addEventListener('error', function () { sfxDone = true; maybeProceed(); });
@@ -1775,7 +1778,7 @@ var Overworld = (function () {
   }
 
   function _runCandle(wipeEl, onDialogueReady) {
-    try { var ms = new Audio('sfx/matchstrike.m4a'); ms.play(); } catch (e) {}
+    SOG.sfx.play('sfx/matchstrike.m4a');
 
     var existing = document.getElementById('adv-candle');
     if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
@@ -1881,7 +1884,7 @@ var Overworld = (function () {
      so the flame visual lives in exactly one place; pair with the exported
      fadeOutCuneiformCandle() to dismiss it. */
   function _runCuneiformCandle(onLit) {
-    try { var ms = new Audio('sfx/matchstrike.m4a'); ms.play(); } catch (e) {}
+    SOG.sfx.play('sfx/matchstrike.m4a');
 
     var existing = document.getElementById('adv-candle');
     if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
@@ -2015,7 +2018,7 @@ var Overworld = (function () {
      runs immediately so the sequence can never stall. */
   function _playSfxThen(src, cb) {
     var audio = null;
-    try { audio = new Audio(src); audio.play(); } catch (e) { audio = null; }
+    try { audio = new Audio(src); audio.volume = (window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1; audio.play(); } catch (e) { audio = null; }
     _afterAudioEnds(audio, cb);
   }
 
@@ -2024,7 +2027,7 @@ var Overworld = (function () {
     if (!overlayEl || !node) { if (onDone) onDone(); return; }
 
     var introAudio = null;
-    try { introAudio = new Audio('sfx/sargonintro.mp3'); introAudio.play(); } catch (e) {}
+    try { introAudio = new Audio('sfx/sargonintro.mp3'); introAudio.volume = (window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1; introAudio.play(); } catch (e) {}
 
     // 1) Build (or find) the Sargon node element, hidden, ready to fade in.
     var nodeEl = overlayEl.querySelector('[data-id="sargon"]');
@@ -2122,7 +2125,7 @@ var Overworld = (function () {
     if (!overlayEl || !node) { if (onDone) onDone(); return; }
 
     var riseAudio = null;
-    try { riseAudio = new Audio('sfx/earthspell.mp3'); riseAudio.play(); } catch (e) {}
+    try { riseAudio = new Audio('sfx/earthspell.mp3'); riseAudio.volume = (window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1; riseAudio.play(); } catch (e) {}
 
     // 1) Build (or find) the Hammurabi node element, hidden, ready to rise.
     var nodeEl = overlayEl.querySelector('[data-id="hammurabi"]');
@@ -2221,7 +2224,7 @@ var Overworld = (function () {
     var node = _findMesoNode('hanging-gardens');
     if (!overlayEl || !node) { if (onDone) onDone(); return; }
 
-    try { new Audio('sfx/magicshimmer.m4a').play(); } catch (e) {}
+    SOG.sfx.play('sfx/magicshimmer.m4a');
 
     // 1) Build (or find) the Hanging Gardens node element, hidden, ready to fade in.
     var nodeEl = overlayEl.querySelector('[data-id="hanging-gardens"]');

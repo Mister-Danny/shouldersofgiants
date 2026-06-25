@@ -144,7 +144,7 @@ var HomeFlow = (function () {
     ensureFootsteps();
     if (!footstepsAudio) return;
     try { footstepsAudio.currentTime = 0; } catch (e) {}
-    var p = footstepsAudio.play();
+    footstepsAudio.volume = 0.9 * ((window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1); var p = footstepsAudio.play();
     if (p && typeof p.catch === 'function') {
       p.catch(function (err) {
         console.warn('[HomeFlow] footsteps play() rejected:', err);
@@ -156,6 +156,20 @@ var HomeFlow = (function () {
       footstepsAudio.pause();
       try { footstepsAudio.currentTime = 0; } catch (e) {}
     }
+  }
+
+  // Woosh that accompanies the iris-wipe transition into the overworld.
+  // Plays on every adventure entry (first-time after the intro video, and
+  // returning visits where there's no video to cover the silence).
+  var wooshAudio = null;
+  function playEntryWoosh() {
+    try {
+      if (!wooshAudio) wooshAudio = new Audio('sfx/woosh.m4a');
+      wooshAudio.currentTime = 0;
+      wooshAudio.volume = 0.8 * ((window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1);
+      var p = wooshAudio.play();
+      if (p && typeof p.catch === 'function') p.catch(function () {});
+    } catch (e) {}
   }
 
   var walkIntervals = [];
@@ -737,6 +751,10 @@ var HomeFlow = (function () {
     var proxy = { r: 0 };
     gsap.to(proxy, {
       r: maxRadius, duration: 0.9, ease: 'power2.inOut',
+      onStart: function () {
+        // Woosh rides the radial wipe from the moment it starts closing in.
+        playEntryWoosh();
+      },
       onUpdate: function () {
         irisEl.style.clipPath = 'circle(' + proxy.r + 'px at ' + cxPct + '% ' + cyPct + '%)';
       },

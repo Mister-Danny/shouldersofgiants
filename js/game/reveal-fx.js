@@ -28,6 +28,7 @@ SOG.RevealFx = (function () {
   var SLOTS_PER_LOC = (SOG.state && SOG.state.SLOTS_PER_LOC) || 4;
 
   function playSfx(src) {
+    if (window.SOG && SOG.sfx) { SOG.sfx.play(src); return; }
     try { new Audio(src).play(); } catch (e) {}
   }
 
@@ -200,6 +201,7 @@ SOG.RevealFx = (function () {
       // fallback timer covers a blocked/silent/missing audio so it always cleans up.
       try {
         var audio = new Audio('sfx/caveart.m4a');
+        audio.volume = (window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1;
         audio.addEventListener('ended', finish);
         audio.play().catch(function () {});
       } catch (e) {}
@@ -300,6 +302,7 @@ SOG.RevealFx = (function () {
       // Dissolve-back coincides with the sound ending; fallback covers silent/blocked audio.
       try {
         var audio = new Audio('sfx/gilgamesh.mp3');
+        audio.volume = (window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1;
         audio.addEventListener('ended', settle);
         audio.play().catch(function () {});
       } catch (e) {}

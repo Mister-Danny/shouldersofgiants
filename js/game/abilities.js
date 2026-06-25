@@ -675,7 +675,7 @@
     opts = opts || {};
     // Discard sound: a caller-supplied sfx (e.g. Priest's priest.m4a) replaces the
     // generic whoosh for THAT discard only; every other caller keeps the whoosh.
-    if (opts.sfx) { try { new Audio(opts.sfx).play(); } catch (e) {} }
+    if (opts.sfx) { SOG.sfx.play(opts.sfx); }
     else if (typeof SFX !== 'undefined') SFX.cardDiscarded();
     var jesusEl  = null;
     var janHusEl = null;

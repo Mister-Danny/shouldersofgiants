@@ -1392,8 +1392,8 @@ img    { display: block; }
 }
 .rules-popup-body {
   font-family: var(--font);
-  font-size: 17px;
-  line-height: 1.55;
+  font-size: 26px;        /* match the card-detail popup body (.popup-ability-text) — chunkier, not the thin 17px */
+  line-height: 1.6;
   color: #f3e6c4;                                /* cream — matches card-popup ability text */
   text-shadow: 1px 1px 0 #000;
   text-align: left;
@@ -1405,6 +1405,12 @@ img    { display: block; }
 /* Gilgamesh battle — clickable opponent portrait (opens the rules popup) */
 .battle-avatar-opponent.gilgamesh-clickable { cursor: pointer; pointer-events: auto; }
 .battle-avatar-opponent.gilgamesh-clickable:hover .battle-avatar-frame {
+  filter: brightness(1.15);
+  box-shadow: 0 0 12px rgba(248, 208, 0, 0.5);
+}
+/* Shared "click opponent → rules popup" affordance (Sargon / Hammurabi / Nebuchadnezzar). */
+.battle-avatar-opponent.rules-clickable { cursor: pointer; pointer-events: auto; }
+.battle-avatar-opponent.rules-clickable:hover .battle-avatar-frame {
   filter: brightness(1.15);
   box-shadow: 0 0 12px rgba(248, 208, 0, 0.5);
 }
@@ -1965,7 +1971,8 @@ img    { display: block; }
 #battle-popup-backdrop .card-popup,
 #difficulty-backdrop .card-popup,
 #rename-deck-backdrop .card-popup,
-.rules-popup {
+.rules-popup,
+.options-panel {
   background:
     repeating-linear-gradient(
       0deg,
@@ -2284,26 +2291,69 @@ img    { display: block; }
 
 .battle-hud-bottomright {
   position: fixed;
-  bottom: 80px;   /* 80 = 14px edge + ~52px music widget + 14px gap */
+  bottom: 18px;   /* the corner music widget is retired in battle → sit in the actual corner */
   right: 20px;    /* +4px extra breathing room from gameboard frame */
   z-index: 55;
   display: flex;
   flex-direction: column;
-  gap: 7px;       /* −25%: was 10px (orig) → −10% of prev */
-  align-items: stretch;
-  min-width: 157px; /* −25%: was 205px (orig) → −10% of prev */
+  gap: 7px;
+  align-items: center;   /* hug + center the grouped buttons in the bottom corner */
+  min-width: 0;
 }
 
-.battle-hud-bottomright .btn-reset-turn,
 .battle-hud-bottomright .btn-end-turn,
-.battle-hud-bottomright .btn-back-results,
-.battle-hud-bottomright .btn-undo-endturn {
+.battle-hud-bottomright .btn-back-results {
   padding: 13px 19px;  /* −25%: was 18px 25px (orig) → −10% of prev */
   font-size: 13px;     /* −25%: was 16px (orig) → −10% of prev */
   width: 100%;
   text-align: center;
   letter-spacing: 0.10em;
 }
+
+/* Option B cluster: large labeled End Turn + a compact icon strip beside it. */
+.battle-action-cluster {
+  display: flex;
+  flex-direction: column;   /* icon strip on top, End Turn underneath */
+  align-items: center;
+  gap: 6px;                 /* tight — one grouped unit */
+}
+.battle-action-cluster .btn-end-turn {
+  width: auto;
+  min-width: 150px;
+  padding: 15px 28px;   /* ~20% shorter (vertical) than before; width unchanged */
+  font-size: 19px;
+}
+.battle-icon-strip {
+  display: grid;
+  grid-template-columns: repeat(2, 78px);   /* +50% */
+  grid-auto-rows: 78px;
+  gap: 8px;
+  align-content: center;
+  justify-content: center;
+}
+.battle-icon-strip .btn-hud-icon {
+  width: 78px;          /* +50% */
+  height: 78px;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font, monospace);
+  font-size: 48px;      /* +50% */
+  line-height: 1;
+  letter-spacing: 0;
+  color: #f0cf6c;
+  background: none;       /* no box — just the icon */
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+}
+.battle-icon-strip .btn-hud-icon img { width: 70px; height: 70px; object-fit: contain; display: block; }  /* cog fills most of the 78px button */
+.battle-icon-strip .btn-hud-icon:hover:not(:disabled)  { filter: brightness(1.15); transform: scale(1.08); }
+.battle-icon-strip .btn-hud-icon:active:not(:disabled) { transform: scale(0.94); }
+.battle-icon-strip .btn-hud-icon:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn-undo-endturn {
   background:   var(--snes-yellow);
@@ -8430,16 +8480,7 @@ body.tut-locked #battle-reset-turn {
           drop-shadow(0 2px 3px rgba(0, 0, 0, 0.75));
 }
 
-/* Back-to-home button */
-#overworld-back {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  z-index: 100;
-  font-family: 'CT Galbite', monospace;
-  font-size: 16px;
-  padding: 8px 16px;
-}
+/* (Back-to-home button removed — its action lives in the Options panel.) */
 
 /* ================================================================
    ADVENTURE MODE — HUD State B: Dialogue mode (Phase H2)
@@ -10761,3 +10802,246 @@ body[data-screen="overworld"] #overworld-overlay {
   55%  { transform: translate(-50%, -78%)  scale(1.02); opacity: 1; }   /* linger visible, slow rise */
   100% { transform: translate(-50%, -122%) scale(0.9);  opacity: 0; }   /* rise + dissipate */
 }
+
+/* ================================================================
+   OPTIONS PANEL — shared overlay (overworld + battle). Clones the
+   card-popup/backdrop look; hosts the relocated music widget.
+   ================================================================ */
+.options-backdrop { z-index: 9000; }   /* above the HUD, below result scoreboards */
+
+.options-panel {
+  width: 560px;
+  max-width: 92vw;
+  height: 460px;               /* fixed — the box stays one size across both tabs */
+  max-height: 86vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;            /* clip the scroll + bottom bar to the rounded frame */
+  text-align: left;
+}
+/* Header row: Home (absolute top-left) · "Settings" (center) · ✕ (top-right). */
+.options-home-btn {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 2;
+  padding: 7px 14px;
+  font-family: var(--font, monospace);
+  font-size: 14px;
+  color: #f3e6c4;
+  background: #5a3418;
+  border: 2px solid #8a5a26;
+  border-radius: 5px;
+  box-shadow: 0 3px 0 #1a0c04, 0 4px 0 #000;
+  cursor: pointer;
+}
+.options-home-btn:hover  { background: #6e4220; border-color: #d4aa50; color: #e8c060; }
+.options-home-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a0c04, 0 2px 0 #000; }
+
+/* Top toggle — one joined button (two halves) that flips the panel's view.
+   Sits in the header row (between the absolute Home and ✕). */
+.options-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 14px 18px 12px;
+}
+.options-toggle {
+  display: inline-flex;
+  padding: 0;
+  border: 2px solid #8a5a26;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #3a200c;
+  box-shadow: 0 3px 0 #1a0c04, 0 4px 0 #000;
+  cursor: pointer;
+  font-family: var(--font, monospace);
+}
+.options-toggle:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a0c04, 0 2px 0 #000; }
+.options-toggle-seg {
+  padding: 8px 22px;
+  font-size: 16px;
+  color: #c9b48a;
+  background: transparent;
+}
+.options-toggle-seg + .options-toggle-seg { border-left: 2px solid #6a4418; }   /* divider between halves */
+.options-toggle-seg.is-active { color: #1a0c04; background: #d4aa50; }            /* highlighted current view */
+.options-toggle:hover .options-toggle-seg:not(.is-active) { color: #e8c060; }
+
+.options-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px 22px 14px;
+}
+
+/* Sections */
+.options-section { margin-bottom: 16px; }
+.options-section-title {
+  font-family: var(--font, monospace);
+  font-size: 18px;
+  color: #e8c060;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 0 #000;                     /* chunky SNES drop-shadow — matches .rules-popup-title */
+  border-bottom: 1px solid rgba(212, 170, 80, 0.40);
+  padding-bottom: 6px;
+  margin-bottom: 12px;
+}
+
+/* Volume sliders */
+.options-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 14px 0;
+}
+.options-slider-label {
+  flex: 0 0 96px;
+  font-family: var(--font, monospace);
+  font-size: 20px;
+  color: #f3e6c4;
+  text-shadow: 1px 1px 0 #000;                     /* match .rules-popup-body cream body text */
+}
+.options-slider {
+  flex: 1 1 auto;
+  accent-color: #d4aa50;
+  height: 8px;
+}
+.options-vol-num {
+  flex: 0 0 44px;
+  text-align: right;
+  font-family: var(--font, monospace);
+  font-size: 18px;
+  color: #e8c060;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* ── How-to-Play SLIDESHOW (the How-to-Play tab's view) ─────────────────── */
+.options-slideshow {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 22px 16px;
+}
+.slideshow-heading {
+  text-align: center;
+  font-family: var(--font, monospace);
+  font-size: 18px;
+  color: #e8c060;
+  text-shadow: 2px 2px 0 #000;
+  margin-bottom: 10px;
+}
+/* Reserved image area — drop a slide image in later (slide.image → background). */
+.slideshow-image {
+  align-self: center;       /* centered; narrower than full width */
+  width: auto;
+  height: 160px;
+  aspect-ratio: 16 / 9;     /* 16:9 image window */
+  max-width: 100%;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  margin-bottom: 12px;
+}
+.slideshow-image.is-placeholder {
+  background-color: rgba(212, 170, 80, 0.06);
+  border: 2px dashed rgba(212, 170, 80, 0.40);
+}
+.slideshow-body {
+  flex: 1 1 auto;
+  font-family: var(--font, monospace);
+  font-size: 18px;
+  line-height: 1.6;
+  color: #f3e6c4;
+  text-shadow: 1px 1px 0 #000;
+  text-align: center;
+  padding: 0 6px;
+}
+.slideshow-nav {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+}
+.slideshow-arrow {
+  width: 40px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #f3e6c4;
+  background: #5a3418;
+  border: 2px solid #8a5a26;
+  border-radius: 5px;
+  box-shadow: 0 3px 0 #1a0c04, 0 4px 0 #000;
+  cursor: pointer;
+}
+.slideshow-arrow:hover:not(:disabled)  { background: #6e4220; border-color: #d4aa50; color: #e8c060; }
+.slideshow-arrow:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 #1a0c04, 0 2px 0 #000; }
+.slideshow-arrow:disabled { opacity: 0.3; cursor: default; }
+.slideshow-dots { display: flex; align-items: center; gap: 8px; }
+.slideshow-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(212, 170, 80, 0.30);
+  border: 1px solid rgba(212, 170, 80, 0.55);
+}
+.slideshow-dot.is-active { background: #e8c060; border-color: #f0d28a; }
+
+/* Bottom music bar (Settings tab only) */
+.options-music-bar {
+  flex: 0 0 auto;
+  border-top: 2px solid rgba(212, 170, 80, 0.45);
+  background: rgba(0, 0, 0, 0.28);
+  padding: 9px 16px 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.options-music-credit {
+  font-family: var(--font, monospace);
+  font-size: 14px;
+  color: #c9b48a;
+  letter-spacing: 0.3px;
+  text-align: center;
+  min-height: 16px;
+}
+/* The panel has its own track title + transport buttons (driven by SOG.music). */
+.options-music-title {
+  font-family: var(--font, monospace);
+  font-size: 16px;
+  color: #e8c060;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-shadow: 1px 1px 0 #000;
+  text-align: center;
+}
+.options-music-controls { display: flex; align-items: center; gap: 16px; margin-top: 2px; }
+.options-music-btn {
+  background: transparent;
+  border: none;
+  color: #e8c060;
+  font-size: 19px;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+}
+.options-music-btn:hover  { color: #fff; }
+.options-music-btn:active { transform: translateY(1px); }
+
+/* Corner music widget: retired from battle/overworld (the Options gear covers
+   those), but RESTORED on the home + deck-builder screens, which have no gear. */
+#music-ctrl { display: none; }
+body[data-screen="home"] #music-ctrl,
+body[data-screen="deckbuilder"] #music-ctrl { display: flex; }
+
+/* (Battle Options gear is now styled via .battle-icon-strip .btn-hud-icon.) */

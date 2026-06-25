@@ -109,7 +109,7 @@ SOG.HUD = (function () {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(480, now);
       gain.gain.setValueAtTime(0,    now);
-      gain.gain.linearRampToValueAtTime(0.10, now + 0.005);
+      gain.gain.linearRampToValueAtTime(0.10 * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1), now + 0.005);
       gain.gain.linearRampToValueAtTime(0,    now + 0.035);
       osc.connect(gain).connect(ctx.destination);
       osc.start(now); osc.stop(now + 0.04);
@@ -121,7 +121,7 @@ SOG.HUD = (function () {
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, now);
       gain.gain.setValueAtTime(0,     now);
-      gain.gain.linearRampToValueAtTime(0.07,  now + 0.005);
+      gain.gain.linearRampToValueAtTime(0.07 * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1),  now + 0.005);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
       osc.connect(gain).connect(ctx.destination);
       osc.start(now); osc.stop(now + 0.08);
@@ -132,7 +132,7 @@ SOG.HUD = (function () {
       osc.type    = 'square';
       osc.frequency.setValueAtTime(freq, now);
       gain.gain.setValueAtTime(0,     now);
-      gain.gain.linearRampToValueAtTime(0.08,  now + 0.005);
+      gain.gain.linearRampToValueAtTime(0.08 * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1),  now + 0.005);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
       osc.connect(gain).connect(ctx.destination);
       osc.start(now); osc.stop(now + 0.06);
@@ -260,9 +260,11 @@ SOG.HUD = (function () {
         _openDeckBuilder();
       });
     }
-    // Options icon — unlabeled; same stub the old OPTIONS button had.
+    // Options icon — opens the shared Options panel (overworld trigger).
     var optBtn = document.getElementById('adv-hud-btn-options');
-    if (optBtn) optBtn.addEventListener('click', function () { log('Options clicked — stub'); });
+    if (optBtn) optBtn.addEventListener('click', function () {
+      if (window.SOG && SOG.OptionsPanel) SOG.OptionsPanel.open();
+    });
   }
 
   function _openDeckBuilder() {
@@ -540,7 +542,7 @@ SOG.HUD = (function () {
       var SCALE    = config.growScale || 2;
       var RISE_PX  = (config.risePx != null) ? config.risePx : -60;
       var ORIGIN_X = (config.growOriginX != null) ? config.growOriginX : '100%';
-      if (config.sfx) { try { new Audio(config.sfx).play(); } catch (e) {} }
+      if (config.sfx) { SOG.sfx.play(config.sfx); }
       // Un-clip + lift the slot so the enlarged portrait shows above the HUD bar.
       var prevOverflow = _npcSlotEl.style.overflow;
       var prevZ        = _npcSlotEl.style.zIndex;

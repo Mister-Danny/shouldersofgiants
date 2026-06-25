@@ -798,15 +798,15 @@
       opts.sfxOnStart();
     } else if (cardId === 33) {
       // Lucy (First Steps): slow wobbling walk — loop footsteps for the move's duration.
-      try { _advSteps = new Audio('sfx/adventuresteps.m4a'); _advSteps.loop = true; _advSteps.play(); } catch (e) {}
+      try { _advSteps = new Audio('sfx/adventuresteps.m4a'); _advSteps.loop = true; _advSteps.volume = (window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1; _advSteps.play(); } catch (e) {}
     } else if (cardId === 35) {
       // Ötzi (flee): quick "yoink" as he darts away (movement itself unchanged).
-      try { new Audio('sfx/yoink.mp3').play(); } catch (e) {}
+      SOG.sfx.play('sfx/yoink.mp3');
     } else if (cardId === 24 && typeof SFX !== 'undefined') {
       SFX.sailingSound();
     } else if (cardId === 48) {
       // Chariot (Phase 1 travel): play chariot.mp3 as it rolls to the new location.
-      try { new Audio('sfx/chariot.mp3').play(); } catch (e) {}
+      SOG.sfx.play('sfx/chariot.mp3');
     }
 
     // Apply IP mods (Cape of Good Hope, Magellan +1)

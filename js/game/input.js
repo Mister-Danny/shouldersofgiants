@@ -90,6 +90,8 @@
     /* Script-hook input gate (isInputBlocked predicate / services.blockInput).
        No script → returns false → behaviour unchanged. */
     if (window.SOG && SOG.BattleHooks && SOG.BattleHooks.isInputBlocked()) return true;
+    // Options panel open mid-battle → board is not interactable behind it.
+    if (window.SOG && SOG.OptionsPanel && SOG.OptionsPanel.isOpen()) return true;
     return false;
   }
 

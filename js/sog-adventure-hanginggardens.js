@@ -110,8 +110,41 @@ SOG.HangingGardensBattle = (function () {
       function (el) { if (el.parentNode) el.parentNode.removeChild(el); });
   }
 
+  /* ── Battle rules popup + click-opponent trigger (standardized across bosses).
+     [CREATED rules copy — refine.] Core rules only (no per-location abilities);
+     the flood is kept as it's a battle-wide mechanic, not a location ability. ── */
+  var RULES_TITLE = 'In The Garden';
+  var RULES_BODY  = [
+    '5 Turns',
+    'Each card costs Capital (CC) to play.',
+    '5 Capital to spend each turn.',
+    "Watch out for flooding rivers!",
+    '<u>Win Condition</u> — Gain the most IP at the most locations to defeat Nebuchadnezzar.'
+  ];
+  function _openRulesPopup(onDismiss) {
+    if (window.SOG && SOG.BattleRulesPopup && typeof SOG.BattleRulesPopup.show === 'function') {
+      SOG.BattleRulesPopup.show({ title: RULES_TITLE, body: RULES_BODY, onDismiss: onDismiss });
+    } else if (onDismiss) { onDismiss(); }
+  }
+  function _opponentAvatarEl() { return document.querySelector('.battle-avatar-opponent'); }
+  var _portraitClickHandler = null;
+  function _wireOpponentPortraitClick() {
+    var el = _opponentAvatarEl();
+    if (!el || _portraitClickHandler) return;
+    el.classList.add('rules-clickable');
+    _portraitClickHandler = function () { _openRulesPopup(); };
+    el.addEventListener('click', _portraitClickHandler);
+  }
+  function _unwireOpponentPortraitClick() {
+    var el = _opponentAvatarEl();
+    if (el && _portraitClickHandler) el.removeEventListener('click', _portraitClickHandler);
+    if (el) el.classList.remove('rules-clickable');
+    _portraitClickHandler = null;
+  }
+
   function _hgTeardown() {
     document.body.classList.remove('hanging-gardens-battle');
+    _unwireOpponentPortraitClick();
     _restoreOpponentBubblePortrait();
     hideBubbles();
     _clearFloodState();                     // reset flood state + remove flood DOM
@@ -131,7 +164,7 @@ SOG.HangingGardensBattle = (function () {
        • Loss / tie → that same 3-button scoreboard (standard retry, no intervention).
      Reuses the SHARED card-acquisition (preh.showCardAcquisition) + gold-reward
      animations. Win/loss/tie DIALOGUE is left as [STUB]s (none written yet). */
-  function _playSfx(src) { try { var a = new Audio(src); a.play(); } catch (e) {} }
+  function _playSfx(src) { if (window.SOG && SOG.sfx) { SOG.sfx.play(src); return; } try { new Audio(src).play(); } catch (e) {} }
 
   function _removeFloatingResultsBtn() {
     var b = document.getElementById(SHOW_RESULTS_ID);
@@ -275,15 +308,18 @@ SOG.HangingGardensBattle = (function () {
     }, 2500);
   }
 
-  /* CONTINUE on the first-win scoreboard: grant Neb's card (50) → +25 gold → exit.
-     [STUB] First-win victory dialogue + closing line go here once written. */
-  function _runFirstWinSequence() {
-    _removeResultPopup();
-    // [STUB] Neb's first-win victory dialogue could play here (runLines(WIN_DIALOGUE,…)).
-    _grantNebCard(function () {
-      _grantGold(GOLD_FIRST_WIN, function () {
-        // [STUB] Neb's closing line could play here (runLines(WIN_DIALOGUE_CLOSER,…)).
-        _exitToOverworld();
+  /* FIRST-WIN victory sequence: VICTORY flourish → Neb's win dialogue → on the final
+     line ("Take this…") fire the card 50 + 25 gold grant → then the scoreboard.
+     First-win only (a repeat win never reaches here — see _onWin's owned guard). */
+  function _runFirstWinSequence(locResults) {
+    _victoryFlourish(function () {
+      runLines(WIN_DIALOGUE, function () {
+        // "Take this…" is WIN_DIALOGUE's last line, so the grant fires on that beat.
+        _grantNebCard(function () {
+          _grantGold(GOLD_FIRST_WIN, function () {
+            _showResultScoreboard(true, false, locResults, {});
+          });
+        });
       });
     });
   }
@@ -342,8 +378,9 @@ SOG.HangingGardensBattle = (function () {
     var firstWin = !_has(KEY_HG_COMPLETE);   // capture BEFORE setting the flag
     _set(KEY_HG_COMPLETE);
     if (firstWin) {
-      _showResultScoreboard(true, false, locResults, { firstWin: true });
+      _runFirstWinSequence(locResults);   // flourish → win dialogue → grant on "Take this" → scoreboard
     } else {
+      // Repeat win: skip the full story beat → flourish → +10 gold → scoreboard.
       _victoryFlourish(function () {
         _grantGold(GOLD_REPEAT_WIN, function () {
           _showResultScoreboard(true, false, locResults, {});
@@ -354,9 +391,10 @@ SOG.HangingGardensBattle = (function () {
   function _onLoss(locResults) { _onDefeatOrTie(false, locResults); }
   function _onTie(locResults)  { _onDefeatOrTie(true,  locResults); }
   function _onDefeatOrTie(isTie, locResults) {
-    // [STUB] Neb's loss/tie dialogue could play here before the scoreboard. Standard
-    // retry scoreboard, no special intervention (mirrors Hammurabi).
-    _showResultScoreboard(false, isTie, locResults, {});
+    // Neb taunts, then the standard retry scoreboard (mirrors Hammurabi).
+    runLines(isTie ? TIE_DIALOGUE : LOSS_DIALOGUE, function () {
+      _showResultScoreboard(false, isTie, locResults, {});
+    });
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -379,6 +417,32 @@ SOG.HangingGardensBattle = (function () {
     { who: 'nebuchadnezzar', text: 'No one walks my paradise uninvited.' },
     { who: 'nebuchadnezzar', text: 'No one.' },
     { who: 'explorer',       text: 'Here we go again.' }
+  ];
+
+  /* ── Outcome dialogue (editable) — Nebuchadnezzar via the opponent bubble. ──────
+     WIN is FIRST-WIN-ONLY (a repeat win skips straight to flourish + gold). The LAST
+     WIN line ("Take this…") is the beat the card 50 + 25 gold grant fires on. */
+  var WIN_DIALOGUE = [
+    { who: 'nebuchadnezzar', text: 'Hmm… How unexpected.' },
+    { who: 'explorer',       text: 'I won?' },
+    { who: 'nebuchadnezzar', text: 'Yes, somehow the stranger in the tawdry hat prevailed.' },
+    { who: 'explorer',       text: 'Hey, I like my hat.' },
+    { who: 'nebuchadnezzar', text: 'How unfortunate.' },
+    { who: 'nebuchadnezzar', text: 'Perhaps, the Egyptians will find it more amusing.' },
+    { who: 'explorer',       text: 'Egyptians?' },
+    { who: 'nebuchadnezzar', text: 'Take this and your hat back and be gone, will you?' }   // ← grant fires after this line
+  ];
+  var LOSS_DIALOGUE = [
+    { who: 'nebuchadnezzar', text: 'Predictable.' },
+    { who: 'nebuchadnezzar', text: 'Excellence was never meant for the likes of you.' },
+    { who: 'explorer',       text: 'Can I have another shot?' },
+    { who: 'nebuchadnezzar', text: 'I do enjoy a captive audience.' }
+  ];
+  var TIE_DIALOGUE = [
+    { who: 'nebuchadnezzar', text: 'A stalemate?' },
+    { who: 'nebuchadnezzar', text: 'How unrefined.' },
+    { who: 'nebuchadnezzar', text: 'We shall do this again.' },
+    { who: 'nebuchadnezzar', text: 'Properly this time.' }
   ];
 
   // Semantic speaker → shared bubble element id (Neb borrows the opponent box).
@@ -411,7 +475,7 @@ SOG.HangingGardensBattle = (function () {
     osc.type = 'square';
     osc.frequency.setValueAtTime(freq, now);
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(p.peak, now + 0.005);
+    gain.gain.linearRampToValueAtTime(p.peak * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1), now + 0.005);
     gain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);
@@ -695,7 +759,7 @@ SOG.HangingGardensBattle = (function () {
 
       if (_has(KEY_HG_OPENING_SEEN) || _has(KEY_HG_COMPLETE)) {
         // Repeat entry (or a victorious rematch) — skip the dialogue, go straight to turn 1.
-        fadeOutCover(function () { done(); });
+        fadeOutCover(function () { _wireOpponentPortraitClick(); done(); });
         return;
       }
 
@@ -705,6 +769,7 @@ SOG.HangingGardensBattle = (function () {
         _runOpeningDialogue(function () {
           _dialogueActive = false;
           _enableButtons();
+          _wireOpponentPortraitClick();
           done();
         });
       });

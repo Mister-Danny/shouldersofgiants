@@ -260,7 +260,7 @@ SOG.OtziBattle = (function () {
     osc.type = p.wave;
     osc.frequency.setValueAtTime(freq, now);
     gain.gain.setValueAtTime(0,        now);
-    gain.gain.linearRampToValueAtTime(p.peak, now + 0.005);
+    gain.gain.linearRampToValueAtTime(p.peak * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1), now + 0.005);
     gain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);
@@ -840,7 +840,7 @@ SOG.OtziBattle = (function () {
       _otziParkSideLocations();
       fadeOutCover(function () {
         runLines(PRE_SHAKE_LINES, function () {
-          try { new Audio('sfx/earthspell.mp3').play(); } catch (e) {}   // rumble as the side locations shake into place
+          SOG.sfx.play('sfx/earthspell.mp3');   // rumble as the side locations shake into place
           shakeCamera(function () {
             revealSideLocations(function () {
               runLines(POST_SHAKE_LINES, function () {

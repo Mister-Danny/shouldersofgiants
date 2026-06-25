@@ -319,9 +319,15 @@
       </div>
       <button class="btn-back-results" id="btn-back-results"     style="display:none">&#8592; Results</button>
       <button class="btn-back-results" id="adv-btn-back-results" style="display:none">&#8592; Results</button>
-      <button class="btn-reset-turn"   id="battle-reset-turn"   disabled>RESET</button>
-      <button class="btn-end-turn"     id="battle-end-turn"     disabled>END TURN</button>
-      <button class="btn-undo-endturn" id="battle-undo-endturn" style="display:none">UNDO (4)</button>
+      <!-- Option B: big labeled End Turn + a compact icon strip (Reset / Undo / Options). -->
+      <div class="battle-action-cluster">
+        <div class="battle-icon-strip">
+          <button class="btn-hud-icon btn-reset-turn"   id="battle-reset-turn"   title="Reset" disabled>&#8635;</button>
+          <button class="btn-hud-icon btn-undo-endturn" id="battle-undo-endturn" title="Undo" style="display:none">&#8630;</button>
+          <button class="btn-hud-icon btn-battle-options" id="battle-btn-options" title="Options"><img src="images/assets/cog1@0.25x.png" alt="Settings" draggable="false"></button>
+        </div>
+        <button class="btn-end-turn" id="battle-end-turn" disabled>END TURN</button>
+      </div>
     </div>
 
     <!-- Ötzi portrait circle (top-right, absolute) -->
@@ -406,8 +412,7 @@
       <span id="overworld-transition-text">Traveling&hellip;</span>
     </div>
 
-
-    <button id="overworld-back" class="btn-snes btn-snes-close">&#8592; Back to Home</button>
+    <!-- (Back to Home relocated into the shared Options panel; floating button removed.) -->
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -1541,7 +1546,7 @@
         <div id="adv-hud-deck-name">Deck</div>
       </div>
       <button id="adv-hud-btn-options" class="adv-hud-icon-btn" title="Options">
-        <img src="images/ui_images/options@0.5x.png" alt="Options" draggable="false">
+        <img src="images/assets/cog1@0.25x.png" alt="Settings" draggable="false">
       </button>
       <!-- State B: NPC portrait slot — hidden in resting state, slides up on dialogue enter -->
       <div id="adv-hud-npc-slot">
@@ -1584,6 +1589,7 @@
   <script src="js/locations.js"></script>
 
   <!-- ── Feature modules (load order matters) ──────────────────── -->
+  <script src="js/sfx.js"></script><!-- central non-music sound router; must precede audio.js -->
   <script src="js/audio.js"></script>
   <script src="js/animations.js"></script>
   <script src="js/progression.js"></script>
@@ -1607,6 +1613,7 @@
   <script src="js/sog-adventure-otzi.js"></script>
   <script src="js/sog-adventure-egypt.js"></script>
   <script src="js/battle-rules-popup.js"></script>
+  <script src="js/options-panel.js"></script><!-- shared Options overlay (overworld + battle) -->
   <script src="js/sog-adventure-gilgamesh.js"></script>
   <script src="js/sog-adventure-sargon.js"></script>
   <script src="js/sog-adventure-hammurabi.js"></script>

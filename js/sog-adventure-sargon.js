@@ -94,11 +94,10 @@ SOG.SargonBattle = (function () {
   //    sub-bullet under the "carry over" line). ─────────────────────────
   var RULES_TITLE = 'The Empire of Sargon';
   var RULES_BODY  = [
-    'Each card costs Capital (CC) to play it.',
-    'You have 5 Capital to spend each turn.',
-    'Unspent Capital does not carry over.<ul class="rules-popup-list"><li>It refreshes to 5 each turn.</li></ul>',
-    '4 turns.',
-    'Win the most locations to defeat Sargon.'
+    '4 Turns',
+    'Each card costs Capital (CC) to play.',
+    '5 Capital to spend each turn.',
+    '<u>Win Condition</u> — Gain the most IP at the most locations to defeat Sargon.'
   ];
 
   // ── Post-game dialogue (editable). Battle-screen speech bubbles. ────
@@ -164,7 +163,7 @@ SOG.SargonBattle = (function () {
     osc.type = 'square';
     osc.frequency.setValueAtTime(freq, now);
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(p.peak, now + 0.005);
+    gain.gain.linearRampToValueAtTime(p.peak * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1), now + 0.005);
     gain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);
@@ -297,6 +296,24 @@ SOG.SargonBattle = (function () {
     } else if (onDismiss) { onDismiss(); }
   }
 
+  /* Click the opponent portrait → open the rules popup (standardized across bosses,
+     mirrors Gilgamesh). Wired at the end of onBattleStart, unwired on teardown. */
+  function _opponentAvatarEl() { return document.querySelector('.battle-avatar-opponent'); }
+  var _portraitClickHandler = null;
+  function _wireOpponentPortraitClick() {
+    var el = _opponentAvatarEl();
+    if (!el || _portraitClickHandler) return;
+    el.classList.add('rules-clickable');
+    _portraitClickHandler = function () { _openRulesPopup(); };
+    el.addEventListener('click', _portraitClickHandler);
+  }
+  function _unwireOpponentPortraitClick() {
+    var el = _opponentAvatarEl();
+    if (el && _portraitClickHandler) el.removeEventListener('click', _portraitClickHandler);
+    if (el) el.classList.remove('rules-clickable');
+    _portraitClickHandler = null;
+  }
+
   /* Opening capital tutorial: dialogue → rules popup → onComplete. Plays once
      per browser; skipped (immediate onComplete) on re-entry. */
   function _runOpeningDialogue(onComplete) {
@@ -350,6 +367,7 @@ SOG.SargonBattle = (function () {
      outcome routing does. */
   function _sargonTeardown() {
     document.body.classList.remove('sargon-battle');
+    _unwireOpponentPortraitClick();
     _restoreOpponentBubblePortrait();
     if (window.SOG && SOG.HUD && typeof SOG.HUD.restoreBattleAvatars === 'function') {
       SOG.HUD.restoreBattleAvatars();
@@ -448,7 +466,7 @@ SOG.SargonBattle = (function () {
   }
 
   /* ── Rewards ───────────────────────────────────────────────────── */
-  function _playSfx(src) { try { var a = new Audio(src); a.play(); } catch (e) {} }
+  function _playSfx(src) { if (window.SOG && SOG.sfx) { SOG.sfx.play(src); return; } try { new Audio(src).play(); } catch (e) {} }
 
   /* Grant the Sargon card (37) via the shared card-acquisition reveal. If the
      player somehow already owns it, skip the reveal (SOG.Cards.unlock returns
@@ -675,6 +693,7 @@ SOG.SargonBattle = (function () {
         _runOpeningDialogue(function () {
           _dialogueActive = false;
           _enableButtons();
+          _wireOpponentPortraitClick();
           done();
         });
       });

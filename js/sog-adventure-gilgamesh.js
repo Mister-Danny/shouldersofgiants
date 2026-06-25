@@ -76,7 +76,7 @@ SOG.GilgameshBattle = (function () {
     osc.type = p.wave;
     osc.frequency.setValueAtTime(freq, now);
     gain.gain.setValueAtTime(0,        now);
-    gain.gain.linearRampToValueAtTime(p.peak, now + 0.005);
+    gain.gain.linearRampToValueAtTime(p.peak * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1), now + 0.005);
     gain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);
@@ -219,9 +219,9 @@ SOG.GilgameshBattle = (function () {
   /* ── Battle rules popup + opponent-portrait interaction (D3a.1) ──── */
   var RULES_TITLE = 'The Epic Battle of Gilgamesh';
   var RULES_BODY  = [
-    '<b>Win Condition</b> — Gain more Influence Points than your opponent at the most locations.',
-    'Draw 2 cards per turn.',
-    '4 turns total.'
+    '4 Turns',
+    'Play 2 cards each turn.',
+    '<u>Win Condition</u> — Gain the most IP at the most locations to defeat Gilgamesh.'
   ];
   function _opponentAvatarEl() { return document.querySelector('.battle-avatar-opponent'); }
   function _openRulesPopup(onDismiss) {
@@ -627,7 +627,7 @@ SOG.GilgameshBattle = (function () {
     } else if (done) { done(); }
   }
 
-  function _playSfx(src) { try { var a = new Audio(src); a.play(); } catch (e) {} }
+  function _playSfx(src) { if (window.SOG && SOG.sfx) { SOG.sfx.play(src); return; } try { new Audio(src).play(); } catch (e) {} }
 
   /* Grant the Gilgamesh card (43) on victory via the shared card-acquisition
      reveal. On a REPEAT win the player already owns it, so skip the acquisition

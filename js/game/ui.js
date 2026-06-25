@@ -52,6 +52,16 @@
   var _musicHowl  = null;
   var _bgMusicVol = 0.10;  // persists across Play Again
 
+  /* Master volume (Options panel) is a multiplier OVER music: effective music
+     volume = master × music. Read fresh from localStorage (default 100 → 1.0) so
+     the music module stays decoupled from SOG.sfx. */
+  function _masterFrac() {
+    var m = parseInt(localStorage.getItem('sog_master_volume'), 10);
+    if (isNaN(m)) m = 100;
+    return Math.max(0, Math.min(100, m)) / 100;
+  }
+  function _effMusicVol() { return _bgMusicVol * _masterFrac(); }
+
   function _musicUpdateUI() {
     var nameEl  = document.getElementById('music-track-name');
     var playBtn = document.getElementById('music-play-btn');
@@ -68,7 +78,7 @@
     if (typeof Howl === 'undefined') { _musicUpdateUI(); return; }
     _musicHowl = new Howl({
       src:    [_musicTracks[_musicIdx].src],
-      volume: _bgMusicVol,
+      volume: _effMusicVol(),
       html5:  true,
       onend:  function () { _musicLoadTrack(_musicIdx + 1, true); },
       onplay: function () { _musicUpdateUI(); },
@@ -108,9 +118,9 @@
 
     // Helper: apply current volume to whichever audio sources exist
     function applyVolumeToAll() {
-      if (_musicHowl) _musicHowl.volume(_bgMusicVol);
-      if (typeof window.setHomeMusicVolume === 'function') window.setHomeMusicVolume(_bgMusicVol);
-      if (typeof window.setDeckMusicVolume === 'function') window.setDeckMusicVolume(_bgMusicVol);
+      if (_musicHowl) _musicHowl.volume(_effMusicVol());
+      if (typeof window.setHomeMusicVolume === 'function') window.setHomeMusicVolume(_effMusicVol());
+      if (typeof window.setDeckMusicVolume === 'function') window.setDeckMusicVolume(_effMusicVol());
     }
 
     // Helper: route play/pause by current screen
@@ -119,7 +129,7 @@
       if (screen === 'battle') {
         if (!_musicHowl) { _musicLoadTrack(_musicIdx, true); return; }
         if (_musicHowl.playing()) _musicHowl.pause();
-        else { _musicHowl.volume(_bgMusicVol); _musicHowl.play(); }
+        else { _musicHowl.volume(_effMusicVol()); _musicHowl.play(); }
         _musicUpdateUI();
       } else if (screen === 'home') {
         if (window.HomeFlow && typeof window.HomeFlow.toggleMusic === 'function') {
@@ -135,7 +145,7 @@
         // Adventure Mode overworld — route to the shared _musicHowl playlist
         if (!_musicHowl) { _musicLoadTrack(_musicIdx, true); return; }
         if (_musicHowl.playing()) _musicHowl.pause();
-        else { _musicHowl.volume(_bgMusicVol); _musicHowl.play(); }
+        else { _musicHowl.volume(_effMusicVol()); _musicHowl.play(); }
         _musicUpdateUI();
       }
       // Other screens (about, result, video, etc.) don't have music
@@ -159,6 +169,11 @@
     SOG.music = {
       /** Toggle play/pause for the current screen's audio source. */
       toggle: function () { togglePlayPauseForCurrentScreen(); },
+
+      /** Advance the shared playlist (used by the Options panel's player). */
+      next: function () { _musicLoadTrack(_musicIdx + 1, true); },
+      /** Rewind the shared playlist. */
+      prev: function () { _musicLoadTrack(_musicIdx - 1, true); },
 
       /**
        * Set volume (0–100 integer). Updates localStorage, all active
@@ -198,7 +213,10 @@
        * Callback invoked by _musicUpdateUI whenever play state changes.
        * Set by SOG.HUD to refresh its compact play/pause button icon.
        */
-      onUpdate: null
+      onUpdate: null,
+
+      /** Re-apply the effective music volume (e.g. after the Master slider moves). */
+      refresh: function () { applyVolumeToAll(); _musicUpdateUI(); }
     };
   }());
 
