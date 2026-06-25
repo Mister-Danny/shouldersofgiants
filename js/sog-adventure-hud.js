@@ -190,7 +190,7 @@ SOG.HUD = (function () {
   ══════════════════════════════════════════════════════════════ */
 
   /* Refreshes the HUD's dynamic resting content: the active deck's saved name
-     (shown under the card-back deck button) and the gold balance. The stamina
+     (shown under the card-back deck button) and the gold balance. The focus
      bar + textbook are static markup. Name kept for the existing callers (init,
      the showScreen hook) + the public API. */
   function refreshDecks() {
@@ -201,6 +201,7 @@ SOG.HUD = (function () {
     }
     _refreshDeckLock();
     refreshGold();
+    refreshFocus();
   }
 
   // The deck builder stays LOCKED (greyed, non-clickable) early in adventure mode
@@ -223,6 +224,31 @@ SOG.HUD = (function () {
       // Triple-digit (100+) totals get a 2px-smaller font so they fit the coin.
       el.classList.toggle('gold-triple', String(val).length >= 3);
     }
+  }
+
+  // Refresh the focus bar fill (e.g. after a battle/travel/market drain). The
+  // fill is driven purely by width %, so map the 0..MAX value straight to 0..100%.
+  function refreshFocus() {
+    var fill = document.querySelector('.adv-hud-focus-fill');
+    if (fill && window.SOG && SOG.focus) {
+      var max = SOG.focus.MAX || 100;
+      var pct = Math.max(0, Math.min(100, (SOG.focus.get() / max) * 100));
+      fill.style.width = pct + '%';
+    }
+    // Focus-gate halo: once Focus is restored above 0, drop the pulsing halo on
+    // the book button (ends the gate episode). The halo is only ADDED by the gate
+    // (SOG.HUD.showFocusHalo), never here — so a plain drain to 0 won't light it.
+    if (window.SOG && SOG.focus && SOG.focus.get() > 0) {
+      var book = document.getElementById('adv-hud-textbook');
+      if (book) book.classList.remove('adv-hud-textbook--halo');
+    }
+  }
+
+  // Raise the persistent gold pulsing halo on the learning-check (book) button —
+  // the beacon shown after the first blocked action while Focus is at 0. Idempotent.
+  function showFocusHalo() {
+    var book = document.getElementById('adv-hud-textbook');
+    if (book) book.classList.add('adv-hud-textbook--halo');
   }
 
   // Set the central region/location label (called by overworld.js loadMap with
@@ -265,6 +291,17 @@ SOG.HUD = (function () {
     if (optBtn) optBtn.addEventListener('click', function () {
       if (window.SOG && SOG.OptionsPanel) SOG.OptionsPanel.open();
     });
+    // Book icon (under the focus bar) — opens the Learning Check popup, which
+    // restores focus by answering a history question. Accessible anytime (no
+    // gate yet — that's Stage 3).
+    var bookBtn = document.getElementById('adv-hud-textbook');
+    if (bookBtn) {
+      bookBtn.style.cursor = 'pointer';
+      bookBtn.addEventListener('click', function () {
+        if (_inDialogue) return;   // suppress during scripted dialogue, like the deck button
+        if (window.SOG && SOG.LearningCheck) SOG.LearningCheck.open();
+      });
+    }
   }
 
   function _openDeckBuilder() {
@@ -788,6 +825,8 @@ SOG.HUD = (function () {
     hide:               hide,
     refreshDecks:       refreshDecks,
     refreshGold:        refreshGold,
+    refreshFocus:     refreshFocus,
+    showFocusHalo:      showFocusHalo,
     setRegion:          setRegion,
     setName:            setName,
     runDialogue:        runDialogue,

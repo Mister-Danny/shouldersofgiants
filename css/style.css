@@ -1402,6 +1402,84 @@ img    { display: block; }
 .rules-popup-list li { margin-bottom: 10px; }
 .rules-popup-prose { white-space: pre-line; }
 
+/* ── Learning Check popup (SOG.LearningCheck) ───────────────────────
+   Reuses the parchment panel (.card-popup .rules-popup); these rules cover the
+   question/answer/feedback layout inside it. SNES-styled answer + action buttons
+   match the Options-panel / btn-snes treatment. */
+.learning-check-popup { width: 600px; max-width: 92vw; text-align: center; }
+.lc-body { font-family: var(--font); }
+.lc-prompt {
+  font-size: 15px;
+  color: #c9b48a;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0 #000;
+  margin-bottom: 10px;
+}
+.lc-question {
+  font-size: 22px;
+  line-height: 1.4;
+  color: #f3e6c4;
+  text-shadow: 1px 1px 0 #000;
+  margin: 0 auto 18px;
+  max-width: 94%;
+}
+.lc-options { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.lc-options-tf { flex-direction: row; justify-content: center; }
+.lc-options-tf .lc-option { flex: 0 0 38%; }
+.lc-option {
+  font-family: var(--font);
+  font-size: 18px;
+  color: #f3e6c4;
+  text-shadow: 1px 1px 0 #000;
+  background: #5a3418;
+  border: 2px solid #8a5a26;
+  border-radius: 6px;
+  padding: 12px 16px;
+  box-shadow: 0 3px 0 #1a0c04, 0 4px 0 #000;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+.lc-option:hover:not(:disabled)  { background: #6e4220; border-color: #d4aa50; color: #e8c060; }
+.lc-option:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 #1a0c04, 0 2px 0 #000; }
+.lc-option:disabled { cursor: default; opacity: 0.85; }
+.lc-option.lc-option-correct { background: #2f6a2e; border-color: #6fcf5a; color: #eafbe4; }
+.lc-option.lc-option-wrong   { background: #6a2626; border-color: #cf5a5a; color: #fbe4e4; opacity: 1; }
+
+/* Feedback + footer actions (after an answer) */
+.lc-feedback { margin-top: 16px; min-height: 1px; }
+.lc-result {
+  font-size: 26px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #000;
+}
+.lc-result-correct { color: #6fcf5a; }
+.lc-result-wrong   { color: #e88a5a; }
+.lc-result-sub {
+  font-size: 15px;
+  color: #e8c060;
+  text-shadow: 1px 1px 0 #000;
+  margin-top: 4px;
+}
+.lc-actions { display: flex; justify-content: center; gap: 14px; margin-top: 16px; }
+.lc-btn {
+  font-family: var(--font);
+  font-size: 16px;
+  color: #f3e6c4;
+  text-shadow: 1px 1px 0 #000;
+  background: #5a3418;
+  border: 2px solid #8a5a26;
+  border-radius: 6px;
+  padding: 10px 22px;
+  box-shadow: 0 3px 0 #1a0c04, 0 4px 0 #000;
+  cursor: pointer;
+}
+.lc-btn:hover  { background: #6e4220; border-color: #d4aa50; color: #e8c060; }
+.lc-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a0c04, 0 2px 0 #000; }
+.lc-btn-next { color: #e8c060; border-color: #d4aa50; }
+
 /* Gilgamesh battle — clickable opponent portrait (opens the rules popup) */
 .battle-avatar-opponent.gilgamesh-clickable { cursor: pointer; pointer-events: auto; }
 .battle-avatar-opponent.gilgamesh-clickable:hover .battle-avatar-frame {
@@ -8510,13 +8588,13 @@ body.tut-locked #battle-reset-turn {
 #adv-hud-btn-options {
   transition: opacity 0.25s ease;
 }
-#adv-hud-stamina-col {
+#adv-hud-focus-col {
   transition: opacity 0.25s ease, width 0.25s ease, margin 0.25s ease;
 }
 
 #adv-hud.dialogue-mode #adv-hud-region,
 #adv-hud.dialogue-mode #adv-hud-player-name,
-#adv-hud.dialogue-mode #adv-hud-stamina-col,
+#adv-hud.dialogue-mode #adv-hud-focus-col,
 #adv-hud.dialogue-mode #adv-hud-gold,
 #adv-hud.dialogue-mode #adv-hud-deck,
 #adv-hud.dialogue-mode #adv-hud-btn-options {
@@ -8524,11 +8602,11 @@ body.tut-locked #battle-reset-turn {
   pointer-events: none;
 }
 
-/* Left-group stamina collapses its width in dialogue mode so the player portrait
+/* Left-group focus collapses its width in dialogue mode so the player portrait
    stands alone at the left edge (its retained space isn't covered by the dialogue
    overlay). The right-group gold + deck + options stay put — the NPC portrait
    slot (inset:0 over #adv-hud-util) covers them. */
-#adv-hud.dialogue-mode #adv-hud-stamina-col {
+#adv-hud.dialogue-mode #adv-hud-focus-col {
   width: 0;
   margin: 0;
   overflow: hidden;
@@ -10120,9 +10198,9 @@ body[data-screen="overworld"] #overworld-overlay {
   height: calc(100% - 120px);   /* 720 - 120 = 600 px */
 }
 
-/* ── LEFT group: avatar+name · stamina/textbook · gold coin ────────
+/* ── LEFT group: avatar+name · focus/textbook · gold coin ────────
    Anchored to the left edge. Children spaced by margins (no flex gap) so
-   stamina + gold collapse cleanly to width 0 in dialogue mode. */
+   focus + gold collapse cleanly to width 0 in dialogue mode. */
 #adv-hud-left {
   flex-shrink: 0;
   display: flex;
@@ -10175,10 +10253,10 @@ body[data-screen="overworld"] #overworld-overlay {
   white-space: nowrap;
 }
 
-/* ── Stamina column — fills the full bar height: the big STAMINA word fills
+/* ── Focus column — fills the full bar height: the big FOCUS word fills
    the space above the (thin, HUD-centred) bar, and the textbook fills the
    space below. Label + textbook share equal flex so the bar stays centred. */
-#adv-hud-stamina-col {
+#adv-hud-focus-col {
   flex-shrink: 0;
   margin-left: 16px;
   align-self: stretch;
@@ -10189,8 +10267,8 @@ body[data-screen="overworld"] #overworld-overlay {
   justify-content: center;
   padding: 6px 0;
 }
-/* STAMINA word — grows to fill the top space, large. */
-.adv-hud-stamina-label {
+/* FOCUS word — grows to fill the top space, large. */
+.adv-hud-focus-label {
   flex: 1 1 0;
   min-height: 0;
   width: 100%;
@@ -10207,7 +10285,7 @@ body[data-screen="overworld"] #overworld-overlay {
   line-height: 1;
 }
 /* Thin bar — sits centred in the HUD. */
-.adv-hud-stamina-track {
+.adv-hud-focus-track {
   flex-shrink: 0;
   width: 100%;
   height: 9px;
@@ -10216,14 +10294,14 @@ body[data-screen="overworld"] #overworld-overlay {
   background: rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
-.adv-hud-stamina-fill {
+.adv-hud-focus-fill {
   height: 100%;
   width: 72%;   /* static placeholder level */
   background: linear-gradient(180deg, #6fcf5a 0%, #3fae2e 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
-/* Textbook — placeholder for a future learning-check that boosts stamina.
-   Shares equal flex with the STAMINA word (so the bar stays centred) and fills
+/* Textbook — placeholder for a future learning-check that boosts focus.
+   Shares equal flex with the FOCUS word (so the bar stays centred) and fills
    the bottom space; aspect-ratio keeps it square so the (4096px) source can't
    claim its natural width and blow out the column. */
 #adv-hud-textbook {
@@ -10237,6 +10315,27 @@ body[data-screen="overworld"] #overworld-overlay {
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
   user-select: none;
   display: block;
+}
+
+/* Focus-gate beacon: pulsing gold halo on the book button while Focus is 0 and
+   the player has hit the gate. drop-shadow follows the book's alpha shape, so the
+   glow hugs the icon (not a rectangle). Added/removed via .adv-hud-textbook--halo
+   (SOG.HUD.showFocusHalo / refreshFocus). */
+@keyframes adv-hud-textbook-halo {
+  0%, 100% {
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 6px rgba(232, 192, 96, 0.9))
+            drop-shadow(0 0 10px rgba(232, 192, 96, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 14px rgba(240, 205, 110, 1))
+            drop-shadow(0 0 24px rgba(240, 200, 110, 0.85));
+  }
+}
+#adv-hud-textbook.adv-hud-textbook--halo {
+  cursor: pointer;
+  animation: adv-hud-textbook-halo 1.1s ease-in-out infinite;
 }
 
 /* ── Gold — coin with the balance overlaid in its centre (white) ── */

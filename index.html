@@ -1495,7 +1495,7 @@
        and dialogue boxes (z9999).
   ════════════════════════════════════════════════════════════════ -->
   <div id="adv-hud">
-    <!-- LEFT group: avatar + name · stamina (word / bar / textbook) -->
+    <!-- LEFT group: avatar + name · focus (word / bar / textbook) -->
     <div id="adv-hud-left">
       <!-- Avatar + static player title -->
       <div id="adv-hud-portrait" title="Avatar — future customisation">
@@ -1503,14 +1503,14 @@
         <!-- Static default; a future name system can feed this via SOG.HUD.setName(). -->
         <div id="adv-hud-player-name">Explorer</div>
       </div>
-      <!-- Stamina column: big STAMINA word fills the top, a thin bar sits centred in
+      <!-- Focus column: big FOCUS word fills the top, a thin bar sits centred in
            the HUD, and the textbook fills the bottom. The textbook is a placeholder
-           for a future learning-check that will boost stamina — image only, no fn. -->
-      <div id="adv-hud-stamina-col" title="Stamina (placeholder)">
-        <div class="adv-hud-stamina-label">STAMINA</div>
-        <div class="adv-hud-stamina-track"><div class="adv-hud-stamina-fill"></div></div>
+           for a future learning-check that will boost focus — image only, no fn. -->
+      <div id="adv-hud-focus-col" title="Focus">
+        <div class="adv-hud-focus-label">FOCUS</div>
+        <div class="adv-hud-focus-track"><div class="adv-hud-focus-fill"></div></div>
         <img id="adv-hud-textbook" src="images/ui_images/textbook.png" alt=""
-             title="Learning check — coming soon" draggable="false">
+             title="Learning check — answer a question to restore focus" draggable="false">
       </div>
     </div>
     <!-- MIDDLE: dynamic region name — absolutely centred on the WHOLE bar (set by
@@ -1586,6 +1586,7 @@
   <script src="js/cards.js"></script>
   <script src="js/sog-collection.js"></script>  <!-- player collection (owns sog_unlocked_cards); must load right after cards.js -->
   <script src="js/sog-gold.js"></script>  <!-- player gold (owns sog_gold); marketplace currency -->
+  <script src="js/sog-focus.js"></script>  <!-- player focus (owns sog_focus); adventure energy drained by battles/travel/market -->
   <script src="js/locations.js"></script>
 
   <!-- ── Feature modules (load order matters) ──────────────────── -->
@@ -1613,6 +1614,7 @@
   <script src="js/sog-adventure-otzi.js"></script>
   <script src="js/sog-adventure-egypt.js"></script>
   <script src="js/battle-rules-popup.js"></script>
+  <script src="js/sog-learning-check.js"></script><!-- learning-check popup (focus refill via history questions) -->
   <script src="js/options-panel.js"></script><!-- shared Options overlay (overworld + battle) -->
   <script src="js/sog-adventure-gilgamesh.js"></script>
   <script src="js/sog-adventure-sargon.js"></script>

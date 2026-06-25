@@ -407,6 +407,20 @@ var SFX = (function () {
       tone(784, 'square', 0.005, 0.05, 0.10, 0.09, 0.22);    // G5
     },
 
+    /** Learning check — CORRECT: bright ascending 8-bit "ta-da" chime */
+    learnCorrect: function () {
+      tone(659,  'square', 0.005, 0.04, 0.06, 0.11);         // E5
+      tone(880,  'square', 0.005, 0.04, 0.06, 0.11, 0.09);   // A5
+      tone(1175, 'square', 0.005, 0.07, 0.14, 0.11, 0.18);   // D6 — bright finish
+    },
+
+    /** Learning check — WRONG: low buzzy "bummer" buzzer (two detuned squares + grit) */
+    learnWrong: function () {
+      tone(196, 'square',   0.004, 0.20, 0.07, 0.15);        // G3
+      tone(185, 'square',   0.004, 0.20, 0.07, 0.11);        // detuned → buzzy beat
+      noise(0.05, 0.05);                                      // a touch of grit
+    },
+
     /** Continuous ability activates: soft warm two-note hum */
     continuous: function () {
       tone(330, 'sine', 0.015, 0.06, 0.10, 0.12);

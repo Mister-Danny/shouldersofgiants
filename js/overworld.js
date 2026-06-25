@@ -992,8 +992,51 @@ var Overworld = (function () {
   }
 
   /* ── Node click ────────────────────────────────────────────── */
+  // Focus (focus) hard gate (Stage 3, adventure-only — the overworld IS adventure
+  // mode): true when the player is out of Focus and must refill via a learning
+  // check before acting. Drains clamp at 0, so "=== 0" is the gate condition.
+  function _focusGated() {
+    return !!(window.SOG && SOG.focus && SOG.focus.get() === 0);
+  }
+
+  // Focus-gate Explorer dialogue (editable). The FIRST attempt of a gate episode
+  // explains the fix; SUBSEQUENT attempts (still at 0) play the lighter nudge.
+  var FOCUS_GATE_FIRST = [
+    { who: 'explorer', text: "I'm losing my focus." },
+    { who: 'explorer', text: 'I think I need a learning check to keep going.' }
+  ];
+  var FOCUS_GATE_AGAIN = [
+    { who: 'explorer', text: 'That place looks so cool.' },
+    { who: 'explorer', text: 'If only there was a way to restore my focus.' }
+  ];
+
+  // Blocked-action feedback: play Explorer dialogue in the HUD, then raise the
+  // persistent gold halo on the learning-check (book) button. The halo IS the
+  // gate-episode flag — present means "already hit the gate this episode", so the
+  // FIRST hit (halo absent) plays the full explanation and the rest play the
+  // shorter nudge. The HUD clears the halo once Focus rises above 0
+  // (SOG.HUD.refreshFocus), which also resets the episode.
+  function _showFocusGate() {
+    var book = document.getElementById('adv-hud-textbook');
+    var firstHit = !(book && book.classList.contains('adv-hud-textbook--halo'));
+    var lines = firstHit ? FOCUS_GATE_FIRST : FOCUS_GATE_AGAIN;
+    isDialogueLocked = true;
+    cancelIdle();
+    runDialogue(lines, function () {
+      isDialogueLocked = false;
+      // Raise (or keep) the pulsing halo so the player always sees the fix.
+      if (window.SOG && SOG.HUD && typeof SOG.HUD.showFocusHalo === 'function') SOG.HUD.showFocusHalo();
+      scheduleIdle();
+    });
+  }
+
   function onNodeClick(node) {
     if (isMoving || isTransitioning || isDialogueLocked) return;
+    // Focus gate: at 0 focus, every node action (battle start, marketplace
+    // entry, replays) is blocked → show the refill prompt instead. The HUD book
+    // icon + the prompt's button both still open the learning check, so the
+    // player can always refill and escape (anti-softlock).
+    if (_focusGated()) { _showFocusGate(); return; }
     // Clicking the Prehistory node ends the urgent idle pulse if active
     clearUrgentPulse();
 
@@ -1184,6 +1227,9 @@ var Overworld = (function () {
   /* ── Exit click — walk then transition ─────────────────────── */
   function onExitClick(exit) {
     if (isMoving || isTransitioning || isDialogueLocked) return;
+    // Focus gate: block map-to-map travel at 0 focus (before any walk),
+    // showing the refill prompt instead.
+    if (_focusGated()) { _showFocusGate(); return; }
     // The actual departure: walk (off-screen if exit.walkOff, else to walkTo),
     // then fade-transition to the target map.
     var go = function () {
@@ -1205,6 +1251,11 @@ var Overworld = (function () {
     isTransitioning = true;
     cancelIdle();
     stopFootsteps();
+
+    // Focus drain (Stage 1): each map-to-map trip costs 15. The isTransitioning
+    // guard above makes this fire exactly once per trip.
+    if (window.SOG && SOG.focus) SOG.focus.spend(15);
+    if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshFocus === 'function') SOG.HUD.refreshFocus();
 
     if (typeof gsap === 'undefined') {
       loadMap(targetMapId, { entryAt: entryAt });
@@ -2769,6 +2820,11 @@ var Overworld = (function () {
     isDialogueLocked = true;
     cancelIdle();
     stopFootsteps();
+
+    // Focus drain (Stage 1): each marketplace trip costs 5. _enterMarket runs
+    // once per entry (node click, or the first-Gilgamesh-win auto-walk).
+    if (window.SOG && SOG.focus) SOG.focus.spend(5);
+    if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshFocus === 'function') SOG.HUD.refreshFocus();
     var prev = document.getElementById('adv-market-screen');
     if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
 

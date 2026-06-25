@@ -1420,6 +1420,17 @@
       }
     };
 
+    // Focus drain (clamps at 0). ADVENTURE-ONLY (Stage 3 scoping): every battle
+    // WIN costs 25, every LOSS costs 10 (ties cost nothing). Guarded on
+    // G.config.scriptHook — truthy for adventure battles (bosses + prehistory/
+    // otzi), null for Arcadium/2P — so Arcadium play never touches focus.
+    // endGame() runs exactly once per battle, so this drains once.
+    if ((G.config && G.config.scriptHook) && window.SOG && SOG.focus) {
+      if      (result.outcome === 'player') SOG.focus.spend(25);
+      else if (result.outcome === 'ai')     SOG.focus.spend(10);
+      if (window.SOG.HUD && typeof SOG.HUD.refreshFocus === 'function') SOG.HUD.refreshFocus();
+    }
+
     var _outcomeHook = result.outcome === 'player' ? 'onWin'
                      : result.outcome === 'ai'     ? 'onLoss'
                      : 'onTie';
