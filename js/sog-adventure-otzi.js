@@ -840,14 +840,18 @@ SOG.OtziBattle = (function () {
       _otziParkSideLocations();
       fadeOutCover(function () {
         runLines(PRE_SHAKE_LINES, function () {
-          SOG.sfx.play('sfx/earthspell.mp3');   // rumble as the side locations shake into place
-          shakeCamera(function () {
-            revealSideLocations(function () {
-              runLines(POST_SHAKE_LINES, function () {
-                dealCards(function () { done(); });
+          // Woosh leads the side-location shake-in: play it now, then start the
+          // shake 500ms later so the whoosh anticipates the locations arriving.
+          SOG.sfx.play('sfx/woosh.m4a');
+          setTimeout(function () {
+            shakeCamera(function () {
+              revealSideLocations(function () {
+                runLines(POST_SHAKE_LINES, function () {
+                  dealCards(function () { done(); });
+                });
               });
             });
-          });
+          }, 500);
         });
       });
     },

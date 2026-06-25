@@ -10307,10 +10307,15 @@ body[data-screen="overworld"] #overworld-overlay {
 #adv-hud-textbook {
   flex: 1 1 0;
   min-height: 0;
+  min-width: 0;        /* Firefox: without this the img's auto min-width resolves to
+                          its intrinsic (4096px) width and, via aspect-ratio, refuses
+                          to shrink — overflowing the column and shoving FOCUS/bar out
+                          of place. Chrome/Safari clamp it anyway; Firefox needs this. */
   height: auto;
   width: auto;
   aspect-ratio: 1 / 1;
   max-width: 150px;
+  max-height: 100%;    /* hard cap to the column so it can never blow out vertically */
   object-fit: contain;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
   user-select: none;
