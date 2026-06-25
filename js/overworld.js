@@ -38,6 +38,10 @@ var Overworld = (function () {
   var KEY_SARGON_NODE_REVEALED      = 'sog_sargon_node_revealed';       // dust-storm reveal played → node persists, no replay
   var KEY_HAMMURABI_NODE_REVEALED   = 'sog_hammurabi_node_revealed';    // earth-rise reveal played (after beating Sargon) → node persists, no replay
   var KEY_HANGING_GARDENS_REVEALED  = 'sog_hanging_gardens_revealed';   // sparkle reveal played (after beating Hammurabi) → node persists, no replay
+  // Egypt on-ramp (post-Nebuchadnezzar)
+  var KEY_NEB_COMPLETE              = 'sog_battle_nebuchadnezzar_complete'; // set on the Nebuchadnezzar (Hanging Gardens) win
+  var KEY_EGYPT_NODE_LIVE           = 'sog_egypt_node_live';            // post-Neb: Egypt Double Crown node is active + post-Neb beat has played (set once, at end of the beat)
+  var KEY_EGYPT_NODE_ARRIVAL        = 'sog_egypt_node_arrival_seen';    // one-time Egypt "funny hat" arrival beat (fires when reaching Egypt with the node live)
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -259,6 +263,29 @@ var Overworld = (function () {
     { who: 'explorer', text: 'If no one is going to answer the door' },
     { who: 'explorer', text: "I'm going to explore myself." }
   ];
+  // ── Egypt on-ramp (post-Nebuchadnezzar) ──────────────────────────────────
+  // Beat 1: plays on the Mesopotamia overworld after beating Nebuchadnezzar
+  // (after a ~5s "looking around expectantly" idle). Then the To Egypt exit
+  // flashes for 3s. EDITABLE.
+  var EGYPT_ONRAMP_DIALOGUE = [
+    { who: 'explorer', text: 'Okay…' },
+    { who: 'explorer', text: 'Abracadabra?!' },
+    { who: 'explorer', text: 'Open sesame?!' },
+    { who: 'explorer', text: 'Something magically mysterious can pop up now…' },
+    { who: 'explorer', text: 'Is that it?' },
+    { who: 'explorer', text: 'Is my historical adventure over?' },
+    { who: 'explorer', text: 'Hmm…' },
+    { who: 'explorer', text: 'Nebuchadnezzar did say something about Egypt.' },
+    { who: 'explorer', text: 'Maybe I should check that out.' }
+  ];
+  // Beat 2: plays once when the player reaches the Egypt map with the Double
+  // Crown node live (sog_egypt_node_live). EDITABLE.
+  var EGYPT_NODE_ARRIVAL_DIALOGUE = [
+    { who: 'explorer', text: 'Still no pyramids?' },
+    { who: 'explorer', text: "That's a bummer." },
+    { who: 'explorer', text: "What's that funny hat?" }
+  ];
+
   // Hammurabi (Babylon) encounter — plays on node click when the active deck has
   // the full 15 cards, then the battle launches.
   var D4_HAMMURABI_ENCOUNTER = [
@@ -448,10 +475,27 @@ var Overworld = (function () {
 
     'egypt': {
       displayName: 'Egypt',
-      image: MAP_PATH + 'egypt.jpeg',
+      image: MAP_PATH + 'egyptz.jpeg',
       spawn: { x: 10, y: 85 },
       startsFogged: true,
-      nodes: [],   // placeholder for future
+      nodes: [
+        {
+          // First Egypt node — Narmer's Double Crown. Goes live after beating
+          // Nebuchadnezzar (sog_egypt_node_live, set at the end of the post-Neb
+          // beat). Placed at the base of the Nile Delta (the green fan, top-left).
+          // Click → walk up → "Egypt Battle 1 — Coming Soon" STUB (battle not built).
+          // ART: doublecrown.png is a PLACEHOLDER — swap when the real art lands.
+          // Position (x/y) + scale are KNOBS for fine-tuning.
+          id:    'double-crown',
+          name:  'The Double Crown',
+          image: NODE_PATH + 'doublecrown.png',
+          x: 24, y: 46,
+          scale: 1.12,
+          showIf: function () {
+            try { return localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) { return false; }
+          }
+        }
+      ],
       exits: [
         {
           id:      'to-mesopotamia',
@@ -820,6 +864,21 @@ var Overworld = (function () {
     // Fix 4: toggle body class so Explorer dialogue box can be re-centred on foreign maps
     document.body.classList.toggle('overworld-away-from-home', mapId !== 'eastafrica');
     mapImgEl.src = data.image;
+    // The Egypt map (egyptz.jpeg) is slightly taller than the 16:9 viewport, so
+    // object-fit:cover alone would crop the Nile Delta at the top. Pin the image's
+    // TOP edge to the screen top (delta fully visible), then zoom in from that top
+    // anchor so the image grows DOWNWARD to cover the bottom all the way under the
+    // HUD (no gap). The top stays framed; only extra map is cropped at the bottom.
+    // Other maps keep their default centered framing.
+    if (mapId === 'egypt') {
+      mapImgEl.style.objectPosition  = 'center top';
+      mapImgEl.style.transformOrigin = 'center top';
+      mapImgEl.style.transform       = 'translateY(-4%) scale(1.08)';
+    } else {
+      mapImgEl.style.objectPosition  = '';
+      mapImgEl.style.transformOrigin = '';
+      mapImgEl.style.transform       = '';
+    }
 
     // Update the HUD region label to the current map's display name (dynamic —
     // never hardcoded). Guarded: a no-op if the HUD isn't present/ready.
@@ -1037,6 +1096,18 @@ var Overworld = (function () {
       return;
     }
 
+    // ── The Double Crown (Egypt) — walk up to the node, then the Egypt Battle 1
+    //    STUB ("Coming Soon"). No battle is built yet; mirror the other node
+    //    walk-ups but land on the placeholder instead of a real battle. ──
+    if (node.id === 'double-crown' && currentMapId === 'egypt') {
+      isDialogueLocked = true;
+      cancelIdle();
+      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+        _launchEgyptBattle1();
+      });
+      return;
+    }
+
     // Adventure Mode handoff: the Prehistory node launches the Neanderthal
     // tutorial battle. If the player has already won it, skip the walk
     // entirely and drop straight into the gameboard (spec: "skip the
@@ -1148,6 +1219,7 @@ var Overworld = (function () {
         // one-time flag): East Africa post-Otzi dialogue, Egypt arrival, or the
         // Mesopotamia arrival sequence (which plays through to the Uruk node).
         if (maybePlayEastAfricaReturnDialogue()) return;
+        if (maybePlayEgyptNodeArrival()) return;   // post-Neb "funny hat" beat — wins over the generic arrival
         if (maybePlayEgyptArrival()) return;
         if (maybePlayMesopotamiaArrival()) return;
         scheduleIdle();
@@ -1281,6 +1353,30 @@ var Overworld = (function () {
       isDialogueLocked = false;
       try { localStorage.setItem(KEY_EGYPT_ARRIVAL, 'true'); } catch (e) {}
       flashExit('to-mesopotamia', 1500);
+      scheduleIdle();
+    });
+    return true;
+  }
+
+  /* ── Egypt arrival with the Double Crown node LIVE (post-Neb) ──
+     One-time "funny hat" beat. Fires when the player reaches Egypt while
+     sog_egypt_node_live is set, then leaves control to the player (the live
+     Double Crown node renders via loadMap's showIf). Gated once via
+     KEY_EGYPT_NODE_ARRIVAL; the flag is set at the END so an interrupted beat
+     replays. Runs BEFORE the generic Egypt arrival so the node-live beat wins. */
+  function maybePlayEgyptNodeArrival() {
+    if (isDialogueLocked) return false;
+    if (currentMapId !== 'egypt') return false;
+    try {
+      if (localStorage.getItem(KEY_EGYPT_NODE_LIVE) !== 'true') return false;
+      if (localStorage.getItem(KEY_EGYPT_NODE_ARRIVAL) === 'true') return false;
+    } catch (e) { return false; }
+
+    isDialogueLocked = true;
+    cancelIdle();
+    runDialogue(EGYPT_NODE_ARRIVAL_DIALOGUE, function () {
+      isDialogueLocked = false;
+      try { localStorage.setItem(KEY_EGYPT_NODE_ARRIVAL, 'true'); } catch (e) {}
       scheduleIdle();
     });
     return true;
@@ -2438,6 +2534,46 @@ var Overworld = (function () {
     });
   }
 
+  /* Egypt Battle 1 — STUB. The battle isn't built yet, so instead of a wipe into
+     a real battle we surface a clear "Coming Soon" placeholder over the map, then
+     return the player to idle. TODO (Egypt Battle 1): replace this with the real
+     launch (mirror _launchHammurabiBattle: _fireWipeFromNode('double-crown', …)
+     → SOG.EgyptBattle1.start()). */
+  function _launchEgyptBattle1() {
+    log('[Egypt] Double Crown clicked — Egypt Battle 1 not built yet (STUB)');
+    _showStubToast('Egypt Battle 1 — Coming Soon', function () {
+      isDialogueLocked = false;
+      scheduleIdle();
+    });
+  }
+
+  /* Minimal self-contained "coming soon" placeholder toast for unbuilt battles.
+     Fades a small SNES-styled card in over the overworld, holds, fades out, then
+     calls onDone. Inline-styled so it needs no CSS; remove when real battles land. */
+  function _showStubToast(text, onDone) {
+    var host = document.getElementById('screen-overworld') || document.body;
+    var el = document.createElement('div');
+    el.textContent = text;
+    el.style.cssText = [
+      'position:absolute', 'left:50%', 'top:50%', 'transform:translate(-50%,-50%)',
+      'z-index:60', 'padding:18px 30px',
+      "font-family:'CTGalbite','Courier New',monospace", 'font-size:22px',
+      'color:#f3e6c4', 'text-shadow:2px 2px 0 #000', 'text-align:center',
+      'background:linear-gradient(#2a1608,#3a200c,#2a1608)',
+      'border:3px solid #d4aa50', 'border-radius:10px',
+      'box-shadow:0 0 0 3px #1a0c04, 0 0 0 6px #6a4418, 0 0 0 7px #1a0c04',
+      'opacity:0', 'transition:opacity 0.3s ease', 'pointer-events:none'
+    ].join(';');
+    host.appendChild(el);
+    // fade in → hold → fade out → cleanup
+    requestAnimationFrame(function () { el.style.opacity = '1'; });
+    setTimeout(function () { el.style.opacity = '0'; }, 1600);
+    setTimeout(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      if (onDone) onDone();
+    }, 2000);
+  }
+
   /* Fire the radial wipe from the node, then start the real Gilgamesh battle. */
   function _launchGilgameshBattle() {
     _fireWipeFromNode('walls-of-uruk', function () {
@@ -3108,6 +3244,7 @@ var Overworld = (function () {
     // scripted intro dialogue (locks movement until it ends).
     var dialogueStarted = maybePlayAdventureIntro();
     if (!dialogueStarted) dialogueStarted = maybePlayEastAfricaReturnDialogue();
+    if (!dialogueStarted) dialogueStarted = maybePlayEgyptNodeArrival();   // post-Neb "funny hat" beat
     if (!dialogueStarted) dialogueStarted = maybePlayEgyptArrival();
     if (!dialogueStarted) dialogueStarted = maybePlayMesopotamiaArrival();
     if (!dialogueStarted) scheduleIdle();
@@ -3279,6 +3416,34 @@ var Overworld = (function () {
           });
         }, 350);
         log('resumeAfterBattle() — Hanging Gardens catch-up reveal');
+        return;
+      }
+
+      // Post-Nebuchadnezzar → Egypt on-ramp. Same robust catch-up pattern as the
+      // Hammurabi / Hanging Gardens reveals above: fires on return to Mesopotamia
+      // whether it's the FIRST Neb win or a return on an already-Neb-beaten save,
+      // and exactly once (the flag is set at the END of the beat). Sequence:
+      // ~5s "looking around expectantly" idle (alive, input locked) → the
+      // "abracadabra" lines → set sog_egypt_node_live (Double Crown goes live) →
+      // flash the To Egypt exit for 3s → restore control (normal travel takes over).
+      var _nebDone = false, _egyptLive = false;
+      try { _nebDone   = localStorage.getItem(KEY_NEB_COMPLETE)   === 'true'; } catch (e) {}
+      try { _egyptLive = localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) {}
+      if (_nebDone && !_egyptLive && currentMapId === 'mesopotamia') {
+        isDialogueLocked = true;          // clicks/travel locked for the whole beat
+        cancelIdle();
+        startIdleRoutine();               // map-reading idle → reads as ALIVE, not frozen
+        setTimeout(function () {
+          cancelIdle();
+          setStanding();
+          runDialogue(EGYPT_ONRAMP_DIALOGUE, function () {
+            try { localStorage.setItem(KEY_EGYPT_NODE_LIVE, 'true'); } catch (e) {}
+            isDialogueLocked = false;
+            flashExit('to-egypt', 3000);  // 3s attention-grab on the EXISTING travel path
+            scheduleIdle();
+          });
+        }, 5000);
+        log('resumeAfterBattle() — post-Neb Egypt on-ramp');
         return;
       }
 
