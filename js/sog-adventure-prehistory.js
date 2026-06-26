@@ -1115,21 +1115,19 @@ window.SOG.Adventure.Prehistory = (function () {
     log('Phase E — coaching starting (phase 1: intro exchange)');
     runCoachingLines(COACHING_PHASE_1, function () {
       log('Phase E — phase 1 complete, shake + UI slide-in');
-      // Woosh leads the card shake-in: play it now, then start the shake 500ms
-      // later so the whoosh anticipates the cards arriving.
+      // Woosh plays in sync with the card shake-in (no lead — online preload
+      // removed the fetch latency that used to mask the old 500ms lead).
       SOG.sfx.play('sfx/woosh.m4a');
-      setTimeout(function () {
-        shakeCamera(function () {
-          slideInUI(function () {
-            log('Phase E — UI in place, starting phase 2 (Lucy coaching)');
-            runCoachingLines(COACHING_PHASE_2, function () {
-              log('Phase E — coaching complete; starting Phase F turn loop');
-              stopIPPulse();
-              if (onAllDone) onAllDone();
-            });
+      shakeCamera(function () {
+        slideInUI(function () {
+          log('Phase E — UI in place, starting phase 2 (Lucy coaching)');
+          runCoachingLines(COACHING_PHASE_2, function () {
+            log('Phase E — coaching complete; starting Phase F turn loop');
+            stopIPPulse();
+            if (onAllDone) onAllDone();
           });
         });
-      }, 500);
+      });
     });
   }
 

@@ -840,18 +840,16 @@ SOG.OtziBattle = (function () {
       _otziParkSideLocations();
       fadeOutCover(function () {
         runLines(PRE_SHAKE_LINES, function () {
-          // Woosh leads the side-location shake-in: play it now, then start the
-          // shake 500ms later so the whoosh anticipates the locations arriving.
+          // Woosh plays in sync with the side-location shake-in (no lead — online
+          // preload removed the fetch latency that used to mask the old 500ms lead).
           SOG.sfx.play('sfx/woosh.m4a');
-          setTimeout(function () {
-            shakeCamera(function () {
-              revealSideLocations(function () {
-                runLines(POST_SHAKE_LINES, function () {
-                  dealCards(function () { done(); });
-                });
+          shakeCamera(function () {
+            revealSideLocations(function () {
+              runLines(POST_SHAKE_LINES, function () {
+                dealCards(function () { done(); });
               });
             });
-          }, 500);
+          });
         });
       });
     },
