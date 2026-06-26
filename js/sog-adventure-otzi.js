@@ -840,9 +840,10 @@ SOG.OtziBattle = (function () {
       _otziParkSideLocations();
       fadeOutCover(function () {
         runLines(PRE_SHAKE_LINES, function () {
-          // Woosh plays in sync with the side-location shake-in (no lead — online
-          // preload removed the fetch latency that used to mask the old 500ms lead).
-          SOG.sfx.play('sfx/woosh.m4a');
+          // Woosh lands a beat INTO the shake (not at its very start) so it syncs
+          // with the side locations actually sliding in, which happens after the
+          // ~260ms shake rumble.
+          setTimeout(function () { SOG.sfx.play('sfx/woosh.m4a'); }, 150);
           shakeCamera(function () {
             revealSideLocations(function () {
               runLines(POST_SHAKE_LINES, function () {

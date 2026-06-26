@@ -1115,9 +1115,9 @@ window.SOG.Adventure.Prehistory = (function () {
     log('Phase E — coaching starting (phase 1: intro exchange)');
     runCoachingLines(COACHING_PHASE_1, function () {
       log('Phase E — phase 1 complete, shake + UI slide-in');
-      // Woosh plays in sync with the card shake-in (no lead — online preload
-      // removed the fetch latency that used to mask the old 500ms lead).
-      SOG.sfx.play('sfx/woosh.m4a');
+      // Woosh lands a beat INTO the shake (not at its very start) so it syncs with
+      // the cards/UI actually sliding in, which happens after the ~260ms shake.
+      setTimeout(function () { SOG.sfx.play('sfx/woosh.m4a'); }, 150);
       shakeCamera(function () {
         slideInUI(function () {
           log('Phase E — UI in place, starting phase 2 (Lucy coaching)');
