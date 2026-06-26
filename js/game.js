@@ -243,6 +243,11 @@
       G.aiHand = G.aiDeck.splice(0, cfg.structure.handStart);
     }
 
+    // Stage 1 preload: warm both decks' card art + reveal-fx overlays + this
+    // battle's SFX into cache now, so the reveal sequence plays from cache instead
+    // of fetching mid-animation online. Fire-and-forget — never blocks.
+    if (window.SOG && SOG.preload && typeof SOG.preload.battle === 'function') SOG.preload.battle(G);
+
     G.locations.forEach(function (loc) {
       G.playerSlots[loc.id] = Array(cfg.structure.slotsPerLocation).fill(null);
       G.aiSlots[loc.id]     = Array(cfg.structure.slotsPerLocation).fill(null);

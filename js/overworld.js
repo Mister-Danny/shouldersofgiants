@@ -855,6 +855,20 @@ var Overworld = (function () {
   }
 
   /* ── Load a map (swap image, build overlay, place character) ── */
+  // Every character sprite frame the overworld can swap in (walk cycles, the
+  // map-reading idle, and the standing frames). Built from SPRITE_PATH so it tracks
+  // the naming used by setWalkFrame / the idle routine. Preloaded on map load.
+  function _walkFrameUrls() {
+    var P = SPRITE_PATH, out = [], i;
+    var dirs = { down: 4, right: 6, up: 8 };   // 'left' reuses the 'right' frames (scaleX -1)
+    for (var d in dirs) { for (i = 1; i <= dirs[d]; i++) out.push(P + 'adventurer-female-' + d + '-' + (i < 10 ? '0' + i : i) + '.png'); }
+    for (i = 1; i <= 6; i++) out.push(P + 'adventurer-female-idle-' + (i < 10 ? '0' + i : i) + '.png');
+    for (i = 1; i <= 9; i++) out.push(P + 'adventurer-female-map-'  + (i < 10 ? '0' + i : i) + '.png');
+    out.push(P + 'adventurer-female-standing.png');
+    out.push(P + 'adventurer-female-standing-backward.png');
+    return out;   // 35 frames
+  }
+
   function loadMap(mapId, opts) {
     opts = opts || {};
     var data = MAPS[mapId];
@@ -864,6 +878,14 @@ var Overworld = (function () {
     // Fix 4: toggle body class so Explorer dialogue box can be re-centred on foreign maps
     document.body.classList.toggle('overworld-away-from-home', mapId !== 'eastafrica');
     mapImgEl.src = data.image;
+
+    // Stage 1 preload: warm ALL character walk frames (+ this map's background) so
+    // the walk animation's 125ms src-swaps hit cache instead of racing the network
+    // (the mid-walk frame stutter). De-duped, fire-and-forget — runs once in effect.
+    if (window.SOG && SOG.preload && typeof SOG.preload.images === 'function') {
+      SOG.preload.images(_walkFrameUrls());
+      SOG.preload.images([data.image]);
+    }
     // The Egypt map (egyptz.jpeg) is slightly taller than the 16:9 viewport, so
     // object-fit:cover alone would crop the Nile Delta at the top. Pin the image's
     // TOP edge to the screen top (delta fully visible), then zoom in from that top
