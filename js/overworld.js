@@ -890,6 +890,11 @@ var Overworld = (function () {
       // node->battle wipes. Warming this early guarantees it's cached before those
       // beats, so it plays in sync online instead of fetching on first play.
       if (typeof SOG.preload.audio === 'function') SOG.preload.audio(['sfx/woosh.m4a']);
+      // Mesopotamia hosts the marketplace — warm its background + price-tag now so
+      // the market's bg-load gate clears instantly when the player enters it.
+      if (mapId === 'mesopotamia') {
+        SOG.preload.images(['images/ui_images/mesomarket.jpg', 'images/ui_images/pricetag@0.5x.png']);
+      }
     }
     // The Egypt map (egyptz.jpeg) is slightly taller than the 16:9 viewport, so
     // object-fit:cover alone would crop the Nile Delta at the top. Pin the image's
@@ -2859,8 +2864,13 @@ var Overworld = (function () {
     // portrait render on top — same layering trick as the candle intervention.
     var screen = document.createElement('div');
     screen.id = 'adv-market-screen';
-    screen.style.cssText = 'position:absolute;inset:0;z-index:100;overflow:hidden;' +
-      'background:url("images/ui_images/mesomarket.jpg") center/cover no-repeat;';
+    var MARKET_BG_URL = 'images/ui_images/mesomarket.jpg';
+    // Start HIDDEN: the background is a CSS background-image (no load event of its
+    // own), so online the cards would otherwise show over a not-yet-painted bg
+    // ("floating cards"). We reveal the whole screen — bg + cards together — only
+    // once the bg is loaded (gate below).
+    screen.style.cssText = 'position:absolute;inset:0;z-index:100;overflow:hidden;opacity:0;' +
+      'background:url("' + MARKET_BG_URL + '") center/cover no-repeat;';
 
     // Lay out the cards on their two shelves (card + its price tag). Cards the
     // player already OWNS are skipped — only unowned cards are for sale, so a
@@ -2886,6 +2896,22 @@ var Overworld = (function () {
     screen.appendChild(btn);
 
     (document.getElementById('sog-stage') || document.body).appendChild(screen);
+
+    // Reveal the market only once the background image is loaded. A CSS
+    // background-image has no onload, so detect via a parallel new Image() with the
+    // SAME url — when it resolves the CSS bg is cached and paints together with the
+    // cards (no floating-cards-over-blank online). Cached/already-warmed → instant.
+    // Safety-capped so a slow/missing bg can never leave the market hidden.
+    (function () {
+      var revealed = false;
+      function reveal() { if (revealed) return; revealed = true; screen.style.opacity = '1'; }
+      var bg = new Image();
+      bg.onload  = reveal;
+      bg.onerror = reveal;                       // missing/failed bg must not hang the market
+      bg.src = MARKET_BG_URL;
+      if (bg.complete && bg.naturalWidth > 0) reveal();   // already cached → show now
+      setTimeout(reveal, 2500);                  // safety cap
+    })();
 
     // On the FIRST visit, play the trader intro dialogue (gated on
     // KEY_MARKET_INTRO_SEEN) before the player can shop. Once it finishes we drop
