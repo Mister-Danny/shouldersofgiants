@@ -35,6 +35,7 @@ var HomeFlow = (function () {
   var screenHomeEl, homeContentEl, adventureStageEl;
   var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback;
   var advDevWarningEl, advDevProceedBtn, advDevGoBackBtn;
+  var arcadiumLockedEl, arcadiumLockedClose;
   var subtitleIntroEl, subtitlePathEl, subtitleAdventurerEl;
   var charFemaleEl, charMaleEl;
   var backBtn, doorEl, irisEl;
@@ -233,6 +234,10 @@ var HomeFlow = (function () {
       hideAdvDevWarning();    // stay on home screen — no further action
     });
 
+    arcadiumLockedEl    = document.getElementById('arcadium-locked-backdrop');
+    arcadiumLockedClose = document.getElementById('arcadium-locked-close');
+    if (arcadiumLockedClose) arcadiumLockedClose.addEventListener('click', hideArcadiumLockedPopup);
+
     if (btnReady)        btnReady.addEventListener('click', onReadyClick);
     if (btnArcadium)     btnArcadium.addEventListener('click', onArcadiumClick);
     if (btnAdventureNew) btnAdventureNew.addEventListener('click', onAdventureClick);
@@ -391,34 +396,28 @@ var HomeFlow = (function () {
     }
   }
 
-  /* ── Arcadium → deck builder (existing Ready-button flow) ─── */
+  /* ── Arcadium → deck builder ───────────────────────────────────
+     Goes straight to the deck builder (the old first-time tutorial trigger is
+     gone). Gate: an Arcadium deck needs 15 cards, and new players accumulate cards
+     in Adventure mode (the collection). If they don't have 15 yet, show a popup
+     pointing them to Adventure instead of opening an unbuildable deck builder. */
   function onArcadiumClick() {
-    stopHomeMusic(400);
     window.multiplayerMode = false;
-    if (localStorage.getItem('sog_tutorial_complete')) {
-      // bug 23: if dbtutorial will run, preset the marker so the music widget
-      // never flashes visible, and skip the deck-music start (tearDown will).
-      var dbWillRun = window.DeckBuilderTutorial &&
-                      typeof window.DeckBuilderTutorial.willRunOnNext === 'function' &&
-                      window.DeckBuilderTutorial.willRunOnNext();
-      if (dbWillRun) document.body.dataset.dbtutorial = 'active';
-      window.showScreen('screen-deckbuilder');
-      if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
-      if (!dbWillRun && typeof window.playDeckMusic === 'function') window.playDeckMusic();
-      return;
-    }
-    // First-time player: Lucy 3-line home intro → video → tutorial
-    if (typeof window.startHomeIntro === 'function') {
-      window.startHomeIntro(function () {
-        var video = document.getElementById('intro-video');
-        if (video) {
-          video.currentTime = 0;
-          video.play().catch(function () {});
-        }
-        window.showScreen('screen-video');
-      });
-    }
+    var owned = (window.SOG && SOG.collection && typeof SOG.collection.getUnlockedCards === 'function')
+      ? SOG.collection.getUnlockedCards().length : 0;
+    if (owned < 15) { showArcadiumLockedPopup(); return; }   // stay on home; home music keeps playing
+
+    // Straight into a clean deck builder — no old first-time tutorial and no
+    // deck-builder (Lucy spotlight) tutorial for Arcadium (suppressed in
+    // initDeckBuilder, which only runs it for the Online Versus entry now).
+    stopHomeMusic(400);
+    window.showScreen('screen-deckbuilder');
+    if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
+    if (typeof window.playDeckMusic === 'function') window.playDeckMusic();
   }
+
+  function showArcadiumLockedPopup() { if (arcadiumLockedEl) arcadiumLockedEl.classList.add('visible'); }
+  function hideArcadiumLockedPopup() { if (arcadiumLockedEl) arcadiumLockedEl.classList.remove('visible'); }
 
   /* ── Online Versus (existing versus flow) ──────────────────── */
   function onOnlineVersusClick() {

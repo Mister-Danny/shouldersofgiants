@@ -972,9 +972,10 @@
     var cosimoOnBoard         = G.locations.some(function (l) {
       return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 19; });
     });
-    var nebuchadnezzarOnBoard = G.locations.some(function (l) {
-      return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 50; });
-    });
+    // Nebuchadnezzar (id 50): At Once, the owner's in-hand Mesopotamia cards get a
+    // one-time -1 CC stamp (G.nebCCDiscount, set in abilities.js). Read per-card below
+    // (not a board scan) — only cards stamped at Neb's reveal display the discount.
+    var nebDiscount = (G.nebCCDiscount && G.nebCCDiscount.player) || {};
     // Babylon location (BABYLON_COST_5) present → base-cost-5 cards display -1. Keyed
     // off the LOCATION (present its whole battle), not a card. Stacks with the Neb-50
     // Mesopotamia discount. Inert in battles with no Babylon location. Mirrors
@@ -986,7 +987,7 @@
       var displayCC = card.cc;
       if (card.type === 'Exploration' && henryOnBoard)           displayCC = Math.max(0, displayCC - 1);
       if (card.type === 'Cultural'    && cosimoOnBoard)          displayCC = Math.max(0, displayCC - 1);
-      if (card.era  === 'Mesopotamia' && nebuchadnezzarOnBoard)  displayCC = Math.max(0, displayCC - 1);
+      if (card.era  === 'Mesopotamia' && nebDiscount[cardId])    displayCC = Math.max(0, displayCC - 1);
       if (card.cc   === 5             && babylonOnBoard)         displayCC = Math.max(0, displayCC - 1);
       var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"] .db-overlay-cc');
       if (hEl) hEl.textContent = displayCC;
@@ -1031,7 +1032,7 @@
         var mv = (s.cardId === 24 && !G.movedThisTurn[24]) ||   // Magellan
                  (s.cardId === 25 && !G.columbusMoved)    ||    // Columbus
                  (s.cardId === 33 && !s._advLucyMoved) ||       // Lucy — First Steps: move once per BATTLE (persistent slot flag, mirrors Chariot's _advChariotMoved)
-                 (s.cardId === 48 && !G.movedThisTurn[48]) ||   // Chariot — can move once per turn
+                 (s.cardId === 48 && !s._advChariotMoved) ||    // Chariot — moves once per BATTLE on its own (persistent slot flag, like Lucy); the move-enabler locations/cards below can still grant extra moves
                  // Scandinavia: Military cards can move away for free (once per turn)
                  (scandinaviaLoc && loc.id === scandinaviaLoc.id && card && card.type === 'Military' && !G.movedThisTurn[s.cardId]) ||
                  // Timbuktu: Cultural cards elsewhere can move to Timbuktu for free (once per turn)
@@ -1105,6 +1106,7 @@
     G.movedThisTurn[cardId] = true;
     if (cardId === 25) G.columbusMoved = true;
     if (cardId === 33) sd._advLucyMoved = true;   // Lucy: once per BATTLE — flag rides the slot data (mirrors Chariot's _advChariotMoved). Set at QUEUE time, so resetTurn clears it when it snaps this move back (the move never happened); it only persists once the move RESOLVES at reveal.
+    if (cardId === 48) sd._advChariotMoved = true;   // Chariot: once per BATTLE on its own — same persistent-slot-flag pattern as Lucy (resetTurn clears it on snap-back; persists once the move resolves)
 
     G.playerActionLog.push({ type: 'move', cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId });
     G.moveLog.push({ cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId, queued: true, isColumbus: cardId === 25 });

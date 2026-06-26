@@ -411,8 +411,11 @@
         });
       });
 
-      // Tribe (id 36): "At Once — Tribe gains +1 IP for every card you play
-      // here next turn." Each slot carries turnPlayed (the turn it was
+      // Tribe (id 36): "Next Turn — Gain +1 IP for every card you play here."
+      // This is a delayed/continuous effect (NOT an At Once — its description no
+      // longer says "At Once", so Pacal's text-based At-Once trigger skips it; the
+      // grant was always computed here, never via an onAtOnce handler). Each slot
+      // carries turnPlayed (the turn it was
       // committed). Tribe gains +1 for every OTHER same-owner card at this
       // location played on the turn immediately after Tribe itself
       // (turnPlayed === tribe.turnPlayed + 1). Recomputed continuously, so
@@ -1542,7 +1545,10 @@
     var rfx = window.SOG && SOG.RevealFx;
     if (rfx && typeof rfx.hammurabiStrike === 'function') {
       rfx.hammurabiStrike(hamEl, [sacEl, oppEl],
-        { strikeSfx: 'sfx/swordslice.m4a', splitSfx: 'sfx/bodyfalling.m4a', onStrike: strike },
+        { strikeSfx: 'sfx/swordslice.m4a', splitSfx: 'sfx/bodyfalling.m4a', onStrike: strike,
+          // The strike compacts the owner's row, so Hammurabi's card moves to a new
+          // slot element. This lets the FX re-find him after the strike to slide him in.
+          getStrikerEl: function () { return findSlotEl(owner, 47); } },
         done);
     } else {
       // Defensive fallback (no FX available): destroy instantly, still correct.
@@ -1605,22 +1611,29 @@
     }
   }
 
-  // The Phoenicians (id 49) — At Once: Attaches itself to one of your
-  // Cultural cards here, granting it +3 IP permanently.
-  // Player gets a chooser; AI auto-picks the highest-IP Cultural card.
+  // The Phoenicians (id 49) — At Once: Attaches itself to one of YOUR cards at this
+  // location (ANY type), merging its own 3 IP onto the host — and +1 MORE if that
+  // host is a Cultural card (so a Cultural host gains +4, anything else +3).
+  // Phoenicians is consumed either way. Player gets a chooser over all their cards
+  // here; the AI auto-picks the card that gains the most (the +1 Cultural edge tips
+  // close calls).
   function abilityPhoenicians(owner, locId, done) {
     var mySlots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var culturalTargets = [];
+    var targets = [];
     forEachRevealedAt(mySlots, locId, function (s, si) {
-      if (s.cardId === 49) return;
-      var c = CARDS.find(function (x) { return x.id === s.cardId; });
-      if (c && c.type === 'Cultural') culturalTargets.push({ sd: s, si: si });
+      if (s.cardId === 49) return;            // never attach to itself
+      targets.push({ sd: s, si: si });        // ANY of the owner's revealed cards here
     });
-    if (culturalTargets.length === 0) { done(); return; }   // no merge target → reveals normally
+    if (targets.length === 0) { done(); return; }   // no host → Phoenicians reveals normally
 
-    // The REAL merge (UNCHANGED logic): consume Phoenicians from its slot and
-    // permanently boost the host (+3). Runs at the DISSOLVE beat so the visible
-    // consumption equals the game-state change.
+    function isCultural(sd) {
+      var c = CARDS.find(function (x) { return x.id === sd.cardId; });
+      return !!(c && c.type === 'Cultural');
+    }
+
+    // The REAL merge: consume Phoenicians from its slot and permanently boost the
+    // host by +3 (its own IP), +1 more if the host is Cultural. Runs at the DISSOLVE
+    // beat so the visible consumption equals the game-state change.
     function doMerge(hostSd) {
       var phoenIdx = mySlots[locId].findIndex(function (s) { return s && s.cardId === 49; });
       if (phoenIdx !== -1) {
@@ -1629,8 +1642,9 @@
         if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
         else                    { compactOppSlots(locId);    syncOppSlots(locId);    }
       }
-      addIPMod(hostSd, 3, 'The Phoenicians');
-      SOG.ui.showIPFloat(owner, hostSd.cardId, 3);
+      var gain = 3 + (isCultural(hostSd) ? 1 : 0);   // +3 base (its IP), +1 if Cultural
+      addIPMod(hostSd, gain, 'The Phoenicians');
+      SOG.ui.showIPFloat(owner, hostSd.cardId, gain);
       evaluateContinuous();
       refreshSlotIPDisplays();
       updateScores();
@@ -1655,16 +1669,19 @@
     }
 
     if (owner === 'opp') {
-      var best = culturalTargets.reduce(function (a, b) {
-        return effectiveIP(a.sd) >= effectiveIP(b.sd) ? a : b;
+      // Best host = highest resulting IP; the +1 Cultural edge tips close calls.
+      var best = targets.reduce(function (a, b) {
+        var sa = effectiveIP(a.sd) + (isCultural(a.sd) ? 1 : 0);
+        var sb = effectiveIP(b.sd) + (isCultural(b.sd) ? 1 : 0);
+        return sa >= sb ? a : b;
       });
       attach(best);
       return;
     }
-    var targetIds = culturalTargets.map(function (t) { return t.sd.cardId; });
-    showDiscardChooser('Choose a Cultural card for The Phoenicians to attach to', targetIds, function (chosenId) {
+    var targetIds = targets.map(function (t) { return t.sd.cardId; });
+    showDiscardChooser('Choose a card for The Phoenicians to attach to', targetIds, function (chosenId) {
       if (chosenId === null) { done(); return; }
-      var target = culturalTargets.find(function (t) { return t.sd.cardId === chosenId; });
+      var target = targets.find(function (t) { return t.sd.cardId === chosenId; });
       if (!target) { done(); return; }
       attach(target);
     });
@@ -2001,6 +2018,32 @@
     var panel = document.createElement('div');
     panel.className = 'discard-panel';
 
+    // One-shot resolver: a card click OR the countdown timeout settles the choice
+    // exactly once (guards the click-vs-timeout race), tears down, and reports back.
+    var settled = false;
+    var intervalId = null;
+    function resolve(cardId) {
+      if (settled) return;
+      settled = true;
+      if (intervalId) { clearInterval(intervalId); intervalId = null; }
+      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+      callback(cardId);
+    }
+
+    // ── 5-second choice timer: a circular clock (depleting gold ring + center
+    //    countdown number) at the top of the panel. If it runs out, the chooser
+    //    auto-picks one of the options at RANDOM so play never stalls. ──
+    var DURATION_S = 5;
+    var timerWrap = document.createElement('div');
+    timerWrap.className = 'chooser-timer';
+    timerWrap.innerHTML =
+      '<svg class="chooser-timer-ring" viewBox="0 0 100 100" aria-hidden="true">' +
+        '<circle class="chooser-timer-track" cx="50" cy="50" r="44"></circle>' +
+        '<circle class="chooser-timer-arc"   cx="50" cy="50" r="44"></circle>' +
+      '</svg>' +
+      '<div class="chooser-timer-num">' + DURATION_S + '</div>';
+    panel.appendChild(timerWrap);
+
     var titleEl = document.createElement('div');
     titleEl.className   = 'discard-title';
     titleEl.textContent = title;
@@ -2013,16 +2056,28 @@
       var card = CARDS.find(function (c) { return c.id === cardId; });
       if (!card) return;
       var cardEl = buildChooserCard(card, cardId);
-      cardEl.addEventListener('click', function () {
-        document.body.removeChild(backdrop);
-        callback(cardId);
-      });
+      cardEl.addEventListener('click', function () { resolve(cardId); });
       row.appendChild(cardEl);
     });
 
     panel.appendChild(row);
     backdrop.appendChild(panel);
     document.body.appendChild(backdrop);
+
+    // Drive the ring depletion (exact 5s CSS animation) + the per-second number
+    // tick (5 → 4 → 3 → 2 → 1, then random pick on the 0 tick).
+    var arc = timerWrap.querySelector('.chooser-timer-arc');
+    if (arc) arc.style.animationDuration = DURATION_S + 's';
+    var numEl = timerWrap.querySelector('.chooser-timer-num');
+    var remaining = DURATION_S;
+    intervalId = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        resolve(cardIds[Math.floor(Math.random() * cardIds.length)]);   // time up → random
+      } else if (numEl) {
+        numEl.textContent = remaining;
+      }
+    }, 1000);
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -2136,6 +2191,62 @@
     done();   // bounce is fire-and-forget presentation — don't stall the reveal pipeline
   }
 
+  /* Nebuchadnezzar (id 50) — "Builder of Babylon": At Once, reduce the owner's
+     in-hand Mesopotamia cards by -1 CC. A ONE-TIME stamp on the cards in hand at
+     reveal (G.nebCCDiscount[side][cardId]) — NOT a continuous board aura (that was
+     too strong) and NOT applied to later-drawn cards. Read by the player cost path
+     (board.js effectiveCost + input.js refreshHandCostDisplays) and the Giant AI
+     cost path (ai.js). The stamp is applied at the magic-shimmer beat so the effect
+     reads as caused by the shimmer; the turn waits for the flourish via done.
+       • PLAYER reveals Neb → Neb shimmers AND the player's in-hand Mesopotamia cards
+         sparkle while their CC ticks down in sync (their hand got cheaper).
+       • OPPONENT reveals Neb → only Neb's card shimmers; the stamp still lands on the
+         opponent's in-hand Mesopotamia cards, but their hand is face-down so there's
+         nothing to sparkle on-screen.
+     The in-hand sparkle + CC-drop therefore runs ONLY for the side whose hand is
+     visible (the player), while the stamp applies to whichever side played Neb. */
+  function abilityNebuchadnezzar(owner, locId, done) {
+    var nebEl = findSlotEl(owner, 50);
+    // The cards that get the one-time -1 stamp: the OWNER's in-hand Mesopotamia
+    // cards (player or AI). The hand here is what's LEFT after this turn's plays.
+    var ownerHand = (owner === 'player') ? (G.playerHand || []) : (G.aiHand || []);
+    var affectedIds = ownerHand.filter(function (cardId) {
+      var card = CARDS.find(function (c) { return c.id === cardId; });
+      return card && card.era === 'Mesopotamia';
+    });
+    // DOM elements to shimmer — ONLY the player's (visible) hand. The opponent's
+    // hand is face-down, so there's nothing on-screen to sparkle (the stamp still
+    // applies to their cards via the cost path; it's just not visualized in-hand).
+    var handEls = [];
+    if (owner === 'player') {
+      var handRoot = document.getElementById('battle-player-hand');
+      if (handRoot) {
+        affectedIds.forEach(function (cardId) {
+          var el = handRoot.querySelector('.battle-hand-card[data-id="' + cardId + '"]');
+          if (el) handEls.push(el);
+        });
+      }
+    }
+    // At the shimmer beat: STAMP the one-time -1 onto those in-hand cards (the real
+    // effect), then refresh the player's displayed costs to match. Idempotent —
+    // the singleton deck means at most one Neb, and re-stamping a card is a no-op.
+    function onDrop() {
+      if (!G.nebCCDiscount) G.nebCCDiscount = { player: {}, opp: {} };
+      var bag = G.nebCCDiscount[owner] || (G.nebCCDiscount[owner] = {});
+      affectedIds.forEach(function (cardId) { bag[cardId] = 1; });
+      if (window.SOG && SOG.input && typeof SOG.input.refreshHandCostDisplays === 'function') {
+        SOG.input.refreshHandCostDisplays();
+      }
+    }
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.nebuchadnezzarShimmer === 'function') {
+      rfx.nebuchadnezzarShimmer(nebEl, handEls, { sfx: 'sfx/magicshimmer.m4a', onDrop: onDrop }, done);
+    } else {
+      onDrop();
+      done();
+    }
+  }
+
   var CARD_ABILITIES = {
     2:  { onAtOnce: abilityScholarOfficials },
     3:  { onAtOnce: abilityJustinian        },
@@ -2164,7 +2275,7 @@
     47: { onAtOnce: abilityHammurabi    },
     48: { onAtOnce: function (o, l, done) { done(); } },  // Chariot  — movement ability
     49: { onAtOnce: abilityPhoenicians  },
-    50: { onAtOnce: function (o, l, done) { done(); } }   // Nebuchadnezzar — Continuous only
+    50: { onAtOnce: abilityNebuchadnezzar }   // Nebuchadnezzar — Continuous discount; At-Once = shimmer flourish
   };
 
   /* ═══════════════════════════════════════════════════════════════
@@ -2176,11 +2287,12 @@
   function fireAtOnce(owner, cardId, locId, done) {
     // Cards with actual At Once abilities: play sound + pulse animation.
     // Cards 2, 3, 5, 13 have custom sfx — skip the generic 8-bit chime for those.
-    // Tool (26) now has its own SFX (the hammer strike via SOG.RevealFx), so skip
-    // the generic 8-bit chime for it too (keep the pulse).
+    // Tool (26) has its own SFX (the hammer strike via SOG.RevealFx) and Soldier
+    // (42) has its own hit SFX (the charge impact) — skip the generic 8-bit chime
+    // for those too (keep the pulse).
     var hasAtOnce = [4, 8, 9, 23, 26, 38, 39, 42, 46, 47, 49].indexOf(cardId) !== -1;
     if (hasAtOnce) {
-      if (typeof SFX !== 'undefined' && cardId !== 26) SFX.atOnce();
+      if (typeof SFX !== 'undefined' && cardId !== 26 && cardId !== 42) SFX.atOnce();
       var atSlotEl = findSlotEl(owner, cardId);
       if (atSlotEl && typeof Anim !== 'undefined') Anim.pulseYellow(atSlotEl);
     }

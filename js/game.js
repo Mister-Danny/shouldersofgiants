@@ -271,6 +271,7 @@
     G.aiBonusCapitalNextTurn = 0;
     G.cardIPBonus            = {};
     G.aiCardIPBonus          = {};
+    G.nebCCDiscount          = { player: {}, opp: {} };  // Nebuchadnezzar one-time in-hand -1 CC stamps
     G.destroyedIPTotal       = 0;
     G.aiDestroyedIPTotal     = 0;
     G.columbusMoved          = false;

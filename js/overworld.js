@@ -1931,59 +1931,6 @@ var Overworld = (function () {
     return [255, 95, 45];
   }
 
-  function _runCandle(wipeEl, onDialogueReady) {
-    SOG.sfx.play('sfx/matchstrike.m4a');
-
-    var existing = document.getElementById('adv-candle');
-    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-    var candle = document.createElement('div');
-    candle.id = 'adv-candle';
-    candle.style.cssText = 'position:fixed;inset:0;z-index:10002;pointer-events:none;opacity:0;';
-    // Append INSIDE #sog-stage: it's a transformed (scaled) stacking context
-    // holding the wipe/HUD/reveals, so the candle must live there to layer
-    // against them (position:fixed resolves to the stage box).
-    (document.getElementById('sog-stage') || document.body).appendChild(candle);
-
-    function setGlow(t, sizePct) {
-      var c    = _candleColor(t);
-      var core = 'rgb('  + c[0] + ',' + c[1] + ',' + c[2] + ')';
-      var warm = 'rgba(' + c[0] + ',' + Math.round(c[1] * 0.5) + ',' + Math.round(c[2] * 0.3) + ',0.55)';
-      // Transparent edges — the room's darkness is the black wipe BEHIND this
-      // layer, so the warm glow never obscures the HUD at the screen edges.
-      candle.style.background =
-        'radial-gradient(circle at 50% 48%, ' + core + ' 0%, ' + warm + ' ' + sizePct + '%, transparent ' + (sizePct * 2.2) + '%)';
-    }
-
-    setGlow(0, 5);
-    gsap.to(candle, { opacity: 1, duration: 0.4, ease: 'power1.out' });
-
-    // Color + size bloom: white point → warm orange-red, expanding (~2.6s).
-    var p = { t: 0, size: 5 };
-    gsap.to(p, {
-      t: 1, size: 24, duration: 2.6, ease: 'power1.inOut',
-      onUpdate: function () { setGlow(p.t, p.size); }
-    });
-
-    // ~0.5s after the candle settles: hand off to a PERSISTENT dark-room +
-    // candle-glow backdrop that sits BELOW the HUD (z 100 < 150), so the
-    // Farmer/Explorer dialogue shows on top and the warm glow STAYS for the
-    // whole conversation. The bloom candle + black wipe (both above the HUD)
-    // then fade out to reveal it. The backdrop is removed when the deck
-    // builder opens (or on resumeAfterBattle, defensively).
-    gsap.delayedCall(3.1, function () {
-      _ensureCandleBackdrop();
-      if (onDialogueReady) onDialogueReady();
-      gsap.to(candle, {
-        opacity: 0, duration: 0.6, ease: 'power1.inOut',
-        onComplete: function () { if (candle.parentNode) candle.parentNode.removeChild(candle); }
-      });
-      gsap.to(wipeEl, {
-        opacity: 0, duration: 0.6, ease: 'power1.inOut',
-        onComplete: function () { _clearWipe(); wipeEl.style.opacity = '1'; }
-      });
-    });
-  }
-
   /* Persistent dark-room + candle-glow backdrop shown for the whole Farmer
      conversation. z 100 keeps it below the HUD (150) and grant reveals
      (5000+) but above the overworld map (30), so the room reads as candlelit
@@ -2029,8 +1976,8 @@ var Overworld = (function () {
   }
 
   /* Standalone Cuneiform candle for the Gilgamesh post-loss intervention
-     (sog-adventure-gilgamesh.js drives it via window.Overworld). Unlike
-     _runCandle this is decoupled from the overworld iris/wipe: the caller has
+     (sog-adventure-gilgamesh.js drives it via window.Overworld). It's decoupled
+     from the overworld iris/wipe: the caller has
      ALREADY faded the screen to black, so we just strike the match, bloom the
      flame, and hand off to the persistent candlelit backdrop (z 100, below the
      HUD 150) that carries the Farmer conversation. onLit() fires once the flame

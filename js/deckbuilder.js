@@ -113,12 +113,12 @@
     renderAllGroups();
     updateUI();
     mainEl.scrollTop = 0;
-    // Fire the deck-builder tutorial if the user hasn't completed it yet.
-    // Self-guards on already-active in-game tutorial.
-    // NOTE: suppressed in Adventure mode (opened from the overworld HUD) — the
-    // adventure deck-builder tutorial is being rebuilt; the module is left intact
-    // so other entry points keep working and we can re-enable it here later.
-    if (!window.deckBuilderFromOverworld &&
+    // Fire the deck-builder tutorial only for the Online Versus entry (self-guards
+    // on the per-user "seen" flag + already-active in-game tutorial). It's
+    // suppressed in Adventure mode (overworld HUD) — being rebuilt — and removed
+    // from Arcadium, which now opens a clean deck builder. multiplayerMode is true
+    // only for Versus; the module is left intact so we can re-enable elsewhere later.
+    if (window.multiplayerMode && !window.deckBuilderFromOverworld &&
         window.DeckBuilderTutorial && typeof window.DeckBuilderTutorial.startIfNew === 'function') {
       window.DeckBuilderTutorial.startIfNew();
     }

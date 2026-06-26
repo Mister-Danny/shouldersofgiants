@@ -62,6 +62,8 @@
     aiBonusCapitalNextTurn: 0,   // Scholar-Officials (AI)
     cardIPBonus:            {},  // player cardId → cumulative bonus IP (Samurai, Jesus)
     aiCardIPBonus:          {},  // AI    cardId → cumulative bonus IP (Samurai, Jesus)
+    nebCCDiscount: { player: {}, opp: {} },  // side → { cardId: 1 } — one-time -1 CC stamp on
+                                             // the owner's in-hand Mesopotamia cards (Nebuchadnezzar At Once)
     destroyedIPTotal:       0,   // total IP of cards destroyed by player (William)
     aiDestroyedIPTotal:     0,   // total IP of cards destroyed by AI   (William)
     destroyedCards:         [],  // [{cardId, ip, eventId}] — per-card destruction log (William Pattern B display)

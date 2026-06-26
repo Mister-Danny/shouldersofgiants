@@ -23,6 +23,7 @@
  * Ability trigger keywords (used by the ability engine in game.js):
  *   "At Once"       — fires immediately when the card is revealed
  *   "Continuous"    — passive, re-evaluated whenever board state changes
+ *   "Next Turn"     — delayed effect that resolves on the following turn (e.g. Tribe 36)
  *   "If / When"     — conditional, fires when the described event occurs
  */
 
@@ -39,28 +40,28 @@ const CARDS = [
     id: 2, name: "Scholar-Officials", cc: 2, ip: 1,
     type: "Political", type2: null, era: "China",
     abilityName: "Civil Service",
-    ability: "At Once: For every other card you have here, Scholar-Officials gain +1 Capital next turn.",
+    ability: "At Once:\nFor every other card you have here, Scholar-Officials gain +1 Capital next turn.",
     image: "images/cards/first25/Scholar-Officials.jpg", locked: false
   },
   {
     id: 3, name: "Justinian", cc: 3, ip: 3,
     type: "Political", type2: null, era: "Rome",
     abilityName: "Code of Justinian",
-    ability: "At Once: Justinian resets all cards here back to their original IP.",
+    ability: "At Once:\nJustinian resets all cards here back to their original IP.",
     image: "images/cards/first25/Justinian.jpg", locked: false
   },
   {
     id: 4, name: "Empress Wu", cc: 4, ip: 4,
     type: "Political", type2: null, era: "China",
     abilityName: "Iron Fist",
-    ability: "At Once: Empress Wu pushes your opponent's Political or Military card with the highest IP away from here, if she can't, she destroys it.",
+    ability: "At Once:\nEmpress Wu pushes your opponent's Political or Military card with the highest IP away from here, if she can't, she destroys it.",
     image: "images/cards/first25/Empress Wu.jpg", locked: false
   },
   {
     id: 5, name: "Pacal the Great", cc: 5, ip: 5,
     type: "Political", type2: null, era: "Mesoamerica",
     abilityName: "Temple of Inscriptions",
-    ability: "At Once: Pacal triggers the 'At Once' abilities of all your cards at this location.",
+    ability: "At Once:\nPacal triggers the 'At Once' abilities of all your cards at this location.",
     image: "images/cards/first25/Pacal the Great.jpg", locked: false
   },
 
@@ -82,14 +83,14 @@ const CARDS = [
     id: 8, name: "Francis of Assisi", cc: 3, ip: 4,
     type: "Religious", type2: null, era: "Middle Ages",
     abilityName: "Vow of Poverty",
-    ability: "At Once: Francis of Assisi discards the highest cost Religious card in your hand.",
+    ability: "At Once:\nFrancis of Assisi discards the highest cost Religious card in your hand.",
     image: "images/cards/first25/Francis of Assisi.jpg", locked: false
   },
   {
     id: 9, name: "Erasmus", cc: 4, ip: 3,
     type: "Religious", type2: null, era: "Reformation",
     abilityName: "On Free Will",
-    ability: "At Once: Erasmus allows you to choose any card from your hand to discard.",
+    ability: "At Once:\nErasmus allows you to choose any card from your hand to discard.",
     image: "images/cards/first25/Erasmus.jpg", locked: false
   },
   {
@@ -119,7 +120,7 @@ const CARDS = [
     id: 13, name: "Hernan Cortes", cc: 3, ip: 3,
     type: "Military", type2: null, era: "Age of Exploration",
     abilityName: "Conquistador",
-    ability: "At Once: Cortes destroys all of your cards at this location and gains +1 IP for each one destroyed.",
+    ability: "At Once:\nCortes destroys all of your cards at this location and gains +1 IP for each one destroyed.",
     image: "images/cards/first25/Hernan Cortes.jpg", locked: false
   },
   {
@@ -133,7 +134,7 @@ const CARDS = [
     id: 15, name: "William the Conqueror", cc: 5, ip: 1,
     type: "Military", type2: null, era: "Middle Ages",
     abilityName: "The Norman Conquest",
-    ability: "Continuous: Accumulates the IP from all cards you destroyed this game.",
+    ability: "Continuous:\nAccumulates the IP from all cards you destroyed this game.",
     image: "images/cards/first25/William the Conqueror.jpg", locked: false,
     attributionPattern: 'B'   // each destroyed card's portrait = separate thumbnail
   },
@@ -149,28 +150,28 @@ const CARDS = [
     id: 17, name: "Kente", cc: 2, ip: 2,
     type: "Cultural", type2: null, era: "West African Societies",
     abilityName: "Woven Heritage",
-    ability: "Continuous: Kente prevents all cards here from being destroyed.",
+    ability: "Continuous:\nKente prevents all cards here from being destroyed.",
     image: "images/cards/first25/Kente.jpg", locked: false
   },
   {
     id: 18, name: "Juvenal", cc: 3, ip: 3,
     type: "Cultural", type2: null, era: "Rome",
     abilityName: "Satire",
-    ability: "Continuous: Juvenal reduces all 4 and 5 CC cards here by -2 IP.",
+    ability: "Continuous:\nJuvenal reduces all 4 and 5 CC cards here by -2 IP.",
     image: "images/cards/first25/Juvenal.jpg", locked: false
   },
   {
     id: 19, name: "Cosimo de'Medici", cc: 4, ip: 4,
     type: "Cultural", type2: null, era: "Renaissance",
     abilityName: "Patron of the Arts",
-    ability: "Continuous: Cosimo de\u2019Medici reduces your cost to play Cultural cards by -1.",
+    ability: "Continuous:\nCosimo de\u2019Medici reduces your cost to play Cultural cards by -1.",
     image: "images/cards/first25/Cosimo de'Medici.jpg", locked: false
   },
   {
     id: 20, name: "Voltaire", cc: 5, ip: 5,
     type: "Cultural", type2: null, era: "Enlightenment",
     abilityName: "Candide",
-    ability: "Continuous: If Voltaire is your only card here, he receives +4 IP.",
+    ability: "Continuous:\nIf Voltaire is your only card here, he receives +4 IP.",
     image: "images/cards/first25/Voltaire.jpg", locked: false
   },
 
@@ -185,14 +186,14 @@ const CARDS = [
     id: 22, name: "Henry the Navigator", cc: 2, ip: 1,
     type: "Exploration", type2: null, era: "Age of Exploration",
     abilityName: "Navigation Patron",
-    ability: "Continuous: Henry reduces your cost of playing Exploration cards by -1.",
+    ability: "Continuous:\nHenry reduces your cost of playing Exploration cards by -1.",
     image: "images/cards/first25/Henry the Navigator.jpg", locked: false
   },
   {
     id: 23, name: "Zheng He", cc: 3, ip: 1,
     type: "Exploration", type2: null, era: "China",
     abilityName: "Treasure Fleet",
-    ability: "At Once: Zheng He delivers +2 IP to 1 card at each adjacent location.",
+    ability: "At Once:\nZheng He delivers +2 IP to 1 card at each adjacent location.",
     image: "images/cards/first25/Zheng He.jpg", locked: false,
     attributionPattern: 'D'   // Zheng He's portrait appears on each target card's breakdown
   },
@@ -216,7 +217,7 @@ const CARDS = [
     id: 26, name: "Tool", cc: 1, ip: 1,
     type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Ancient Tech",
-    ability: "At Once: Tool draws 1 card.",
+    ability: "At Once:\nTool draws 1 card.",
     image: "images/cards/prehistorycards/toolcard.jpg", locked: true
   },
   {
@@ -235,14 +236,14 @@ const CARDS = [
     id: 29, name: "Fire", cc: 2, ip: 1,
     type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Cooked",
-    ability: "Continuous: Cards played after Fire here gain +1 IP.",
+    ability: "Continuous:\nCards played here after Fire gain +1 IP.",
     image: "images/cards/prehistorycards/firecard.jpg", locked: true
   },
   {
     id: 30, name: "Cave Art", cc: 2, ip: 1,
     type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Ancient Storytelling",
-    ability: "Continuous: Cards played before Cave Art here gain +1 IP.",
+    ability: "Continuous:\nCards played here before Cave Art gain +1 IP.",
     image: "images/cards/prehistorycards/caveartcard.jpg", locked: true
   },
   {
@@ -255,7 +256,7 @@ const CARDS = [
     id: 32, name: "Domesticated Animal", cc: 2, ip: 1,
     type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Man's Best Friend",
-    ability: "Continuous: Cards in adjacent slots here gain +1 IP.",
+    ability: "Continuous:\nCards next to Domesticated Animal gain +1 IP.",
     image: "images/cards/prehistorycards/domesticatedanimalcard.jpg", locked: true
   },
   {
@@ -282,7 +283,7 @@ const CARDS = [
     id: 36, name: "Tribe", cc: 2, ip: 2,
     type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Strength In Numbers",
-    ability: "At Once: Tribe gains +1 IP for every card you play here next turn.",
+    ability: "Next Turn:\nGain +1 IP for every card you play here.",
     image: "images/cards/prehistorycards/tribecard.jpg", locked: true
   },
 
@@ -296,62 +297,62 @@ const CARDS = [
     id: 37, name: "Sargon", cc: 5, ip: 3,
     type: "Political", type2: null, era: "Mesopotamia",
     abilityName: "The Empire State",
-    ability: "Continuous: Sargon grants +3 IP to adjacent location(s).",
+    ability: "Continuous:\nSargon grants +3 IP to adjacent location(s).",
     image: "images/cards/mesopotamiacards/sargon@0.5x.jpg", locked: true
   },
   {
     id: 38, name: "Priest", cc: 1, ip: 2,
     type: "Religious", type2: null, era: "Mesopotamia",
     abilityName: "Spiritual Sacrifice",
-    ability: "At Once: Discard the card in your hand with lowest CC.",
+    ability: "At Once:\nDiscard the card in your hand with lowest CC.",
     image: "images/cards/mesopotamiacards/priest@0.5x.jpg", locked: true
   },
   {
     id: 39, name: "Farmer", cc: 1, ip: 1,
     type: "Labor", type2: null, era: "Mesopotamia",
-    abilityName: "Harvest", ability: "At Once: Provides +1 Capital next turn.",
+    abilityName: "Harvest", ability: "At Once:\nProvides +1 Capital next turn.",
     image: "images/cards/mesopotamiacards/farmer@0.5x.jpg", locked: true
   },
   {
     id: 40, name: "Scribe", cc: 2, ip: 2,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Record Keeper",
-    ability: "At Once: Provides +1 IP to all of your other cards at this location.",
+    ability: "At Once:\nProvide +1 IP to your other cards at this location.",
     image: "images/cards/mesopotamiacards/scribe@0.5x.jpg", locked: true
   },
   {
     id: 41, name: "Canals", cc: 1, ip: 1,
     type: "Scientific", type2: null, era: "Mesopotamia",
     abilityName: "Irrigation",
-    ability: "Continuous: Boosts all Labor cards here by +1 IP.",
+    ability: "Continuous:\nBoosts all Labor cards here by +1 IP.",
     image: "images/cards/mesopotamiacards/canals@0.5x.jpg", locked: true
   },
   {
     id: 42, name: "Soldier", cc: 1, ip: 1,
     type: "Military", type2: null, era: "Mesopotamia",
     abilityName: "Military Service",
-    ability: "At Once: Strike one of your opponent's cards here and reduce it by -1 IP.",
+    ability: "At Once:\nStrike an opponent's cards here and reduce it by -1 IP.",
     image: "images/cards/mesopotamiacards/soldier@0.5x.jpg", locked: true
   },
   {
     id: 43, name: "Gilgamesh", cc: 5, ip: 5,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Epic Hero",
-    ability: "Continuous: Gains +1 IP for all other Cultural cards you've played.",
+    ability: "Continuous:\nGains +1 IP for each Cultural card you've played.",
     image: "images/cards/mesopotamiacards/gilgamesh@0.5x.jpg", locked: true
   },
   {
     id: 44, name: "Enkidu", cc: 3, ip: 3,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Wild Ally",
-    ability: "Continuous: Cards next to Enkidu gain +1 IP.",
+    ability: "Continuous:\nCards next to Enkidu gain +1 IP.",
     image: "images/cards/mesopotamiacards/enkidu@0.5x.jpg", locked: true
   },
   {
     id: 45, name: "Ziggurat", cc: 3, ip: 3,
     type: "Religious", type2: null, era: "Mesopotamia",
     abilityName: "Sacred Space",
-    ability: "Continuous: Provides +1 IP to other Religious cards at this location.",
+    ability: "Continuous:\nProvides +1 IP to other Religious cards at this location.",
     image: "images/cards/mesopotamiacards/ziggurat@0.5x.jpg", locked: true
   },
   {
@@ -359,14 +360,14 @@ const CARDS = [
     id: 46, name: "Cuneiform", cc: 1, ip: 1,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Writing",
-    ability: "At Once: +1 IP to all of your Prehistory cards in play.",
+    ability: "At Once:\n+1 IP to all of your Prehistory cards in play.",
     image: "images/cards/mesopotamiacards/cunieform@0.5x.jpg", locked: true
   },
   {
     id: 47, name: "Hammurabi", cc: 5, ip: 5,
     type: "Political", type2: null, era: "Mesopotamia",
     abilityName: "Eye For An Eye",
-    ability: "At Once: Destroy your lowest CC card here in order to destroy your opponent's lowest CC card.",
+    ability: "At Once:\nDestroy your lowest-CC card here in order to destroy your opponent's lowest-CC card here.",
     image: "images/cards/mesopotamiacards/hammurabi@0.5x.jpg", locked: true
   },
   {
@@ -381,14 +382,14 @@ const CARDS = [
     id: 49, name: "The Phoenicians", cc: 3, ip: 3,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Alphabet",
-    ability: "At Once: Attaches itself to one of your Cultural cards here.",
+    ability: "At Once:\nAttaches to one of your cards here.\n+1 IP if it's a Cultural card.",
     image: "images/cards/mesopotamiacards/phoenicians@0.5x.jpg", locked: true
   },
   {
     id: 50, name: "Nebuchadnezzar", cc: 5, ip: 5,
     type: "Political", type2: null, era: "Mesopotamia",
     abilityName: "Builder of Babylon",
-    ability: "Continuous: Mesopotamia cards cost -1 CC to play.",
+    ability: "At Once:\nReduce your in-hand Mesopotamian cards by -1 CC.",
     image: "images/cards/mesopotamiacards/nebuchadnezzar@0.5x.jpg", locked: true
   }
 

@@ -76,13 +76,11 @@ SOG.OptionsPanel = (function () {
   function _renderSlide() {
     var s = HOWTO_SLIDES[_slideIdx];
     if (!s) return;
-    var h = document.getElementById('opt-slide-heading');
     var b = document.getElementById('opt-slide-body');
     var img = document.getElementById('opt-slide-image');
     var dots = document.getElementById('opt-slide-dots');
     var prev = document.getElementById('opt-slide-prev');
     var next = document.getElementById('opt-slide-next');
-    if (h) h.textContent = s.heading;
     if (b) b.textContent = s.body;
     if (img) {
       if (s.image) { img.style.backgroundImage = 'url("' + s.image + '")'; img.classList.remove('is-placeholder'); }
@@ -199,6 +197,11 @@ SOG.OptionsPanel = (function () {
      marked won/beaten and nothing is granted, so the boss node stays active. */
   function _doForfeit() {
     if (window.SOG && SOG.focus && typeof SOG.focus.spend === 'function') SOG.focus.spend(20);
+    // Stop the battle music. The quiet forfeit skips endGame() — which is what
+    // normally stops it — so without this the battle track keeps playing on the
+    // (otherwise silent) overworld. No overworld music to start: the map is silent
+    // between battles, same as the normal battle→map return.
+    if (window.SOG && SOG.ui && typeof SOG.ui.stopBgMusic === 'function') SOG.ui.stopBgMusic();
     close();
     if (window.Overworld && typeof window.Overworld.teardown === 'function') window.Overworld.teardown();
     if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
@@ -252,7 +255,6 @@ SOG.OptionsPanel = (function () {
       '</div>' +
       // ── HOW-TO-PLAY VIEW (slideshow; toggled by the top tab) ────────────
       '<div class="options-slideshow" id="opt-slideshow" style="display:none">' +
-        '<div class="slideshow-heading" id="opt-slide-heading"></div>' +
         '<div class="slideshow-image is-placeholder" id="opt-slide-image"></div>' +
         '<div class="slideshow-body" id="opt-slide-body"></div>' +
         '<div class="slideshow-nav">' +

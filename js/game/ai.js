@@ -302,12 +302,12 @@
     if (loc && loc.abilityKey === 'RELIGIOUS_DISCOUNT' && card.type === 'Religious') {
       cc = Math.max(1, cc - 1);
     }
-    // Nebuchadnezzar (id=50): reduces Mesopotamia-era cc while he is on the AI's board
-    if (card.era === 'Mesopotamia' && cardId !== 50) {
-      var nebOnBoard = G.locations.some(function (l) {
-        return G.aiSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 50; });
-      });
-      if (nebOnBoard) cc = Math.max(1, cc - 1);
+    // Nebuchadnezzar (id=50): At Once, his owner's in-hand Mesopotamia cards get a
+    // ONE-TIME -1 CC stamp (G.nebCCDiscount, set in abilities.js when Neb reveals).
+    // The AI is the 'opp' side — read its stamp per-card (no longer a continuous aura).
+    if (card.era === 'Mesopotamia' && cardId !== 50 &&
+        G.nebCCDiscount && G.nebCCDiscount.opp[cardId]) {
+      cc = Math.max(1, cc - 1);
     }
     return cc;
   }
@@ -329,6 +329,19 @@
     var score  = baseIP;
 
     /* ── Per-card synergy bonuses ─────────────────────────────── */
+
+    // Hammurabi (id=47) — "Eye for an Eye": at reveal he sacrifices the AI's
+    // lowest-CC card here and destroys the player's lowest-CC card here. He does
+    // NOTHING unless BOTH exist at this location: a destroy target (a revealed
+    // player card) AND a sacrifice (another AI card here, already revealed or
+    // queued this turn). Never waste him on a target-less spot (e.g. turn 1, empty
+    // board) — skip the play entirely. Leaving capital unspent beats a dead Hammurabi.
+    if (cardId === 47) {
+      var hasPlayerTarget = G.playerSlots[locId].some(function (s) { return s && s.revealed; });
+      var hasSacrifice    = an.aiAllCards.some(function (s) { return s.cardId !== 47; }) ||
+                            tentativePlays.some(function (p) { return p.locId === locId && p.cardId !== 47; });
+      if (!hasPlayerTarget || !hasSacrifice) return null;
+    }
 
     // Juvenal (id=18): each high-CC player card here triggers -2 IP penalty
     if (cardId === 18) {

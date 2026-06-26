@@ -684,18 +684,50 @@ SOG.RevealFx = (function () {
       return;
     }
 
-    gsap.timeline({
-      delay: 0.2,                                                                     // brief beat before the strike begins
-      onComplete: function () { gsap.set(hammurabiEl, { clearProps: 'transform,zIndex' }); finish(); }
-    })
+    // His INITIAL spot, captured before any transform — the settle returns here.
+    var oldNatural = hammurabiEl.getBoundingClientRect();
+
+    gsap.timeline({ delay: 0.2 })                                                     // brief beat before the strike begins
       .set(hammurabiEl, { zIndex: 50, transformOrigin: '50% 100%' })
       .to(hammurabiEl, { y: -28, scale: 1.06, duration: 0.22, ease: 'power2.out' })   // RISE
       .to(hammurabiEl, { y: 12,  scale: 1.0,  duration: 0.11, ease: 'power3.in',      // SLAM down
-        onStart:    function () { if (opts.strikeSfx) playSfx(opts.strikeSfx); },
-        onComplete: doStrike })                                                       // STRIKE beat
-      .to(hammurabiEl, { y: 0, duration: 0.5, ease: 'power2.out' })                   // settle back
-      .to({}, { duration: 0.28 })                                                     // hold for halves to dissolve
-      .timeScale(1 / 1.15);                                                           // 15% slower overall
+        onStart: function () { if (opts.strikeSfx) playSfx(opts.strikeSfx); },
+        onComplete: function () {
+          var slamRect = hammurabiEl.getBoundingClientRect();   // his visual pos at the bottom of the slam
+
+          // Clone Hammurabi into a fixed flyer pinned at the slam spot. The settle +
+          // slide play on the CLONE, so they're immune to the compaction below — which
+          // re-renders the real slots and is what caused the jump-cut. cssText wipes the
+          // cloned slam transform; the card face (child nodes) carries over.
+          var fly = hammurabiEl.cloneNode(true);
+          fly.style.cssText = 'position:fixed;left:' + slamRect.left + 'px;top:' + slamRect.top + 'px;' +
+            'width:' + slamRect.width + 'px;height:' + slamRect.height + 'px;margin:0;' +
+            'z-index:9998;pointer-events:none;';
+          document.body.appendChild(fly);
+
+          doStrike();   // STRIKE: destroy the two cards — the owner's row compacts, so the real Hammurabi jumps to his new slot
+
+          // Reset the vacated original slot, and hide the real (jumped) Hammurabi so
+          // only the clone shows until it slides home.
+          gsap.set(hammurabiEl, { clearProps: 'transform,zIndex' });
+          var realEl = (typeof opts.getStrikerEl === 'function') ? opts.getStrikerEl() : null;
+          if (realEl) realEl.style.visibility = 'hidden';
+          var newRect = realEl ? realEl.getBoundingClientRect() : oldNatural;   // his NEW (compacted) spot
+
+          gsap.timeline({
+            onComplete: function () {
+              if (realEl) realEl.style.visibility = '';
+              if (fly.parentNode) fly.parentNode.removeChild(fly);
+              finish();
+            }
+          })
+            .to(fly, { left: oldNatural.left, top: oldNatural.top, duration: 0.5, ease: 'power2.out' })  // settle back into his INITIAL spot
+            .to({}, { duration: 0.28 })                                                                  // hold while the two halves split + dissolve
+            .to(fly, { left: newRect.left, top: newRect.top, duration: 0.42, ease: 'power2.inOut' })     // THEN slide into the new spot
+            .timeScale(1 / 1.15);
+        }
+      })
+      .timeScale(1 / 1.15);                                                           // 15% slower overall (rise + slam)
   }
 
   // Cuneiform (46) synchronized group LIFT (PRESENTATION; the IP boost is applied by
@@ -912,11 +944,81 @@ SOG.RevealFx = (function () {
     }, sitMs);
   }
 
+  /* Nebuchadnezzar (id 50) reveal flourish — visualizes the "Mesopotamia cards
+     cost -1 CC" discount (the discount itself is continuous; this is presentation
+     only). Plays magicshimmer, bursts star-sparkles on Neb's own card, and — for
+     each affected in-hand card passed in (player side only; the opponent's hand is
+     face-down so the caller passes none) — bursts sparkles and fires opts.onDrop at
+     the sparkle peak so the displayed CC ticks DOWN in sync with the shimmer. The
+     sparkle layer is a fixed-position child of <body> centered on each card's rect
+     (same approach as the flyers — no scaled-stage offset, and never clipped by the
+     hand card's overflow:hidden). Reuses the Hanging Gardens node sparkle grains for
+     a matching "wonder of the world" shimmer. Self-cleaning; gates the turn via
+     onComplete. */
+  function nebuchadnezzarShimmer(nebEl, handEls, opts, onComplete) {
+    opts = opts || {};
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+    if (opts.sfx) playSfx(opts.sfx);
+
+    var layers = [];
+    function burst(el, count, spreadX, spreadY) {
+      if (!el) return;
+      var r = el.getBoundingClientRect();
+      if (!r.width) return;
+      var layer = document.createElement('div');
+      layer.className = 'hanging-gardens-sparkle reveal-fx-neb-sparkle';
+      layer.style.position = 'fixed';
+      layer.style.left   = (r.left + r.width  / 2) + 'px';
+      layer.style.top    = (r.top  + r.height / 2) + 'px';
+      layer.style.zIndex = '9998';
+      for (var i = 0; i < count; i++) {
+        var s = document.createElement('span');
+        s.className = 'hanging-gardens-sparkle-grain';
+        s.style.setProperty('--sx', ((Math.random() - 0.5) * spreadX).toFixed(1) + 'px');
+        s.style.setProperty('--sy', ((Math.random() - 0.5) * spreadY).toFixed(1) + 'px');
+        s.style.setProperty('--dur', (0.7 + Math.random() * 0.7).toFixed(2) + 's');
+        s.style.setProperty('--delay', (Math.random() * 0.5).toFixed(2) + 's');
+        var size = (5 + Math.random() * 8).toFixed(1) + 'px';
+        s.style.width = s.style.height = size;
+        layer.appendChild(s);
+      }
+      document.body.appendChild(layer);
+      layers.push(layer);
+    }
+
+    // Neb's own card — sparkle + glow (seen by BOTH sides).
+    burst(nebEl, 26, 150, 200);
+    flashClass(nebEl, 'reveal-fx-neb-glow', 1200);
+
+    // Affected in-hand Mesopotamia cards — sparkle + glow (player side only; the
+    // caller passes an empty list when the opponent reveals Neb).
+    (handEls || []).forEach(function (el) {
+      burst(el, 14, 120, 170);
+      flashClass(el, 'reveal-fx-neb-glow', 1200);
+    });
+
+    // CC tick-down IN SYNC with the sparkle peak (~grains reaching full opacity).
+    setTimeout(function () {
+      if (typeof opts.onDrop === 'function') opts.onDrop();
+      (handEls || []).forEach(function (el) {
+        var cc = el.querySelector('.db-overlay-cc');
+        if (cc) flashClass(cc, 'reveal-fx-cc-drop', 460);
+      });
+    }, 360);
+
+    // Hold for the shimmer to resolve, clean up the layers, release the turn.
+    setTimeout(function () {
+      layers.forEach(function (l) { if (l.parentNode) l.parentNode.removeChild(l); });
+      finish();
+    }, 1500);
+  }
+
   return { fire: fire, has: has, reactBounce: reactBounce,
            scribeStampSequence: scribeStampSequence,
            soldierCharge: soldierCharge,
            hammurabiStrike: hammurabiStrike,
            cuneiformLift: cuneiformLift,
            phoeniciansMerge: phoeniciansMerge,
-           chariotArrow: chariotArrow };
+           chariotArrow: chariotArrow,
+           nebuchadnezzarShimmer: nebuchadnezzarShimmer };
 })();

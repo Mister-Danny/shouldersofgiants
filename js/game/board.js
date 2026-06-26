@@ -419,11 +419,12 @@
           return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 22; });
         }))
       cost = Math.max(0, cost - 1);
-    // Nebuchadnezzar (id 50): Mesopotamia cards cost -1 CC while he is on the board
-    if (card.era === 'Mesopotamia' &&
-        G.locations.some(function (l) {
-          return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 50; });
-        }))
+    // Nebuchadnezzar (id 50) — "Builder of Babylon": At Once, his owner's in-hand
+    // Mesopotamia cards get a ONE-TIME -1 CC stamp (set in abilities.js when Neb
+    // reveals). This is the player charge/display path, so read the player stamp.
+    // The stamp persists on the card while it sits in hand; later-drawn cards aren't
+    // stamped. (Not continuous — leaving the cheaper aura was too strong.)
+    if (card.era === 'Mesopotamia' && G.nebCCDiscount && G.nebCCDiscount.player[card.id])
       cost = Math.max(0, cost - 1);
     // Babylon (BABYLON_COST_5 location, Nebuchadnezzar battle): BASE-cost-5 cards cost
     // -1 while a Babylon location is present. Global (not at-Babylon-only). Keyed off

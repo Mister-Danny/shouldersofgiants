@@ -3372,6 +3372,56 @@ body.hanging-gardens-battle .battle-col .hg-flood-tint {
   padding-bottom: 2px;
 }
 
+/* Choice countdown clock (chooser timer) — a depleting gold ring + center number
+   shown above the chooser title. The arc starts as a full circle at 12 o'clock and
+   retreats clockwise back to 12 over the 5s window; if it empties, the chooser
+   auto-picks at random (js/game/abilities.js showDiscardChooser). r=44 →
+   circumference 2·π·44 ≈ 276.46 (the stroke-dasharray / depletion target). */
+.chooser-timer {
+  position: relative;
+  width: 58px;
+  height: 58px;
+}
+.chooser-timer-ring {
+  width: 100%;
+  height: 100%;
+  /* Anchor the arc's break point at 12 o'clock. (Direction is set by the negative
+     dash-offset animation below, so no mirror is needed — a mirror would shift the
+     break point off 12.) */
+  transform: rotate(-90deg);
+}
+.chooser-timer-track {
+  fill: none;
+  stroke: #2a1608;              /* warm dark-brown well (history palette) */
+  stroke-width: 7;
+}
+.chooser-timer-arc {
+  fill: none;
+  stroke: #d4aa50;              /* antique gold (HUD / options-panel gold) */
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-dasharray: 276.46;
+  stroke-dashoffset: 0;
+  filter: drop-shadow(0 0 3px rgba(212, 170, 80, 0.6));
+  animation: chooserTimerDeplete 5s linear forwards;
+}
+@keyframes chooserTimerDeplete {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -276.46; }   /* negative → empties CLOCKWISE, break stays at 12 o'clock */
+}
+.chooser-timer-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'CTGalbite', monospace;
+  font-size: 1.5rem;
+  color: #f3e6c4;              /* parchment cream (history text) */
+  text-shadow: 1px 1px 0 rgba(26, 12, 4, 0.9);
+  pointer-events: none;
+}
+
 /* Visual card option — same dimensions and structure as .battle-hand-card */
 .discard-card-option {
   position: relative;
@@ -8541,6 +8591,29 @@ body.tut-locked #battle-reset-turn {
   0%   { filter: brightness(1.8)  drop-shadow(0 0 2px  rgba(170, 225, 255, 0.0)); }
   35%  { filter: brightness(1.25) drop-shadow(0 0 16px rgba(170, 225, 255, 0.9)); }
   100% { filter: brightness(1)    drop-shadow(0 0 0    rgba(170, 225, 255, 0.0)); }
+}
+
+/* Nebuchadnezzar (id 50) reveal flourish — visualizes the Mesopotamia -1 CC
+   discount. A blue-white magic glow pulse on Neb's card + each affected in-hand
+   card (filter only — not clipped by the hand card's overflow:hidden); pairs with
+   the .hanging-gardens-sparkle* star grains the JS bursts over each card. */
+.reveal-fx-neb-glow {
+  animation: revealFxNebGlow 1.2s ease-out 1 both;
+}
+@keyframes revealFxNebGlow {
+  0%   { filter: brightness(1.6)  drop-shadow(0 0 2px  rgba(170, 225, 255, 0.0)); }
+  35%  { filter: brightness(1.25) drop-shadow(0 0 14px rgba(170, 225, 255, 0.9)); }
+  100% { filter: brightness(1)    drop-shadow(0 0 0    rgba(170, 225, 255, 0.0)); }
+}
+/* The CC number ticking DOWN as the shimmer lands — a quick gold pop so the drop
+   reads as caused by the sparkle. */
+.db-overlay-cc.reveal-fx-cc-drop {
+  animation: revealFxCcDrop 0.46s ease-out 1 both;
+}
+@keyframes revealFxCcDrop {
+  0%   { transform: scale(1);    color: #fff; }
+  40%  { transform: scale(1.55); color: #ffe08a; text-shadow: 0 0 8px rgba(255, 210, 120, 0.95), 2px 2px 0 rgba(0,0,0,0.85); }
+  100% { transform: scale(1);    color: rgba(255, 255, 255, 0.75); }
 }
 
 /* Player character sprite — pixel-art crisp rendering */
