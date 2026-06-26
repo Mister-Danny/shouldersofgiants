@@ -885,6 +885,11 @@ var Overworld = (function () {
     if (window.SOG && SOG.preload && typeof SOG.preload.images === 'function') {
       SOG.preload.images(_walkFrameUrls());
       SOG.preload.images([data.image]);
+      // Warm the woosh now (overworld entry) — it fires the side-locations entrance
+      // in the Otzi/Neanderthal battle intros (always reached from here) and on
+      // node->battle wipes. Warming this early guarantees it's cached before those
+      // beats, so it plays in sync online instead of fetching on first play.
+      if (typeof SOG.preload.audio === 'function') SOG.preload.audio(['sfx/woosh.m4a']);
     }
     // The Egypt map (egyptz.jpeg) is slightly taller than the 16:9 viewport, so
     // object-fit:cover alone would crop the Nile Delta at the top. Pin the image's

@@ -839,31 +839,49 @@ window.SOG.Adventure.Prehistory = (function () {
       bannerEl.style.transform  = 'scale(0.88)';
     }
 
-    // Card rises into centre
-    gsap.to(animTarget, {
-      y:        0,
-      opacity:  1,
-      duration: 1.5,
-      ease:     'power2.out',
-      onComplete: function () {
-        // Banner bounces in
-        if (bannerEl) {
-          bannerEl.style.transition = 'opacity 0.15s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
-          bannerEl.style.opacity    = '1';
-          bannerEl.style.transform  = 'scale(1.0)';
+    // Card rises into centre — but GATE the rise on the NEW card's image being
+    // decoded. #adv-card-reveal-img is reused across acquisitions, so until the new
+    // src finishes loading the element still shows the PREVIOUS card's image (e.g.
+    // Lucy before Neanderthal). Online that load takes a moment, so an un-gated
+    // fade-in flashes the prior card. The card stays at opacity 0 (invisible) over
+    // the dim backdrop until its art is ready, then rises — correct from frame one.
+    var _risen = false;
+    function _startRise() {
+      if (_risen) return;
+      _risen = true;
+      gsap.to(animTarget, {
+        y:        0,
+        opacity:  1,
+        duration: 1.5,
+        ease:     'power2.out',
+        onComplete: function () {
+          // Banner bounces in
+          if (bannerEl) {
+            bannerEl.style.transition = 'opacity 0.15s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+            bannerEl.style.opacity    = '1';
+            bannerEl.style.transform  = 'scale(1.0)';
+          }
+
+          // SFX on banner entrance
+          if (typeof sfxFn === 'function') sfxFn();
+          else playCardAcquire();
+
+          // Wire up interactions after a short guard (so the click that
+          // advanced the last dialogue line doesn't instantly fire).
+          setTimeout(function () {
+            _wireCardAcquisitionInteractions(card, dimEl, revealEl, animTarget, bannerEl, onComplete, opts);
+          }, 80);
         }
+      });
+    }
 
-        // SFX on banner entrance
-        if (typeof sfxFn === 'function') sfxFn();
-        else playCardAcquire();
-
-        // Wire up interactions after a short guard (so the click that
-        // advanced the last dialogue line doesn't instantly fire).
-        setTimeout(function () {
-          _wireCardAcquisitionInteractions(card, dimEl, revealEl, animTarget, bannerEl, onComplete, opts);
-        }, 80);
-      }
-    });
+    if (imgEl.complete && imgEl.naturalWidth > 0) {
+      _startRise();                 // art already cached (e.g. preloaded) → rise now
+    } else {
+      imgEl.onload  = _startRise;
+      imgEl.onerror = _startRise;   // missing/failed art must not hang the reward
+      setTimeout(_startRise, 2000); // safety cap so we never wait forever
+    }
   }
 
   /* Attaches the click-to-popup / click-outside-to-dismiss handlers
