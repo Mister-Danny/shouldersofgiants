@@ -311,14 +311,16 @@ SOG.HangingGardensBattle = (function () {
   /* FIRST-WIN victory sequence: VICTORY flourish → Neb's win dialogue → on the final
      line ("Take this…") fire the card 50 + 25 gold grant → then the scoreboard.
      First-win only (a repeat win never reaches here — see _onWin's owned guard). */
-  function _runFirstWinSequence(locResults) {
-    _victoryFlourish(function () {
-      runLines(WIN_DIALOGUE, function () {
-        // "Take this…" is WIN_DIALOGUE's last line, so the grant fires on that beat.
-        _grantNebCard(function () {
-          _grantGold(GOLD_FIRST_WIN, function () {
-            _showResultScoreboard(true, false, locResults, {});
-          });
+  function _runFirstWinSequence() {
+    // Runs from the first-win scoreboard's CONTINUE (mirrors Hammurabi): dismiss
+    // the board → Neb's win dialogue → grant card 50 + 25 gold on the "Take this…"
+    // line → exit to the overworld.
+    _removeResultPopup();
+    runLines(WIN_DIALOGUE, function () {
+      // "Take this…" is WIN_DIALOGUE's last line, so the grant fires on that beat.
+      _grantNebCard(function () {
+        _grantGold(GOLD_FIRST_WIN, function () {
+          _exitToOverworld();
         });
       });
     });
@@ -378,7 +380,9 @@ SOG.HangingGardensBattle = (function () {
     var firstWin = !_has(KEY_HG_COMPLETE);   // capture BEFORE setting the flag
     _set(KEY_HG_COMPLETE);
     if (firstWin) {
-      _runFirstWinSequence(locResults);   // flourish → win dialogue → grant on "Take this" → scoreboard
+      // Standardized first-win board (matches Hammurabi/Sargon): VICTORY scoreboard
+      // with CONTINUE + GAME BOARD → CONTINUE runs the win dialogue + grant → exit.
+      _showResultScoreboard(true, false, locResults, { firstWin: true });
     } else {
       // Repeat win: skip the full story beat → flourish → +10 gold → scoreboard.
       _victoryFlourish(function () {
@@ -430,7 +434,7 @@ SOG.HangingGardensBattle = (function () {
     { who: 'nebuchadnezzar', text: 'How unfortunate.' },
     { who: 'nebuchadnezzar', text: 'Perhaps, the Egyptians will find it more amusing.' },
     { who: 'explorer',       text: 'Egyptians?' },
-    { who: 'nebuchadnezzar', text: 'Take this and your hat back and be gone, will you?' }   // ← grant fires after this line
+    { who: 'nebuchadnezzar', text: 'Take this and your little hat and be gone, will you?' }   // ← grant fires after this line
   ];
   var LOSS_DIALOGUE = [
     { who: 'nebuchadnezzar', text: 'Predictable.' },
@@ -840,7 +844,11 @@ SOG.HangingGardensBattle = (function () {
       if (!openLocs.length) break;
 
       aff.sort(function (a, b) { return (b.ip - a.ip) || (b.cc - a.cc); });
+      // Nebuchadnezzar (50) — get him onto the board as EARLY as possible: whenever
+      // he's affordable, play him before other cards, so he lands on the first turn
+      // the AI can afford him.
       var pick = aff[0];
+      for (var n = 0; n < aff.length; n++) { if (aff[n].id === 50) { pick = aff[n]; break; } }
       var locId = weakestOpenLoc(openLocs);
 
       plays.push({ cardId: pick.id, locId: locId });

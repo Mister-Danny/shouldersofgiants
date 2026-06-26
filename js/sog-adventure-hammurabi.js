@@ -794,8 +794,36 @@ SOG.HammurabiBattle = (function () {
       if (!openLocs.length) break;
 
       aff.sort(function (a, b) { return (b.ip - a.ip) || (b.cc - a.cc); });   // strongest first
-      var pick = aff[0];
-      var locId = weakestOpenLoc(openLocs);   // strongest card → weakest location (spread)
+
+      // Hammurabi (47) — Eye-for-an-Eye only does work at a location where the AI
+      // has BOTH a card to SACRIFICE (an own card here other than Hammurabi) AND an
+      // opposing card to DESTROY. Find such an open location; if none exists, don't
+      // waste Hammurabi this turn (hold him / play other cards instead).
+      var has47 = false;
+      for (var a47 = 0; a47 < aff.length; a47++) { if (aff[a47].id === 47) { has47 = true; break; } }
+      var hammTarget = null;
+      if (has47) {
+        for (var L = 0; L < openLocs.length; L++) {
+          var lid = openLocs[L].id, own = G.aiSlots[lid] || [], opp = G.playerSlots[lid] || [];
+          var ownSac = false, oppHit = false;
+          for (var oi = 0; oi < own.length; oi++) { if (own[oi] && own[oi].cardId !== 47) { ownSac = true; break; } }
+          for (var pi = 0; pi < opp.length; pi++) { if (opp[pi]) { oppHit = true; break; } }
+          if (ownSac && oppHit) { hammTarget = lid; break; }
+        }
+      }
+
+      var pick, locId;
+      if (has47 && hammTarget !== null) {
+        pick  = cardById(47);                 // play Hammurabi where it actually triggers
+        locId = hammTarget;
+      } else {
+        // Never play Hammurabi without a valid sacrifice + target.
+        var pool = [];
+        for (var p = 0; p < aff.length; p++) { if (aff[p].id !== 47) pool.push(aff[p]); }
+        if (!pool.length) break;              // only Hammurabi affordable but no target → hold it
+        pick  = pool[0];
+        locId = weakestOpenLoc(openLocs);     // strongest card → weakest location (spread)
+      }
 
       plays.push({ cardId: pick.id, locId: locId });
       capital -= pick.cc;
@@ -817,7 +845,7 @@ SOG.HammurabiBattle = (function () {
         turns:            4,
         locationsCount:   3,
         slotsPerLocation: st.SLOTS_PER_LOC || 4,
-        handStart:        st.HAND_START    || 5,
+        handStart:        4,
         maxHandSize:      st.MAX_HAND_SIZE || 7
       },
       resource: { model: 'capital', capital: 5, resetEachTurn: true },   // capital ON, 5/turn

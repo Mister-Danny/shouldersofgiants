@@ -765,11 +765,19 @@ SOG.SargonBattle = (function () {
       if (!openLocs.length) break;
 
       aff.sort(function (a, b) { return (b.ip - a.ip) || (b.cc - a.cc); });   // strongest first
-      var pick = aff[0], locId;
-      if (pick.id === 37) {
-        var mid = G.locations[Math.floor(G.locations.length / 2)];           // Sargon → middle
-        locId = (mid && slotsLeft(mid.id) > 0) ? mid.id : weakestOpenLoc(openLocs);
+
+      // Sargon (37) — ALWAYS into the MIDDLE location (his +3 boosts BOTH flanks
+      // there). Prioritize him so he claims the middle slot before other cards
+      // spread into it; only fall back if the middle is full.
+      var mid = G.locations[Math.floor(G.locations.length / 2)];
+      var sargonAff = null;
+      for (var s = 0; s < aff.length; s++) { if (aff[s].id === 37) { sargonAff = aff[s]; break; } }
+      var pick, locId;
+      if (sargonAff && mid && slotsLeft(mid.id) > 0) {
+        pick  = sargonAff;
+        locId = mid.id;
       } else {
+        pick  = aff[0];
         locId = weakestOpenLoc(openLocs);   // strongest card → weakest location (spread)
       }
 
@@ -793,7 +801,7 @@ SOG.SargonBattle = (function () {
         turns:            4,
         locationsCount:   3,
         slotsPerLocation: st.SLOTS_PER_LOC || 4,
-        handStart:        st.HAND_START    || 5,
+        handStart:        4,
         maxHandSize:      st.MAX_HAND_SIZE || 7
       },
       resource: { model: 'capital', capital: 5, resetEachTurn: true },   // capital ON, 5/turn
