@@ -646,24 +646,6 @@
   // Export so tutorial.js can re-enter the deck builder after tutorial ends
   window.initDeckBuilder = initDeckBuilder;
 
-  /* ── Home screen buttons ─────────────────────────────────────── */
-
-  // Home buttons (Ready / Versus / Arcadium / Adventure) are now handled
-  // by HomeFlow in js/home.js. The overworld back button is kept here
-  // because the overworld screen lives alongside the deck builder flow.
-  var advBack = document.getElementById('overworld-back');
-  if (advBack) {
-    advBack.addEventListener('click', function () {
-      showScreen('screen-home');
-      if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') {
-        window.HomeFlow.reset();
-      }
-      if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
-        window.HomeFlow.playMusic();
-      }
-    });
-  }
-
   // Expose deck music so HomeFlow can start it when routing to the deck builder
   window.playDeckMusic = playDeckMusic;
   // Bug 14: expose toggle + volume setter for the global music widget.

@@ -145,6 +145,68 @@ SOG.OptionsPanel = (function () {
     SOG.music.onUpdate = wrap;
   }
 
+  /* ── Forfeit ("Back to Map") ───────────────────────────────────────────────
+     Battle-context detection: the panel is the SAME overlay on the overworld and
+     in battle (only the trigger gear differs). showScreen sets body.dataset.screen
+     to the active screen id sans "screen-", so an ADVENTURE battle is screen
+     'battle' WITH a live scripted battle (G.config.scriptHook — truthy for the
+     adventure bosses/prehistory/otzi, null for Arcadium/2P). The overworld (and
+     its marketplace overlay) is screen 'overworld', so the button stays hidden
+     there. Gating on scriptHook also keeps it off non-adventure battles. */
+  function _inAdventureBattle() {
+    var inBattle = !!(document.body && document.body.dataset && document.body.dataset.screen === 'battle');
+    var G = window.SOG && SOG.state && SOG.state.G;
+    return !!(inBattle && G && G.config && G.config.scriptHook);
+  }
+
+  /* Small parchment Yes/No confirm — same look as the marketplace buy-confirm
+     (_openBuyConfirm in overworld.js). z-index sits above the options backdrop
+     (9000). No → just dismiss (stay in Settings/the battle). Yes → forfeit. */
+  function _openForfeitConfirm() {
+    if (document.getElementById('opt-forfeit-confirm')) return;   // already open
+    var ov = document.createElement('div');
+    ov.id = 'opt-forfeit-confirm';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;background:rgba(8,4,0,0.5);';
+
+    var panel = document.createElement('div');
+    panel.style.cssText = 'background:linear-gradient(180deg,#f6efdc,#e8dcb8);border:3px solid #1a0a04;border-radius:10px;' +
+      'padding:24px 28px;display:flex;flex-direction:column;align-items:center;gap:18px;color:#1a0a04;' +
+      'font-family:var(--font,sans-serif);max-width:380px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.6);';
+    var q = document.createElement('div');
+    q.textContent = "Are you sure you'd like to forfeit this battle?";
+    q.style.cssText = 'font-size:19px;line-height:1.4;';
+    var row = document.createElement('div'); row.style.cssText = 'display:flex;gap:16px;';
+    var yes = document.createElement('button'); yes.className = 'btn-primary'; yes.textContent = 'Yes';
+    yes.style.cssText = 'padding:9px 28px;font-size:17px;cursor:pointer;';
+    var no = document.createElement('button'); no.className = 'btn-primary'; no.textContent = 'No';
+    no.style.cssText = 'padding:9px 28px;font-size:17px;cursor:pointer;';
+    function closeConfirm() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    no.addEventListener('click', closeConfirm);
+    yes.addEventListener('click', function () { closeConfirm(); _doForfeit(); });
+    row.appendChild(yes); row.appendChild(no);
+    panel.appendChild(q); panel.appendChild(row);
+    ov.appendChild(panel);
+    document.body.appendChild(ov);
+  }
+
+  /* The forfeit itself — a QUIET exit (no defeat scoreboard, no loss dialogue, no
+     fanfare; the player chose to leave). −20 Focus (a deterrent: MORE than the
+     normal −10 loss; always applies, even to 0 — the gate then triggers on the
+     next blocked action via the existing system). Reuses the canonical
+     Overworld.teardown() (same fresh-load-equivalent reset as Back-to-Home), then
+     the normal battle→overworld return path (showScreen + resumeAfterBattle, as
+     deckbuilder.js / the battle modules use). The battle is ABANDONED: nothing is
+     marked won/beaten and nothing is granted, so the boss node stays active. */
+  function _doForfeit() {
+    if (window.SOG && SOG.focus && typeof SOG.focus.spend === 'function') SOG.focus.spend(20);
+    close();
+    if (window.Overworld && typeof window.Overworld.teardown === 'function') window.Overworld.teardown();
+    if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
+    if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshDecks === 'function') SOG.HUD.refreshDecks();
+    if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') window.Overworld.resumeAfterBattle();
+    if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshFocus === 'function') SOG.HUD.refreshFocus();
+  }
+
   function _build() {
     if (_built) return;
 
@@ -157,7 +219,11 @@ SOG.OptionsPanel = (function () {
     panel.innerHTML =
       // ── HEADER ROW: Home (top-left) · Settings title · ✕ (top-right) ─────
       '<button class="options-home-btn" id="opt-home-btn">&#8592; Home</button>' +
+      // Top-right corner control. Overworld → the close ✕. In an adventure battle
+      // → the "Back to Map" forfeit takes the corner instead (the ✕ is hidden);
+      // open() swaps which one shows. The panel still closes via the backdrop.
       '<button class="popup-close-x" aria-label="Close">&#x2715;</button>' +
+      '<button class="options-map-corner" id="opt-map-btn" style="display:none">Back to Map</button>' +
       // ── TOP TOGGLE — one joined button that flips between the two views ──
       '<div class="options-tabs">' +
         '<button class="options-toggle" id="opt-view-toggle">' +
@@ -215,10 +281,17 @@ SOG.OptionsPanel = (function () {
       // Stop the battle/overworld playlist before handing off to the home music,
       // otherwise it keeps playing under the home screen.
       if (window.SOG && SOG.ui && typeof SOG.ui.stopBgMusic === 'function') SOG.ui.stopBgMusic();
+      // Comprehensive teardown FIRST → fresh-load-equivalent clean state (removes
+      // leftover overlays like the marketplace backdrop, strips battle body
+      // classes, clears overworld locks/timers + window flags). Then show home.
+      if (window.Overworld && typeof window.Overworld.teardown === 'function') window.Overworld.teardown();
       if (typeof window.showScreen === 'function') window.showScreen('screen-home');
       if (window.HomeFlow && typeof window.HomeFlow.reset    === 'function') window.HomeFlow.reset();
       if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') window.HomeFlow.playMusic();
     });
+
+    // Back to Map (forfeit) — battle-context only (shown/hidden by open()).
+    panel.querySelector('#opt-map-btn').addEventListener('click', function () { _openForfeitConfirm(); });
 
     // Sliders (Part C). Master scales BOTH music and SFX (SOG.sfx.setMaster
     // re-applies music via SOG.music.refresh); Music/SFX are independent axes.
@@ -252,6 +325,13 @@ SOG.OptionsPanel = (function () {
   function open() {
     _build();
     _selectTab('settings');   // always open on the Settings tab (never mid-slideshow)
+    // Top-right corner control: "Back to Map" (forfeit) in an adventure battle,
+    // otherwise the close ✕. Exactly one shows at a time.
+    var inBattle = _inAdventureBattle();
+    var mapBtn = document.getElementById('opt-map-btn');
+    var closeX = document.querySelector('#' + BACKDROP_ID + ' .popup-close-x');
+    if (mapBtn) mapBtn.style.display = inBattle ? '' : 'none';
+    if (closeX) closeX.style.display = inBattle ? 'none' : '';
     _syncFromStorage();
     _updateMusicUI();
     var backdrop = document.getElementById(BACKDROP_ID);

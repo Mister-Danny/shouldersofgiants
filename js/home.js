@@ -849,6 +849,7 @@ var HomeFlow = (function () {
     btnAbout.style.display = '';
     gsap.set(btnReady, { opacity: 1 });
     gsap.set(btnAbout, { opacity: 1 });
+    gsap.set(btnLearn, { opacity: 1 });   // Learn faded to 0 in onReadyClick but never restored — un-stick it
     applyVisitState();
     // Re-evaluate Feedback button (threshold-gated by feedback.js)
     if (window.Feedback && typeof window.Feedback.refreshHomeButton === 'function') {

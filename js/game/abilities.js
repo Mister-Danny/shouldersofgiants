@@ -1785,7 +1785,7 @@
   }
 
   function triggerSamurai(owner, locId, done) {
-    console.log('[Samurai] triggerSamurai called — owner:', owner, 'locId:', locId);
+    if (window.SOG_DEBUG) console.log('[Samurai] triggerSamurai called — owner:', owner, 'locId:', locId);
     var sBonus   = owner === 'player' ? G.cardIPBonus : G.aiCardIPBonus;
     var prevBonus = sBonus[12] || 0;
     var newBonus  = prevBonus + 2;
@@ -1800,7 +1800,7 @@
     sBonus[12] = 0;
     var placed = placeRevealedCard(owner, locId, 12, 0, { skipLocationAbility: true });
     sBonus[12] = newBonus;
-    console.log('[Samurai] placeRevealedCard returned:', placed, '| newBonus:', newBonus);
+    if (window.SOG_DEBUG) console.log('[Samurai] placeRevealedCard returned:', placed, '| newBonus:', newBonus);
 
     var sSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var sIdx   = sSlots[locId].findIndex(function (s) { return s && s.cardId === 12; });
@@ -1840,13 +1840,13 @@
     }
 
     if (!slotEl || typeof gsap === 'undefined') {
-      console.log('[Samurai] triggerSamurai — no slotEl or no GSAP, finishing immediately');
+      if (window.SOG_DEBUG) console.log('[Samurai] triggerSamurai — no slotEl or no GSAP, finishing immediately');
       if (typeof SFX !== 'undefined') SFX.samuraiReturn();
       finish();
       return;
     }
 
-    console.log('[Samurai] triggerSamurai — playing return SFX + spin animation');
+    if (window.SOG_DEBUG) console.log('[Samurai] triggerSamurai — playing return SFX + spin animation');
     if (typeof SFX !== 'undefined') SFX.samuraiReturn();
 
     gsap.fromTo(slotEl,
@@ -2099,7 +2099,7 @@
     if (SOG.game && typeof SOG.game.executeMoveAnimated === 'function') {
       setTimeout(function () {
         SOG.game.executeMoveAnimated(owner, 35, fromLoc, dest.id, {}, function () {
-          if (typeof console !== 'undefined') console.log('[Otzi] flee: card 35 (' + owner + ') relocated from loc ' + fromLoc + ' to loc ' + dest.id);
+          if (window.SOG_DEBUG && typeof console !== 'undefined') console.log('[Otzi] flee: card 35 (' + owner + ') relocated from loc ' + fromLoc + ' to loc ' + dest.id);
           done();
         });
       }, FLEE_DELAY_MS);

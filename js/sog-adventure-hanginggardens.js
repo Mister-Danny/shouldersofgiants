@@ -18,7 +18,7 @@ window.SOG = window.SOG || {};
 SOG.HangingGardensBattle = (function () {
   'use strict';
 
-  function log(msg) { console.log('[HangingGardensBattle] ' + msg); }
+  function log(msg) { if (window.SOG_DEBUG) console.log('[HangingGardensBattle] ' + msg); }
   function _has(key) { try { return localStorage.getItem(key) === 'true'; } catch (e) { return false; } }
   function _set(key) { try { localStorage.setItem(key, 'true'); } catch (e) {} }
 

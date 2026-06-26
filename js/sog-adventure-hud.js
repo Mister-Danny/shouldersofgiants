@@ -33,7 +33,7 @@ var SOG = window.SOG || {};
 SOG.HUD = (function () {
   'use strict';
 
-  function log(msg) { console.log('[HUD] ' + msg); }
+  function log(msg) { if (window.SOG_DEBUG) console.log('[HUD] ' + msg); }
 
   /* ══════════════════════════════════════════════════════════════
      CHARACTER REGISTRY

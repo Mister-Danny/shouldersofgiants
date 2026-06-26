@@ -230,7 +230,7 @@ SOG.OtziBattle = (function () {
   };
 
   /* ── Logging ─────────────────────────────────────────────────── */
-  function log(msg) { console.log('[Adventure/Otzi] ' + msg); }
+  function log(msg) { if (window.SOG_DEBUG) console.log('[Adventure/Otzi] ' + msg); }
 
   /* ── Web Audio bleeps ────────────────────────────────────────── */
   var _bleepCtx = null;

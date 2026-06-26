@@ -15,6 +15,12 @@
  *                               SFX once/session)
  */
 window.SOG = window.SOG || {};
+
+// Debug logging toggle (defaults OFF in production). The per-module log()
+// wrappers and routine gameplay traces are gated on this, so the console stays
+// quiet during normal play. Re-enable live with: window.SOG_DEBUG = true
+window.SOG_DEBUG = window.SOG_DEBUG || false;
+
 SOG.preload = (function () {
   'use strict';
 

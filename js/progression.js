@@ -83,7 +83,7 @@ var Progression = (function () {
       window._pendingMontage = true;
     }
 
-    console.log('[Progression] recordWin:', difficulty, '| justUnlocked:', justUnlocked,
+    if (window.SOG_DEBUG) console.log('[Progression] recordWin:', difficulty, '| justUnlocked:', justUnlocked,
       '| totalWins:', tw, '| serfWins:', _getInt(KEY_SERF_WINS), '| giantWins:', _getInt(KEY_GIANT_WINS));
 
     if (justUnlocked) window._pendingUnlock = justUnlocked;

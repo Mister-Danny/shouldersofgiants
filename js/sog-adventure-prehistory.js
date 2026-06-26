@@ -63,7 +63,7 @@ window.SOG.Adventure.Prehistory = (function () {
   var neanderthalIntroSeenThisSession = false;
 
   /* ── Logging helper ────────────────────────────────────────── */
-  function log(msg) { console.log('[Adventure/Prehistory] ' + msg); }
+  function log(msg) { if (window.SOG_DEBUG) console.log('[Adventure/Prehistory] ' + msg); }
 
   /* ── Tuning constants ──────────────────────────────────────── */
   var TYPE_SPEED_MS      = 32;     // ms per character (slightly slower

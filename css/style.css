@@ -10954,13 +10954,36 @@ body[data-screen="overworld"] #overworld-overlay {
 .options-home-btn:hover  { background: #6e4220; border-color: #d4aa50; color: #e8c060; }
 .options-home-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a0c04, 0 2px 0 #000; }
 
+/* "Back to Map" (forfeit) — battle-context only (shown by JS, replacing the close
+   ✕ in the top-right corner). Compact SNES parchment button, mirroring the Home
+   button's corner placement, in a warmer red-brown to read as a "leave the
+   battle" action. */
+.options-map-corner {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 2;
+  padding: 7px 14px;
+  font-family: var(--font, monospace);
+  font-size: 14px;
+  color: #f3e6c4;
+  background: #6a2d1c;
+  border: 2px solid #a85a36;
+  border-radius: 5px;
+  box-shadow: 0 3px 0 #2a0c04, 0 4px 0 #000;
+  cursor: pointer;
+}
+.options-map-corner:hover  { background: #803726; border-color: #e0a060; color: #ffd890; }
+.options-map-corner:active { transform: translateY(2px); box-shadow: 0 1px 0 #2a0c04, 0 2px 0 #000; }
+
 /* Top toggle — one joined button (two halves) that flips the panel's view.
-   Sits in the header row (between the absolute Home and ✕). */
+   Sits on its own row BELOW the absolute Home (top-left) and Back-to-Map / ✕
+   (top-right) corner buttons, so the extra top padding clears them. */
 .options-tabs {
   flex: 0 0 auto;
   display: flex;
   justify-content: center;
-  padding: 14px 18px 12px;
+  padding: 60px 18px 12px;
 }
 .options-toggle {
   display: inline-flex;

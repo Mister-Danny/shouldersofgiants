@@ -30,7 +30,7 @@ SOG.SargonBattle = (function () {
 
   var TYPE_SPEED_MS = 32;   // matches the Gilgamesh battle typewriter
 
-  function log(msg) { console.log('[SargonBattle] ' + msg); }
+  function log(msg) { if (window.SOG_DEBUG) console.log('[SargonBattle] ' + msg); }
   function _has(key) { try { return localStorage.getItem(key) === 'true'; } catch (e) { return false; } }
   function _set(key) { try { localStorage.setItem(key, 'true'); } catch (e) {} }
 

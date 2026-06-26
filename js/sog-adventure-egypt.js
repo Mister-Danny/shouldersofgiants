@@ -11,7 +11,7 @@ var SOG = window.SOG || {};
 SOG.Egypt = (function () {
   'use strict';
 
-  function log(msg) { console.log('[Egypt] ' + msg); }
+  function log(msg) { if (window.SOG_DEBUG) console.log('[Egypt] ' + msg); }
 
   /* ── Entry point ─────────────────────────────────────────────── */
   function start() {

@@ -1327,7 +1327,7 @@ var Overworld = (function () {
      ADVENTURE INTRO DIALOGUE — SNES-style typewriter
      ════════════════════════════════════════════════════════════ */
 
-  function log(step) { console.log('[Adventure Intro] ' + step); }
+  function log(step) { if (window.SOG_DEBUG) console.log('[Adventure Intro] ' + step); }
 
   /* ── Thin HUD delegation ──────────────────────────────────────
      All overworld dialogue now routes through SOG.HUD.
@@ -1929,31 +1929,6 @@ var Overworld = (function () {
       }
     }
     return [255, 95, 45];
-  }
-
-  /* Candle transition (Phase D2d-b). Extends the iris primitive:
-       iris closes to black → ~1.2s silent hold (portrait swap happens here)
-       → matchstrike SFX + a white point of light blooms center-screen,
-       shifting white→orange-red and growing → the black wipe fades out so the
-       scene returns lit by a warm radial glow → ~0.5s after the candle settles
-       onDialogueReady() fires (HUD dialogue with Farmer) → the warm glow fades
-       to normal so nothing lingers into the deck builder.
-     onBlackHold(done) runs during the black hold (swap the portrait).        */
-  function _d2cCandleTransition(onBlackHold, onDialogueReady) {
-    var wipeEl = document.getElementById('adv-radial-wipe');
-
-    if (typeof gsap === 'undefined' || !wipeEl) {
-      if (onBlackHold) onBlackHold(function () {});
-      _clearWipe();
-      if (onDialogueReady) onDialogueReady();
-      return;
-    }
-
-    _irisClose(function () {
-      // Fully black. Swap the portrait now (hidden), hold ~1.2s in silence.
-      if (onBlackHold) onBlackHold(function () {});
-      gsap.delayedCall(1.2, function () { _runCandle(wipeEl, onDialogueReady); });
-    });
   }
 
   function _runCandle(wipeEl, onDialogueReady) {
@@ -3319,6 +3294,72 @@ var Overworld = (function () {
     }
   }
 
+  /* ── Canonical teardown ─────────────────────────────────────────────────
+     Reset the adventure subsystems to a FRESH-LOAD-equivalent clean state. Run
+     by the Settings "Back to Home" handler BEFORE showing home, and reusable by
+     the forfeit "Back to Map" flow (call this, then re-show/re-init the
+     overworld). Safe to call from any screen — every step is guarded. */
+  function teardown() {
+    // --- Overworld subsystem: stop timers + clear locks/guards ---
+    cancelIdle();
+    clearUrgentPulse();
+    if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
+    stopFootsteps();
+    isMoving = false;
+    isTransitioning = false;
+    isDialogueLocked = false;
+    _marketReady = false;
+
+    // --- Remove the full-screen overlays showScreen can't hide (the VISIBLE
+    //     breakage): the dynamic marketplace screen + its popups are removed from
+    //     the DOM; the static reveal/dim overlays are re-hidden; the radial wipe is
+    //     cleared; any open dialogue bubbles are hidden. ---
+    _clearWipe();                                       // #adv-radial-wipe.active
+    ['adv-market-screen', 'adv-market-buy', 'adv-market-confirm'].forEach(function (id) {
+      var el = document.getElementById(id);             // dynamic → remove from DOM
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    });
+    ['adv-card-reveal', 'adv-post-battle-dim'].forEach(function (id) {
+      var el = document.getElementById(id);             // static markup → just re-hide
+      if (el) el.style.display = 'none';
+    });
+    ['adv-bubble-otzi', 'adv-bubble-explorer', 'adv-bubble-lucy', 'adv-bubble-neanderthal'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b) b.classList.remove('is-visible', 'is-ready');
+    });
+
+    // --- Strip stale battle/mode body classes (FORWARD-PLAY corruption: a new
+    //     battle inheriting a leftover class → wrong location art). ---
+    ['gilgamesh-battle', 'hammurabi-battle', 'hanging-gardens-battle', 'sargon-battle',
+     'otzi-battle', 'otzi-pre-deal', 'prehistory-battle', 'prehistory-pre-coaching',
+     'overworld-away-from-home', 'tut-locked'].forEach(function (c) {
+      document.body.classList.remove(c);
+    });
+
+    // --- HUD: exit dialogue mode (clears dialogue-mode + stops the typewriter),
+    //     restore battle avatars, drop the Focus-gate halo. ---
+    var hud = window.SOG && window.SOG.HUD;
+    if (hud) {
+      if (typeof hud.exitDialogueMode    === 'function') { try { hud.exitDialogueMode(function () {}); } catch (e) {} }
+      if (typeof hud.restoreBattleAvatars === 'function') hud.restoreBattleAvatars();
+    }
+    var hudEl = document.getElementById('adv-hud');
+    if (hudEl) hudEl.classList.remove('dialogue-mode');
+    var book = document.getElementById('adv-hud-textbook');
+    if (book) book.classList.remove('adv-hud-textbook--halo');
+
+    // --- Battle engine: mark the battle ENDED so stale G can't drive forward
+    //     play. G is a shared instance mutated in place by initGame, so we only
+    //     flag the phase — the next initGame fully rebuilds it. ---
+    if (window.SOG && SOG.state && SOG.state.G) SOG.state.G.phase = 'over';
+
+    // --- Clear stale window mode flags (left at last-session values). ---
+    window.deckBuilderFromOverworld = false;
+    window._adventureVideoMode      = false;
+    window.versusStudentMode        = false;
+    window.multiplayerMode          = false;
+  }
+
   /* ── Public init ───────────────────────────────────────────── */
   function init() {
     mapImgEl         = document.getElementById('overworld-map');
@@ -3340,7 +3381,7 @@ var Overworld = (function () {
     // the intro would never fire.
     var introDone = localStorage.getItem(KEY_ADVENTURE_INTRO) === 'true';
     if (!introDone && currentMapId !== 'eastafrica') {
-      console.log('[Overworld] Intro not yet seen — forcing start on East Africa');
+      if (window.SOG_DEBUG) console.log('[Overworld] Intro not yet seen — forcing start on East Africa');
       currentMapId = 'eastafrica';
       currentPos   = { x: MAPS.eastafrica.spawn.x, y: MAPS.eastafrica.spawn.y };
     }
@@ -3362,6 +3403,9 @@ var Overworld = (function () {
   /* ── Expose ────────────────────────────────────────────────── */
   return {
     init: init,
+    // Canonical adventure teardown → fresh-load-equivalent clean state. Used by
+    // Settings "Back to Home" and (reusably) the forfeit "Back to Map" flow.
+    teardown: teardown,
     reset: function () {
       localStorage.removeItem(KEY_MAP);
       localStorage.removeItem(KEY_POS);

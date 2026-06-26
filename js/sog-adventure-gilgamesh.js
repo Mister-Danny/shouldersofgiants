@@ -46,7 +46,7 @@ SOG.GilgameshBattle = (function () {
   var TOTAL_TURNS   = 4;
 
   /* ── Logging ─────────────────────────────────────────────────── */
-  function log(msg) { console.log('[Adventure/Gilgamesh] ' + msg); }
+  function log(msg) { if (window.SOG_DEBUG) console.log('[Adventure/Gilgamesh] ' + msg); }
 
   /* ── Web Audio bleeps ────────────────────────────────────────── */
   var _bleepCtx = null;
