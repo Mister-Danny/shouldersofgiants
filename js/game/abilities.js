@@ -2186,9 +2186,15 @@
     if (!landed || landed.turnPlayed !== tribe.turnPlayed + 1) { done(); return; }  // this card grants Tribe no bonus
     var el = getSlotEl(ctx.owner, ctx.locId, ctx.slotIndex);
     if (el && window.SOG && SOG.RevealFx && typeof SOG.RevealFx.reactBounce === 'function') {
-      SOG.RevealFx.reactBounce(el, 'sfx/tribe.m4a', ctx.landedCardId);
+      // AWAIT the bounce: hold the reveal pipeline until it finishes so the
+      // bounce is sequenced to its OWN triggering (same-owner) card and never
+      // overlaps the next card's reveal — otherwise, when the player goes
+      // first, the bounce bleeds onto the opponent's card reveal and reads as
+      // if the opponent's play triggered it.
+      SOG.RevealFx.reactBounce(el, 'sfx/tribe.m4a', ctx.landedCardId, done);
+    } else {
+      done();
     }
-    done();   // bounce is fire-and-forget presentation — don't stall the reveal pipeline
   }
 
   /* Nebuchadnezzar (id 50) — "Builder of Babylon": At Once, reduce the owner's

@@ -2619,8 +2619,8 @@ var Overworld = (function () {
      dialogue + Gilgamesh-card grant. The battle module has faded to black and
      switched to the overworld screen; we land the Explorer at the Uruk node on
      the (still-loaded) Mesopotamia map, reveal the now-unlocked market node, fade
-     the black out via onMapShown, then — FIRST TIME ONLY — auto-walk her into the
-     market. Afterwards the market node just sits there, clickable to revisit. */
+     the black out via onMapShown, then hand control back. The market node sits
+     there clickable — the player walks into it on their own when ready. */
   function returnFromGilgameshWin(onMapShown) {
     isDialogueLocked = true;
     isTransitioning  = false;
@@ -2647,32 +2647,18 @@ var Overworld = (function () {
     // Reveal the map + Uruk (battle module fades its black cover out).
     if (onMapShown) onMapShown();
 
-    // Beat 2: fade the market node in (~after the map fade-from-black).
+    // Beat 2: fade the market node in (~after the map fade-from-black), then
+    // hand control back. The node is now revealed but the player walks into it
+    // on their own — clicking it opens the market (trader intro still plays on
+    // their first actual entry, gated separately on KEY_MARKET_INTRO_SEEN).
     setTimeout(function () {
       if (marketEl) {
         if (typeof gsap !== 'undefined') gsap.to(marketEl, { opacity: 1, duration: 0.6, ease: 'power1.out' });
         else marketEl.style.opacity = '1';
       }
-
-      var firstDone = false;
-      try { firstDone = localStorage.getItem(KEY_MARKET_FIRST_VISIT) === 'true'; } catch (e) {}
-
-      if (firstDone) {
-        // Already visited once — just hand control back; the node is clickable.
-        isDialogueLocked = false;
-        scheduleIdle();
-        return;
-      }
-
-      // Beat 3: FIRST TIME — auto-walk to the market node, then enter it.
-      var market = _findMesoNode('market');
-      var dest   = market ? (market.path || [{ x: market.x, y: market.y }]) : [];
-      setTimeout(function () {
-        walkPath(dest, function () {
-          try { localStorage.setItem(KEY_MARKET_FIRST_VISIT, 'true'); } catch (e) {}
-          _enterMarket();
-        });
-      }, 800);
+      try { localStorage.setItem(KEY_MARKET_FIRST_VISIT, 'true'); } catch (e) {}
+      isDialogueLocked = false;
+      scheduleIdle();
     }, 650);
   }
 

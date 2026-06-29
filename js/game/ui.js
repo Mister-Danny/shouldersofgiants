@@ -65,12 +65,12 @@
     'overworld:mesopotamia':  { src: 'music/derpnugget.mp3',                vol: 0.60, duck: 0.15, name: 'Derp Nugget' },
     'overworld:egypt':        { src: 'music/returnofthemummy.mp3',          vol: 0.60, duck: 0.15, name: 'Return of the Mummy' },
     'marketplace':            { src: 'music/hiddenwonders.mp3',             vol: 0.50, name: 'Hidden Wonders' },
-    'battle:prehistory':      { src: 'music/dentaneosuchushunt.mp3',        vol: 0.50, name: 'Dentaneosuchus Hunt' },   // Neanderthal
-    'battle:otzi':            { src: 'music/mountainemperor.mp3',           vol: 0.50, name: 'Mountain Emperor' },
-    'battle:gilgamesh':       { src: 'music/ancientmysterywaltzpresto.mp3', vol: 0.50, name: 'Ancient Mystery Waltz' },
-    'battle:sargon':          { src: 'music/cupidsrevenge.mp3',             vol: 0.50, name: 'Cupids Revenge' },
-    'battle:hammurabi':       { src: 'music/crossingthechasm.mp3',          vol: 0.50, name: 'Crossing the Chasm' },
-    'battle:hanging-gardens': { src: 'music/digya.mp3',                     vol: 0.50, name: 'Dig Ya' }   // Nebuchadnezzar
+    'battle:prehistory':      { src: 'music/dentaneosuchushunt.mp3',        vol: 0.50, duck: 0.15, name: 'Dentaneosuchus Hunt' },   // Neanderthal
+    'battle:otzi':            { src: 'music/mountainemperor.mp3',           vol: 0.50, duck: 0.15, name: 'Mountain Emperor' },
+    'battle:gilgamesh':       { src: 'music/ancientmysterywaltzpresto.mp3', vol: 0.50, duck: 0.15, name: 'Ancient Mystery Waltz' },
+    'battle:sargon':          { src: 'music/cupidsrevenge.mp3',             vol: 0.50, duck: 0.15, name: 'Cupids Revenge' },
+    'battle:hammurabi':       { src: 'music/crossingthechasm.mp3',          vol: 0.50, duck: 0.15, name: 'Crossing the Chasm' },
+    'battle:hanging-gardens': { src: 'music/digya.mp3',                     vol: 0.50, duck: 0.15, name: 'Dig Ya' }   // Nebuchadnezzar
   };
   var _ctxKey    = null;   // current context key (null = legacy playlist / none)
   var _ctxMul    = 1.0;    // current applied context multiplier (1.0 for the legacy playlist; may be ducked)
@@ -214,12 +214,22 @@
     _loadSrcFadeIn(cfg.src, cfg.name, FADE_IN_MS);
   }
 
-  // Overworld dialogue ducking. Only contexts with a `duck` level respond (the
-  // overworld); battles / marketplace have no `duck` and ignore this. Fades 400ms.
+  // Dialogue ducking. Only contexts with a `duck` level respond (overworld maps
+  // and battles); marketplace has no `duck` and ignores this. Fades 400ms.
   function duckForDialogue(on) {
     var cfg = _ctxKey ? CONTEXT_MUSIC[_ctxKey] : null;
     if (!cfg || typeof cfg.duck !== 'number') return;
     _tweenCtxMul(on ? cfg.duck : cfg.vol, 400);
+  }
+
+  // Fade the current context music OUT and stop it over `ms` — for handing off to a
+  // separate audio source (e.g. the deck-builder music). Clears context state, so
+  // the next playContext() starts fresh.
+  function fadeOutContextMusic(ms) {
+    _clearDuck(); _clearFadeIn();
+    if (_musicHowl) { _fadeHowlOut(_musicHowl, ms || 600); _musicHowl = null; }
+    _ctxKey = null; _ctxMul = 1.0; _fadeMul = 1.0;
+    _musicUpdateUI();
   }
 
   /* ── Music control widget (shared across home / deckbuilder / battle) ──
@@ -321,6 +331,8 @@
       duckForDialogue: function (on) { duckForDialogue(on); },
       /** Resolve a context key → its track src (for preload warming). */
       srcForContext: function (key) { return CONTEXT_MUSIC[key] ? CONTEXT_MUSIC[key].src : null; },
+      /** Fade the context music out + stop it (handing off to a separate source). */
+      fadeOutAndStop: function (ms) { fadeOutContextMusic(ms); },
 
       /** Return true if the shared music Howl is currently playing. */
       isPlaying: function () { return !!(_musicHowl && _musicHowl.playing()); },

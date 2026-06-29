@@ -109,6 +109,7 @@ SOG.GilgameshBattle = (function () {
   };
 
   function runLines(lines, onAllDone) {
+    if (window.SOG && SOG.music && typeof SOG.music.duckForDialogue === 'function') SOG.music.duckForDialogue(true);   // duck battle music during dialogue
     _dlg.lines     = lines;
     _dlg.lineIdx   = 0;
     _dlg.onAllDone = onAllDone;
@@ -184,6 +185,7 @@ SOG.GilgameshBattle = (function () {
   }
 
   function finishRunner() {
+    if (window.SOG && SOG.music && typeof SOG.music.duckForDialogue === 'function') SOG.music.duckForDialogue(false);   // restore battle music after dialogue
     if (_dlg.clickHandler) {
       document.removeEventListener('click',   _dlg.clickHandler);
       document.removeEventListener('keydown', _dlg.clickHandler);
@@ -731,9 +733,9 @@ SOG.GilgameshBattle = (function () {
             { who: 'otzi',     text: "Until the next time..." }
           ], function () {
             // The win dialogue (above) teases the Marketplace; now fade to the
-            // Mesopotamia map at Uruk, reveal the market node, and — first time
-            // only — auto-walk the Explorer into the market. (The market SCREEN
-            // itself is a placeholder until next session — see overworld
+            // Mesopotamia map at Uruk and reveal the market node. The player
+            // walks into it on their own when ready — no auto-walk. (The market
+            // SCREEN itself is a placeholder until next session — see overworld
             // _enterMarket's TODO.)
             _returnToMesopotamiaMarket();
           });

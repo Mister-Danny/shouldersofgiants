@@ -526,6 +526,7 @@ SOG.HangingGardensBattle = (function () {
   }
 
   function runLines(lines, onAllDone) {
+    if (window.SOG && SOG.music && typeof SOG.music.duckForDialogue === 'function') SOG.music.duckForDialogue(true);   // duck battle music during dialogue
     _dlg.lines     = lines;
     _dlg.lineIdx   = 0;
     _dlg.onAllDone = onAllDone;
@@ -599,6 +600,7 @@ SOG.HangingGardensBattle = (function () {
   }
 
   function finishRunner() {
+    if (window.SOG && SOG.music && typeof SOG.music.duckForDialogue === 'function') SOG.music.duckForDialogue(false);   // restore battle music after dialogue
     if (_dlg.clickHandler) {
       document.removeEventListener('click',   _dlg.clickHandler);
       document.removeEventListener('keydown', _dlg.clickHandler);

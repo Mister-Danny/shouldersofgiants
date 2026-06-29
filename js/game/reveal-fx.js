@@ -350,14 +350,20 @@ SOG.RevealFx = (function () {
   // already consumed holdFor(full) = full - INTER_REVEAL_GAP, so the time remaining
   // when we get here is exactly min(full, INTER_REVEAL_GAP); 0 for plain cards (no
   // reveal fx), which keeps them snappy. A 140ms reaction beat follows either way.
-  function reactBounce(slotEl, sfxSrc, landedCardId) {
-    if (!slotEl) return;
+  function reactBounce(slotEl, sfxSrc, landedCardId, onDone) {
+    onDone = typeof onDone === 'function' ? onDone : function () {};
+    if (!slotEl) { onDone(); return; }
     var pre = (landedCardId != null)
       ? Math.min(fullRevealMs(landedCardId), INTER_REVEAL_GAP)
       : 0;
     setTimeout(function () {
       if (sfxSrc) playSfx(sfxSrc);
       flashClass(slotEl, 'reveal-fx-bounce', 480);
+      // Hold the reveal pipeline until the bounce finishes so it stays bound to
+      // its OWN triggering card and never bleeds onto the next card's reveal
+      // (which, when the player goes first, would be the opponent's card and
+      // make the bounce look like the opponent triggered it).
+      setTimeout(onDone, 480);
     }, pre + 140);
   }
 

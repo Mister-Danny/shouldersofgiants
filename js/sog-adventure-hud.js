@@ -46,10 +46,10 @@ SOG.HUD = (function () {
     otzi:        { portrait: 'images/portraits/otzi.jpg',           bleepHz: 280, side: 'npc', frame: 'otzi' },
     hunter:      { portrait: 'images/portraits/hunterportrait.jpg', bleepHz: 380, side: 'npc'    },
     farmer:      { portrait: 'images/portraits/farmerportrait.jpg', bleepHz: 360, side: 'npc'    },
-    gilgamesh:   { portrait: 'images/portraits/gilgameshportrait.jpeg', bleepHz: 210, side: 'npc' },  // bleep routed through the 'otzi' synth branch (matches his battle voice)
-    sargon:      { portrait: 'images/portraits/sargonportrait.jpg', bleepHz: 440, side: 'npc'    },
-    hammurabi:   { portrait: 'images/portraits/hammurabi.jpg', bleepHz: 240, side: 'npc' },
-    nebuchadnezzar: { portrait: 'images/portraits/nebuchadnezzar.jpg', bleepHz: 200, side: 'npc' },
+    gilgamesh:   { portrait: 'images/portraits/gilgameshportrait.jpeg', bleepHz: 210, side: 'npc', frame: 'gilgamesh' },  // bleep routed through the 'otzi' synth branch (matches his battle voice)
+    sargon:      { portrait: 'images/portraits/sargonportrait.jpg', bleepHz: 440, side: 'npc', frame: 'sargon'    },
+    hammurabi:   { portrait: 'images/portraits/hammurabi.jpg', bleepHz: 240, side: 'npc', frame: 'hammurabi' },
+    nebuchadnezzar: { portrait: 'images/portraits/nebuchadnezzar.jpg', bleepHz: 200, side: 'npc', frame: 'neb' },
     trader:      { portrait: 'images/portraits/mesotrader@0.5x.jpg', bleepHz: 300, side: 'npc'   }
   };
 
@@ -311,8 +311,46 @@ SOG.HUD = (function () {
     // HUD (not a battle/Arcadium entry). This drives the "Back to Map" /
     // "Save Decks" buttons. Cleared when the player clicks Back to Map.
     window.deckBuilderFromOverworld = true;
-    if (typeof window.showScreen === 'function') window.showScreen('screen-deckbuilder');
-    if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
+
+    var doOpen = function () {
+      if (typeof window.showScreen === 'function') window.showScreen('screen-deckbuilder');
+      if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
+    };
+
+    // Cross-fade music: overworld track out, deck-builder track (dozingoffselect) in.
+    if (window.SOG && SOG.music && typeof SOG.music.fadeOutAndStop === 'function') SOG.music.fadeOutAndStop(700);
+
+    // Iris transition centered on the deck button: a black disc grows from the
+    // button to cover the overworld, the deck builder is shown behind it, then the
+    // disc shrinks back to the button to reveal the deck builder.
+    if (typeof gsap !== 'undefined' && _deckEl) {
+      var r  = _deckEl.getBoundingClientRect();
+      var cx = Math.round(r.left + r.width / 2);
+      var cy = Math.round(r.top + r.height / 2);
+      var maxR = Math.round(Math.sqrt(window.innerWidth * window.innerWidth + window.innerHeight * window.innerHeight) * 1.1);
+      var iris = document.createElement('div');
+      iris.id = 'adv-deck-iris';
+      iris.style.cssText = 'position:fixed;inset:0;background:#000;z-index:10050;pointer-events:none;';
+      iris.style.clipPath = 'circle(0px at ' + cx + 'px ' + cy + 'px)';
+      document.body.appendChild(iris);
+      var p = { r: 0 };
+      gsap.to(p, {
+        r: maxR, duration: 0.45, ease: 'power2.in',
+        onUpdate: function () { iris.style.clipPath = 'circle(' + p.r + 'px at ' + cx + 'px ' + cy + 'px)'; },
+        onComplete: function () {
+          doOpen();                                                    // switch behind full black
+          if (typeof window.playDeckMusic === 'function') window.playDeckMusic(700);
+          gsap.to(p, {
+            r: 0, duration: 0.5, ease: 'power2.out',
+            onUpdate: function () { iris.style.clipPath = 'circle(' + p.r + 'px at ' + cx + 'px ' + cy + 'px)'; },
+            onComplete: function () { if (iris.parentNode) iris.parentNode.removeChild(iris); }
+          });
+        }
+      });
+    } else {
+      doOpen();                                                        // no gsap fallback
+      if (typeof window.playDeckMusic === 'function') window.playDeckMusic(700);
+    }
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -495,12 +533,16 @@ SOG.HUD = (function () {
     var char = CHARACTERS[who];
     if (!char) return;
     _npcImgEl.src = char.portrait;
-    // Per-character frame color (e.g. Otzi's icy frame). Square head-and-
-    // shoulders portraits use the same framing as the Explorer; the frame
-    // marker only swaps the border color.
-    _npcImgEl.classList.remove('adv-hud-npc-otzi');
-    if (char.frame === 'otzi') {
-      _npcImgEl.classList.add('adv-hud-npc-otzi');
+    // Per-character frame color (e.g. Otzi's icy frame, the Mesopotamian
+    // giants' themed borders). Square head-and-shoulders portraits use the
+    // same framing as the Explorer; the frame marker only swaps the border
+    // color via an `adv-hud-npc-<frame>` class.
+    _npcImgEl.classList.remove(
+      'adv-hud-npc-otzi', 'adv-hud-npc-gilgamesh', 'adv-hud-npc-sargon',
+      'adv-hud-npc-hammurabi', 'adv-hud-npc-neb'
+    );
+    if (char.frame) {
+      _npcImgEl.classList.add('adv-hud-npc-' + char.frame);
     }
     _currentNpc = who;
   }
