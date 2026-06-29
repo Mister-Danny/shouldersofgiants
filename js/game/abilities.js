@@ -2247,6 +2247,30 @@
     }
   }
 
+  /* Sargon (id 37) — "Continuous: +3 IP to adjacent location(s)." The +3 itself is
+     continuous (evaluateContinuous → G.locationBoosts); this At-Once is PRESENTATION
+     ONLY — a beam of light from Sargon's card to each location he actually boosts,
+     plus a glow around those full location boxes for the length of ssfxsargon.m4a.
+     Targets EXACTLY getAdjacentLocIds(locId) (the same adjacency the boost uses), so
+     a middle Sargon beams both neighbors and an end Sargon beams just one. Plays for
+     BOTH sides (the board is visible to both). Gates the turn via done. */
+  function abilitySargon(owner, locId, done) {
+    var sargonEl = findSlotEl(owner, 37);
+    var boxes = [];
+    getAdjacentLocIds(locId).forEach(function (adjId) {
+      var box = boardEl.querySelector('.battle-col[data-loc-id="' + adjId + '"]');
+      if (box) boxes.push(box);
+    });
+    if (!sargonEl || !boxes.length) { done(); return; }   // no adjacent location → no boost → no flourish
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.sargonBeam === 'function') {
+      rfx.sargonBeam(sargonEl, boxes, { sfx: 'sfx/ssfxsargon.m4a' }, done);
+    } else {
+      if (window.SOG && SOG.sfx) SOG.sfx.play('sfx/ssfxsargon.m4a');
+      done();
+    }
+  }
+
   var CARD_ABILITIES = {
     2:  { onAtOnce: abilityScholarOfficials },
     3:  { onAtOnce: abilityJustinian        },
@@ -2262,7 +2286,7 @@
 
     /* ── Mesopotamia era ───────────────────────────────────────────
        Phase C cards (37 Sargon, 43 Gilgamesh) remain stubbed.      */
-    37: {},  // Sargon — Continuous only; handled in evaluateContinuous via G.locationBoosts
+    37: { onAtOnce: abilitySargon },  // Sargon — Continuous +3 (evaluateContinuous); At-Once = beam+glow flourish
     38: { onAtOnce: abilityPriest       },
     39: { onAtOnce: abilityFarmer       },  // Harvest — +1 capital next turn (shared accumulator)
     40: { onAtOnce: abilityScribe },  // Record Keeper — At Once: stamps +1 IP onto owner's other cards here

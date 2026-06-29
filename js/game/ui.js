@@ -43,14 +43,46 @@
      BACKGROUND MUSIC PLAYLIST
   ═══════════════════════════════════════════════════════════════ */
 
+  // Legacy playlist — Arcadium / non-adventure battles cycle through these via
+  // startBgMusic(). (Paths corrected to the renamed/compressed files.)
   var _musicTracks = [
-    { src: 'music/Cupids Revenge.mp3',     name: 'Cupids Revenge — Kevin MacLeod' },
-    { src: 'music/Crossing the Chasm.mp3', name: 'Crossing the Chasm — Kevin MacLeod' },
-    { src: 'music/Mountain Emperor.mp3',   name: 'Mountain Emperor — Kevin MacLeod' }
+    { src: 'music/cupidsrevenge.mp3',    name: 'Cupids Revenge — Kevin MacLeod' },
+    { src: 'music/crossingthechasm.mp3', name: 'Crossing the Chasm — Kevin MacLeod' },
+    { src: 'music/mountainemperor.mp3',  name: 'Mountain Emperor — Kevin MacLeod' }
   ];
   var _musicIdx   = 0;
   var _musicHowl  = null;
   var _bgMusicVol = 0.10;  // persists across Play Again
+
+  /* ── Context soundtrack (EDITABLE routing) ──────────────────────────────────
+     context key → { src, vol, duck?, name }. `vol` / `duck` are MULTIPLIERS on
+     the player's music slider (× master) — so the Settings slider keeps scaling
+     everything live. Overworld contexts define a `duck` level (faded to during
+     dialogue); battle / marketplace play at a constant `vol` (no `duck`).
+     Reassign tracks here. */
+  var CONTEXT_MUSIC = {
+    'overworld:eastafrica':   { src: 'music/derpnugget.mp3',                vol: 0.60, duck: 0.15, name: 'Derp Nugget' },
+    'overworld:mesopotamia':  { src: 'music/derpnugget.mp3',                vol: 0.60, duck: 0.15, name: 'Derp Nugget' },
+    'overworld:egypt':        { src: 'music/returnofthemummy.mp3',          vol: 0.60, duck: 0.15, name: 'Return of the Mummy' },
+    'marketplace':            { src: 'music/hiddenwonders.mp3',             vol: 0.50, name: 'Hidden Wonders' },
+    'battle:prehistory':      { src: 'music/dentaneosuchushunt.mp3',        vol: 0.50, name: 'Dentaneosuchus Hunt' },   // Neanderthal
+    'battle:otzi':            { src: 'music/mountainemperor.mp3',           vol: 0.50, name: 'Mountain Emperor' },
+    'battle:gilgamesh':       { src: 'music/ancientmysterywaltzpresto.mp3', vol: 0.50, name: 'Ancient Mystery Waltz' },
+    'battle:sargon':          { src: 'music/cupidsrevenge.mp3',             vol: 0.50, name: 'Cupids Revenge' },
+    'battle:hammurabi':       { src: 'music/crossingthechasm.mp3',          vol: 0.50, name: 'Crossing the Chasm' },
+    'battle:hanging-gardens': { src: 'music/digya.mp3',                     vol: 0.50, name: 'Dig Ya' }   // Nebuchadnezzar
+  };
+  var _ctxKey    = null;   // current context key (null = legacy playlist / none)
+  var _ctxMul    = 1.0;    // current applied context multiplier (1.0 for the legacy playlist; may be ducked)
+  var _curName   = '';     // current track display name (context or playlist)
+  var _duckTimer = null;   // in-progress duck fade interval
+  var _fadeMul    = 1.0;   // incoming-track fade-IN multiplier (0→1 during a context cross-fade)
+  var _fadeInTimer = null; // in-progress fade-in interval
+  // Context cross-fade timings: the OUTGOING track fades out, the INCOMING track
+  // fades in — so overworld→battle (and every other context switch) cross-fades
+  // cleanly instead of hard-cutting.
+  var FADE_OUT_MS = 600;
+  var FADE_IN_MS  = 1000;
 
   /* Master volume (Options panel) is a multiplier OVER music: effective music
      volume = master × music. Read fresh from localStorage (default 100 → 1.0) so
@@ -60,12 +92,13 @@
     if (isNaN(m)) m = 100;
     return Math.max(0, Math.min(100, m)) / 100;
   }
-  function _effMusicVol() { return _bgMusicVol * _masterFrac(); }
+  // Effective Howl volume = music slider × master × context multiplier × fade-in.
+  function _effMusicVol() { return _bgMusicVol * _masterFrac() * _ctxMul * _fadeMul; }
 
   function _musicUpdateUI() {
     var nameEl  = document.getElementById('music-track-name');
     var playBtn = document.getElementById('music-play-btn');
-    if (nameEl)  nameEl.textContent  = _musicTracks[_musicIdx].name;
+    if (nameEl)  nameEl.textContent  = _curName || _musicTracks[_musicIdx].name;
     if (playBtn) playBtn.textContent = (_musicHowl && _musicHowl.playing()) ? '\u258c\u258c' : '\u25b6';
     // Notify HUD to refresh its compact play button (Phase H1)
     var hudMusic = window.SOG && window.SOG.music;
@@ -73,8 +106,10 @@
   }
 
   function _musicLoadTrack(idx, autoplay) {
+    _clearFadeIn(); _fadeMul = 1.0;   // legacy playlist plays at full level (no fade-in)
     if (_musicHowl) { _musicHowl.stop(); _musicHowl.unload(); _musicHowl = null; }
     _musicIdx = ((idx % _musicTracks.length) + _musicTracks.length) % _musicTracks.length;
+    _curName  = _musicTracks[_musicIdx].name;
     if (typeof Howl === 'undefined') { _musicUpdateUI(); return; }
     _musicHowl = new Howl({
       src:    [_musicTracks[_musicIdx].src],
@@ -90,12 +125,101 @@
   }
 
   function startBgMusic() {
+    _clearDuck(); _clearFadeIn(); _ctxKey = null; _ctxMul = 1.0; _fadeMul = 1.0;   // legacy playlist → no context multiplier / fade
     _musicLoadTrack(0, true);
   }
 
   function stopBgMusic() {
+    _clearDuck(); _clearFadeIn(); _ctxKey = null; _ctxMul = 1.0; _fadeMul = 1.0;
     if (_musicHowl) { _musicHowl.stop(); _musicHowl.unload(); _musicHowl = null; }
     _musicUpdateUI();
+  }
+
+  /* ── Context soundtrack engine ──────────────────────────────────────────── */
+
+  function _applyMusicVol() { if (_musicHowl) _musicHowl.volume(_effMusicVol()); }
+  function _clearDuck() { if (_duckTimer) { clearInterval(_duckTimer); _duckTimer = null; } }
+
+  // Smoothly ramp the context multiplier to `target` over `ms` (re-applying the
+  // effective volume each step, so a live slider move during the fade still scales).
+  function _tweenCtxMul(target, ms) {
+    _clearDuck();
+    var start = _ctxMul, steps = Math.max(1, Math.round(ms / 40)), i = 0;
+    _duckTimer = setInterval(function () {
+      i++;
+      _ctxMul = start + (target - start) * (i / steps);
+      _applyMusicVol();
+      if (i >= steps) { _ctxMul = target; _applyMusicVol(); _clearDuck(); }
+    }, 40);
+  }
+
+  function _clearFadeIn() { if (_fadeInTimer) { clearInterval(_fadeInTimer); _fadeInTimer = null; } }
+
+  // Fade an OUTGOING howl down to silence over `ms`, then stop + unload it. Self-
+  // contained (its own ramp) since it's being discarded — no slider/duck tracking.
+  function _fadeHowlOut(howl, ms) {
+    if (!howl) return;
+    var start;
+    try { start = howl.volume(); } catch (e) { try { howl.stop(); howl.unload(); } catch (e2) {} return; }
+    if (!(start > 0)) { try { howl.stop(); howl.unload(); } catch (e) {} return; }
+    var steps = Math.max(1, Math.round(ms / 40)), i = 0;
+    var t = setInterval(function () {
+      i++;
+      try { howl.volume(Math.max(0, start * (1 - i / steps))); } catch (e) {}
+      if (i >= steps) { clearInterval(t); try { howl.stop(); howl.unload(); } catch (e) {} }
+    }, 40);
+  }
+
+  // Load + loop a context track, fading it IN from silence over `ms`. The fade rides
+  // the _fadeMul factor of _effMusicVol, so a live slider / duck still scales mid-fade.
+  function _loadSrcFadeIn(src, name, ms) {
+    _curName = name || '';
+    if (typeof Howl === 'undefined') { _musicUpdateUI(); return; }
+    _clearFadeIn();
+    _fadeMul = 0;
+    _musicHowl = new Howl({
+      src: [src], volume: _effMusicVol(), html5: true, loop: true,
+      onplay:  function () { _musicUpdateUI(); },
+      onpause: function () { _musicUpdateUI(); },
+      onstop:  function () { _musicUpdateUI(); }
+    });
+    _musicHowl.play();
+    _musicUpdateUI();
+    var steps = Math.max(1, Math.round(ms / 40)), i = 0;
+    _fadeInTimer = setInterval(function () {
+      i++;
+      _fadeMul = Math.min(1, i / steps);
+      _applyMusicVol();
+      if (i >= steps) { _fadeMul = 1; _applyMusicVol(); _clearFadeIn(); }
+    }, 40);
+  }
+
+  // Play the track assigned to a context (map/battle/marketplace) at its multiplier,
+  // CROSS-FADING from whatever is playing (outgoing fades out, incoming fades in) —
+  // so overworld→battle (and every context switch) transitions cleanly, no hard cut.
+  // Idempotent: re-requesting the SAME context that's already playing keeps it going.
+  function playContext(key) {
+    var cfg = CONTEXT_MUSIC[key];
+    if (!cfg) return;
+    if (_ctxKey === key && _musicHowl && _musicHowl.playing()) {
+      _clearDuck(); _ctxMul = cfg.vol; _applyMusicVol(); return;   // already playing — just un-duck to base
+    }
+    _clearDuck(); _clearFadeIn();
+    // Hand the current track off to a fade-out, then fade the new one in.
+    if (_musicHowl) { _fadeHowlOut(_musicHowl, FADE_OUT_MS); _musicHowl = null; }
+    _ctxKey = key;
+    _ctxMul = cfg.vol;
+    // Warm the track (fire-and-forget) so it streams promptly online.
+    if (window.SOG && SOG.preload && typeof SOG.preload.audio === 'function') SOG.preload.audio([cfg.src]);
+    _loadSrcFadeIn(cfg.src, cfg.name, FADE_IN_MS);
+  }
+
+  // Overworld dialogue ducking. Only contexts with a `duck` level respond (the
+  // overworld); battles / marketplace have no `duck` and ignore this. Fades 400ms.
+  function duckForDialogue(on) {
+    var cfg = _ctxKey ? CONTEXT_MUSIC[_ctxKey] : null;
+    if (!cfg || typeof cfg.duck !== 'number') return;
+    _tweenCtxMul(on ? cfg.duck : cfg.vol, 400);
   }
 
   /* ── Music control widget (shared across home / deckbuilder / battle) ──
@@ -191,6 +315,13 @@
       /** Return current volume as integer 0–100. */
       getVolume: function () { return Math.round(_bgMusicVol * 100); },
 
+      /** Context soundtrack: play the track assigned to a map/battle/marketplace key. */
+      playContext: function (key) { playContext(key); },
+      /** Overworld dialogue ducking (no-op for battle/marketplace contexts). */
+      duckForDialogue: function (on) { duckForDialogue(on); },
+      /** Resolve a context key → its track src (for preload warming). */
+      srcForContext: function (key) { return CONTEXT_MUSIC[key] ? CONTEXT_MUSIC[key].src : null; },
+
       /** Return true if the shared music Howl is currently playing. */
       isPlaying: function () { return !!(_musicHowl && _musicHowl.playing()); },
 
@@ -200,13 +331,12 @@
        * @returns {{ title: string, artist: string, full: string }}
        */
       getCurrentTrack: function () {
-        var t = _musicTracks[_musicIdx];
-        if (!t) return { title: '—', artist: '', full: '—' };
+        var name = _curName || (_musicTracks[_musicIdx] && _musicTracks[_musicIdx].name) || '—';
         // Split on " — " (em-dash with spaces) to separate title from attribution
-        var sep   = t.name.indexOf(' — ');
-        var title  = sep !== -1 ? t.name.slice(0, sep) : t.name;
-        var artist = sep !== -1 ? t.name.slice(sep + 3) : '';
-        return { title: title, artist: artist, full: t.name };
+        var sep    = name.indexOf(' — ');
+        var title  = sep !== -1 ? name.slice(0, sep) : name;
+        var artist = sep !== -1 ? name.slice(sep + 3) : '';
+        return { title: title, artist: artist, full: name };
       },
 
       /**

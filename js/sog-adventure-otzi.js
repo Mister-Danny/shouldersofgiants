@@ -838,15 +838,20 @@ SOG.OtziBattle = (function () {
       if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(OTZI_CONFIG.presentation);
       _otziApplyTurnPresentation(1);
       _otziParkSideLocations();
+      // Skip the entry dialogue once Ötzi is beaten — the shake / side-location
+      // reveal / deal still run (they set up the board); only the lines are skipped.
+      var _beaten = false;
+      try { _beaten = localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true'; } catch (e) {}
+      var _lines = function (arr, next) { if (_beaten) { if (next) next(); return; } runLines(arr, next); };
       fadeOutCover(function () {
-        runLines(PRE_SHAKE_LINES, function () {
+        _lines(PRE_SHAKE_LINES, function () {
           // Woosh lands a beat INTO the shake (not at its very start) so it syncs
           // with the side locations actually sliding in, which happens after the
           // ~260ms shake rumble.
           setTimeout(function () { SOG.sfx.play('sfx/woosh.m4a'); }, 150);
           shakeCamera(function () {
             revealSideLocations(function () {
-              runLines(POST_SHAKE_LINES, function () {
+              _lines(POST_SHAKE_LINES, function () {
                 dealCards(function () { done(); });
               });
             });

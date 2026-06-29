@@ -869,6 +869,18 @@ var Overworld = (function () {
     return out;   // 35 frames
   }
 
+  // Start (or keep) the overworld track for the current map. Idempotent via
+  // SOG.music.playContext — safe to call from every map-entry / battle-return /
+  // market-exit path; it only restarts when the map's context actually changes.
+  function _playMapMusic() {
+    // Some sequences borrow the overworld screen but want SILENCE (e.g. the
+    // Gilgamesh cuneiform "shh" intervention) — they set this flag to opt out.
+    if (window._sogSuppressMapMusic) return;
+    if (window.SOG && SOG.music && typeof SOG.music.playContext === 'function') {
+      SOG.music.playContext('overworld:' + currentMapId);
+    }
+  }
+
   function loadMap(mapId, opts) {
     opts = opts || {};
     var data = MAPS[mapId];
@@ -1016,6 +1028,9 @@ var Overworld = (function () {
       visitedMaps.push(mapId);
     }
     saveState();
+
+    // Context soundtrack — this map's track (fresh start when the map changes).
+    _playMapMusic();
   }
 
   function showFog(on) {
@@ -2613,6 +2628,7 @@ var Overworld = (function () {
     // The player came from Mesopotamia, so its map DOM is intact behind the
     // battle screen; make sure it's the current map (defensive).
     if (currentMapId !== 'mesopotamia') loadMap('mesopotamia', {});
+    _playMapMusic();   // resume the overworld track (covers the path that skips loadMap)
 
     // Land at the Uruk node.
     var uruk = _findMesoNode('walls-of-uruk');
@@ -2775,6 +2791,11 @@ var Overworld = (function () {
     cancelIdle();
     stopFootsteps();
 
+    // Context soundtrack — marketplace track (constant 50%, no ducking).
+    if (window.SOG && SOG.music && typeof SOG.music.playContext === 'function') {
+      SOG.music.playContext('marketplace');
+    }
+
     // Focus drain (Stage 1): each marketplace trip costs 5. _enterMarket runs
     // once per entry (node click, or the first-Gilgamesh-win auto-walk).
     if (window.SOG && SOG.focus) SOG.focus.spend(5);
@@ -2879,6 +2900,7 @@ var Overworld = (function () {
     var screen = document.getElementById('adv-market-screen');
     if (screen && screen.parentNode) screen.parentNode.removeChild(screen);
     isDialogueLocked = false;
+    _playMapMusic();   // back on the map — resume the overworld track
     // First time back from the marketplace, the explorer notes the growing
     // collection and the deck builder un-greys. One-time; gated below. THEN, on
     // the same first return, the Sargon node dust-reveals (also one-time, gated),
@@ -3350,6 +3372,9 @@ var Overworld = (function () {
   /* ── Expose ────────────────────────────────────────────────── */
   return {
     init: init,
+    // Resume the current map's context soundtrack. Called from the showScreen hook
+    // whenever the overworld is shown (covers every battle-return path) + market exit.
+    playMapMusic: _playMapMusic,
     // Canonical adventure teardown → fresh-load-equivalent clean state. Used by
     // Settings "Back to Home" and (reusably) the forfeit "Back to Map" flow.
     teardown: teardown,
@@ -3424,6 +3449,7 @@ var Overworld = (function () {
       _clearWipe();
       var hud = window.SOG && window.SOG.HUD;
       if (hud && typeof hud.show === 'function') hud.show();
+      _playMapMusic();
       setTimeout(function () {
         runDialogue(D4_SARGON_LOSS_REFLECT, function () {
           isDialogueLocked = false;
@@ -3441,6 +3467,7 @@ var Overworld = (function () {
       _clearWipe();
       var hud = window.SOG && window.SOG.HUD;
       if (hud && typeof hud.show === 'function') hud.show();
+      _playMapMusic();
       setTimeout(function () {
         _maybeRevealHammurabiNode(function () {
           // The node has risen — Explorer chimes in, then control is restored so
@@ -3475,6 +3502,7 @@ var Overworld = (function () {
       _removeCandleBackdrop();   // defensive: clear any lingering candlelit backdrop
       var hud = window.SOG && window.SOG.HUD;
       if (hud) { hud.show(); }
+      _playMapMusic();   // resume the overworld track (battle music was stopped at endGame)
 
       // Catch-up Hammurabi node reveal. The node normally rises via
       // returnFromSargonWin (the FIRST Sargon win). But a save that beat Sargon

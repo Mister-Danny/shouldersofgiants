@@ -332,6 +332,10 @@ SOG.HUD = (function () {
       if (_hudEl) _hudEl.style.display = '';
       if (id === 'screen-overworld') {
         refreshDecks();
+        // Resume the current map's context soundtrack on EVERY return to the
+        // overworld (battles stop/replace it). Universal hook so no return path is
+        // missed (prehistory/Ötzi return via bare showScreen, etc.); idempotent.
+        if (window.Overworld && typeof window.Overworld.playMapMusic === 'function') window.Overworld.playMapMusic();
       }
     };
   }
@@ -348,6 +352,9 @@ SOG.HUD = (function () {
   function enterDialogueMode(config, onReady) {
     if (_inDialogue) { if (onReady) setTimeout(onReady, 0); return; }
     _inDialogue = true;
+    // Duck the overworld music while dialogue plays (no-op for battle/marketplace
+    // contexts, which define no duck level — see SOG.music.duckForDialogue).
+    if (window.SOG && SOG.music && typeof SOG.music.duckForDialogue === 'function') SOG.music.duckForDialogue(true);
 
     // Clear both speaker zones
     if (_dlgTextEl)       _dlgTextEl.textContent    = '';
@@ -374,6 +381,8 @@ SOG.HUD = (function () {
    */
   function exitDialogueMode(onDone) {
     if (!_inDialogue) { if (onDone) setTimeout(onDone, 0); return; }
+    // Restore the overworld music level as dialogue closes (no-op off the overworld).
+    if (window.SOG && SOG.music && typeof SOG.music.duckForDialogue === 'function') SOG.music.duckForDialogue(false);
 
     _removeAdvanceListener();
 

@@ -248,6 +248,21 @@
     // of fetching mid-animation online. Fire-and-forget — never blocks.
     if (window.SOG && SOG.preload && typeof SOG.preload.battle === 'function') SOG.preload.battle(G);
 
+    // Context soundtrack — switch to this battle's track at battle ENTRY (here, in
+    // the build), NOT at turn-1 activation, so the overworld track doesn't keep
+    // playing through a long opening cinematic (e.g. the Neanderthal coaching).
+    // Adventure bosses each get their own track (constant 50%); Arcadium / 2P fall
+    // back to the legacy playlist. Idempotent — a "Play Again" won't restart it.
+    (function () {
+      var ctx = cfg.scriptHook ? ('battle:' + cfg.scriptHook) : null;
+      if (ctx && window.SOG && SOG.music && typeof SOG.music.playContext === 'function'
+          && SOG.music.srcForContext(ctx)) {
+        SOG.music.playContext(ctx);
+      } else if (window.SOG && SOG.ui && typeof SOG.ui.startBgMusic === 'function') {
+        SOG.ui.startBgMusic();
+      }
+    })();
+
     G.locations.forEach(function (loc) {
       G.playerSlots[loc.id] = Array(cfg.structure.slotsPerLocation).fill(null);
       G.aiSlots[loc.id]     = Array(cfg.structure.slotsPerLocation).fill(null);
@@ -308,7 +323,7 @@
        interactive pause) and gate turn 1 until done(). With no script present
        the turn-1 activation tail runs immediately — behaviour-identical. */
     SOG.BattleHooks.runAsyncOr('onBattleStart', [], function _activateTurn1() {
-      SOG.ui.startBgMusic();
+      // (Battle music already started at battle entry in _initGameBuild.)
       _startSelectionTimer();
       if (typeof Analytics !== 'undefined') {
         Analytics.gameStarted(window.aiDifficulty);

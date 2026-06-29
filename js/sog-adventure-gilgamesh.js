@@ -931,6 +931,11 @@ SOG.GilgameshBattle = (function () {
     var ow  = window.Overworld;
     var hasCandle = !!(ow && typeof ow.showCuneiformCandle === 'function'
                           && typeof ow.fadeOutCuneiformCandle === 'function');
+    // Keep the "shh" intervention SILENT: it borrows the overworld screen below
+    // (so the HUD can render the Farmer dialogue), which would otherwise resume the
+    // map music via the showScreen hook. Suppress + stop any music for the duration.
+    window._sogSuppressMapMusic = true;
+    if (window.SOG && SOG.ui && typeof SOG.ui.stopBgMusic === 'function') SOG.ui.stopBgMusic();
     _playSfx('sfx/shh.m4a');
     _gFadeToBlack(function () {
       // Behind black: borrow the overworld screen so the HUD can render.
@@ -945,6 +950,7 @@ SOG.GilgameshBattle = (function () {
               var backToBoard = function () {
                 // Behind the candle: return to the intact battle board.
                 if (typeof showScreen === 'function') showScreen('screen-battle');
+                window._sogSuppressMapMusic = false;   // "shh" sequence over — music may resume again
                 _playSfx('sfx/shh.m4a');   // SHH as the candle is snuffed
                 var revealChallenge = function () {
                   runLines(GILGAMESH_POSTLOSS_CHALLENGE, function () {
@@ -990,6 +996,7 @@ SOG.GilgameshBattle = (function () {
   }
 
   function _restartBattle() {
+    window._sogSuppressMapMusic = false;   // safety: never leave map music suppressed
     teardown();   // engine owns the End Turn / Reset buttons now
     if (typeof SOG !== 'undefined' && SOG.GilgameshBattle) SOG.GilgameshBattle.start();
   }

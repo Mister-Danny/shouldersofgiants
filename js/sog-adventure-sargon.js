@@ -104,7 +104,7 @@ SOG.SargonBattle = (function () {
   var SARGON_CARD_ID = 37;
   var GOLD_FIRST_WIN = 25;
   var GOLD_REPEAT_WIN = 10;
-  // First-win victory dialogue — runs after CONTINUE, before the Sargon card grant.
+  // First-win victory dialogue — runs on the win, before the Sargon card grant.
   var WIN_DIALOGUE = [
     { who: 'sargon',   text: "You've bested me." },
     { who: 'sargon',   text: 'But how?' },
@@ -116,7 +116,7 @@ SOG.SargonBattle = (function () {
     { who: 'sargon',   text: 'And so am I.' },
     { who: 'sargon',   text: 'Take this as a symbol of our budding alliance.' }
   ];
-  // First-win closing line — runs after the Sargon card + gold, before exiting to the map.
+  // First-win closing line — runs after the Sargon card + gold, before the scoreboard.
   var WIN_DIALOGUE_CLOSER = [
     { who: 'explorer', text: 'I see why they call you The Great.' }
   ];
@@ -317,7 +317,8 @@ SOG.SargonBattle = (function () {
   /* Opening capital tutorial: dialogue → rules popup → onComplete. Plays once
      per browser; skipped (immediate onComplete) on re-entry. */
   function _runOpeningDialogue(onComplete) {
-    if (_has(KEY_OPENING_SEEN)) { if (onComplete) onComplete(); return; }
+    // Skip once seen OR once Sargon is beaten (entry dialogue never replays after a win).
+    if (_has(KEY_OPENING_SEEN) || _has(KEY_SARGON_COMPLETE)) { if (onComplete) onComplete(); return; }
     runLines(OPENING_DIALOGUE, function () {
       _openRulesPopup(function () {
         _set(KEY_OPENING_SEEN);
@@ -382,7 +383,7 @@ SOG.SargonBattle = (function () {
 
   /* ══════════════════════════════════════════════════════════════
      END-GAME SCOREBOARD (mirrors the Gilgamesh / Otzi parchment scoreboard).
-       • First win  → CONTINUE + GAME BOARD.
+       • First win  → shown AFTER the victory sequence → BACK TO MAP + GAME BOARD.
        • Otherwise (any subsequent battle, win or loss; or a pre-win loss)
                     → PLAY AGAIN + GAMEBOARD + BACK TO MAP.
   ══════════════════════════════════════════════════════════════ */
@@ -524,15 +525,16 @@ SOG.SargonBattle = (function () {
     }, 1900);
   }
 
-  /* CONTINUE on the first-win scoreboard: victory dialogue → Sargon card grant
-     → +25 gold → closing line → exit to the map (all on the battle screen). */
-  function _runFirstWinSequence() {
+  /* First win: victory dialogue → Sargon card grant → +25 gold → closing line →
+     THEN the end-game scoreboard (its Back To Map exits, Game Board reviews). The
+     whole sequence runs on the battle screen, BEFORE the scoreboard. */
+  function _runFirstWinSequence(locResults) {
     _removeResultPopup();
     runLines(WIN_DIALOGUE, function () {
       _grantSargonCard(function () {
         _grantGold(GOLD_FIRST_WIN, function () {
           runLines(WIN_DIALOGUE_CLOSER, function () {
-            _exitToOverworldAfterFirstWin();
+            _showResultScoreboard(true, false, locResults, { firstWin: true });
           });
         });
       });
@@ -583,8 +585,10 @@ SOG.SargonBattle = (function () {
       return b;
     }
     if (opts.firstWin) {
-      actions.appendChild(mkBtn('CONTINUE',   function () { _runFirstWinSequence(); }));
-      actions.appendChild(mkBtn('GAME BOARD', function () { _hideResultForReview(); }));
+      // Shown AFTER the first-win victory sequence (dialogue + card + gold + closer),
+      // so these buttons exit to the map / review the board — no Continue needed.
+      actions.appendChild(mkBtn('BACK TO MAP', function () { _exitToOverworldAfterFirstWin(); }));
+      actions.appendChild(mkBtn('GAME BOARD',  function () { _hideResultForReview(); }));
     } else {
       actions.appendChild(mkBtn('PLAY AGAIN',  function () { _restartBattle(); }));
       actions.appendChild(mkBtn('GAMEBOARD',   function () { _hideResultForReview(); }));
@@ -636,7 +640,9 @@ SOG.SargonBattle = (function () {
     var firstWin = !_has(KEY_SARGON_COMPLETE);
     _set(KEY_SARGON_COMPLETE);
     if (firstWin) {
-      _showResultScoreboard(true, false, locResults, { firstWin: true });
+      // Victory dialogue → Sargon card → +25 gold → closing line → THEN the
+      // scoreboard. The sequence plays BEFORE the board (not behind a Continue button).
+      _runFirstWinSequence(locResults);
     } else {
       // Repeat win: VICTORY chime + pop-up (2.5s) → +10 gold acquisition → scoreboard.
       _victoryFlourish(function () {

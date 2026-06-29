@@ -678,7 +678,8 @@ SOG.HammurabiBattle = (function () {
 
   /* Opening dialogue (first-time only; skipped → immediate onComplete on re-entry). */
   function _runOpeningDialogue(onComplete) {
-    if (_has(KEY_HAMMURABI_OPENING_SEEN)) { if (onComplete) onComplete(); return; }
+    // Skip once seen OR once Hammurabi is beaten (entry dialogue never replays after a win).
+    if (_has(KEY_HAMMURABI_OPENING_SEEN) || _has(KEY_HAMMURABI_COMPLETE)) { if (onComplete) onComplete(); return; }
     runLines(OPENING_DIALOGUE, function () {
       _set(KEY_HAMMURABI_OPENING_SEEN);
       if (onComplete) onComplete();
@@ -708,8 +709,9 @@ SOG.HammurabiBattle = (function () {
       }
       _swapOpponentBubblePortrait();
 
-      if (_has(KEY_HAMMURABI_OPENING_SEEN)) {
-        // Repeat entry — no dialogue; ability text shows statically (names + effects).
+      if (_has(KEY_HAMMURABI_OPENING_SEEN) || _has(KEY_HAMMURABI_COMPLETE)) {
+        // Repeat entry (seen before, or Hammurabi already beaten) — no dialogue;
+        // ability text shows statically (names + effects).
         fadeOutCover(function () { _wireOpponentPortraitClick(); done(); });
         return;
       }

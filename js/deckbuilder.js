@@ -440,7 +440,7 @@
   var _deckHowl = null;
   // Mutable live volume — read from localStorage on Howl creation
   // (sog_music_volume) and updated by the global music widget. Bug 14.
-  var _deckMusicVolLive = 0.5;
+  var _deckMusicVolLive = 0.8;
 
   function getDeckMusic() {
     // Apply any persisted volume before creating the Howl (bug 14).
@@ -450,7 +450,7 @@
     }
     if (!_deckHowl && typeof Howl !== 'undefined') {
       _deckHowl = new Howl({
-        src:    ['music/Dozing Off Card Select.m4a'],
+        src:    ['music/dozingoffselect.mp3'],
         volume: _deckMusicVolLive,
         loop:   false,
         html5:  true

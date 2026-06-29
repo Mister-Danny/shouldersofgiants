@@ -44,7 +44,7 @@ var HomeFlow = (function () {
      Howler's HTML5 audio pool was exhausting with the game's other
      SFX running, which blocked our home music. Using a dedicated
      <audio> element sidesteps the pool entirely. */
-  var HOME_MUSIC_VOLUME = 0.50; // ~66% × 0.75 = 50% (legacy default; live value below)
+  var HOME_MUSIC_VOLUME = 0.80; // base level (still tracks the music slider once moved)
   // Mutable live volume — read from localStorage on init (sog_music_volume) and
   // updated by the global music widget's slider. Bug 14.
   var HOME_MUSIC_VOLUME_LIVE = HOME_MUSIC_VOLUME;
@@ -53,7 +53,7 @@ var HomeFlow = (function () {
 
   function ensureHomeMusic() {
     if (homeMusicAudio) return;
-    homeMusicAudio = new Audio("music/The Silent Knight's Tale.m4a");
+    homeMusicAudio = new Audio("music/thesilentknightstale.mp3");
     homeMusicAudio.loop    = true;
     homeMusicAudio.volume  = HOME_MUSIC_VOLUME_LIVE;
     homeMusicAudio.preload = 'auto';

@@ -1013,6 +1013,72 @@ SOG.RevealFx = (function () {
     }, 1500);
   }
 
+  /* Sargon (id 37) reveal flourish — visualizes his "+3 IP to adjacent location(s)".
+     A gold BEAM of light shoots from Sargon's card to each AFFECTED location's full
+     box (the caller passes exactly the boosted boxes — getAdjacentLocIds), and those
+     boxes GLOW. Plays ssfxsargon at the moment the beam fires and keeps the glow lit
+     for the SOUND's length, fading it out when the audio ends (a safety timeout
+     covers muted/failed audio). Beam + glow are fixed-position layers on <body> (no
+     clipping / scaled-stage offset). Gates the turn via onComplete. */
+  function sargonBeam(sargonEl, targetEls, opts, onComplete) {
+    opts = opts || {};
+    targetEls = (targetEls || []).filter(Boolean);
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+    if (!sargonEl || !targetEls.length) { finish(); return; }
+
+    // Play the SFX (volume-respecting) and keep the handle to time the glow to it.
+    var audio = (window.SOG && SOG.sfx && typeof SOG.sfx.play === 'function') ? SOG.sfx.play(opts.sfx) : null;
+
+    var sr = sargonEl.getBoundingClientRect();
+    var sx = sr.left + sr.width / 2, sy = sr.top + sr.height / 2;
+    var glows = [];
+
+    targetEls.forEach(function (box) {
+      var r = box.getBoundingClientRect();
+      if (!r.width) return;
+      // Glow over the whole location box (fixed overlay; fades in now, out on SFX end).
+      var g = document.createElement('div');
+      g.className = 'sargon-loc-glow';
+      g.style.cssText = 'position:fixed;left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px;z-index:9995;pointer-events:none;opacity:0;';
+      document.body.appendChild(g);
+      void g.offsetWidth; g.style.opacity = '1';
+      glows.push(g);
+
+      // Beam from Sargon's card to the box centre.
+      var tx = r.left + r.width / 2, ty = r.top + r.height / 2;
+      var dx = tx - sx, dy = ty - sy;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      var ang  = Math.atan2(dy, dx) * 180 / Math.PI;
+      var beam = document.createElement('div');
+      beam.className = 'sargon-beam';
+      beam.style.cssText = 'position:fixed;left:' + sx + 'px;top:' + (sy - 4) + 'px;width:' + dist + 'px;height:8px;z-index:9996;pointer-events:none;';
+      document.body.appendChild(beam);
+      if (typeof gsap !== 'undefined') {
+        gsap.set(beam, { rotation: ang, scaleX: 0, transformOrigin: '0 50%' });
+        gsap.to(beam, { scaleX: 1, duration: 0.25, ease: 'power2.out' });
+        gsap.to(beam, { opacity: 0, duration: 0.5, delay: 0.55,
+          onComplete: function () { if (beam.parentNode) beam.parentNode.removeChild(beam); } });
+      } else {
+        beam.style.transform = 'rotate(' + ang + 'deg)';
+        setTimeout(function () { if (beam.parentNode) beam.parentNode.removeChild(beam); }, 1000);
+      }
+    });
+
+    // Tie the glow's lifetime to ssfxsargon: fade it out when the sound ends, then
+    // release the turn. Safety fallback if the audio can't report 'ended'.
+    var ended = false;
+    function endFlourish() {
+      if (ended) return; ended = true;
+      glows.forEach(function (g) {
+        g.style.opacity = '0';
+        setTimeout(function () { if (g.parentNode) g.parentNode.removeChild(g); }, 450);
+      });
+      setTimeout(finish, 450);
+    }
+    if (audio && typeof audio.addEventListener === 'function') audio.addEventListener('ended', endFlourish);
+    setTimeout(endFlourish, 4000);   // safety: muted/failed audio or no 'ended'
+  }
+
   return { fire: fire, has: has, reactBounce: reactBounce,
            scribeStampSequence: scribeStampSequence,
            soldierCharge: soldierCharge,
@@ -1020,5 +1086,6 @@ SOG.RevealFx = (function () {
            cuneiformLift: cuneiformLift,
            phoeniciansMerge: phoeniciansMerge,
            chariotArrow: chariotArrow,
-           nebuchadnezzarShimmer: nebuchadnezzarShimmer };
+           nebuchadnezzarShimmer: nebuchadnezzarShimmer,
+           sargonBeam: sargonBeam };
 })();

@@ -103,6 +103,12 @@ SOG.preload = (function () {
     images(REVEAL_FX_IMAGES);
     audio(ADVENTURE_SFX);
     if (!_abilityWarmed) { _abilityWarmed = true; audio(ABILITY_SFX); }
+    // Warm this battle's context soundtrack so it streams promptly online.
+    if (window.SOG && SOG.music && typeof SOG.music.srcForContext === 'function'
+        && G.config && G.config.scriptHook) {
+      var trackSrc = SOG.music.srcForContext('battle:' + G.config.scriptHook);
+      if (trackSrc) audio([trackSrc]);
+    }
   }
 
   return { images: images, audio: audio, battle: battle };

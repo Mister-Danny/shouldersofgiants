@@ -3787,6 +3787,26 @@ body.hanging-gardens-battle .battle-col .hg-flood-tint {
   100% { transform: translateX(0); }
 }
 
+/* Sargon (id 37) reveal flourish — a gold beam of light from his card to each
+   ADJACENT location he boosts (+3), and a glow around those full location boxes for
+   the length of ssfxsargon.m4a (JS fades the glow's opacity out when the sound ends). */
+.sargon-beam {
+  background: linear-gradient(90deg, rgba(255, 238, 170, 0.95), rgba(255, 205, 80, 0.9) 55%, rgba(255, 180, 40, 0));
+  border-radius: 4px;
+  box-shadow: 0 0 12px 3px rgba(255, 210, 90, 0.7);
+}
+.sargon-loc-glow {
+  border-radius: 8px;
+  border: 2px solid rgba(255, 225, 130, 0.9);
+  box-shadow: 0 0 22px 6px rgba(255, 210, 90, 0.85), inset 0 0 16px 3px rgba(255, 200, 70, 0.5);
+  transition: opacity 0.4s ease;   /* JS toggles opacity for the fade in / fade-out-on-sound-end */
+  animation: sargonLocGlowPulse 1.0s ease-in-out infinite;
+}
+@keyframes sargonLocGlowPulse {
+  0%, 100% { box-shadow: 0 0 18px 4px rgba(255, 210, 90, 0.70),  inset 0 0 12px 2px rgba(255, 200, 70, 0.40); }
+  50%      { box-shadow: 0 0 30px 9px rgba(255, 228, 125, 0.95), inset 0 0 20px 5px rgba(255, 212, 85, 0.60); }
+}
+
 @keyframes loc-win-glow {
   0%   { background-color: transparent; }
   25%  { background-color: rgba(255, 215, 0, 0.32); }

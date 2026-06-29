@@ -331,8 +331,8 @@ var Progression = (function () {
     if (typeof Howl !== 'undefined') {
       if (_cutsceneHowl) { _cutsceneHowl.stop(); _cutsceneHowl.unload(); }
       _cutsceneHowl = new Howl({
-        src: ['music/The Curtain Rises.mp3'],
-        volume: 0.7,
+        src: ['music/thecurtainrises.mp3'],
+        volume: 0.85,
         loop: false,
         html5: true
       });
