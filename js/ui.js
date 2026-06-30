@@ -64,6 +64,109 @@
     playerHandEl.appendChild(sep);
 
     playerHandEl.appendChild(buildDeckPile(deckCount));
+
+    layoutHand();   // size + space the cards for the current hand count
+  }
+
+  /* ── Dynamic hand layout ─────────────────────────────────────────
+     The hand row is flex-centred with a fixed separator + deck pile on
+     the right (balanced by a ::before ghost on the left). Card spacing
+     and size are computed from the LIVE card count and the available
+     width so the cards always sit fully side-by-side with ZERO overlap at
+     any count: at low counts they keep a comfortable gap and full size;
+     as the hand grows the gap tightens first, then — only if the gap has
+     bottomed out and they still don't fit — the cards scale down (bounded).
+
+     HARD RIGHT BOUNDARY: the cards AND the deck pile must hard-stop before
+     the fixed bottom-right control cluster (deck/reset/gear/End Turn). We
+     measure that cluster's left edge and cap the cards' width so the
+     rightmost item — the deck pile — never crosses it. Because the row is
+     centre-balanced, the pile's right edge sits at
+        pileRight = padLeft + (inner + RESERVED + cardsW) / 2,
+     so the cap is  cardsW ≤ 2·(boundary − margin − padLeft) − inner − RESERVED.
+
+     Recomputed on every hand change via the MutationObserver below (draws,
+     plays, discards, undo). The default (giant/Arcadium) layout is the one
+     that overlapped; prehistory + Ötzi keep their own tuned CSS. */
+  var HAND_RESERVED     = 230;        // ghost 115 + sep (1+14+4) + pile (82+14)
+  var HAND_ASPECT       = 184 / 123;  // card height / width
+  var HAND_CARD_MAX     = 123;        // comfortable full size
+  var HAND_CARD_MIN     = 88;         // smallest still-readable width
+  var HAND_GAP_MAX      = 12;         // comfortable gap at low counts
+  var HAND_GAP_MIN      = 4;          // tightest gap before cards shrink
+  var HAND_RIGHT_MARGIN = 16;         // safety gap kept between deck pile + control cluster
+
+  function layoutHand() {
+    if (!playerHandEl) return;
+    // Prehistory + Ötzi battles tune the hand via their own CSS — leave them be.
+    if (document.body.classList.contains('prehistory-battle') ||
+        document.body.classList.contains('otzi-battle')) return;
+
+    var cards = playerHandEl.querySelectorAll('.battle-hand-card');
+    var n = cards.length;
+    if (!n) return;
+
+    var cs    = getComputedStyle(playerHandEl);
+    var padL  = parseFloat(cs.paddingLeft)  || 0;
+    var padX  = padL + (parseFloat(cs.paddingRight) || 0);
+    var inner = playerHandEl.clientWidth - padX;
+    if (inner <= 0) inner = 1280 - padX;       // fallback if measured pre-layout (stage is 1280)
+
+    // Default available width = full content box minus the reserved right side.
+    // Then cap it at the right-corner control cluster's left edge so neither the
+    // cards nor the deck pile can ever push into / crowd those controls.
+    var avail   = inner - HAND_RESERVED;
+    var cluster = document.querySelector('.battle-hud-bottomright');
+    if (cluster) {
+      var crect = cluster.getBoundingClientRect();
+      if (crect.width > 0) {                    // measurable (not display:none)
+        var scale    = (window.SOG && SOG.Stage && typeof SOG.Stage.getScale === 'function')
+                         ? (SOG.Stage.getScale() || 1) : 1;
+        var boundary = (crect.left - playerHandEl.getBoundingClientRect().left) / scale;  // stage-local px
+        var capAvail = 2 * (boundary - HAND_RIGHT_MARGIN - padL) - inner - HAND_RESERVED;
+        if (capAvail < avail) avail = capAvail;
+      }
+    }
+
+    var w = HAND_CARD_MAX, gap = HAND_GAP_MAX;
+    var total = function (cw, cg) { return n * cw + (n - 1) * cg; };
+
+    if (total(w, gap) > avail) {
+      // 1) Tighten the gap (toward the minimum) before shrinking cards.
+      gap = n > 1 ? (avail - n * w) / (n - 1) : 0;
+      if (gap < HAND_GAP_MIN) {
+        // 2) Still too wide — shrink the cards, bounded by the min width.
+        gap = HAND_GAP_MIN;
+        w = (avail - (n - 1) * gap) / n;
+        if (w < HAND_CARD_MIN) w = HAND_CARD_MIN;   // floor; only overflows past ~11 cards
+        if (w > HAND_CARD_MAX) w = HAND_CARD_MAX;
+      }
+    }
+    if (gap > HAND_GAP_MAX) gap = HAND_GAP_MAX;
+    if (gap < 0)            gap = 0;
+
+    w = Math.floor(w);             // floor so rounding never pushes the row past `avail`
+    var h  = Math.round(w * HAND_ASPECT);
+    var mg = Math.floor(gap);
+    cards.forEach(function (el, i) {
+      el.style.width      = w + 'px';
+      el.style.height     = h + 'px';
+      el.style.marginLeft = (i === 0 ? 0 : mg) + 'px';
+    });
+  }
+
+  /* Recompute on any hand change. childList-only + rAF-debounced so our own
+     inline-style writes don't retrigger it and a full rebuild coalesces into
+     a single pass. Covers the direct DOM removals on play/discard that bypass
+     setPlayerHand (input.js + abilities.js). */
+  var _handLayoutPending = false;
+  function scheduleHandLayout() {
+    if (_handLayoutPending) return;
+    _handLayoutPending = true;
+    requestAnimationFrame(function () { _handLayoutPending = false; layoutHand(); });
+  }
+  if (playerHandEl && typeof MutationObserver !== 'undefined') {
+    new MutationObserver(scheduleHandLayout).observe(playerHandEl, { childList: true });
   }
 
   /* ── Header ──────────────────────────────────────────────────── */
@@ -294,5 +397,6 @@
   window.initBattleUI  = initBattleUI;
   window.setPlayerHand = setPlayerHand;
   window.buildCardImg  = buildCardImg;
+  window.layoutHand    = layoutHand;
 
 })();
