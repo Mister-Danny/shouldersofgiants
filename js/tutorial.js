@@ -284,7 +284,7 @@
     lucyFrame.className = 'matchup-portrait-frame';
     var lucyImg = document.createElement('img');
     lucyImg.className = 'matchup-portrait-img';
-    lucyImg.src = 'images/portraits/Lucy.png';
+    lucyImg.src = 'images/portraits/lucy.jpeg';
     lucyImg.alt = 'Lucy';
     lucyImg.onerror = function () { this.style.display = 'none'; };
     lucyFrame.appendChild(lucyImg);

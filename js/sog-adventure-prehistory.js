@@ -384,7 +384,7 @@ window.SOG.Adventure.Prehistory = (function () {
     presentation: {
       bodyClass:        'prehistory-battle',        // gates all CSS overrides (applied pre-board)
       preCoachingClass: 'prehistory-pre-coaching',  // additionally hides hand+deck+HUD until slide-in
-      allyAvatar:       'images/portraits/Lucy.png',          // ally is Lucy (HTML default — no visible swap)
+      allyAvatar:       'images/portraits/lucy.jpeg',          // ally is Lucy (HTML default — no visible swap)
       opponentAvatar:   'images/portraits/neanderthalportait.jpeg'
     },
     ai: { profile: 'scriptedSequence',

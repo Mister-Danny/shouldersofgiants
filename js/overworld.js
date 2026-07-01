@@ -576,7 +576,7 @@ var Overworld = (function () {
           // (south/near Uruk) — fine-tune later. Click → deck-size gate (onNodeClick).
           id:    'sargon',
           name:  'Akkad',
-          image: NODE_PATH + 'sargon.png',
+          image: NODE_PATH + 'sargonshadow.png',
           x: 61, y: 55,
           scale: 1.61,   // 704×384 art rendered at 84px base — scale up a touch (knob)
           showIf: function () {
@@ -590,7 +590,7 @@ var Overworld = (function () {
           // Euphrates. Click → stub (battle not built yet). Position/scale are knobs.
           id:    'hammurabi',
           name:  'Babylon',
-          image: NODE_PATH + 'hammurabinodesm@0.5x.png',
+          image: NODE_PATH + 'hammurabinode.png',
           x: 48, y: 33,
           scale: 1.6,
           showIf: function () {
@@ -934,6 +934,10 @@ var Overworld = (function () {
     // so it always paints on top in DOM order — prevents node images from
     // covering the character when she stands at the same position as a node.
     overlayEl.innerHTML = '';
+
+    // Egypt early-settlement topography props (pre-Neb only; self-gates on map +
+    // KEY_EGYPT_NODE_LIVE). Placed before the nodes so they sit behind them.
+    _placeEgyptProps();
 
     // Place nodes
     data.nodes.forEach(function (n) {
@@ -1446,7 +1450,8 @@ var Overworld = (function () {
 
     isDialogueLocked = true;
     cancelIdle();
-    _d1PlaceUmmelqaab();
+    // The Egypt topography props (incl. Umm el-Qaab) are placed by loadMap's
+    // gated group when the Egypt map loads — no per-arrival placement needed.
     runDialogue(D1_SCENE2_DIALOGUE, function () {
       isDialogueLocked = false;
       try { localStorage.setItem(KEY_EGYPT_ARRIVAL, 'true'); } catch (e) {}
@@ -1613,16 +1618,13 @@ var Overworld = (function () {
         // Travel transition 1: East Africa → Egypt
         _d1TravelTo('egypt', { x: 10, y: 85 }, function () {
           // === SCENE 2: Egypt ===
-          _d1PlaceUmmelqaab();
+          // Egypt topography props (incl. Umm el-Qaab) are placed by loadMap's
+          // gated group when the Egypt map loaded above — they stay on screen
+          // through the walk-off and are cleared when loadMap swaps to the
+          // Mesopotamia map below.
           runDialogue(D1_SCENE2_DIALOGUE, function () {
-            // Explorer walks off the right edge — keep the Umm el-Qaab
-            // decoration on screen during the walk.
+            // Explorer walks off the right edge.
             walkPath([{ x: 115, y: currentPos.y }], function () {
-              // Remove the Egypt decoration only now, as the travel
-              // transition's loading screen comes up, so it doesn't linger
-              // on the Mesopotamia map.
-              var dec = overlayEl && overlayEl.querySelector('.d1-ummelqaab-decoration');
-              if (dec && dec.parentNode) dec.parentNode.removeChild(dec);
               // Travel transition 2: Egypt → Mesopotamia
               _d1TravelTo('mesopotamia', { x: 10, y: 85 }, function () {
                 // === SCENE 3: Mesopotamia ===
@@ -1639,31 +1641,75 @@ var Overworld = (function () {
     });
   }
 
-  /* Place the Umm el-Qaab necropolis decoration on the Egypt map overlay.
-     Non-interactive visual only — no click handler, no hover label. */
-  function _d1PlaceUmmelqaab() {
-    if (!overlayEl) return;
-    // Remove any stale decoration from a previous D1 run (shouldn't happen,
-    // but be defensive about it).
-    var existing = overlayEl.querySelector('.d1-ummelqaab-decoration');
-    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+  /* ── Egypt early-settlement topography props (decorative, pre-Neb only) ──────
+     Four non-interactive decorations on the Egypt map showing EARLY Egypt:
+     simple settlements that exist UNTIL Nebuchadnezzar is beaten, then vanish
+     (the dynastic era begins; advanced replacements come later). Placed by
+     _placeEgyptProps() on every Egypt map load, behind the nodes/character.
+     Inverse gating of the Narmer/Double-Crown node (which appears WHEN Neb is
+     beaten) — these disappear when he is.
 
-    var dec = document.createElement('img');
-    dec.className = 'd1-ummelqaab-decoration';
-    dec.src = 'images/metaworld/topography/ummelqaab@0.25x.png';
-    dec.alt = '';
-    dec.draggable = false;
-    // Position along the Nile — left side of the Egypt map
-    dec.style.cssText = [
-      'position:absolute',
-      'left:16%',
-      'top:37%',
-      'transform:translate(-50%,-50%) scale(0.4)',
-      'transform-origin:center center',
-      'pointer-events:none',
-      'user-select:none'
-    ].join(';');
-    overlayEl.insertBefore(dec, charEl);
+     ░░ FINE-TUNING ░░ Each prop's position is leftPct / topPct (percent of the
+     map, same coordinate system as node x/y) plus a per-prop scale knob.
+     Eyeball egyptz.jpeg (1380×800) and nudge. Reference geography: the Nile
+     DELTA is the green northern fan (top-left of the map); the river runs
+     down/south from it. "sides of the Nile" = west (lower left%) vs east
+     (higher left%) banks; "below the delta starts" = just south of the fan. */
+  var TOPO_PATH = 'images/metaworld/topography/';
+  // Per-prop knobs — all freely editable: leftPct / topPct (map %, anchors the
+  // prop's CENTER), scale, and rotation (degrees, applied around the center via
+  // transform-origin:center, so rotation is predictable). Because rotation is
+  // center-based, a rotated prop's visual footprint may shift slightly from its
+  // left/top anchor — re-nudge leftPct/topPct if needed.
+  var EGYPT_TOPO_PROPS = [
+    // Umm el-Qaab necropolis — the original prop, now part of the gated group.
+    { src: 'ummelqaab@0.25x.png', leftPct: 28, topPct: 87, scale: 0.35,  rotation:  0 },
+    // River hut — ONE, in the delta (northern fan).
+    { src: 'riverhut.png',        leftPct: 27, topPct: 22, scale: 0.21,  rotation:  -3 },
+    // Granary — ONE, just south of where the delta starts.
+    { src: 'granary.png',         leftPct: 27, topPct: 46, scale: 0.29,  rotation:   0 },
+    // Mud huts — settlements dotted along the Nile, spread apart (not adjacent).
+    { src: 'mudhut.png',          leftPct: 17, topPct: 26, scale: 0.20,  rotation: 20 },  // north (delta)
+    { src: 'mudhut.png',          leftPct: 21, topPct: 57, scale: 0.20,  rotation: 20 },  // west bank
+    { src: 'mudhut.png',          leftPct: 29, topPct: 66, scale: 0.20,  rotation: 40 }   // east bank
+  ];
+
+  /* Render the gated Egypt topography group. Decorative + non-interactive
+     (pointer-events:none), sitting BEHIND the nodes/character. Clears any prior
+     props, then renders ONLY on the Egypt map and ONLY pre-Neb (KEY_EGYPT_NODE_
+     LIVE not set). Called from loadMap on every map entry, so the gate is
+     re-checked on each Egypt visit — robust for both fresh saves (props present)
+     and already-beaten-Neb saves (props absent). */
+  function _placeEgyptProps() {
+    if (!overlayEl) return;
+    // Always clear first (defensive — loadMap also wipes the overlay).
+    overlayEl.querySelectorAll('.egypt-topo-prop').forEach(function (el) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    if (currentMapId !== 'egypt') return;                 // Egypt map only
+    var nebBeaten = false;
+    try { nebBeaten = localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) {}
+    if (nebBeaten) return;                                 // post-Neb: early settlements gone
+
+    EGYPT_TOPO_PROPS.forEach(function (p) {
+      var el = document.createElement('img');
+      el.className = 'egypt-topo-prop';
+      el.src = TOPO_PATH + p.src;
+      el.alt = '';
+      el.draggable = false;
+      el.style.cssText = [
+        'position:absolute',
+        'left:' + p.leftPct + '%',
+        'top:'  + p.topPct  + '%',
+        'transform:translate(-50%,-50%) rotate(' + (p.rotation || 0) + 'deg) scale(' + p.scale + ')',
+        'transform-origin:center center',
+        'pointer-events:none',
+        'user-select:none'
+      ].join(';');
+      // Prepend so the props paint at the BACK (behind nodes + character),
+      // regardless of when this runs relative to node placement.
+      overlayEl.insertBefore(el, overlayEl.firstChild);
+    });
   }
 
   /* Map-swap with "Traveling…" loading screen — mirrors transitionToMap()
@@ -2155,7 +2201,7 @@ var Overworld = (function () {
       nodeEl.style.top  = node.y + '%';
       nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
       var img = document.createElement('img');
-      img.src = NODE_PATH + 'sargon.png';
+      img.src = NODE_PATH + 'sargonshadow.png';
       img.alt = node.name || 'Akkad';
       img.draggable = false;
       nodeEl.appendChild(img);
@@ -2253,7 +2299,7 @@ var Overworld = (function () {
       nodeEl.style.top  = node.y + '%';
       nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
       var img = document.createElement('img');
-      img.src = NODE_PATH + 'hammurabinodesm@0.5x.png';
+      img.src = NODE_PATH + 'hammurabinode.png';
       img.alt = node.name || 'Babylon';
       img.draggable = false;
       nodeEl.appendChild(img);

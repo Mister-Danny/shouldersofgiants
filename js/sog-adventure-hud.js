@@ -41,7 +41,7 @@ SOG.HUD = (function () {
 
   var CHARACTERS = {
     explorer:    { portrait: 'images/portraits/femaleexplorer portrait.jpeg', bleepHz: 520, side: 'player' },
-    lucy:        { portrait: 'images/portraits/Lucy.png',                     bleepHz: 480, side: 'npc'    },
+    lucy:        { portrait: 'images/portraits/lucy.jpeg',                     bleepHz: 480, side: 'npc'    },
     neanderthal: { portrait: 'images/portraits/neanderthalportait.jpeg', bleepHz: 160, side: 'npc' },
     otzi:        { portrait: 'images/portraits/otzi.jpg',           bleepHz: 280, side: 'npc', frame: 'otzi' },
     hunter:      { portrait: 'images/portraits/hunterportrait.jpg', bleepHz: 380, side: 'npc'    },
@@ -819,7 +819,7 @@ SOG.HUD = (function () {
      BOTH to the HTML baseline on teardown — so no battle free-rides on
      the default or another battle's cleanup.
 
-     HTML baseline (index.html): opponent=images/Otzi.jpg, ally=images/portraits/Lucy.png.
+     HTML baseline (index.html): opponent=images/Otzi.jpg, ally=images/portraits/lucy.jpeg.
 
      presentation = {
        opponentAvatar: <img src>,    // required to set the opponent frame
@@ -832,7 +832,7 @@ SOG.HUD = (function () {
   ══════════════════════════════════════════════════════════════ */
   var BATTLE_AVATAR_BASELINE = {
     opponent: 'images/Otzi.jpg',
-    ally:     'images/portraits/Lucy.png'
+    ally:     'images/portraits/lucy.jpeg'
   };
 
   function _battleAvatarFrameImg(role) {

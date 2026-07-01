@@ -379,7 +379,7 @@
       if (speakerEl) speakerEl.innerHTML = 'Farmer';   // no subtitle line
       _blipHz = 360;                                   // Farmer (HUD registry)
     } else {
-      if (lucyImgEl) { lucyImgEl.src = 'images/portraits/Lucy.png'; lucyImgEl.alt = 'Lucy'; }
+      if (lucyImgEl) { lucyImgEl.src = 'images/portraits/lucy.jpeg'; lucyImgEl.alt = 'Lucy'; }
       if (speakerEl) speakerEl.innerHTML = 'Lucy<br><span class="tut-speaker-sub">The Ancient One</span>';
       _blipHz = 480;                                   // Lucy (unchanged default)
     }

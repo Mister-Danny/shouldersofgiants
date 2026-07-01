@@ -56,7 +56,7 @@ var HomeFlow = (function () {
     homeMusicAudio = new Audio("music/thesilentknightstale.mp3");
     homeMusicAudio.loop    = true;
     homeMusicAudio.volume  = HOME_MUSIC_VOLUME_LIVE;
-    homeMusicAudio.preload = 'auto';
+    homeMusicAudio.preload = 'none';   // don't pre-download 2.4MB on cold load; play() fetches on demand (first interaction)
     homeMusicAudio.addEventListener('error', function () {
       console.warn('[HomeFlow] home music audio error:', homeMusicAudio.error);
     });
@@ -207,11 +207,13 @@ var HomeFlow = (function () {
     // Initial subtitle visible
     subtitleIntroEl.classList.add('is-visible');
 
-    // Try to start home music immediately. If the browser's autoplay policy
-    // blocks it (no prior interaction this session), the rejection is silent
-    // and the click listener below kicks it off on the first user click.
+    // Start home music on the FIRST user interaction, not on load. A fresh page
+    // load has no prior gesture, so an eager play() here would be blocked by the
+    // autoplay policy anyway — but calling play() still kicks off the ~2.4MB
+    // download even with preload="none", adding that weight to the cold load on
+    // slow connections. Deferring to the first click avoids the cold-load cost
+    // while still starting the music the instant the user interacts.
     homeMusicEnabled = true;   // bug 13: this init is the only place we WANT music to play
-    startHomeMusic();
     document.addEventListener('click', function _firstClick() {
       startHomeMusic();
     }, { once: true });
@@ -786,18 +788,40 @@ var HomeFlow = (function () {
     stopHomeMusic(200);
 
     window.showScreen('screen-video');
-    video.currentTime = 0;
+    try { video.currentTime = 0; } catch (e) {}
 
-    var onVideoEnd = function () {
-      video.removeEventListener('ended', onVideoEnd);
+    var skipBtn = document.getElementById('intro-skip-btn');
+
+    // Single finish path — fired by the video ending, a click/tap on Skip, or a
+    // key press. Guarded so it only runs once. Tears down its own listeners and
+    // stops the (possibly still-buffering) video so a slow connection is never
+    // forced to wait on the full download before continuing to the overworld.
+    var finished = false;
+    function finishIntro() {
+      if (finished) return;
+      finished = true;
+      video.removeEventListener('ended', finishIntro);
+      if (skipBtn) skipBtn.removeEventListener('click', finishIntro);
+      document.removeEventListener('keydown', onKey);
+      try { video.pause(); } catch (e) {}
       window._adventureVideoMode = false;
       if (onEnd) onEnd();
-    };
-    video.addEventListener('ended', onVideoEnd);
-    video.play().catch(function () {
-      window._adventureVideoMode = false;
-      if (onEnd) onEnd();
-    });
+    }
+    function onKey(e) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape' || e.key === 'Spacebar') {
+        finishIntro();
+      }
+    }
+
+    video.addEventListener('ended', finishIntro);
+    if (skipBtn) skipBtn.addEventListener('click', finishIntro);
+    document.addEventListener('keydown', onKey);
+
+    // preload="none" means play() starts the fetch now; on a fast link it plays,
+    // on a slow link the Skip button is already available to bail out. If play()
+    // is rejected (autoplay policy / decode error), just continue.
+    var p = video.play();
+    if (p && typeof p.catch === 'function') p.catch(function () { finishIntro(); });
   }
 
   function openIrisAndEnterOverworld(cxPct, cyPct, maxRadius) {

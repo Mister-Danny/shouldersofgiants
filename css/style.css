@@ -636,6 +636,31 @@ img    { display: block; }
   background: #000;
 }
 
+/* Skip control — lets a slow connection bail out of the intro without
+   waiting on the (large) video to buffer/finish. Only visible while the
+   video screen is active. */
+.intro-skip-btn {
+  position: absolute;
+  bottom: 24px;
+  right: 28px;
+  z-index: 10;
+  padding: 10px 20px;
+  font-family: var(--font);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.intro-skip-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: #fff;
+}
+
 /* ── Radial wipe transition overlay ──────────────────────────── */
 
 #radial-wipe {
