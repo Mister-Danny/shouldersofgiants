@@ -523,26 +523,6 @@ var Overworld = (function () {
       startsFogged: true,
       nodes: [
         {
-          id:    'winged-akkad',
-          name:  'Akkad',
-          image: NODE_PATH + 'winged akkad node.png',
-          x: 42, y: 52,
-          // TODO (Phase D3+): remove this gate when Akkad content is ready
-          showIf: function () {
-            try { return localStorage.getItem('sog_full_mesopotamia_unlock') === 'true'; } catch (e) { return false; }
-          }
-        },
-        {
-          id:    'hammurabi',
-          name:  'Hammurabi\u2019s Code',
-          image: NODE_PATH + 'hammurabi code node.png',
-          x: 58, y: 60,
-          // TODO (Phase D3+): remove this gate when Hammurabi content is ready
-          showIf: function () {
-            try { return localStorage.getItem('sog_full_mesopotamia_unlock') === 'true'; } catch (e) { return false; }
-          }
-        },
-        {
           // Phase D2a: visible after sog_mesopotamia_arrival_complete is set.
           // Click handler is a stub \u2014 the Gilgamesh encounter lives in Phase D2b.
           id:    'walls-of-uruk',
