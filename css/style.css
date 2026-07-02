@@ -3325,6 +3325,28 @@ body.hanging-gardens-battle .battle-col .hg-flood-tint {
   cursor: grabbing;
 }
 
+/* Trader (68, Egypt) barter affordance — its own cyan pulse, distinct from the
+   gold move pulse, so a barterable card reads as a different interaction. */
+@keyframes trader-barterable-pulse {
+  0%   { box-shadow: 0 0 0 2px var(--snes-cyan), inset 0 0 0 1px var(--snes-cyan); }
+  50%  { box-shadow: 0 0 8px 3px rgba(64,224,224,0.6), inset 0 0 0 1px var(--snes-cyan); }
+  100% { box-shadow: 0 0 0 2px var(--snes-cyan), inset 0 0 0 1px var(--snes-cyan); }
+}
+
+.battle-card-slot.trader-barterable {
+  border-color: var(--snes-cyan);
+  border-style: solid;
+  cursor: pointer;
+  animation: trader-barterable-pulse 1.4s ease-in-out infinite;
+}
+
+/* Trader barter PREVIEW — a slot displaying the OTHER card during selection.
+   Subtle cyan tint marks it as a not-yet-committed display swap. */
+.battle-card-slot.trader-preview {
+  outline: 2px dashed rgba(64,224,224,0.75);
+  outline-offset: -3px;
+}
+
 /* Queued move indicator — card stays in place with pulsing arrow overlay */
 /* Queued-move destination: card appears at dest during select phase with pulsing gold border */
 @keyframes queued-dest-pulse {
@@ -8659,6 +8681,46 @@ body.tut-locked #battle-reset-turn {
   0%   { transform: scale(1);    color: #fff; }
   40%  { transform: scale(1.55); color: #ffe08a; text-shadow: 0 0 8px rgba(255, 210, 120, 0.95), 2px 2px 0 rgba(0,0,0,0.85); }
   100% { transform: scale(1);    color: rgba(255, 255, 255, 0.75); }
+}
+
+/* ── End-of-turn gain shimmer (Megalith 31 + future end-of-turn cards) ──
+   A warm band of light sweeps across the card; the IP number pops UP in sync
+   (green-gold, mirroring the cc-drop pattern but positive). The wrap clips the
+   band to the card face. */
+.reveal-fx-eot-shimmer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+.reveal-fx-eot-shimmer-band {
+  position: absolute;
+  top: -20%;
+  left: 0;
+  width: 55%;
+  height: 140%;
+  transform: translateX(-120%) skewX(-18deg);
+  background: linear-gradient(90deg,
+    rgba(255, 245, 200, 0)    0%,
+    rgba(255, 245, 200, 0.55) 45%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 245, 200, 0.55) 55%,
+    rgba(255, 245, 200, 0)    100%);
+  animation: revealFxEotSweep 0.75s ease-in-out 1 both;
+}
+@keyframes revealFxEotSweep {
+  0%   { transform: translateX(-120%) skewX(-18deg); }
+  100% { transform: translateX(300%)  skewX(-18deg); }
+}
+/* The IP number ticking UP as the light crosses it. */
+.db-overlay-ip.reveal-fx-ip-gain {
+  animation: revealFxIpGain 0.52s ease-out 1 both;
+}
+@keyframes revealFxIpGain {
+  0%   { transform: scale(1);    color: #fff; }
+  40%  { transform: scale(1.6);  color: #b8ffb0; text-shadow: 0 0 8px rgba(150, 255, 140, 0.95), 2px 2px 0 rgba(0,0,0,0.85); }
+  100% { transform: scale(1);    color: #fff; }
 }
 
 /* Player character sprite — pixel-art crisp rendering */

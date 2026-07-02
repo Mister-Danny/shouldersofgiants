@@ -507,6 +507,13 @@
     var slotIndex = parseInt(slotEl.dataset.slotIndex, 10);
     if (isNaN(locId) || isNaN(slotIndex)) return;
 
+    // Trader (68) barter affordance → open the picker (not a move).
+    if (slotEl.classList.contains('trader-barterable')) {
+      e.preventDefault();
+      openTraderBarter(locId, slotIndex);
+      return;
+    }
+
     // Moveable revealed slot → toggle select-for-move
     if (slotEl.classList.contains('moveable')) {
       var mvCardId = parseInt(slotEl.dataset.cardId, 10);
@@ -906,6 +913,9 @@
     // 2. Snap queued-move previews back to their origin slots
     snapBack();
 
+    // 2b. Clear any Trader barter (display-only preview + queued action-log entry).
+    clearTraderBarter();
+
     // 3. Return any deferred new plays (didn't fit at snap-back) to hand
     Object.keys(G.deferredPlays).forEach(function (lidStr) {
       var lid = parseInt(lidStr, 10);
@@ -1033,6 +1043,7 @@
                  (s.cardId === 25 && !G.columbusMoved)    ||    // Columbus
                  (s.cardId === 33 && !s._advLucyMoved) ||       // Lucy — First Steps: move once per BATTLE (persistent slot flag, mirrors Chariot's _advChariotMoved)
                  (s.cardId === 48 && !s._advChariotMoved) ||    // Chariot — moves once per BATTLE on its own (persistent slot flag, like Lucy); the move-enabler locations/cards below can still grant extra moves
+                 (s.cardId === 69 && !s._advChariotMoved) ||    // Chariots (Egypt) — same once-per-BATTLE move as Chariot (48); arrival -2 strike wired in executeMoveAnimated
                  // Scandinavia: Military cards can move away for free (once per turn)
                  (scandinaviaLoc && loc.id === scandinaviaLoc.id && card && card.type === 'Military' && !G.movedThisTurn[s.cardId]) ||
                  // Timbuktu: Cultural cards elsewhere can move to Timbuktu for free (once per turn)
@@ -1043,6 +1054,87 @@
         }
       });
     });
+
+    // Trader (68, Egypt) — barter affordance. Distinct from a move: tagged
+    // '.trader-barterable' (its own pulse, NOT '.moveable' — so it never enters
+    // the drag / move-select machinery); the dblclick handler opens the picker.
+    // Eligible when revealed, hasn't bartered this battle (_advTraderBartered),
+    // and has a revealed partner card at ANOTHER location.
+    G.locations.forEach(function (loc) {
+      (G.playerSlots[loc.id] || []).forEach(function (s, si) {
+        if (!s || !s.revealed || s.cardId !== 68 || s._advTraderBartered) return;
+        if (!_traderHasPartner(loc.id)) return;
+        var el = getSlotEl('player', loc.id, si);
+        if (el) el.classList.add('trader-barterable');
+      });
+    });
+  }
+
+  /* True if the player has any revealed card at a location OTHER than traderLocId
+     (a valid Trader barter partner). */
+  function _traderHasPartner(traderLocId) {
+    var has = false;
+    G.locations.forEach(function (loc) {
+      if (has || loc.id === traderLocId) return;
+      (G.playerSlots[loc.id] || []).forEach(function (s) { if (s && s.revealed) has = true; });
+    });
+    return has;
+  }
+
+  /* Open the Trader barter picker: the player's OWN revealed cards at OTHER
+     locations are the valid swap partners. Picking one defines the swap. Reuses
+     the shared showDiscardChooser. Re-opening replaces any prior choice. */
+  function openTraderBarter(traderLocId, traderIdx) {
+    var traderSd = G.playerSlots[traderLocId] && G.playerSlots[traderLocId][traderIdx];
+    if (!traderSd || traderSd.cardId !== 68 || traderSd._advTraderBartered) return;
+    var partners = [];
+    G.locations.forEach(function (loc) {
+      if (loc.id === traderLocId) return;
+      (G.playerSlots[loc.id] || []).forEach(function (s) { if (s && s.revealed) partners.push(s.cardId); });
+    });
+    if (!partners.length) return;
+    clearSelection();
+    if (SOG.abilities && typeof SOG.abilities.showDiscardChooser === 'function') {
+      SOG.abilities.showDiscardChooser('Choose a card to barter with Trader', partners, function (chosenId) {
+        _setTraderBarter(traderLocId, traderSd.cardId, chosenId);
+      });
+    }
+  }
+
+  /* Record/replace the barter choice: queue a {type:'barter'} action-log entry
+     (executes at reveal) and let the display-only preview re-skin the two slots
+     (via syncPlayerSlots → _applyTraderPreview). G is NOT mutated. */
+  function _setTraderBarter(traderLocId, traderCardId, partnerCardId) {
+    var partnerLocId = null;
+    G.locations.forEach(function (loc) {
+      (G.playerSlots[loc.id] || []).forEach(function (s) { if (s && s.cardId === partnerCardId) partnerLocId = loc.id; });
+    });
+    if (partnerLocId === null) return;
+    var prev = G.traderBarter;
+    // Replace-old: drop any prior barter entry (queuing a new choice replaces it).
+    G.playerActionLog = G.playerActionLog.filter(function (a) { return a.type !== 'barter'; });
+    G.traderBarter = { traderCardId: traderCardId, partnerCardId: partnerCardId,
+                       traderLocId: traderLocId, partnerLocId: partnerLocId };
+    G.playerActionLog.push({ type: 'barter', cardId: traderCardId, partnerCardId: partnerCardId });
+    // Re-render the involved locations (+ the previous choice's locs, to restore
+    // their true faces) so the preview shows the current swap only.
+    var locs = [traderLocId, partnerLocId];
+    if (prev) { locs.push(prev.traderLocId); locs.push(prev.partnerLocId); }
+    locs.filter(function (v, i) { return locs.indexOf(v) === i; })
+        .forEach(function (lid) { syncPlayerSlots(lid); });
+    updateScores();
+    refreshMoveableCards();
+  }
+
+  /* Clear the barter (reset / re-choose teardown): drop the action-log entry +
+     preview state and restore the two slots' true faces. */
+  function clearTraderBarter() {
+    var tb = G.traderBarter;
+    if (!tb) return;
+    G.traderBarter = null;
+    G.playerActionLog = G.playerActionLog.filter(function (a) { return a.type !== 'barter'; });
+    syncPlayerSlots(tb.traderLocId);
+    syncPlayerSlots(tb.partnerLocId);
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -1106,7 +1198,7 @@
     G.movedThisTurn[cardId] = true;
     if (cardId === 25) G.columbusMoved = true;
     if (cardId === 33) sd._advLucyMoved = true;   // Lucy: once per BATTLE — flag rides the slot data (mirrors Chariot's _advChariotMoved). Set at QUEUE time, so resetTurn clears it when it snaps this move back (the move never happened); it only persists once the move RESOLVES at reveal.
-    if (cardId === 48) sd._advChariotMoved = true;   // Chariot: once per BATTLE on its own — same persistent-slot-flag pattern as Lucy (resetTurn clears it on snap-back; persists once the move resolves)
+    if (cardId === 48 || cardId === 69) sd._advChariotMoved = true;   // Chariot (48) / Chariots (69, Egypt): once per BATTLE on its own — same persistent-slot-flag pattern as Lucy (resetTurn clears it on snap-back; persists once the move resolves)
 
     G.playerActionLog.push({ type: 'move', cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId });
     G.moveLog.push({ cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId, queued: true, isColumbus: cardId === 25 });
