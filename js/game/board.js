@@ -279,6 +279,7 @@
         }
       }
     }
+    _applyTraderPreview(locId);   // display-only barter overlay (no-op unless active)
     // refreshMoveableCards lives in game.js until Pass 3c (input concern).
     if (SOG.game && typeof SOG.game.refreshMoveableCards === 'function') {
       SOG.game.refreshMoveableCards();
@@ -317,6 +318,36 @@
     }
   }
 
+  /* Trader (68) barter PREVIEW — DISPLAY-ONLY. The barter never mutates G during
+     selection; this re-skins the two swapped slots' FACES on top of the true
+     render (leaving each slot's real dataset.cardId, and therefore scoring /
+     costs / continuous effects / interactions, UNCHANGED). Re-applied at the end
+     of every syncPlayerSlots so it survives selection-phase re-renders. Guarded by
+     G.traderBarter (null in every non-Trader battle → zero cost) and the SELECT
+     phase; at reveal the guard fails so the slots render their true faces. */
+  function _applyTraderPreview(locId) {
+    var tb = G.traderBarter;
+    if (!tb || G.phase !== 'select') return;
+    var atCardId, showCardId;
+    if      (locId === tb.traderLocId)  { atCardId = tb.traderCardId;  showCardId = tb.partnerCardId; }
+    else if (locId === tb.partnerLocId) { atCardId = tb.partnerCardId; showCardId = tb.traderCardId;  }
+    else return;
+    var arr = G.playerSlots[locId] || [], idx = -1;
+    for (var i = 0; i < arr.length; i++) { if (arr[i] && arr[i].cardId === atCardId) { idx = i; break; } }
+    if (idx === -1) return;                     // the real card left this slot → no preview
+    var slotEl   = getSlotEl('player', locId, idx);
+    var showCard = CARDS.find(function (c) { return c.id === showCardId; });
+    if (!slotEl || !showCard) return;
+    // Badge = the SHOWN card's true effectiveIP (from its real slot elsewhere).
+    var showSd = null;
+    G.locations.forEach(function (l) {
+      (G.playerSlots[l.id] || []).forEach(function (s) { if (s && s.cardId === showCardId) showSd = s; });
+    });
+    buildCardFace(slotEl, showCard, showSd ? effectiveIP(showSd) : showCard.ip);
+    slotEl.classList.add('trader-preview');
+    slotEl.dataset.cardId = atCardId;           // keep the REAL identity (interactions/scoring)
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      BONUS ATTRIBUTION
   ═══════════════════════════════════════════════════════════════ */
@@ -344,6 +375,13 @@
     'Zheng He':              { type: 'card',     id: 23, pattern: 'D' },
     'Fire':                  { type: 'card',     id: 29, pattern: 'A' },
     'Cave Art':              { type: 'card',     id: 30, pattern: 'A' },
+    'Megalith':              { type: 'card',     id: 31, pattern: 'A' },
+    // Egypt (era) — bonus attributions for the wired Egypt abilities.
+    'Narmer':                { type: 'card',     id: 51, pattern: 'A' },
+    'Pyramid':               { type: 'card',     id: 57, pattern: 'A' },
+    'Obelisk':               { type: 'card',     id: 59, pattern: 'A' },
+    'Hieroglyphics':         { type: 'card',     id: 62, pattern: 'A' },
+    'Ra':                    { type: 'card',     id: 63, pattern: 'A' },
     'Domesticated Animal':   { type: 'card',     id: 32, pattern: 'A' },
     'Tribe':                 { type: 'card',     id: 36, pattern: 'A' },
     'Sargon':                { type: 'card',     id: 37, pattern: 'A' },
@@ -432,6 +470,13 @@
     // with no Babylon location.
     if (card.cc === 5 &&
         G.locations.some(function (l) { return l.abilityKey === 'BABYLON_COST_5'; }))
+      cost = Math.max(0, cost - 1);
+    // Imhotep (id 65) — "Ancient Engineering": -1 CC to SCIENTIFIC cards played at
+    // HIS location (a revealed player-side Imhotep here). Layered like Babylon.
+    // Inert until Egypt cards are decked (no id-65 in any current deck).
+    if (card.type === 'Scientific' &&
+        G.playerSlots[locId] &&
+        G.playerSlots[locId].some(function (s) { return s && s.revealed && s.cardId === 65; }))
       cost = Math.max(0, cost - 1);
     return cost;
   }

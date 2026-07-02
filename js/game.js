@@ -295,6 +295,7 @@
     G.aiMovedThisTurn        = {};
     G.moveLog                = [];
     G.playerActionLog        = [];
+    G.traderBarter           = null;   // Trader (68) barter preview/queue
     G.locationSnapshots      = {};
     G.reservedSlotsPerLoc    = {};
     G.deferredPlays          = {};
@@ -825,8 +826,8 @@
       SOG.sfx.play('sfx/yoink.mp3');
     } else if (cardId === 24 && typeof SFX !== 'undefined') {
       SFX.sailingSound();
-    } else if (cardId === 48) {
-      // Chariot (Phase 1 travel): play chariot.mp3 as it rolls to the new location.
+    } else if (cardId === 48 || cardId === 69) {
+      // Chariot (48) / Chariots (69, Egypt): play chariot.mp3 as it rolls to the new location.
       SOG.sfx.play('sfx/chariot.mp3');
     }
 
@@ -889,6 +890,11 @@
       // Chariot (id 48): on arrival, strike the highest-IP opponent card at the destination
       if (cardId === 48 && SOG.abilities && typeof SOG.abilities.chariotArrival === 'function') {
         SOG.abilities.chariotArrival(owner, toLocId, sd, done);
+        return;
+      }
+      // Chariots (id 69, Egypt): arrival strike for -2 IP (Sphinx protection applies)
+      if (cardId === 69 && SOG.abilities && typeof SOG.abilities.chariotArrival === 'function') {
+        SOG.abilities.chariotArrival(owner, toLocId, sd, done, -2);
         return;
       }
 
@@ -994,6 +1000,95 @@
     }
   }
 
+  /* Trader (68) barter: at the Trader's beat in the reveal, swap the Trader and
+     its chosen partner between their slots FOR REAL (both cards belong to the
+     same owner). Preview was display-only; this is the authoritative exchange.
+     FIZZLES safely if either card is gone (destroyed earlier this reveal), with
+     no half-swap. Once-per-battle flag `_advTraderBartered` is set here (on real
+     resolution) so re-choosing during selection stays free. Animates a two-card
+     cross-slide both sides see, then re-tallies. */
+  function executeBarter(owner, traderCardId, partnerCardId, done) {
+    done = done || function () {};
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+
+    function locate(cardId) {
+      for (var li = 0; li < G.locations.length; li++) {
+        var lid = G.locations[li].id, arr = slots[lid] || [];
+        for (var si = 0; si < arr.length; si++) {
+          if (arr[si] && arr[si].cardId === cardId) return { locId: lid, idx: si, sd: arr[si] };
+        }
+      }
+      return null;
+    }
+
+    var t = locate(traderCardId), p = locate(partnerCardId);
+    // Fizzle safely: a partner (or the Trader) destroyed before this beat.
+    if (!t || !p || (t.locId === p.locId && t.idx === p.idx)) {
+      G.traderBarter = null;
+      done();
+      return;
+    }
+
+    var tCard = CARDS.find(function (c) { return c.id === traderCardId; });
+    var pCard = CARDS.find(function (c) { return c.id === partnerCardId; });
+    var syncLoc = (owner === 'player')
+      ? function (l) { syncPlayerSlots(l); }
+      : function (l) { syncOppSlots(l); };
+
+    // Capture on-screen rects of both cards BEFORE the swap, for the cross-slide.
+    var tEl = getSlotEl(owner, t.locId, t.idx);
+    var pEl = getSlotEl(owner, p.locId, p.idx);
+    var tRect = tEl ? tEl.getBoundingClientRect() : null;
+    var pRect = pEl ? pEl.getBoundingClientRect() : null;
+
+    function commit() {
+      // Real exchange: swap the two sd objects between their slots.
+      slots[t.locId][t.idx] = p.sd;
+      slots[p.locId][p.idx] = t.sd;
+      t.sd._advTraderBartered = true;   // once per battle — set on real resolution
+      G.traderBarter = null;
+      syncLoc(t.locId);
+      if (p.locId !== t.locId) syncLoc(p.locId);
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+      done();
+    }
+
+    SOG.sfx.play('sfx/chariot.mp3');
+
+    if (typeof gsap !== 'undefined' && tEl && pEl && tRect && pRect) {
+      var cloneT = tEl.cloneNode(true);
+      var cloneP = pEl.cloneNode(true);
+      function styleClone(clone, rect) {
+        clone.style.cssText = [
+          'position:fixed', 'left:' + rect.left + 'px', 'top:' + rect.top + 'px',
+          'width:' + rect.width + 'px', 'height:' + rect.height + 'px',
+          'z-index:9000', 'pointer-events:none', 'margin:0', 'transition:none'
+        ].join(';');
+        document.body.appendChild(clone);
+      }
+      styleClone(cloneT, tRect);
+      styleClone(cloneP, pRect);
+      tEl.style.opacity = '0';
+      pEl.style.opacity = '0';
+      var remaining = 2;
+      var onOne = function () {
+        remaining--;
+        if (remaining > 0) return;
+        document.body.removeChild(cloneT);
+        document.body.removeChild(cloneP);
+        tEl.style.opacity = '';
+        pEl.style.opacity = '';
+        commit();
+      };
+      gsap.to(cloneT, { left: pRect.left, top: pRect.top, duration: 0.6, ease: 'power2.inOut', onComplete: onOne });
+      gsap.to(cloneP, { left: tRect.left, top: tRect.top, duration: 0.6, ease: 'power2.inOut', onComplete: onOne });
+    } else {
+      commit();
+    }
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      REVEAL PHASE
   ═══════════════════════════════════════════════════════════════ */
@@ -1006,6 +1101,13 @@
     clearSelection();      // tear down any click/keyboard selection state
     hideRevealFirstHighlight();  // glow shown during selection — clear it now
     snapBack();            // Restore all queued cards to true origin slots
+    // Trader barter: tear down the display-only swap PREVIEW (real swap still
+    // queued in the action log, executes at the Trader's beat). Phase is now
+    // 'reveal', so _applyTraderPreview no-ops and these re-syncs show TRUE faces.
+    if (G.traderBarter) {
+      syncPlayerSlots(G.traderBarter.traderLocId);
+      syncPlayerSlots(G.traderBarter.partnerLocId);
+    }
     refreshMoveableCards();
     updateHeader();
 
@@ -1063,12 +1165,12 @@
       if (i < fQ.length) {
         var fi = fQ[i];
         seq.push({ type: fi.type, owner: fO, cardId: fi.cardId,
-                   fromLocId: fi.fromLocId, toLocId: fi.toLocId });
+                   fromLocId: fi.fromLocId, toLocId: fi.toLocId, partnerCardId: fi.partnerCardId });
       }
       if (i < sQ.length) {
         var si2 = sQ[i];
         seq.push({ type: si2.type, owner: sO, cardId: si2.cardId,
-                   fromLocId: si2.fromLocId, toLocId: si2.toLocId });
+                   fromLocId: si2.fromLocId, toLocId: si2.toLocId, partnerCardId: si2.partnerCardId });
       }
     }
     return seq;
@@ -1115,6 +1217,12 @@
           updateScores();
         }
       }
+      // NUBIAN_GOLD_ON_PLAY location key: grant a Nubian Gold token to each side
+      // that played a card at a keyed location (unless their hand is full). Reveal-
+      // end, once per turn (mirrors applyRiverAtOnce). Inert without the key.
+      if (SOG.abilities && typeof SOG.abilities.applyNubianGoldOnPlay === 'function') {
+        SOG.abilities.applyNubianGoldOnPlay(revealed);
+      }
       /* Once-per-turn location abilities (e.g. CAPITAL_WHEN_FULL). Evaluated HERE
          — exactly once, after all flips/At-Once/continuous have resolved — NOT in
          evaluateContinuous (which re-runs many times per turn and would over-grant).
@@ -1131,7 +1239,20 @@
         SOG.BattleHooks.fire('onAfterReveal', [{ turn: G.turn, revealed: revealed }]);
       }
       var _proceedAfterReveal = function () {
-        setTimeout(function () { G.turn >= G.config.structure.turns ? endGame() : nextTurn(); }, POST_REVEAL);
+        /* END-OF-TURN ability phase: after ALL reveals (and, on the adventure
+           path, the Chariot movement) but BEFORE the turn advances — so a
+           gain landed here counts in this turn's totals and in endGame's
+           tally. Discrete once-per-turn phase (see fireEndOfTurn); fires each
+           end-of-turn card sequentially in global reveal order and the turn
+           WAITS for the whole phase. No end-of-turn cards on board → no-op. */
+        var _advance = function () {
+          setTimeout(function () { G.turn >= G.config.structure.turns ? endGame() : nextTurn(); }, POST_REVEAL);
+        };
+        if (SOG.abilities && typeof SOG.abilities.fireEndOfTurn === 'function') {
+          SOG.abilities.fireEndOfTurn(_advance);
+        } else {
+          _advance();
+        }
       };
       /* Adventure-battle AI movement (cfg.ai.movement 'adventure'): relocate a
          move-capable AI card (Chariot, id 48) now that every card is revealed —
@@ -1180,6 +1301,11 @@
 
     if (item.type === 'move') {
       executeMoveAnimated(item.owner, item.cardId, item.fromLocId, item.toLocId, item.opts || {}, proceed);
+      return;
+    }
+
+    if (item.type === 'barter') {
+      executeBarter(item.owner, item.cardId, item.partnerCardId, proceed);
       return;
     }
 
@@ -1292,6 +1418,7 @@
     G.aiMovedThisTurn        = {};
     G.moveLog                = [];
     G.playerActionLog        = [];
+    G.traderBarter           = null;   // Trader (68) barter preview/queue
     G.locationSnapshots      = {};
     G.reservedSlotsPerLoc    = {};
     G.deferredPlays          = {};
@@ -1710,6 +1837,7 @@
     isKenteProtected:      isKenteProtected,
     executeMove:           executeMove,
     executeMoveAnimated:   executeMoveAnimated,
+    executeBarter:         executeBarter,   // Trader (68) barter — reused by AI movement pass
     findSlotEl:            findSlotEl,
     refreshMoveableCards:  refreshMoveableCards,
     // Exposed for the Prehistory adventure module's reveal sequence.
