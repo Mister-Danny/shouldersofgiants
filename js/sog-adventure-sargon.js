@@ -760,6 +760,23 @@ SOG.SargonBattle = (function () {
       return best.id;
     }
 
+    // Shared card-placement heuristics (ai.js): Megalith early (sort bias) +
+    // Soldier/Phoenicians/Priest/Ziggurat placement (location bias). No-op if
+    // SOG.ai is absent. plays = this turn's tentative context.
+    var _turns    = (G.config && G.config.structure && G.config.structure.turns) || 4;
+    var turnsLeft = Math.max(1, _turns - (G.turn || 1) + 1);
+    var _ai = (window.SOG && SOG.ai) || null;
+    function turnBias(id)  { return _ai && _ai.cardTurnBias ? _ai.cardTurnBias(id, turnsLeft) : 0; }
+    function biasedLoc(cardId, openLocs, fallbackId) {
+      if (!_ai || !_ai.cardLocBias) return fallbackId;
+      var best = fallbackId, bestB = _ai.cardLocBias(cardId, fallbackId, G, 'opp', plays);
+      for (var i = 0; i < openLocs.length; i++) {
+        var id = openLocs[i].id, b = _ai.cardLocBias(cardId, id, G, 'opp', plays);
+        if (b > bestB) { bestB = b; best = id; }
+      }
+      return best;
+    }
+
     var plays = [], guard = 0;
     while (guard++ < 24) {
       // Affordable cards still in hand (cc ≤ remaining capital).
@@ -772,7 +789,8 @@ SOG.SargonBattle = (function () {
       var openLocs = G.locations.filter(function (loc) { return slotsLeft(loc.id) > 0; });
       if (!openLocs.length) break;
 
-      aff.sort(function (a, b) { return (b.ip - a.ip) || (b.cc - a.cc); });   // strongest first
+      // strongest first — IP + early-turn bias (Megalith), then CC tiebreak
+      aff.sort(function (a, b) { return ((b.ip + turnBias(b.id)) - (a.ip + turnBias(a.id))) || (b.cc - a.cc); });
 
       // Sargon (37) — ALWAYS into the MIDDLE location (his +3 boosts BOTH flanks
       // there). Prioritize him so he claims the middle slot before other cards
@@ -786,7 +804,8 @@ SOG.SargonBattle = (function () {
         locId = mid.id;
       } else {
         pick  = aff[0];
-        locId = weakestOpenLoc(openLocs);   // strongest card → weakest location (spread)
+        // Card-specific heuristic loc (Soldier/Phoenicians/Priest/Ziggurat) else spread.
+        locId = biasedLoc(pick.id, openLocs, weakestOpenLoc(openLocs));
       }
 
       plays.push({ cardId: pick.id, locId: locId });

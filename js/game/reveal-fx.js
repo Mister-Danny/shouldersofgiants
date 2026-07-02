@@ -1085,6 +1085,40 @@ SOG.RevealFx = (function () {
     setTimeout(endFlourish, 4000);   // safety: muted/failed audio or no 'ended'
   }
 
+  /* ── End-of-turn gain shimmer (generic — Megalith 31 + future EOT cards) ──
+     A band of light sweeps ACROSS the card (adapted from the Neb shimmer's
+     cause-and-effect pacing): overlay div clipped to the slot, gradient band
+     translates left→right (~750ms). At the sweep's midpoint opts.onTick() fires
+     — the ability applies its real effect there (e.g. addIPMod +1) and the
+     slot's IP number pops via .reveal-fx-ip-gain, so the change reads as CAUSED
+     by the light. onDone releases the end-of-turn queue (sequential firing). */
+  function endOfTurnShimmer(slotEl, opts, onDone) {
+    opts   = opts || {};
+    onDone = typeof onDone === 'function' ? onDone : function () {};
+    if (!slotEl) { if (typeof opts.onTick === 'function') opts.onTick(); onDone(); return; }
+
+    // Clipped overlay so the band never paints outside the card.
+    var wrap = document.createElement('div');
+    wrap.className = 'reveal-fx-eot-shimmer';
+    var band = document.createElement('div');
+    band.className = 'reveal-fx-eot-shimmer-band';
+    wrap.appendChild(band);
+    slotEl.appendChild(wrap);
+
+    // Midpoint of the sweep: apply the real effect + pop the IP number.
+    setTimeout(function () {
+      if (typeof opts.onTick === 'function') opts.onTick();
+      var ip = slotEl.querySelector('.db-overlay-ip');
+      if (ip) flashClass(ip, 'reveal-fx-ip-gain', 520);
+    }, 380);
+
+    // Sweep done → clean up + release the queue.
+    setTimeout(function () {
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      onDone();
+    }, 820);
+  }
+
   return { fire: fire, has: has, reactBounce: reactBounce,
            scribeStampSequence: scribeStampSequence,
            soldierCharge: soldierCharge,
@@ -1093,5 +1127,6 @@ SOG.RevealFx = (function () {
            phoeniciansMerge: phoeniciansMerge,
            chariotArrow: chariotArrow,
            nebuchadnezzarShimmer: nebuchadnezzarShimmer,
-           sargonBeam: sargonBeam };
+           sargonBeam: sargonBeam,
+           endOfTurnShimmer: endOfTurnShimmer };
 })();

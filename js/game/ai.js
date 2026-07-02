@@ -317,6 +317,67 @@
    * Returns null if inadvisable; otherwise a numeric score (higher = better).
    * tentativePlays: already-selected plays this turn (for Voltaire/Scholar synergy checks).
    */
+  /* ═══════════════════════════════════════════════════════════════
+     CARD-SPECIFIC PLACEMENT HEURISTICS (shared)
+     ────────────────────────────────────────────────────────────────
+     Light "don't waste the card" biases matching each card's REAL ability,
+     used by _giantScorePlay (Arcadium hard AI) AND the per-battle heuristic
+     selectors (Hammurabi/Sargon/Neb). Deliberately modest weights — they steer
+     placement, they do NOT make the AI unbeatable. Split into a turn-scaled
+     (location-independent) part and a location-dependent part so a simple
+     "sort by IP, place at weakest loc" selector can fold each into the right
+     stage (card sort vs location choice). Exported as SOG.ai.* below. */
+
+  /* Turn-scaled preference (location-independent): cards worth MORE the earlier
+     they land. Fire (29, Continuous: later cards here gain +1) and Megalith (31,
+     0 IP, End-of-turn +1 cumulative) both realise value over the remaining turns,
+     so a pure-IP scorer under-plays them. turnsLeft = totalTurns − turn + 1. */
+  function cardTurnBias(cardId, turnsLeft) {
+    turnsLeft = (typeof turnsLeft === 'number' && turnsLeft > 0) ? turnsLeft : 1;
+    if (cardId === 29 || cardId === 31) {         // Fire / Megalith — prefer EARLY
+      var b = Math.max(0, turnsLeft - 1) * 1.5;   // scales with turns remaining; 0 on the last turn
+      if (cardId === 31 && turnsLeft <= 1) b -= 1;// a last-turn Megalith is nearly worthless
+      return b;
+    }
+    return 0;
+  }
+
+  /* Location-dependent preference: cards whose ability only pays off at a
+     location with a matching neighbour. `side` = the AI's side key ('opp' in the
+     engine's frame). `tentative` = this turn's not-yet-committed plays
+     [{cardId,locId}], so same-turn context counts. */
+  function cardLocBias(cardId, locId, G, side, tentative) {
+    if (!G) return 0;
+    side = side || 'opp';
+    var mine = (side === 'opp' ? G.aiSlots     : G.playerSlots)[locId] || [];
+    var opp  = (side === 'opp' ? G.playerSlots : G.aiSlots)[locId]     || [];
+    tentative = tentative || [];
+    function typeOf(id) { var c = CARDS.find(function (x) { return x.id === id; }); return c ? c.type : null; }
+
+    // Own cards already here (prior turns + this turn's tentative plays), minus self.
+    var ownIds = [];
+    mine.forEach(function (s) { if (s && s.cardId !== cardId) ownIds.push(s.cardId); });
+    tentative.forEach(function (p) { if (p.locId === locId && p.cardId !== cardId) ownIds.push(p.cardId); });
+    var oppRevealed = opp.filter(function (s) { return s && s.revealed; }).length;
+
+    switch (cardId) {
+      case 42:  // Soldier — At Once strikes an OPPONENT card here; whiffs with no target.
+        return oppRevealed > 0 ? 2 : -3;
+      case 49: { // Phoenicians — attaches to one of the AI's OWN cards here; +1 if Cultural.
+        if (!ownIds.length) return -1;            // no host → attaches to nothing
+        return ownIds.some(function (id) { return typeOf(id) === 'Cultural'; }) ? 2 : 0.5;
+      }
+      case 38:  // Priest — Religious; wants a Ziggurat here (Ziggurat gives +1 to Religious).
+        return ownIds.indexOf(45) !== -1 ? 1.5 : 0;
+      case 45: { // Ziggurat — Continuous +1 to OTHER Religious cards here (e.g. Priest).
+        var rel = ownIds.filter(function (id) { return typeOf(id) === 'Religious'; }).length;
+        return Math.min(rel, 2) * 1.5;
+      }
+      default:
+        return 0;
+    }
+  }
+
   function _giantScorePlay(cardId, locId, boardAnalysis, tentativePlays) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return null;
@@ -418,6 +479,14 @@
     /* ── Adaptive responses ──────────────────────────────────── */
     // Counter opponent Voltaire alone: playing here breaks the +4 bonus
     if (an.playerHasVoltaireAlone) score += 4;
+
+    /* ── Card-specific placement heuristics (Megalith/Fire early; Soldier
+       target; Phoenicians cultural host; Priest/Ziggurat pairing). Light
+       biases; tentativePlays supplies same-turn context. ── */
+    var _totalTurns = (G.config && G.config.structure && G.config.structure.turns) || G.turn;
+    var _turnsLeft  = Math.max(1, _totalTurns - G.turn + 1);
+    score += cardTurnBias(cardId, _turnsLeft);
+    score += cardLocBias(cardId, locId, G, 'opp', tentativePlays);
 
     return score;
   }
@@ -755,19 +824,72 @@
     G.locations.forEach(function (loc) {
       (G.aiSlots[loc.id] || []).forEach(function (s) {
         if (found || !s || !s.revealed) return;
-        if (s.cardId === 48 && !s._advChariotMoved &&
+        if ((s.cardId === 48 || s.cardId === 69) && !s._advChariotMoved &&
             (s.turnPlayed == null || G.turn > s.turnPlayed)) {
-          found = { locId: loc.id, sd: s };
+          found = { locId: loc.id, sd: s, cardId: s.cardId };
         }
       });
     });
-    if (!found) { onDone(); return; }
+    if (!found) { _tryAiBarter(G, onDone); return; }   // no Chariot → still consider a Trader barter
 
     var dest = _bestChariotDest(G, found.locId, helpers.effectiveIP(found.sd));
-    if (dest === null) { onDone(); return; }
+    if (dest === null) { _tryAiBarter(G, onDone); return; }
 
     found.sd._advChariotMoved = true;   // persists with the card → never moves again
-    SOG.game.executeMoveAnimated('opp', 48, found.locId, dest, {}, function () { onDone(); });
+    SOG.game.executeMoveAnimated('opp', found.cardId, found.locId, dest, {}, function () {
+      _tryAiBarter(G, onDone);
+    });
+  }
+
+  /* Light AI Trader (68) barter (reuses SOG.game.executeBarter, the same queued-
+     barter resolution the player's reveal uses). Once per battle per Trader
+     (_advTraderBartered), only when swapping the Trader to a location the AI is
+     LOSING would FLIP that location to a win — and doing so doesn't surrender a
+     location the AI currently holds. No eligible Trader / no flipping swap → no-op. */
+  function _tryAiBarter(G, onDone) {
+    onDone = onDone || function () {};
+    if (!SOG.game || typeof SOG.game.executeBarter !== 'function') { onDone(); return; }
+
+    var trader = null;
+    G.locations.forEach(function (loc) {
+      (G.aiSlots[loc.id] || []).forEach(function (s) {
+        if (trader || !s || !s.revealed) return;
+        if (s.cardId === 68 && !s._advTraderBartered &&
+            (s.turnPlayed == null || G.turn > s.turnPlayed)) {
+          trader = { locId: loc.id, sd: s };
+        }
+      });
+    });
+    if (!trader) { onDone(); return; }
+
+    var tEff  = helpers.effectiveIP(trader.sd);
+    var aiT   = _advLocIP(G.aiSlots, trader.locId);
+    var pT    = _advLocIP(G.playerSlots, trader.locId);
+
+    var best = null;
+    G.locations.forEach(function (loc) {
+      if (loc.id === trader.locId) return;
+      var aiL = _advLocIP(G.aiSlots, loc.id);
+      var pL  = _advLocIP(G.playerSlots, loc.id);
+      if (aiL - pL >= 0) return;                       // only interested in locations we're losing
+      (G.aiSlots[loc.id] || []).forEach(function (s) {
+        if (!s || !s.revealed) return;
+        var pEff = helpers.effectiveIP(s);
+        if (pEff >= tEff) return;                       // swap must raise this location's total
+        var marginAfterL = (aiL - pEff + tEff) - pL;    // Trader replaces partner here
+        if (marginAfterL < 0) return;                   // must actually flip to a win
+        // Don't surrender the Trader's current location if we're currently holding it.
+        var marginAfterT = (aiT - tEff + pEff) - pT;
+        if (aiT - pT >= 0 && marginAfterT < 0) return;
+        if (!best || marginAfterL > best.margin) {
+          best = { partnerCardId: s.cardId, margin: marginAfterL };
+        }
+      });
+    });
+
+    if (!best) { onDone(); return; }
+    trader.sd._advTraderBartered = true;
+    SOG.game.executeBarter('opp', trader.sd.cardId, best.partnerCardId, onDone);
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -776,7 +898,10 @@
   SOG.ai = {
     runAiSelection: runAiSelection,
     runAiMovements: runAiMovements,
-    runAdventureMovements: runAdventureMovements
+    runAdventureMovements: runAdventureMovements,
+    // Shared card-placement heuristics (also used by the per-battle selectors).
+    cardTurnBias: cardTurnBias,
+    cardLocBias:  cardLocBias
   };
 
 })();

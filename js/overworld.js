@@ -489,8 +489,9 @@ var Overworld = (function () {
           id:    'double-crown',
           name:  'The Double Crown',
           image: NODE_PATH + 'doublecrown.png',
-          x: 24, y: 46,
-          scale: 1.12,
+          x: 23, y: 35,
+          scale: 0.95,
+          flipX: true,
           showIf: function () {
             try { return localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) { return false; }
           }
@@ -558,7 +559,7 @@ var Overworld = (function () {
           name:  'Akkad',
           image: NODE_PATH + 'sargonshadow.png',
           x: 61, y: 55,
-          scale: 1.61,   // 704×384 art rendered at 84px base — scale up a touch (knob)
+          scale: 1.25,   // 704×384 art rendered at 84px base — scale up a touch (knob)
           showIf: function () {
             try { return localStorage.getItem(KEY_SARGON_NODE_REVEALED) === 'true'; } catch (e) { return false; }
           }
@@ -571,8 +572,8 @@ var Overworld = (function () {
           id:    'hammurabi',
           name:  'Babylon',
           image: NODE_PATH + 'hammurabinode.png',
-          x: 48, y: 33,
-          scale: 1.6,
+          x: 48, y: 31,
+          scale: 1.25,
           showIf: function () {
             try { return localStorage.getItem(KEY_HAMMURABI_NODE_REVEALED) === 'true'; } catch (e) { return false; }
           }
@@ -1140,9 +1141,11 @@ var Overworld = (function () {
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
         // Post-victory: skip the intro dialogue (A lines → knock → B lines → door) —
-        // walk up, then straight into the battle via the radial wipe.
-        var hgBattle = window.SOG && window.SOG.HangingGardensBattle;
-        if (hgBattle && typeof hgBattle.isBattleComplete === 'function' && hgBattle.isBattleComplete()) {
+        // walk up, then straight into the battle via the radial wipe. Read the
+        // completion flag directly so it holds regardless of module load timing.
+        var beatenNeb = false;
+        try { beatenNeb = localStorage.getItem('sog_battle_nebuchadnezzar_complete') === 'true'; } catch (e) {}
+        if (beatenNeb) {
           log('Hanging Gardens node — battle already won, skipping intro dialogue');
           _launchHangingGardensBattle();
           return;
@@ -1654,12 +1657,28 @@ var Overworld = (function () {
     { src: 'mudhut.png',          leftPct: 29, topPct: 66, scale: 0.20,  rotation: 40 }   // east bank
   ];
 
+  /* POST-Neb "advanced" settlement group — shown AFTER Nebuchadnezzar is beaten
+     (KEY_EGYPT_NODE_LIVE set), replacing the early props above. Same positions /
+     scale / rotation as the pre-Neb props, but the advanced (adv*) art and NO
+     Umm el-Qaab. Same editable knobs. */
+  var EGYPT_TOPO_PROPS_ADV = [
+    // River hut (advanced) — in the delta (northern fan).
+    { src: 'advriverhut.png',     leftPct: 27, topPct: 22, scale: 0.26,  rotation:  -3 },
+    // Granary (advanced) — just south of where the delta starts.
+    { src: 'advgranary.png',      leftPct: 27, topPct: 46, scale: 0.26,  rotation:   0 },
+    // Mud huts (advanced) — settlements dotted along the Nile.
+    { src: 'advmudhouse3@0.25x.png', leftPct: 18, topPct: 26, scale: 0.30,  rotation: 20 },   // north (delta)
+    { src: 'advmudhouse3@0.25x.png', leftPct: 22, topPct: 57, scale: 0.30,  rotation: 20 },   // west bank
+    { src: 'advmudhouse3@0.25x.png', leftPct: 27, topPct: 66, scale: 0.30,  rotation: -15, flipX: true }   // east bank — mirrored H
+  ];
+
   /* Render the gated Egypt topography group. Decorative + non-interactive
      (pointer-events:none), sitting BEHIND the nodes/character. Clears any prior
-     props, then renders ONLY on the Egypt map and ONLY pre-Neb (KEY_EGYPT_NODE_
-     LIVE not set). Called from loadMap on every map entry, so the gate is
-     re-checked on each Egypt visit — robust for both fresh saves (props present)
-     and already-beaten-Neb saves (props absent). */
+     props, then renders ONLY on the Egypt map, choosing the set by progress:
+     pre-Neb → early settlements (EGYPT_TOPO_PROPS); post-Neb (KEY_EGYPT_NODE_LIVE
+     set) → the advanced settlements (EGYPT_TOPO_PROPS_ADV). Called from loadMap on
+     every map entry, so the set is re-checked on each Egypt visit — robust for
+     both fresh saves and already-beaten-Neb saves. */
   function _placeEgyptProps() {
     if (!overlayEl) return;
     // Always clear first (defensive — loadMap also wipes the overlay).
@@ -1669,19 +1688,23 @@ var Overworld = (function () {
     if (currentMapId !== 'egypt') return;                 // Egypt map only
     var nebBeaten = false;
     try { nebBeaten = localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) {}
-    if (nebBeaten) return;                                 // post-Neb: early settlements gone
+    // Pre-Neb: early settlements. Post-Neb: the advanced (adv*) settlements.
+    var props = nebBeaten ? EGYPT_TOPO_PROPS_ADV : EGYPT_TOPO_PROPS;
 
-    EGYPT_TOPO_PROPS.forEach(function (p) {
+    props.forEach(function (p) {
       var el = document.createElement('img');
       el.className = 'egypt-topo-prop';
       el.src = TOPO_PATH + p.src;
       el.alt = '';
       el.draggable = false;
+      // flipX / flipY mirror the prop via a signed scale on that axis.
+      var sx = p.scale * (p.flipX ? -1 : 1);
+      var sy = p.scale * (p.flipY ? -1 : 1);
       el.style.cssText = [
         'position:absolute',
         'left:' + p.leftPct + '%',
         'top:'  + p.topPct  + '%',
-        'transform:translate(-50%,-50%) rotate(' + (p.rotation || 0) + 'deg) scale(' + p.scale + ')',
+        'transform:translate(-50%,-50%) rotate(' + (p.rotation || 0) + 'deg) scale(' + sx + ',' + sy + ')',
         'transform-origin:center center',
         'pointer-events:none',
         'user-select:none'
@@ -2506,6 +2529,18 @@ var Overworld = (function () {
   function _runHammurabiEncounter(node) {
     var hud = window.SOG && window.SOG.HUD;
     if (!hud || typeof hud.enterDialogueMode !== 'function') { isDialogueLocked = false; scheduleIdle(); return; }
+
+    // Post-victory: skip the encounter dialogue (and the deck-size gate) entirely —
+    // clicking the node goes straight into a rematch. Mirrors Sargon / Hanging
+    // Gardens. Read the completion flag directly so it holds regardless of module
+    // load timing.
+    var beatenHammurabi = false;
+    try { beatenHammurabi = localStorage.getItem('sog_battle_hammurabi_complete') === 'true'; } catch (e) {}
+    if (beatenHammurabi) {
+      log('[D4] Hammurabi node — battle already won, skipping encounter dialogue');
+      _launchHammurabiBattle();
+      return;
+    }
 
     var full = 15, deckSize = 0;
     try {

@@ -831,6 +831,23 @@ SOG.HangingGardensBattle = (function () {
       return best.id;
     }
 
+    // Shared card-placement heuristics (ai.js): Megalith early (sort bias) +
+    // Soldier/Phoenicians/Priest/Ziggurat placement (location bias). No-op if
+    // SOG.ai is absent. plays = this turn's tentative context.
+    var _turns    = (G.config && G.config.structure && G.config.structure.turns) || 4;
+    var turnsLeft = Math.max(1, _turns - (G.turn || 1) + 1);
+    var _ai = (window.SOG && SOG.ai) || null;
+    function turnBias(id)  { return _ai && _ai.cardTurnBias ? _ai.cardTurnBias(id, turnsLeft) : 0; }
+    function biasedLoc(cardId, openLocs, fallbackId) {
+      if (!_ai || !_ai.cardLocBias) return fallbackId;
+      var best = fallbackId, bestB = _ai.cardLocBias(cardId, fallbackId, G, 'opp', plays);
+      for (var i = 0; i < openLocs.length; i++) {
+        var id = openLocs[i].id, b = _ai.cardLocBias(cardId, id, G, 'opp', plays);
+        if (b > bestB) { bestB = b; best = id; }
+      }
+      return best;
+    }
+
     var plays = [], guard = 0;
     while (guard++ < 24) {
       var aff = [];
@@ -845,13 +862,15 @@ SOG.HangingGardensBattle = (function () {
       });
       if (!openLocs.length) break;
 
-      aff.sort(function (a, b) { return (b.ip - a.ip) || (b.cc - a.cc); });
+      // strongest first — IP + early-turn bias (Megalith), then CC tiebreak
+      aff.sort(function (a, b) { return ((b.ip + turnBias(b.id)) - (a.ip + turnBias(a.id))) || (b.cc - a.cc); });
       // Nebuchadnezzar (50) — get him onto the board as EARLY as possible: whenever
       // he's affordable, play him before other cards, so he lands on the first turn
       // the AI can afford him.
       var pick = aff[0];
       for (var n = 0; n < aff.length; n++) { if (aff[n].id === 50) { pick = aff[n]; break; } }
-      var locId = weakestOpenLoc(openLocs);
+      // Card-specific heuristic loc (Soldier/Phoenicians/Priest/Ziggurat) else spread.
+      var locId = biasedLoc(pick.id, openLocs, weakestOpenLoc(openLocs));
 
       plays.push({ cardId: pick.id, locId: locId });
       capital -= pick.cc;

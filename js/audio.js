@@ -407,6 +407,13 @@ var SFX = (function () {
       tone(784, 'square', 0.005, 0.05, 0.10, 0.09, 0.22);    // G5
     },
 
+    /** End-of-turn IP gain (e.g. Megalith): short positive 2-note up-blip —
+        distinct from the 3-note At-Once chime so the new timing reads apart. */
+    eotGain: function () {
+      tone(587, 'square', 0.004, 0.03, 0.05, 0.09);          // D5
+      tone(880, 'square', 0.004, 0.05, 0.09, 0.10, 0.09);    // A5 — bright landing
+    },
+
     /** Learning check — CORRECT: bright ascending 8-bit "ta-da" chime */
     learnCorrect: function () {
       tone(659,  'square', 0.005, 0.04, 0.06, 0.11);         // E5

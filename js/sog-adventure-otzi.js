@@ -176,6 +176,13 @@ SOG.OtziBattle = (function () {
         if (fireHere) eff += 1;               // benefits from Fire's "after" buff
         if (caveHere) eff -= 1;               // Cave Art combo here is closed — a later card earns nothing
       }
+      // Megalith (31) is 0 base IP (End of turn: +1 cumulative) — a pure-IP scorer
+      // never plays it. Prefer it EARLY, scaled by turns remaining (shared with the
+      // engine heuristic). (Fire's early preference is the open>=2 term above.)
+      if (card.id === 31 && window.SOG && SOG.ai && SOG.ai.cardTurnBias) {
+        var _turns = (G.config && G.config.structure && G.config.structure.turns) || 4;
+        eff += SOG.ai.cardTurnBias(31, Math.max(1, _turns - (G.turn || 1) + 1));
+      }
       eff -= 0.5 * aiIP(locId);               // mild spread → contest 2-3 locations, don't stack one
       return eff;
     }

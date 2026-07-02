@@ -489,6 +489,9 @@ SOG.GilgameshBattle = (function () {
       case 45: // Ziggurat → a loc where the AI has another Religious card (Priest)
         return best(function (l) { return _gAiHasType(l.id, 'Religious'); },
                     function (id) { return _gAiCardsAt(id).filter(function (s) { return _gAiTypeOf(s.cardId) === 'Religious'; }).length; });
+      case 38: // Priest → a loc where the AI already has a Ziggurat (gains its +1 to Religious)
+        return best(function (l) { return _gAiCardsAt(l.id).some(function (s) { return s.cardId === 45; }); },
+                    function (id) { return _gAiCardsAt(id).filter(function (s) { return s.cardId === 45; }).length; });
       case 42: // Soldier → a loc with a player card; prefer the strongest strike / a flip
         return best(function (l) { return _gPlayerRevealedAt(l.id).length > 0; }, _gSoldierStrikeValue);
       case 40: // Scribe → a loc where the AI already has cards (boosts cards played before it)
@@ -526,6 +529,7 @@ SOG.GilgameshBattle = (function () {
       case 49: return pref !== null ? 5 : 0;     // Phoenicians with a Cultural target ready
       case 42: return pref !== null ? 3 : 0;     // Soldier with a strike target
       case 45: return pref !== null ? 3 : 0;     // Ziggurat next to a Religious card
+      case 38: return pref !== null ? 2 : 0;     // Priest — prefers a loc with a Ziggurat (its +1)
       case 40: return pref !== null ? 2 : 0;     // Scribe co-located with earlier plays
       case 43: return turn >= 3 ? 4 : -1;        // Gilgamesh card late = big scorer
       default: return 0;
