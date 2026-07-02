@@ -489,6 +489,47 @@
         });
       });
 
+      // ── Egypt continuous type-boosts ────────────────────────────
+      // Hieroglyphics (id 62): +2 IP to the OWNER'S Religious AND Political cards
+      // here (same family as Ziggurat; two types, +2). Excludes itself (Cultural).
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        if (!sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 62; })) return;
+        sl[loc.id].forEach(function (s) {
+          if (!s || !s.revealed || s.cardId === 62) return;
+          var c = CARDS.find(function (x) { return x.id === s.cardId; });
+          if (c && (c.type === 'Religious' || c.type === 'Political')) {
+            s.contMod = (s.contMod || 0) + 2;
+            s.contModSources.push({ source: 'Hieroglyphics', delta: 2 });
+            addBonus(s, 2, 'card', 62, nextEventId(), 'A', true);
+          }
+        });
+      });
+
+      // Pyramid (id 57): DOUBLES the IP of the OWNER'S most-recently-played
+      // Political card here (by reveal order = sd.playTime). Implemented as
+      // +cardBaseIP on that one card (so a base-3 Political shows 6). If the
+      // "last" card carries other mods, only its BASE is doubled (documented).
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        if (!sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 57; })) return;
+        var last = null, lastTime = -Infinity;
+        sl[loc.id].forEach(function (s) {
+          if (!s || !s.revealed) return;
+          var c = CARDS.find(function (x) { return x.id === s.cardId; });
+          if (!c || c.type !== 'Political') return;
+          var t = (typeof s.playTime === 'number') ? s.playTime : -1;
+          if (t >= lastTime) { lastTime = t; last = s; }
+        });
+        if (last) {
+          var lc  = CARDS.find(function (x) { return x.id === last.cardId; });
+          var add = lc ? lc.ip : 0;
+          last.contMod = (last.contMod || 0) + add;
+          last.contModSources.push({ source: 'Pyramid', delta: add });
+          addBonus(last, add, 'card', 57, nextEventId(), 'A', true);
+        }
+      });
+
       // Scribe (id 40) is no longer Continuous — it is now an At Once ability
       // (abilityScribe) that applies a one-time +1 IP to the owner's other cards
       // here as each stamp lands. See CARD_ABILITIES[40] / reveal-fx stamping.
@@ -529,6 +570,48 @@
       });
 
     });
+
+    /* ── Narmer (id 51) "The Unifier" — total-IP averaging (FINAL PASS) ──────────
+       Runs AFTER every other continuous mod + location boost, so it averages the
+       FINAL computed totals. For NARMER'S OWNER ONLY (opponent untouched): take
+       the owner's total IP at Narmer's location and each adjacent location, SUM,
+       and redistribute EQUALLY. Cards don't move — we only add a per-location
+       delta into G.locationBoosts (the same table updateScores + tallyResult sum),
+       so the location TOTALS become the average while per-card IP badges stay
+       truthful. Remainder → Narmer's OWN location first, then neighbours in order
+       (e.g. 31 across 3 → 11/10/10). locationBoosts is rebuilt each pass, so no
+       compounding. Inert until an Egypt battle decks Narmer. */
+    ['player', 'opp'].forEach(function (own) {
+      var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+      var narmerLoc = null;
+      G.locations.forEach(function (loc) {
+        if (sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 51; })) narmerLoc = loc.id;
+      });
+      if (narmerLoc === null) return;
+      // Group = Narmer's loc (FIRST — gets the remainder) + its adjacents.
+      var group = [narmerLoc].concat(getAdjacentLocIds(narmerLoc));
+      function ownerTotal(locId) {
+        var t = 0;
+        sl[locId].forEach(function (s) { if (s && s.revealed) t += effectiveIP(s); });
+        if (G.locationBoosts[locId]) G.locationBoosts[locId][own].forEach(function (b) { t += b.amount; });
+        return t;
+      }
+      var totals = group.map(ownerTotal);
+      var sum    = totals.reduce(function (a, b) { return a + b; }, 0);
+      var n      = group.length;
+      var base   = Math.floor(sum / n);
+      var rem    = sum - base * n;                 // 0..n-1 remainder points
+      group.forEach(function (locId, i) {
+        var target = base + (i < rem ? 1 : 0);     // remainder → Narmer's own loc first
+        var delta  = target - totals[i];
+        if (delta !== 0 && G.locationBoosts[locId]) {
+          G.locationBoosts[locId][own].push({
+            sourceCardId: 51, sourceOwner: own, sourceLocId: narmerLoc, amount: delta
+          });
+        }
+      });
+    });
+
     // Note: Cuneiform (id 46) attachment is NOT resolved here.
     // It fires from the play-event hook in revealNext (game.js), which guarantees
     // it only triggers on an explicit play-from-hand action, never on a card move.
@@ -1451,7 +1534,11 @@
   // Soldier (id 42) — At Once: Strike one of your opponent's revealed cards here
   // and reduce it by -1 IP.  The target is chosen RANDOMLY for BOTH sides (no
   // player chooser) — the spear flies at that same randomly-picked card.
-  function abilitySoldier(owner, locId, done) {
+  // Shared Soldier strike — used by the Mesopotamia Soldier (42) and the Egypt
+  // Soldier (70). soldierCardId picks whose slot the spear flies FROM. Sphinx (64)
+  // protection: if the TARGET's owner has a Sphinx here, the strike whiffs (no IP
+  // reduction) — the Kente-pattern reuse the Egypt Sphinx requested.
+  function _soldierStrike(owner, locId, done, soldierCardId) {
     var oppSide  = owner === 'player' ? 'opp' : 'player';
     var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
     // Keep each target's SLOT INDEX alongside its data so the charge animation can
@@ -1466,12 +1553,15 @@
     // pipeline waits for the charge (same coupling pattern as Scribe's stamping).
     function applyStrike(t) {
       var targetSd  = t.sd;
-      var targetEl  = getSlotEl(oppSide, locId, t.idx);   // the SAME card the ability chose
-      var soldierEl = findSlotEl(owner, 42);              // the charging Soldier's slot
+      var targetEl  = getSlotEl(oppSide, locId, t.idx);       // the SAME card the ability chose
+      var soldierEl = findSlotEl(owner, soldierCardId);       // the charging Soldier's slot
 
       function strike() {   // the real, one-time IP reduction (shown at impact)
-        addIPMod(targetSd, -1, 'Soldier');
-        SOG.ui.showIPFloat(oppSide, targetSd.cardId, -1);
+        // Sphinx guards the target owner's cards here — block the reduction.
+        if (!isSphinxProtected(oppSide, locId)) {
+          addIPMod(targetSd, -1, 'Soldier');
+          SOG.ui.showIPFloat(oppSide, targetSd.cardId, -1);
+        }
         evaluateContinuous();
         refreshSlotIPDisplays();
         updateScores();
@@ -1491,6 +1581,8 @@
     var target = targets[Math.floor(Math.random() * targets.length)];
     applyStrike(target);
   }
+  function abilitySoldier(owner, locId, done)      { _soldierStrike(owner, locId, done, 42); }  // Mesopotamia
+  function abilitySoldierEgypt(owner, locId, done) { _soldierStrike(owner, locId, done, 70); }  // Egypt
 
   // Hammurabi (id 47) — At Once: "Destroy your lowest CC card here in order to
   // destroy your opponent's lowest CC card." A SACRIFICE / trade, symmetric for
@@ -1687,10 +1779,13 @@
     });
   }
 
-  // Chariot (id 48) — arrival strike: when the Chariot moves to a new
-  // location it strikes the highest-IP opponent card there for -1 IP.
-  // Called via opts.onLand from executeMoveAnimated (wired in queueMove).
-  function chariotArrival(owner, toLocId, sd, done) {
+  // Chariot arrival strike: when a Chariot-type card moves to a new location it
+  // strikes the highest-IP revealed opponent card there. Mesopotamia Chariot (48)
+  // uses delta -1; Egypt Chariots (69) uses -2. Sphinx (64) protection applies —
+  // if the target's owner has a Sphinx here, the strike whiffs (inert in Meso
+  // battles, where Sphinx never appears). Called from executeMoveAnimated (game.js).
+  function chariotArrival(owner, toLocId, sd, done, delta) {
+    delta = (typeof delta === 'number') ? delta : -1;
     var oppSide  = owner === 'player' ? 'opp' : 'player';
     var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
     var mySlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
@@ -1709,8 +1804,10 @@
 
     // The real strike, applied at the arrow's IMPACT beat (same card, same event).
     function applyStrike() {
-      addIPMod(best, -1, 'Chariot');
-      SOG.ui.showIPFloat(oppSide, best.cardId, -1);
+      if (!isSphinxProtected(oppSide, toLocId)) {   // Sphinx guards the target's cards
+        addIPMod(best, delta, 'Chariot');
+        SOG.ui.showIPFloat(oppSide, best.cardId, delta);
+      }
       evaluateContinuous();
       refreshSlotIPDisplays();
       updateScores();
@@ -2277,6 +2374,234 @@
     }
   }
 
+  /* Megalith (id 31) — "Monument": End of turn, gain +1 IP PERMANENTLY and
+     cumulatively (addIPMod, the Scribe pattern — a stamped modifier, NOT a
+     recomputed continuous mod, so it survives evaluateContinuous re-runs and
+     counts in scoring). Fired by the END-OF-TURN phase (fireEndOfTurn below):
+     once per turn, after ALL reveals complete, including the turn it's played.
+     Presentation: a light-band shimmer sweeps the card; the +1 lands at the
+     sweep's midpoint (IP number pops in sync) with a positive 8-bit blip. The
+     phase queue AWAITS done — multiple end-of-turn cards fire sequentially. */
+  function megalithEndOfTurn(owner, locId, slotIndex, sd, done) {
+    // Re-acquire the slot element by owner+cardId (the Hammurabi lesson: slot
+    // indexes can shift if an earlier queue entry compacted the board).
+    var el = findSlotEl(owner, sd.cardId);
+    var rfx = window.SOG && SOG.RevealFx;
+    var tick = function () {
+      addIPMod(sd, 1, 'Megalith');            // permanent +1, cumulative across turns
+      if (typeof SFX !== 'undefined' && SFX.eotGain) SFX.eotGain();
+      refreshSlotIPDisplays();                 // IP number updates in sync with the sweep
+      updateScores();
+    };
+    if (rfx && typeof rfx.endOfTurnShimmer === 'function') {
+      rfx.endOfTurnShimmer(el, { onTick: tick }, done);
+    } else {
+      tick();
+      done();
+    }
+  }
+
+  /* ── Egypt era abilities (wired via existing machinery) ────────────────────── */
+
+  /* Obelisk (id 59) — "Monolith": End of turn, gain +1 IP permanently and
+     cumulatively. Identical to Megalith (31) — same end-of-turn phase + shimmer,
+     different attribution source. */
+  function obeliskEndOfTurn(owner, locId, slotIndex, sd, done) {
+    var el  = findSlotEl(owner, sd.cardId);
+    var rfx = window.SOG && SOG.RevealFx;
+    var tick = function () {
+      addIPMod(sd, 1, 'Obelisk');
+      if (typeof SFX !== 'undefined' && SFX.eotGain) SFX.eotGain();
+      refreshSlotIPDisplays();
+      updateScores();
+    };
+    if (rfx && typeof rfx.endOfTurnShimmer === 'function') rfx.endOfTurnShimmer(el, { onTick: tick }, done);
+    else { tick(); done(); }
+  }
+
+  /* Scribe — Egypt (id 56) — "Accounting": At Once, +1 Capital next turn for every
+     OTHER card the owner has at this location. Same next-turn-capital accumulator
+     as Scholar-Officials (2) / Farmer, via grantCapitalNextTurn. */
+  function abilityScribeEgypt(owner, locId, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var count = 0;
+    forEachRevealedAt(slots, locId, function (s) { if (s.cardId !== 56) count++; });
+    grantCapitalNextTurn(owner, count);
+    if (count > 0 && typeof SFX !== 'undefined' && SFX.coinSound) SFX.coinSound();
+    done();
+  }
+
+  /* Ra (id 63) — "Sun God": At Once, discard the owner's lowest-CC hand card; Ra
+     permanently gains that card's IP (addIPMod). Reuses the Priest discard pattern
+     (lowest-CC selection + discardFromHand) plus a permanent stamp on Ra. */
+  function abilityRa(owner, locId, done) {
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    if (!hand.length) { done(); return; }
+    var lowestCC = Infinity, lowestId = null;
+    hand.forEach(function (id) {
+      var c = CARDS.find(function (x) { return x.id === id; });
+      if (c && c.cc < lowestCC) { lowestCC = c.cc; lowestId = id; }
+    });
+    if (lowestId === null) { done(); return; }
+    var dc    = CARDS.find(function (x) { return x.id === lowestId; });
+    var gain  = dc ? dc.ip : 0;
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var raSd  = null;
+    (slots[locId] || []).forEach(function (s) { if (s && s.cardId === 63) raSd = s; });
+    discardFromHand(owner, lowestId, function () {
+      if (raSd && gain !== 0) {
+        addIPMod(raSd, gain, 'Ra');
+        if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(owner, 63, gain);
+      }
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+      done();
+    }, { animate: true });
+  }
+
+  /* Draw the first card of a given TYPE from the owner's deck into their hand
+     (respecting maxHandSize). Minimal reusable helper — the engine's first mid-turn
+     draw (Khufu 60). Rebuilds the player's visible hand; the AI hand is face-down,
+     so only its count changes. Returns true if a card was drawn. */
+  function drawTypeFromDeck(owner, type) {
+    var deck = owner === 'player' ? G.playerDeck : G.aiDeck;
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    if (!deck || !hand) return false;
+    var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
+    if (hand.length >= maxHand) return false;                      // hand full
+    var idx = -1;
+    for (var i = 0; i < deck.length; i++) {
+      var c = CARDS.find(function (x) { return x.id === deck[i]; });
+      if (c && c.type === type) { idx = i; break; }
+    }
+    if (idx === -1) return false;                                  // none in deck
+    var drawnId = deck.splice(idx, 1)[0];
+    hand.push(drawnId);
+    if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+    return true;
+  }
+
+  /* Khufu (id 60) — "Great Pyramid": At Once, draw a Scientific card. */
+  function abilityKhufu(owner, locId, done) {
+    drawTypeFromDeck(owner, 'Scientific');
+    done();
+  }
+
+  /* Sphinx (id 64) — "Monumental Guardian": Kente-style protection (see
+     isKenteProtected). True if OWNER has a revealed Sphinx at locId → that owner's
+     cards there can't have their IP reduced. Enforced in _soldierStrike. Egypt-only
+     → returns false (inert) in every current battle. */
+  function isSphinxProtected(owner, locId) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    return (slots[locId] || []).some(function (s) { return s && s.revealed && s.cardId === 64; });
+  }
+
+  /* Hyksos (id 67) — "Foreign Kings": At Once on reveal, TRANSFER to the OPPONENT'S
+     side of the SAME location (into an open slot). Ownership = array membership, so
+     moving the sd from the owner's array to the opponent's array flips ownership for
+     ALL systems (scoring/continuous/display/badges) automatically. If the opponent's
+     side is FULL (no null slot — face-down/unrevealed cards count as occupying), the
+     transfer FAILS and Hyksos stays STUCK on its owner's side (its -2 IP stays the
+     owner's — the timing skill). */
+  function abilityHyksos(owner, locId, done) {
+    var oppSide  = owner === 'player' ? 'opp' : 'player';
+    var mySlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
+    if ((oppSlots[locId] || []).indexOf(null) === -1) { done(); return; }  // opp side FULL → stuck
+    var fromIdx = -1;
+    (mySlots[locId] || []).forEach(function (s, i) { if (fromIdx === -1 && s && s.cardId === 67) fromIdx = i; });
+    if (fromIdx === -1) { done(); return; }
+    var sd = mySlots[locId][fromIdx];
+    // Remove from owner's side, compact/re-render.
+    mySlots[locId][fromIdx] = null;
+    clearSlotDOM(owner, locId, fromIdx);
+    if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
+    else                    { compactOppSlots(locId);    syncOppSlots(locId);    }
+    // Place onto opponent's side (first open compacted slot) + render.
+    var toIdx = oppSlots[locId].indexOf(null);
+    oppSlots[locId][toIdx] = sd;
+    if (oppSide === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
+    else                      { compactOppSlots(locId);    syncOppSlots(locId);    }
+    if (typeof SFX !== 'undefined' && SFX.cardDiscarded) SFX.cardDiscarded();
+    evaluateContinuous();
+    refreshSlotIPDisplays();
+    updateScores();
+    setTimeout(done, 300);
+  }
+
+  /* Hatshepsut (id 52) — "Trading Queen": At Once on reveal, the owner GIVES one of
+     their OWN revealed cards here (player: chosen via the shared picker; AI: its
+     lowest-value card) and RECEIVES a RANDOM revealed opponent card here — the two
+     swap sides/owners. Fizzles (no-op) if the owner has no other revealed card here
+     OR the opponent has none. */
+  function abilityHatshepsut(owner, locId, done) {
+    var oppSide  = owner === 'player' ? 'opp' : 'player';
+    var mySlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
+    var mine = [];
+    (mySlots[locId] || []).forEach(function (s, i) { if (s && s.revealed && s.cardId !== 52) mine.push({ sd: s, idx: i }); });
+    var theirs = [];
+    (oppSlots[locId] || []).forEach(function (s, i) { if (s && s.revealed) theirs.push({ sd: s, idx: i }); });
+    if (!mine.length || !theirs.length) { done(); return; }   // fizzle
+
+    var recv = theirs[Math.floor(Math.random() * theirs.length)];   // random opponent card returns
+
+    function doSwap(give) {
+      // Remove both, compact/re-render, then drop each into the other side's open slot.
+      mySlots[locId][give.idx]  = null; clearSlotDOM(owner,   locId, give.idx);
+      oppSlots[locId][recv.idx] = null; clearSlotDOM(oppSide, locId, recv.idx);
+      if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); } else { compactOppSlots(locId); syncOppSlots(locId); }
+      if (oppSide === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); } else { compactOppSlots(locId); syncOppSlots(locId); }
+      var myOpen = mySlots[locId].indexOf(null);  if (myOpen !== -1) mySlots[locId][myOpen] = recv.sd;
+      var opOpen = oppSlots[locId].indexOf(null); if (opOpen !== -1) oppSlots[locId][opOpen] = give.sd;
+      if (owner === 'player') { syncPlayerSlots(locId); } else { syncOppSlots(locId); }
+      if (oppSide === 'player') { syncPlayerSlots(locId); } else { syncOppSlots(locId); }
+      if (typeof SFX !== 'undefined' && SFX.cardDiscarded) SFX.cardDiscarded();
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+      setTimeout(done, 300);
+    }
+
+    if (owner === 'player') {
+      if (mine.length === 1) { doSwap(mine[0]); return; }
+      showDiscardChooser('Choose a card to give', mine.map(function (m) { return m.sd.cardId; }), function (chosenId) {
+        var picked = mine.filter(function (m) { return m.sd.cardId === chosenId; })[0] || mine[0];
+        doSwap(picked);
+      });
+    } else {
+      var lowest = mine[0];
+      mine.forEach(function (m) { if (effectiveIP(m.sd) < effectiveIP(lowest.sd)) lowest = m; });
+      doSwap(lowest);
+    }
+  }
+
+  /* NUBIAN_GOLD_ON_PLAY location key — reveal-end hook (mirrors applyRiverAtOnce /
+     applyCapitalWhenFull; called ONCE per turn from revealNext). For each card
+     played this turn (both sides) at a location carrying the key, that side gets one
+     Nubian Gold token (id 73) into hand — UNLESS the hand is already full (no queue).
+     Inert in every battle whose locations don't carry the key. */
+  function applyNubianGoldOnPlay(newlyRevealed) {
+    if (!G.locations || !newlyRevealed || !newlyRevealed.length) return 0;
+    var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
+    var granted = 0;
+    newlyRevealed.forEach(function (r) {
+      if (r.locId == null) return;
+      var loc = G.locations.find(function (l) { return l.id === r.locId; });
+      if (!loc || loc.abilityKey !== 'NUBIAN_GOLD_ON_PLAY') return;
+      var hand = r.owner === 'player' ? G.playerHand : G.aiHand;
+      if (hand.length >= maxHand) return;   // hand full → NO token (no queue)
+      hand.push(73);                        // Nubian Gold token
+      granted++;
+    });
+    if (granted > 0) {
+      if (typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+      if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
+    }
+    return granted;
+  }
+
   var CARD_ABILITIES = {
     2:  { onAtOnce: abilityScholarOfficials },
     3:  { onAtOnce: abilityJustinian        },
@@ -2287,6 +2612,7 @@
     13: { onAtOnce: abilityCortes           },
     23: { onAtOnce: abilityZhengHe          },
     26: { onAtOnce: abilityTool             },  // Prehistory tutorial
+    31: { endOfTurn: megalithEndOfTurn      },  // Megalith — End of turn: gain +1 IP (permanent, cumulative)
     35: { onCardLandedHere: abilityOtziFlee },  // Ötzi — reactive flee (any card lands at his loc after he's revealed)
     36: { onCardLandedHere: tribeReactBounce },  // Tribe — reactive bounce+sfx (presentation only; IP stays in evaluateContinuous)
 
@@ -2305,7 +2631,27 @@
     47: { onAtOnce: abilityHammurabi    },
     48: { onAtOnce: function (o, l, done) { done(); } },  // Chariot  — movement ability
     49: { onAtOnce: abilityPhoenicians  },
-    50: { onAtOnce: abilityNebuchadnezzar }   // Nebuchadnezzar — Continuous discount; At-Once = shimmer flourish
+    50: { onAtOnce: abilityNebuchadnezzar },  // Nebuchadnezzar — Continuous discount; At-Once = shimmer flourish
+
+    /* ── Egypt era (WIRED only). Continuous cards (Narmer/Pyramid/Hieroglyphics/
+       Sphinx/Imhotep) carry a no-op onAtOnce and do their work in
+       evaluateContinuous / effectiveCost / the strike guard. NOT-YET-WIRED Egypt
+       cards have NO entry here (and are never decked). ── */
+    51: { onAtOnce: function (o, l, done) { done(); } },  // Narmer — Continuous (IP averaging)
+    52: { onAtOnce: abilityHatshepsut      },             // Hatshepsut — give/receive swap at this loc
+    55: { onAtOnce: abilityFarmer          },             // Farmer (EGY) — +1 capital next turn (reuses Meso Farmer)
+    56: { onAtOnce: abilityScribeEgypt     },             // Scribe (EGY) — capital per other card here
+    57: { onAtOnce: function (o, l, done) { done(); } },  // Pyramid — Continuous (double last Political)
+    59: { endOfTurn: obeliskEndOfTurn      },             // Obelisk — End of turn: +1 IP (Megalith key)
+    60: { onAtOnce: abilityKhufu           },             // Khufu — draw a Scientific card
+    62: { onAtOnce: function (o, l, done) { done(); } },  // Hieroglyphics — Continuous (+2 Religious/Political)
+    63: { onAtOnce: abilityRa              },             // Ra — discard lowest → permanent +IP
+    64: { onAtOnce: function (o, l, done) { done(); } },  // Sphinx — Continuous protection (enforced in _soldierStrike)
+    65: { onAtOnce: function (o, l, done) { done(); } },  // Imhotep — Continuous (effectiveCost -1 Scientific)
+    67: { onAtOnce: abilityHyksos          },             // Hyksos — transfer to opponent's side (stuck if full)
+    69: { onAtOnce: function (o, l, done) { done(); } },  // Chariots — movement card; arrival -2 strike in executeMoveAnimated
+    70: { onAtOnce: abilitySoldierEgypt    },             // Soldier (EGY) — strike -1 IP
+    73: { onAtOnce: abilityFarmer          }              // Nubian Gold (token) — +1 capital next turn (Farmer machinery)
   };
 
   /* ═══════════════════════════════════════════════════════════════
@@ -2380,15 +2726,83 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     END-OF-TURN PHASE DISPATCHER (general — data-driven per card)
+     ────────────────────────────────────────────────────────────────
+     Called ONCE per turn by game.js (revealNext completion → the
+     _proceedAfterReveal wrapper), after ALL of this turn's reveals, At-Once
+     abilities, continuous mods, river stamps and Chariot movement have
+     resolved and BEFORE the turn advances / endGame tallies — so a gain
+     landed here counts this turn. Like applyCapitalWhenFull, it is a
+     DISCRETE once-per-turn phase: never call it from evaluateContinuous
+     (multi-fire trap).
+
+     Collects every revealed on-board card (both sides) whose
+     CARD_ABILITIES[id].endOfTurn is a function — including cards revealed
+     THIS turn — into ONE GLOBAL QUEUE ordered by sd.playTime (the reveal-
+     sequence stamp set at flip time in game.js: monotonically increasing
+     across the whole battle, so earlier-revealed fires first; two revealed
+     the same turn keep their within-turn reveal order; both sides
+     interleave naturally). Unstamped cards (defensive) fire last.
+
+     Fires SEQUENTIALLY: each handler's animation completes (done) before
+     the next fires; after each fire the board re-tallies + refreshes so
+     location totals update visibly per card. allDone releases the turn —
+     the turn WAITS for the whole phase (coupled, like Scribe/Soldier).
+
+     Once-per-turn guarantee: called from a single reveal-end site AND each
+     card is stamped sd._eotFiredTurn = G.turn before its handler runs, so
+     even a double invocation cannot double-fire a card. */
+  function fireEndOfTurn(allDone) {
+    var finish = function () { if (typeof allDone === 'function') allDone(); };
+    var q = [];
+    ['player', 'opp'].forEach(function (side) {
+      var slots = side === 'player' ? G.playerSlots : G.aiSlots;
+      G.locations.forEach(function (loc) {
+        (slots[loc.id] || []).forEach(function (sd, si) {
+          if (!sd || !sd.revealed) return;
+          var spec = CARD_ABILITIES[sd.cardId];
+          if (!spec || typeof spec.endOfTurn !== 'function') return;
+          if (sd._eotFiredTurn === G.turn) return;   // already fired this turn
+          q.push({ owner: side, locId: loc.id, slotIndex: si, sd: sd, spec: spec });
+        });
+      });
+    });
+    if (!q.length) { finish(); return; }   // no end-of-turn cards → zero-cost no-op
+
+    // Global reveal order: earlier playTime first (stable across turns/sides).
+    q.sort(function (a, b) {
+      var pa = (typeof a.sd.playTime === 'number') ? a.sd.playTime : Infinity;
+      var pb = (typeof b.sd.playTime === 'number') ? b.sd.playTime : Infinity;
+      return pa - pb;
+    });
+
+    var i = 0;
+    (function next() {
+      if (i >= q.length) { finish(); return; }
+      var r = q[i++];
+      r.sd._eotFiredTurn = G.turn;   // stamp BEFORE firing — re-entry safe
+      r.spec.endOfTurn(r.owner, r.locId, r.slotIndex, r.sd, function () {
+        // Re-tally + refresh after EACH fire so totals/displays track per card.
+        evaluateContinuous();
+        refreshSlotIPDisplays();
+        updateScores();
+        next();
+      });
+    })();
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      PUBLIC EXPORTS
   ═══════════════════════════════════════════════════════════════ */
   SOG.abilities = {
     /* Dispatch + engine */
     fireAtOnce:                fireAtOnce,
     fireOnCardLandedHere:      fireOnCardLandedHere,
+    fireEndOfTurn:             fireEndOfTurn,
     evaluateContinuous:        evaluateContinuous,
     applyCapitalWhenFull:      applyCapitalWhenFull,
     applyRiverAtOnce:          applyRiverAtOnce,
+    applyNubianGoldOnPlay:     applyNubianGoldOnPlay,
     /* Shared ability helpers (callable from game.js if needed) */
     isKenteProtected:          isKenteProtected,
     destroyCard:               destroyCard,
