@@ -442,6 +442,16 @@
      COST / IP MATH
   ═══════════════════════════════════════════════════════════════ */
 
+  /* Effective ABILITY id for a slot — mirrors abilities.js abilityIdOf so the
+     card-scoped cost clauses below dispatch by ABILITY, not card id (a Rosetta
+     that transcribed a discount card projects it). Identical to sd.cardId for any
+     non-transcribed card, so normal cost behaviour is unchanged. Local mirror
+     avoids a load-order dependency on SOG.abilities. */
+  function abilityIdOf(s) {
+    if (!s) return null;
+    return (s.transcribedFrom != null) ? s.transcribedFrom : s.cardId;
+  }
+
   function effectiveCost(card, locId) {
     if (G.prehistoryMode) return 0;
     var loc  = G.locations.find(function (l) { return l.id === locId; });
@@ -450,12 +460,12 @@
       cost = Math.max(0, cost - 1);
     if (card.type === 'Cultural' &&
         G.locations.some(function (l) {
-          return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 19; });
+          return G.playerSlots[l.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 19; });
         }))
       cost = Math.max(0, cost - 1);
     if (card.type === 'Exploration' &&
         G.locations.some(function (l) {
-          return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 22; });
+          return G.playerSlots[l.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 22; });
         }))
       cost = Math.max(0, cost - 1);
     // Nebuchadnezzar (id 50) — "Builder of Babylon": At Once, his owner's in-hand
@@ -477,7 +487,7 @@
     // Inert until Egypt cards are decked (no id-65 in any current deck).
     if (card.type === 'Scientific' &&
         G.playerSlots[locId] &&
-        G.playerSlots[locId].some(function (s) { return s && s.revealed && s.cardId === 65; }))
+        G.playerSlots[locId].some(function (s) { return s && s.revealed && abilityIdOf(s) === 65; }))
       cost = Math.max(0, cost - 1);
     return cost;
   }

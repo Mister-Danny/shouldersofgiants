@@ -185,8 +185,8 @@
   ═══════════════════════════════════════════════════════════════ */
 
   function isKenteProtected(locId) {
-    return G.playerSlots[locId].some(function (s) { return s && s.revealed && s.cardId === 17; }) ||
-           G.aiSlots[locId].some(    function (s) { return s && s.revealed && s.cardId === 17; });
+    return G.playerSlots[locId].some(function (s) { return s && s.revealed && abilityIdOf(s) === 17; }) ||
+           G.aiSlots[locId].some(    function (s) { return s && s.revealed && abilityIdOf(s) === 17; });
   }
 
   /* Update the persistent orange Kente glow on each location tile.
@@ -293,7 +293,7 @@
       // Juvenal (id 18): -2 IP to all CC≥4 cards here (both sides)
       ['player','opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        if (sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 18; })) {
+        if (sl[loc.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 18; })) {
           ['player','opp'].forEach(function (to) {
             var ts = to === 'player' ? G.playerSlots : G.aiSlots;
             ts[loc.id].forEach(function (s) {
@@ -313,7 +313,7 @@
       ['player','opp'].forEach(function (own) {
         var sl  = own === 'player' ? G.playerSlots : G.aiSlots;
         var rev = sl[loc.id].filter(function (s) { return s && s.revealed; });
-        if (rev.length === 1 && rev[0].cardId === 20) {
+        if (rev.length === 1 && abilityIdOf(rev[0]) === 20) {
           rev[0].contMod = (rev[0].contMod || 0) + 4;
           rev[0].contModSources.push({ source: 'Voltaire', delta: 4 });
           addBonus(rev[0], 4, 'card', 20, nextEventId(), 'A', true);
@@ -322,7 +322,7 @@
 
       // William the Conqueror (id 15): contMod = total destroyed IP for that owner
       G.playerSlots[loc.id].forEach(function (s) {
-        if (s && s.revealed && s.cardId === 15) {
+        if (s && s.revealed && abilityIdOf(s) === 15) {
           s.contMod = (s.contMod || 0) + G.destroyedIPTotal;
           if (G.destroyedIPTotal > 0) {
             s.contModSources.push({ source: 'William the Conqueror', delta: G.destroyedIPTotal });
@@ -334,7 +334,7 @@
         }
       });
       G.aiSlots[loc.id].forEach(function (s) {
-        if (s && s.revealed && s.cardId === 15) {
+        if (s && s.revealed && abilityIdOf(s) === 15) {
           s.contMod = (s.contMod || 0) + G.aiDestroyedIPTotal;
           if (G.aiDestroyedIPTotal > 0) {
             s.contModSources.push({ source: 'William the Conqueror', delta: G.aiDestroyedIPTotal });
@@ -436,7 +436,7 @@
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (tribe, tribeIdx) {
-          if (!tribe || !tribe.revealed || tribe.cardId !== 36) return;
+          if (!tribe || !tribe.revealed || abilityIdOf(tribe) !== 36) return;
           if (typeof tribe.turnPlayed !== 'number') return;
           var nextTurn = tribe.turnPlayed + 1;
           var count = 0;
@@ -458,7 +458,7 @@
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (enkidu, enkiduIdx) {
-          if (!enkidu || !enkidu.revealed || enkidu.cardId !== 44) return;
+          if (!enkidu || !enkidu.revealed || abilityIdOf(enkidu) !== 44) return;
           [enkiduIdx - 1, enkiduIdx + 1].forEach(function (adjIdx) {
             var s = sl[loc.id][adjIdx];
             if (s && s.revealed) {
@@ -473,7 +473,7 @@
       // Canals (id 41): +1 IP to all Labor-type cards here (same owner).
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        if (!sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 41; })) return;
+        if (!sl[loc.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 41; })) return;
         sl[loc.id].forEach(function (s) {
           if (!s || !s.revealed) return;
           var c = CARDS.find(function (x) { return x.id === s.cardId; });
@@ -524,7 +524,7 @@
       // "last" card carries other mods, only its BASE is doubled (documented).
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        if (!sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 57; })) return;
+        if (!sl[loc.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 57; })) return;
         var last = null, lastTime = -Infinity;
         sl[loc.id].forEach(function (s) {
           if (!s || !s.revealed) return;
@@ -553,8 +553,15 @@
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (s) {
-          if (!s || !s.revealed || s.cardId !== 43) return;
-          var bonus = ((G.culturalCount && G.culturalCount[own]) || 0) - 1;  // exclude Gilgamesh himself
+          if (!s || !s.revealed || abilityIdOf(s) !== 43) return;
+          // The -1 excludes the SOURCE card from its own count, but only when the
+          // source is itself a Cultural card tallied in culturalCount. Real Gilgamesh
+          // is Cultural → subtract himself (identical to before). A projector whose
+          // OWN type isn't Cultural (e.g. Rosetta, Scientific) was never counted, so
+          // it subtracts nothing.
+          var _src         = CARDS.find(function (x) { return x.id === s.cardId; });
+          var _selfCounted = (_src && _src.type === 'Cultural') ? 1 : 0;
+          var bonus = ((G.culturalCount && G.culturalCount[own]) || 0) - _selfCounted;
           if (bonus <= 0) return;
           s.contMod = (s.contMod || 0) + bonus;
           s.contModSources.push({ source: 'Gilgamesh', delta: bonus });
@@ -568,7 +575,7 @@
       // win-condition math, and the location popup can visualise it.
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        if (!sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 37; })) return;
+        if (!sl[loc.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 37; })) return;
         var adjIds = getAdjacentLocIds(loc.id);
         adjIds.forEach(function (adjId) {
           if (!G.locationBoosts[adjId]) return;
@@ -597,7 +604,7 @@
       var sl = own === 'player' ? G.playerSlots : G.aiSlots;
       var narmerLoc = null;
       G.locations.forEach(function (loc) {
-        if (sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 51; })) narmerLoc = loc.id;
+        if (sl[loc.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 51; })) narmerLoc = loc.id;
       });
       if (narmerLoc === null) return;
       // Group = Narmer's loc (FIRST — gets the remainder) + its adjacents.
@@ -2522,7 +2529,7 @@
      → returns false (inert) in every current battle. */
   function isSphinxProtected(owner, locId) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    return (slots[locId] || []).some(function (s) { return s && s.revealed && s.cardId === 64; });
+    return (slots[locId] || []).some(function (s) { return s && s.revealed && abilityIdOf(s) === 64; });
   }
 
   /* Hyksos (id 67) — "Foreign Kings": At Once on reveal, TRANSFER to the OPPONENT'S
