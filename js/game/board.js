@@ -377,6 +377,7 @@
     'Cave Art':              { type: 'card',     id: 30, pattern: 'A' },
     'Megalith':              { type: 'card',     id: 31, pattern: 'A' },
     // Egypt (era) — bonus attributions for the wired Egypt abilities.
+    'Ramses II':             { type: 'card',     id: 53, pattern: 'A' },
     'Narmer':                { type: 'card',     id: 51, pattern: 'A' },
     'Pyramid':               { type: 'card',     id: 57, pattern: 'A' },
     'Obelisk':               { type: 'card',     id: 59, pattern: 'A' },

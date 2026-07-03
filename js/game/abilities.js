@@ -156,6 +156,18 @@
     }
   }
 
+  /* Effective ABILITY id for a slot. Normally the card's own id, but Rosetta
+     Stone (58) "Decipher The Past" ADOPTS another card's ability and stores that
+     source id in sd.transcribedFrom — so for ability-DISPATCH purposes (the
+     end-of-turn queue and the continuous type-boost detections) Rosetta counts
+     as the transcribed card. Only Rosetta ever sets transcribedFrom, so this is
+     inert (returns sd.cardId) for every non-Rosetta card and every battle that
+     doesn't deck Rosetta. */
+  function abilityIdOf(sd) {
+    if (!sd) return null;
+    return (sd.transcribedFrom != null) ? sd.transcribedFrom : sd.cardId;
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      ADJACENCY
   ═══════════════════════════════════════════════════════════════ */
@@ -477,9 +489,9 @@
       // owner). Ziggurat does not boost its own IP.
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        if (!sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 45; })) return;
+        if (!sl[loc.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 45; })) return;
         sl[loc.id].forEach(function (s) {
-          if (!s || !s.revealed || s.cardId === 45) return;  // exclude Ziggurat itself
+          if (!s || !s.revealed || abilityIdOf(s) === 45) return;  // exclude the Ziggurat source itself
           var c = CARDS.find(function (x) { return x.id === s.cardId; });
           if (c && c.type === 'Religious') {
             s.contMod = (s.contMod || 0) + 1;
@@ -494,9 +506,9 @@
       // here (same family as Ziggurat; two types, +2). Excludes itself (Cultural).
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        if (!sl[loc.id].some(function (s) { return s && s.revealed && s.cardId === 62; })) return;
+        if (!sl[loc.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 62; })) return;
         sl[loc.id].forEach(function (s) {
-          if (!s || !s.revealed || s.cardId === 62) return;
+          if (!s || !s.revealed || abilityIdOf(s) === 62) return;
           var c = CARDS.find(function (x) { return x.id === s.cardId; });
           if (c && (c.type === 'Religious' || c.type === 'Political')) {
             s.contMod = (s.contMod || 0) + 2;
@@ -664,6 +676,22 @@
     if (canalsNewBoost && typeof SFX !== 'undefined' && typeof SFX.waterflowSound === 'function') {
       SFX.waterflowSound();
     }
+
+    // Ramses II (53) buff cue: glow a revealed Ramses whose owner has an ACTIVE
+    // CULTURAL_2X next-turn effect this turn (the turn the doubling is live), so
+    // the player can see the buff is armed. Derived from the same pass; cleared
+    // automatically once the effect expires. Inert when no Ramses is on the board.
+    G.locations.forEach(function (loc) {
+      ['player', 'opp'].forEach(function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        var live = nextTurnEffectActive(own, 'CULTURAL_2X');
+        sl[loc.id].forEach(function (s, si) {
+          if (!s || s.cardId !== 53) return;
+          var el = getSlotEl(own, loc.id, si);
+          if (el) el.classList.toggle('ramses-buff-active', live && s.revealed);
+        });
+      });
+    });
 
     // Update continuous glow on all revealed slots
     if (typeof Anim !== 'undefined') {
@@ -2602,6 +2630,121 @@
     return granted;
   }
 
+  /* ── Batch B: copy/transcribe cards + the "Next Turn:" timing class ────────── */
+
+  /* Papyrus (54) — "For the Record". At Once: COPY the owner's most-recently-
+     played card and add that copy (same card id) to the owner's hand — the token-
+     grant pattern (like Nubian Gold), respecting the 7-card hand cap. "Last card
+     you played" = the owner's revealed card with the highest playTime BEFORE
+     Papyrus (Papyrus's own playTime is stamped AFTER this At-Once fires, so it is
+     naturally excluded; excluded by id too, defensively). Board-wide, not
+     location-scoped (matches "the last card you played"). Fizzles (no-op) if the
+     owner has no prior play this battle, or the hand is already full. */
+  function abilityPapyrus(owner, locId, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var hand  = owner === 'player' ? G.playerHand  : G.aiHand;
+    var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
+
+    // Find the owner's most-recently-played card across the whole board.
+    var lastId = null, lastTime = -Infinity;
+    G.locations.forEach(function (loc) {
+      (slots[loc.id] || []).forEach(function (s) {
+        if (!s || !s.revealed) return;
+        if (s.cardId === 54) return;                       // exclude Papyrus itself
+        var t = (typeof s.playTime === 'number') ? s.playTime : -1;
+        if (t > lastTime) { lastTime = t; lastId = s.cardId; }
+      });
+    });
+
+    if (lastId == null) { done(); return; }                // no prior play → fizzle
+    if (hand.length >= maxHand) { done(); return; }        // hand full → fizzle (no copy)
+
+    hand.push(lastId);                                     // the copy (same card id)
+    if (typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+    if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
+    if (typeof SFX !== 'undefined' && SFX.coinSound) SFX.coinSound();
+    done();
+  }
+
+  /* Ramses II (53) — "Monuments Man". Declares a NEXT-TURN effect: during the
+     OWNER's next turn only, Cultural cards the owner REVEALS get 2x their base IP.
+     Uses the general next-turn-effects queue (G.nextTurnEffects) — the structural
+     cousin of the bonusCapitalNextTurn accumulator, but data-driven so future
+     "Next Turn:" cards can add their own keys. Consumed at each card's reveal by
+     applyNextTurnRevealEffects; pruned after its active turn in game.js nextTurn. */
+  function abilityRamses(owner, locId, done) {
+    if (!G.nextTurnEffects) G.nextTurnEffects = [];
+    G.nextTurnEffects.push({ owner: owner, key: 'CULTURAL_2X', turnDeclared: G.turn });
+    done();
+  }
+
+  /* True if a next-turn effect with `key` is ACTIVE for `owner` THIS turn (i.e.
+     declared on the owner's previous turn). Active window = exactly the turn after
+     the declaring turn. */
+  function nextTurnEffectActive(owner, key) {
+    if (!G.nextTurnEffects) return false;
+    return G.nextTurnEffects.some(function (e) {
+      return e.owner === owner && e.key === key && e.turnDeclared === G.turn - 1;
+    });
+  }
+
+  /* Called from the reveal pipeline for EACH card as it reveals (after its own
+     At-Once). Applies any active next-turn reveal effects to the just-revealed
+     card. Currently: Ramses' CULTURAL_2X — a Cultural card revealed during the
+     buffed turn gets +baseIP baked in via addIPMod (permanent doubling, survives
+     into scoring; applies only to cards revealed THIS turn, never retroactively).
+     Idempotent per card via sd._ramsesDoubledTurn. Inert when no effect is live. */
+  function applyNextTurnRevealEffects(owner, cardId, sd, locId) {
+    if (!sd || !G.nextTurnEffects || !G.nextTurnEffects.length) return;
+    if (nextTurnEffectActive(owner, 'CULTURAL_2X')) {
+      var c = CARDS.find(function (x) { return x.id === cardId; });
+      if (c && c.type === 'Cultural' && sd._ramsesDoubledTurn !== G.turn) {
+        sd._ramsesDoubledTurn = G.turn;
+        addIPMod(sd, c.ip, 'Ramses II');                   // +base IP → doubles the base
+        refreshSlotIPDisplays();
+        updateScores();
+      }
+    }
+  }
+
+  /* Rosetta Stone (58) — "Decipher The Past". At Once: ADOPT the ability of the
+     FIRST card the owner played at Rosetta's location (earliest playTime among the
+     owner's OTHER cards there, excluding any Rosetta so there is no regress). The
+     source id is stored on sd.transcribedFrom; from then on Rosetta behaves as if
+     she carried that card's ability:
+       • AT-ONCE  → fired NOW (below), with Rosetta as the source card.
+       • CONTINUOUS → picked up by evaluateContinuous (abilityIdOf detections).
+       • END-OF-TURN → picked up by fireEndOfTurn (abilityIdOf lookup).
+     Fizzles (stays a plain 3/3) if she is the owner's first card here. Firing the
+     transcribed At-Once just calls that card's onAtOnce; continuous/end-of-turn
+     cards carry a no-op onAtOnce, so this call harmlessly no-ops for them and the
+     other dispatch paths do the work. */
+  function abilityRosetta(owner, locId, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+
+    var srcId = null, srcTime = Infinity;
+    forEachRevealedAt(slots, locId, function (s) {
+      if (s.cardId === 58) return;                         // exclude Rosetta(s) — no regress
+      var t = (typeof s.playTime === 'number') ? s.playTime : Infinity;
+      if (t < srcTime) { srcTime = t; srcId = s.cardId; }
+    });
+
+    if (srcId == null) { done(); return; }                 // first card here → fizzle (plain 3/3)
+
+    // Stamp the adoption on Rosetta's slot data (persists like a real copy).
+    var rIdx = -1;
+    forEachRevealedAt(slots, locId, function (s, i) { if (rIdx === -1 && s.cardId === 58) rIdx = i; });
+    if (rIdx !== -1) slots[locId][rIdx].transcribedFrom = srcId;
+
+    // Fire the transcribed At-Once now (real at-once fires; continuous/eot no-op).
+    var spec = CARD_ABILITIES[srcId];
+    if (spec && typeof spec.onAtOnce === 'function') {
+      spec.onAtOnce(owner, locId, done);
+    } else {
+      done();
+    }
+  }
+
   var CARD_ABILITIES = {
     2:  { onAtOnce: abilityScholarOfficials },
     3:  { onAtOnce: abilityJustinian        },
@@ -2639,9 +2782,12 @@
        cards have NO entry here (and are never decked). ── */
     51: { onAtOnce: function (o, l, done) { done(); } },  // Narmer — Continuous (IP averaging)
     52: { onAtOnce: abilityHatshepsut      },             // Hatshepsut — give/receive swap at this loc
+    53: { onAtOnce: abilityRamses          },             // Ramses II — Next Turn: 2x IP to next turn's Cultural plays
+    54: { onAtOnce: abilityPapyrus         },             // Papyrus — At Once: copy last-played card to hand
     55: { onAtOnce: abilityFarmer          },             // Farmer (EGY) — +1 capital next turn (reuses Meso Farmer)
     56: { onAtOnce: abilityScribeEgypt     },             // Scribe (EGY) — capital per other card here
     57: { onAtOnce: function (o, l, done) { done(); } },  // Pyramid — Continuous (double last Political)
+    58: { onAtOnce: abilityRosetta         },             // Rosetta Stone — adopt first-here card's ability
     59: { endOfTurn: obeliskEndOfTurn      },             // Obelisk — End of turn: +1 IP (Megalith key)
     60: { onAtOnce: abilityKhufu           },             // Khufu — draw a Scientific card
     62: { onAtOnce: function (o, l, done) { done(); } },  // Hieroglyphics — Continuous (+2 Religious/Political)
@@ -2760,7 +2906,7 @@
       G.locations.forEach(function (loc) {
         (slots[loc.id] || []).forEach(function (sd, si) {
           if (!sd || !sd.revealed) return;
-          var spec = CARD_ABILITIES[sd.cardId];
+          var spec = CARD_ABILITIES[abilityIdOf(sd)];   // Rosetta adopts via transcribedFrom
           if (!spec || typeof spec.endOfTurn !== 'function') return;
           if (sd._eotFiredTurn === G.turn) return;   // already fired this turn
           q.push({ owner: side, locId: loc.id, slotIndex: si, sd: sd, spec: spec });
@@ -2803,6 +2949,7 @@
     applyCapitalWhenFull:      applyCapitalWhenFull,
     applyRiverAtOnce:          applyRiverAtOnce,
     applyNubianGoldOnPlay:     applyNubianGoldOnPlay,
+    applyNextTurnRevealEffects: applyNextTurnRevealEffects,
     /* Shared ability helpers (callable from game.js if needed) */
     isKenteProtected:          isKenteProtected,
     destroyCard:               destroyCard,

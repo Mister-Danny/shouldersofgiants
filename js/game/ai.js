@@ -373,6 +373,55 @@
         var rel = ownIds.filter(function (id) { return typeOf(id) === 'Religious'; }).length;
         return Math.min(rel, 2) * 1.5;
       }
+      case 54: { // Papyrus (Egypt) — copies the LAST card played to hand; worth more
+                 // after the AI has already played something worthwhile. Board-wide
+                 // read (constant across locs → a card-priority nudge). Excludes self.
+        var bestIP = 0;
+        ['opp', 'player'].forEach(function (sideKey) {
+          if (sideKey !== side) return;   // only the AI's own prior plays
+          var slots = sideKey === 'opp' ? G.aiSlots : G.playerSlots;
+          G.locations.forEach(function (l) {
+            (slots[l.id] || []).forEach(function (s) {
+              if (s && s.revealed && s.cardId !== 54) {
+                var cc = CARDS.find(function (x) { return x.id === s.cardId; });
+                if (cc && cc.ip > bestIP) bestIP = cc.ip;
+              }
+            });
+          });
+        });
+        tentative.forEach(function (p) {
+          if (p.cardId === 54) return;
+          var cc = CARDS.find(function (x) { return x.id === p.cardId; });
+          if (cc && cc.ip > bestIP) bestIP = cc.ip;
+        });
+        return Math.min(bestIP, 5) * 0.4;   // nothing good yet → ~0; a 5-IP prior play → +2
+      }
+      case 58: { // Rosetta Stone (Egypt) — adopts the FIRST card the owner played
+                 // HERE; worth more when that card has a strong ability. Location-
+                 // dependent. STRONG = high-impact copy targets.
+        var STRONG = [70, 62, 45, 59, 63, 51, 57, 56, 38, 43, 42, 2];
+        var here = (mine || []).filter(function (s) { return s && s.revealed && s.cardId !== 58; });
+        if (!here.length) return -1;        // nothing to decipher → whiffs
+        var first = here[0];
+        here.forEach(function (s) {
+          var t  = (typeof s.playTime === 'number') ? s.playTime : Infinity;
+          var ft = (typeof first.playTime === 'number') ? first.playTime : Infinity;
+          if (t < ft) first = s;
+        });
+        return STRONG.indexOf(first.cardId) !== -1 ? 2 : 0.5;
+      }
+      case 53: { // Ramses II (Egypt) — Next Turn: 2x IP to next turn's Cultural
+                 // plays; worth more when the AI holds Cultural cards AND a next
+                 // turn remains to spend them. Constant across locs (card nudge).
+        var hand = side === 'opp' ? G.aiHand : G.playerHand;
+        var turnsLeft = (G.config && G.config.structure)
+          ? (G.config.structure.turns - G.turn + 1) : 1;
+        if (turnsLeft < 2) return -1;       // no next turn → wasted
+        var culturalInHand = (hand || []).filter(function (id) {
+          return id !== 53 && typeOf(id) === 'Cultural';
+        }).length;
+        return Math.min(culturalInHand, 3) * 0.8;
+      }
       default:
         return 0;
     }

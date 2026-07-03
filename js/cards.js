@@ -419,17 +419,17 @@ const CARDS = [
     image: "images/cards/egyptcards/hatshepsut.jpg", locked: true
   },
   {
-    id: 53, name: "Ramses II", cc: 5, ip: 4,                    // TODO (Egypt): NOT YET WIRED — monuments/boost
+    id: 53, name: "Ramses II", cc: 5, ip: 4,                    // WIRED (Next Turn: 2x IP to next turn's Cultural plays)
     type: "Political", type2: null, era: "Egypt",
     abilityName: "Monuments Man",
-    ability: "Boosts your monument cards here.\n(Not yet wired.)",
+    ability: "Next Turn:\nDouble the IP of Cultural cards you play.",
     image: "images/cards/egyptcards/ramses.jpg", locked: true
   },
   {
-    id: 54, name: "Papyrus", cc: 2, ip: 2,                      // TODO (Egypt): NOT YET WIRED — copying
+    id: 54, name: "Papyrus", cc: 2, ip: 2,                      // WIRED (At Once: copy last-played card to hand)
     type: "Scientific", type2: null, era: "Egypt",             // (was "Technology" — dropped; Imhotep's Scientific discount now covers it)
     abilityName: "For the Record",
-    ability: "Copies the ability of another card here.\n(Not yet wired.)",
+    ability: "At Once:\nCopy the last card you played and add it to your hand.",
     image: "images/cards/egyptcards/papyrus.jpg", locked: true
   },
   {
@@ -454,10 +454,10 @@ const CARDS = [
     image: "images/cards/egyptcards/pyramid.jpg", locked: true
   },
   {
-    id: 58, name: "Rosetta Stone", cc: 3, ip: 3,               // TODO (Egypt): NOT YET WIRED — copying
+    id: 58, name: "Rosetta Stone", cc: 3, ip: 3,               // WIRED (adopts ability of the first card you played here)
     type: "Scientific", type2: null, era: "Egypt",
     abilityName: "Decipher The Past",
-    ability: "Copies an ability from a card in play.\n(Not yet wired.)",
+    ability: "Adopt the ability of the first card you played at this location.",
     image: "images/cards/egyptcards/rosettastone.jpg", locked: true
   },
   {

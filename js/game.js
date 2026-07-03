@@ -284,6 +284,7 @@
 
     G.bonusCapitalNextTurn   = 0;
     G.aiBonusCapitalNextTurn = 0;
+    G.nextTurnEffects        = [];  // general "Next Turn:" effects queue (Ramses 53); pruned in nextTurn
     G.cardIPBonus            = {};
     G.aiCardIPBonus          = {};
     G.nebCCDiscount          = { player: {}, opp: {} };  // Nebuchadnezzar one-time in-hand -1 CC stamps
@@ -1350,6 +1351,12 @@
               G.culturalCount[item.owner] = (G.culturalCount[item.owner] || 0) + 1;
             }
           }
+          // (c2) "Next Turn:" reveal effects (Ramses 53 — 2x IP to this turn's
+          //      Cultural reveals). Applied per-card at reveal so within-turn order
+          //      doesn't matter; inert when no effect is live.
+          if (SOG.abilities && typeof SOG.abilities.applyNextTurnRevealEffects === 'function') {
+            SOG.abilities.applyNextTurnRevealEffects(item.owner, item.cardId, rSd, rLocId);
+          }
           // (d) Reactive: fire onCardLandedHere for OTHER already-revealed cards
           //     at this location (e.g. Ötzi's flee). Excludes the just-landed
           //     card, so it never fires on a card's own reveal. No card 35 in an
@@ -1396,6 +1403,15 @@
   function nextTurn() {
     G.turn    += 1;
     G.phase    = 'select';
+    /* Prune expired "Next Turn:" effects. An effect declared on turn T is active
+       ONLY on turn T+1; once G.turn passes that window it is dropped. Keeps effects
+       declared last turn (now active) and this-turn declarations; inert when the
+       queue is empty. */
+    if (G.nextTurnEffects && G.nextTurnEffects.length) {
+      G.nextTurnEffects = G.nextTurnEffects.filter(function (e) {
+        return (e.turnDeclared + 1) >= G.turn;
+      });
+    }
     /* Capital reset via config.resource (was hardcoded CAPITAL). 'none' holds
        capital at 0 (future capital-less battles); any other model resets to
        resource.capital + bonus. Arcadium (model 'capital', capital 5) is

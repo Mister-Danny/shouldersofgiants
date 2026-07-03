@@ -3325,6 +3325,16 @@ body.hanging-gardens-battle .battle-col .hg-flood-tint {
   cursor: grabbing;
 }
 
+/* Ramses II (53) buff-live cue — a warm gold pulse on Ramses during the turn his
+   "Next Turn: 2x Cultural" doubling is armed. Toggled by evaluateContinuous. */
+@keyframes ramses-buff-pulse {
+  0%, 100% { box-shadow: 0 0 4px 1px rgba(248,208,0,0.55), inset 0 0 0 1px rgba(248,208,0,0.8); }
+  50%      { box-shadow: 0 0 12px 4px rgba(248,208,0,0.85), inset 0 0 0 2px rgba(248,208,0,0.95); }
+}
+.battle-card-slot.ramses-buff-active {
+  animation: ramses-buff-pulse 1.5s ease-in-out infinite;
+}
+
 /* Trader (68, Egypt) barter affordance — its own cyan pulse, distinct from the
    gold move pulse, so a barterable card reads as a different interaction. */
 @keyframes trader-barterable-pulse {

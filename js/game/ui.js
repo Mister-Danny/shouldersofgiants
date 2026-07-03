@@ -554,7 +554,17 @@
       }
     }
 
-    if (card.ability) {
+    // Rosetta Stone (58) that has DECIPHERED a card shows the ADOPTED ability
+    // (so the player can see what she became), tagged with the source card name.
+    var transcribed = (sd && sd.transcribedFrom != null)
+      ? CARDS.find(function (c) { return c.id === sd.transcribedFrom; })
+      : null;
+    if (transcribed) {
+      battlePopupAbilNmEl.textContent   = 'Deciphered: ' + transcribed.name;
+      battlePopupAbilNmEl.style.display = '';
+      battlePopupAbilTxEl.textContent   = transcribed.ability || 'No special ability.';
+      battlePopupAbilTxEl.className     = 'popup-ability-text';
+    } else if (card.ability) {
       battlePopupAbilNmEl.textContent   = card.abilityName;
       battlePopupAbilNmEl.style.display = '';
       battlePopupAbilTxEl.textContent   = card.ability;
