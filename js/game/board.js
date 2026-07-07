@@ -145,6 +145,21 @@
     }
   }
 
+  /* Card object to RENDER for a slot. Normally the card def, but a created Mummy
+     (id 72 token, Batch C) inherits its source card's CC on its slot data (sd.cc) —
+     tokens share one card def so the inherited stats must live on the sd. Return a
+     shallow clone with the CC overridden so the badge shows the inherited value and
+     survives re-renders. This is the DISPLAY side of CC inheritance; game logic reads
+     the same sd.cc via abilities.effectiveCC(sd) (Juvenal, Hammurabi, AI scoring), and
+     IP flows through effectiveIP(sd) everywhere — so inherited stats are honored in
+     both rendering and rules. */
+  function _faceCard(sd, card) {
+    if (card && sd && sd.cc != null && sd.cc !== card.cc) {
+      return Object.assign({}, card, { cc: sd.cc });
+    }
+    return card;
+  }
+
   /**
    * Place a card face-up at a location (for Samurai return, Joan summon, Wu push).
    * @param {boolean} [opts.skipLocationAbility] skip MOVE_IN_GAINS_IP
@@ -275,7 +290,7 @@
           slotEl.dataset.cardId = sd.cardId;
           slotEl.className      = 'battle-card-slot occupied face-up';
           slotEl.removeAttribute('draggable');
-          buildCardFace(slotEl, card, effectiveIP(sd));
+          buildCardFace(slotEl, _faceCard(sd, card), effectiveIP(sd));
         }
       }
     }
@@ -312,7 +327,7 @@
           slotEl.dataset.cardId = sd.cardId;
           slotEl.className      = 'battle-card-slot occupied face-up';
           slotEl.removeAttribute('draggable');
-          buildCardFace(slotEl, card, effectiveIP(sd));
+          buildCardFace(slotEl, _faceCard(sd, card), effectiveIP(sd));
         }
       }
     }

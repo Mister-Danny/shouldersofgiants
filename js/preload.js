@@ -97,7 +97,11 @@ SOG.preload = (function () {
       var im = _cardImage(ids[i]);
       if (!im) continue;
       urls.push(im);
-      if (/\.jpg$/.test(im)) urls.push(im.replace(/\.jpg$/, '@sm.jpg'));   // hand uses @sm (ui.js)
+      // Hand thumbnail: prefer the card's explicit imageSm (Egypt @0.3x scheme);
+      // legacy cards derive @sm from the full image (matches ui.js buildCardImg).
+      var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === ids[i]; });
+      if (card && card.imageSm) urls.push(card.imageSm);
+      else if (/\.jpg$/.test(im)) urls.push(im.replace(/\.jpg$/, '@sm.jpg'));
     }
     images(urls);
     images(REVEAL_FX_IMAGES);

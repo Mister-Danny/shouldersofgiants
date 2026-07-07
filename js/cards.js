@@ -344,14 +344,14 @@ const CARDS = [
     image: "images/cards/mesopotamiacards/gilgamesh@0.5x.jpg", locked: true
   },
   {
-    id: 44, name: "Enkidu", cc: 4, ip: 4,
+    id: 44, name: "Enkidu", cc: 3, ip: 4,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Wild Ally",
     ability: "Continuous:\nCards next to Enkidu gain +1 IP.",
     image: "images/cards/mesopotamiacards/enkidu@0.5x.jpg", locked: true
   },
   {
-    id: 45, name: "Ziggurat", cc: 3, ip: 3,
+    id: 45, name: "Ziggurat", cc: 3, ip: 4,
     type: "Religious", type2: null, era: "Mesopotamia",
     abilityName: "Sacred Space",
     ability: "Continuous:\nProvides +1 IP to other Religious cards at this location.",
@@ -409,156 +409,179 @@ const CARDS = [
     type: "Political", type2: null, era: "Egypt",
     abilityName: "The Unifier",
     ability: "Continuous:\nShares your total IP equally across this location and those adjacent to it.",
-    image: "images/cards/egyptcards/narmer.jpg", locked: true
+    image:   "images/cards/egyptcards/narmer@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/narmer@0.3x.jpg", locked: true
   },
   {
     id: 52, name: "Hatshepsut", cc: 5, ip: 5,                   // TODO (Egypt): NOT YET WIRED — trade/movement
     type: "Political", type2: null, era: "Egypt",
     abilityName: "Trading Queen",
     ability: "Trade one of your cards with an adjacent location.\n(Not yet wired.)",
-    image: "images/cards/egyptcards/hatshepsut.jpg", locked: true
+    image:   "images/cards/egyptcards/hatshepsut@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/hatshepsut@0.3x.jpg", locked: true
   },
   {
     id: 53, name: "Ramses II", cc: 5, ip: 4,                    // WIRED (Next Turn: 2x IP to next turn's Cultural plays)
     type: "Political", type2: null, era: "Egypt",
     abilityName: "Monuments Man",
     ability: "Next Turn:\nDouble the IP of Cultural cards you play.",
-    image: "images/cards/egyptcards/ramses.jpg", locked: true
+    image:   "images/cards/egyptcards/ramsesii@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/ramsesii@0.3x.jpg", locked: true
   },
   {
     id: 54, name: "Papyrus", cc: 2, ip: 2,                      // WIRED (At Once: copy last-played card to hand)
     type: "Scientific", type2: null, era: "Egypt",             // (was "Technology" — dropped; Imhotep's Scientific discount now covers it)
     abilityName: "For the Record",
     ability: "At Once:\nCopy the last card you played and add it to your hand.",
-    image: "images/cards/egyptcards/papyrus.jpg", locked: true
+    image:   "images/cards/egyptcards/papyrus@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/papyrus@0.3x.jpg", locked: true
   },
   {
     id: 55, name: "Farmer", cc: 1, ip: 1,                       // WIRED (grantCapitalNextTurn) — distinct from Meso Farmer(39)
     type: "Labor", type2: null, era: "Egypt",
     abilityName: "Harvest",
     ability: "At Once:\n+1 Capital next turn.",
-    image: "images/cards/egyptcards/farmer.jpg", locked: true
+    image:   "images/cards/egyptcards/egyptfarmer@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/egyptfarmer@0.3x.jpg", locked: true
   },
   {
     id: 56, name: "Scribe", cc: 2, ip: 2,                       // WIRED (capital per prior card here) — distinct from Meso Scribe(40)
-    type: "Labor", type2: null, era: "Egypt",
+    type: "Economic", type2: null, era: "Egypt",               // Accounting is economic-administrative, not manual Labor (Batch C retype)
     abilityName: "Accounting",
     ability: "At Once:\nFor every other card you have here, gain +1 Capital next turn.",
-    image: "images/cards/egyptcards/scribe.jpg", locked: true
+    image:   "images/cards/egyptcards/egyptscribe@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/egyptscribe@0.3x.jpg", locked: true
   },
   {
     id: 57, name: "Pyramid", cc: 3, ip: 0,                      // WIRED (continuous double-last-Political)
     type: "Scientific", type2: null, era: "Egypt",
     abilityName: "Monumental Legacy",
     ability: "Continuous:\nDoubles the IP of the last Political card you played here.",
-    image: "images/cards/egyptcards/pyramid.jpg", locked: true
+    image:   "images/cards/egyptcards/pyramid@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/pyramid@0.3x.jpg", locked: true
   },
   {
     id: 58, name: "Rosetta Stone", cc: 3, ip: 3,               // WIRED (adopts ability of the first card you played here)
     type: "Scientific", type2: null, era: "Egypt",
     abilityName: "Decipher The Past",
     ability: "Adopt the ability of the first card you played at this location.",
-    image: "images/cards/egyptcards/rosettastone.jpg", locked: true
+    image:   "images/cards/egyptcards/rosettastone@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/rosettastone@0.3x.jpg", locked: true
   },
   {
     id: 59, name: "Obelisk", cc: 3, ip: 1,                      // WIRED (End of turn: +1 IP — Megalith key)
     type: "Cultural", type2: null, era: "Egypt",
     abilityName: "Monolith",
     ability: "End of turn:\nGain +1 IP.",
-    image: "images/cards/egyptcards/obelisk.jpg", locked: true
+    image:   "images/cards/egyptcards/obelisk@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/obelisk@0.3x.jpg", locked: true
   },
   {
     id: 60, name: "Khufu", cc: 4, ip: 4,                        // WIRED (draw a Scientific card)
     type: "Political", type2: null, era: "Egypt",
     abilityName: "Great Pyramid",
     ability: "At Once:\nDraw a Scientific card.",
-    image: "images/cards/egyptcards/khufu.jpg", locked: true
+    image:   "images/cards/egyptcards/khufu@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/khufu@0.3x.jpg", locked: true
   },
   {
-    id: 61, name: "King Tutankhamen", cc: 3, ip: 3,            // TODO (Egypt): NOT YET WIRED — resurrection
-    type: "Political", type2: null, era: "Egypt",
+    id: 61, name: "King Tutankhamen", cc: 3, ip: 3,            // WIRED (Batch C: 2x IP realized at Mummy-creation when Tut is the revived source)
+    type: "Cultural", type2: null, era: "Egypt",
     abilityName: "Sacred Tomb",
-    ability: "If resurrected, gains double IP.\n(Not yet wired.)",
-    image: "images/cards/egyptcards/tutankhamen.jpg", locked: true
+    ability: "If resurrected, the Mummy gains double IP.",
+    image:   "images/cards/egyptcards/kingtut@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/kingtut@0.3x.jpg", locked: true
   },
   {
     id: 62, name: "Hieroglyphics", cc: 2, ip: 0,               // WIRED (continuous type-boost)
     type: "Cultural", type2: null, era: "Egypt",
     abilityName: "Sacred Symbols",
     ability: "Continuous:\n+2 IP to your Religious and Political cards here.",
-    image: "images/cards/egyptcards/hieroglyphics.jpg", locked: true
+    image:   "images/cards/egyptcards/hieroglyphs@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/hieroglyphs@0.3x.jpg", locked: true
   },
   {
     id: 63, name: "Ra", cc: 4, ip: 2,                           // WIRED (discard lowest → addIPMod)
     type: "Religious", type2: null, era: "Egypt",
     abilityName: "Sun God",
     ability: "At Once:\nDiscard your lowest-CC card in hand; Ra permanently gains its IP.",
-    image: "images/cards/egyptcards/ra.jpg", locked: true
+    image:   "images/cards/egyptcards/ra@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/ra@0.3x.jpg", locked: true
   },
   {
     id: 64, name: "Sphinx", cc: 3, ip: 2,                       // WIRED (Kente-style protection)
     type: "Cultural", type2: null, era: "Egypt",
     abilityName: "Monumental Guardian",
     ability: "Continuous:\nYour cards here cannot have their IP reduced.",
-    image: "images/cards/egyptcards/sphinx.jpg", locked: true
+    image:   "images/cards/egyptcards/sphinx@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/sphinx@0.3x.jpg", locked: true
   },
   {
     id: 65, name: "Imhotep", cc: 3, ip: 3,                      // WIRED (effectiveCost -1 Scientific here)
     type: "Scientific", type2: null, era: "Egypt",
     abilityName: "Ancient Engineering",
     ability: "Continuous:\nReduces the cost to play Scientific cards at this location by -1 CC.",
-    image: "images/cards/egyptcards/imhotep.jpg", locked: true
+    image:   "images/cards/egyptcards/imhotep@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/imhotep@0.3x.jpg", locked: true
   },
   {
-    id: 66, name: "Book of the Dead", cc: 3, ip: 3,            // TODO (Egypt): NOT YET WIRED — resurrection
+    id: 66, name: "Book of the Dead", cc: 3, ip: 3,            // WIRED (Batch C: discard + weigh → resurrect if IP==CC)
     type: "Religious", type2: null, era: "Egypt",
     abilityName: "Weighing of the Heart",
-    ability: "Resurrects a fallen card.\n(Not yet wired.)",
-    image: "images/cards/egyptcards/bookofthedead.jpg", locked: true
+    ability: "At Once:\nDiscard a card from your hand. If its IP equals its CC, resurrect it now as a Mummy at a random location.",
+    image:   "images/cards/egyptcards/bookofthedead@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/bookofthedead@0.3x.jpg", locked: true
   },
   {
     id: 67, name: "Hyksos", cc: 3, ip: -2,                      // TODO (Egypt): NOT YET WIRED
     type: "Political", type2: null, era: "Egypt",
     abilityName: "Foreign Kings",
     ability: "Foreign rulers seize the land.\n(Not yet wired.)",
-    image: "images/cards/egyptcards/hyksos.jpg", locked: true
+    image:   "images/cards/egyptcards/hyksos@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/hyksos@0.3x.jpg", locked: true
   },
   {
     id: 68, name: "Trader", cc: 1, ip: 1,                       // TODO (Egypt): NOT YET WIRED — trade; NEW "Economic" type
     type: "Economic", type2: null, era: "Egypt",
     abilityName: "Barter",
     ability: "Trade goods for advantage.\n(Not yet wired.)",
-    image: "images/cards/egyptcards/trader.jpg", locked: true
+    image:   "images/cards/egyptcards/trader@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/trader@0.3x.jpg", locked: true
   },
   {
     id: 69, name: "Chariots", cc: 2, ip: 2,                     // TODO (Egypt): NOT YET WIRED — movement
     type: "Military", type2: null, era: "Egypt",
     abilityName: "Chariot of Ra",
     ability: "Move to an adjacent location.\n(Not yet wired.)",
-    image: "images/cards/egyptcards/chariots.jpg", locked: true
+    image:   "images/cards/egyptcards/egyptchariot@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/egyptchariot@0.3x.jpg", locked: true
   },
   {
     id: 70, name: "Soldier", cc: 1, ip: 1,                      // WIRED (strike -1 IP) — distinct from Meso Soldier(42)
     type: "Military", type2: null, era: "Egypt",
     abilityName: "Military Service",
     ability: "At Once:\nStrike an opponent's card here and reduce it by -1 IP.",
-    image: "images/cards/egyptcards/soldier.jpg", locked: true
+    image:   "images/cards/egyptcards/egyptsoldier@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/egyptsoldier@0.3x.jpg", locked: true
   },
   {
-    id: 71, name: "Priest", cc: 1, ip: 1,                       // TODO (Egypt): NOT YET WIRED — resurrection; distinct from Meso Priest(38)
+    id: 71, name: "Priest", cc: 1, ip: 1,                       // WIRED (Batch C: revive a discarded card as a Mummy) — distinct from Meso Priest(38)
     type: "Religious", type2: null, era: "Egypt",
     abilityName: "Embalming",
-    ability: "Prepares a fallen card for resurrection.\n(Not yet wired.)",
-    image: "images/cards/egyptcards/priest.jpg", locked: true
+    ability: "At Once:\nRevive one of your discarded cards as a Mummy here.",
+    image:   "images/cards/egyptcards/egyptpriest@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/egyptpriest@0.3x.jpg", locked: true
   },
   {
     // TOKEN — NOT DECKABLE. Created by the (unbuilt) resurrection system; it
     // inherits the revived card's stats at creation, so cc/ip here are just
     // placeholders. No ability, never in a deck, never drawn.
-    id: 72, name: "Mummy", cc: 0, ip: 0,                        // TOKEN (placeholder stats)
-    type: null, type2: null, era: "Egypt",
+    id: 72, name: "Mummy", cc: 0, ip: 0,                        // TOKEN — cc/ip are placeholders; a created Mummy inherits its source card's IP/CC on its slot data (sd.ip / sd.cc)
+    type: "Cultural", type2: null, era: "Egypt",
     abilityName: null, ability: null,
-    image: "images/cards/egyptcards/mummy.jpg", locked: true, token: true
+    flavor: "Arrghh…",
+    image:   "images/cards/egyptcards/mummy@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/mummy@0.3x.jpg", locked: true, token: true
   },
   {
     // TOKEN — NOT DECKABLE. Granted to a side's hand by the NUBIAN_GOLD_ON_PLAY
@@ -569,7 +592,8 @@ const CARDS = [
     type: "Economic", type2: null, era: "Egypt",
     abilityName: "Tribute",
     ability: "Next Turn:\nReceive +1 Capital.",
-    image: "images/cards/egyptcards/nubiangold.jpg", locked: true, token: true
+    image:   "images/cards/egyptcards/nubiangold@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/nubiangold@0.3x.jpg", locked: true, token: true
   }
 
 ];

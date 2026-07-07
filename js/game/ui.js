@@ -569,6 +569,11 @@
       battlePopupAbilNmEl.style.display = '';
       battlePopupAbilTxEl.textContent   = card.ability;
       battlePopupAbilTxEl.className     = 'popup-ability-text';
+    } else if (card.flavor) {
+      // Ability-less token with flavor text (e.g. the Mummy's "Arrghh…").
+      battlePopupAbilNmEl.style.display = 'none';
+      battlePopupAbilTxEl.textContent   = card.flavor;
+      battlePopupAbilTxEl.className     = 'popup-ability-text vanilla';
     } else {
       battlePopupAbilNmEl.style.display = 'none';
       battlePopupAbilTxEl.textContent   = 'No special ability.';

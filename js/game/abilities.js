@@ -168,6 +168,18 @@
     return (sd.transcribedFrom != null) ? sd.transcribedFrom : sd.cardId;
   }
 
+  /* Effective CC for a BOARD slot. Normally the card def's CC, but a created Mummy
+     (Batch C) inherits its source card's CC onto sd.cc — so ALL game-logic CC reads
+     on board cards (Juvenal's CC≥4 penalty, Hammurabi's lowest-CC destroy, AI CC
+     scoring, the CC badge) must honor it. Only the Mummy ever sets sd.cc, so this is
+     identical to the card def's CC for every other card. Exported for game.js/ai.js. */
+  function effectiveCC(sd) {
+    if (!sd) return 0;
+    if (sd.cc != null) return sd.cc;
+    var c = CARDS.find(function (x) { return x.id === sd.cardId; });
+    return c ? c.cc : 0;
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      ADJACENCY
   ═══════════════════════════════════════════════════════════════ */
@@ -298,8 +310,7 @@
             var ts = to === 'player' ? G.playerSlots : G.aiSlots;
             ts[loc.id].forEach(function (s) {
               if (!s || !s.revealed) return;
-              var c = CARDS.find(function (x) { return x.id === s.cardId; });
-              if (c && c.cc >= 4) {
+              if (effectiveCC(s) >= 4) {   // honors a Mummy's inherited CC (sd.cc)
                 s.contMod = (s.contMod || 0) - 2;
                 s.contModSources.push({ source: 'Juvenal', delta: -2 });
                 addBonus(s, -2, 'card', 18, nextEventId(), 'A', true);
@@ -723,6 +734,20 @@
      Joan of Arc) and accumulate William's destruction counter.
   ═══════════════════════════════════════════════════════════════ */
 
+  /* Batch C — DESTROYED-CARD pile (infrastructure; NO consumer yet). Every card
+     destroyed on the board records an identifying entry in the DESTROYED owner's
+     pile — STRICTLY SEPARATE from the discard pile (Ra/Book discards). Destroyed
+     cards never enter the discard pile, and Priest/Book never read this pile. Stores
+     effective stats at destruction so a destroyed token (Mummy) keeps its inherited
+     IP/CC. Cleared per battle (game.js). Distinct from G.destroyedCards (William's
+     IP accumulator), which this does not touch. */
+  function pushDestroyed(owner, sd, dIP) {
+    if (!sd) return;
+    var entry = { cardId: sd.cardId, ip: dIP, cc: effectiveCC(sd) };
+    if (owner === 'player') { (G.playerDestroyed = G.playerDestroyed || []).push(entry); }
+    else                    { (G.aiDestroyed     = G.aiDestroyed     || []).push(entry); }
+  }
+
   function destroyCard(owner, locId, slotIndex, opts) {
     opts = opts || {};
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
@@ -733,6 +758,7 @@
     var dIP    = effectiveIP(sd);
     var cardId = sd.cardId;
     var dEid   = nextEventId();
+    pushDestroyed(owner, sd, dIP);   // Batch C destroyed pile (separate from discards; runs on every real destroy)
     if (owner === 'player') {
       G.destroyedIPTotal += dIP;
       G.destroyedCards.push({ cardId: cardId, ip: dIP, eventId: dEid });
@@ -1641,8 +1667,8 @@
       var lowestCC = Infinity, lowestIdx = -1;
       forEachRevealedAt(slots, locId, function (s, si) {
         if (skipCardId !== undefined && s.cardId === skipCardId) return;
-        var c = CARDS.find(function (x) { return x.id === s.cardId; });
-        if (c && c.cc < lowestCC) { lowestCC = c.cc; lowestIdx = si; }
+        var cc = effectiveCC(s);   // honors a Mummy's inherited CC (sd.cc)
+        if (cc < lowestCC) { lowestCC = cc; lowestIdx = si; }
       });
       return lowestIdx;
     }
@@ -2483,6 +2509,7 @@
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var raSd  = null;
     (slots[locId] || []).forEach(function (s) { if (s && s.cardId === 63) raSd = s; });
+    pushDiscard(owner, lowestId);   // Ra's discard feeds the resurrection pile (Batch C)
     discardFromHand(owner, lowestId, function () {
       if (raSd && gain !== 0) {
         addIPMod(raSd, gain, 'Ra');
@@ -2752,6 +2779,140 @@
     }
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     BATCH C — RESURRECTION (discard pile + Mummy creation)
+     ───────────────────────────────────────────────────────────────
+     Two systems: a per-side DISCARD PILE (G.playerDiscard / G.aiDiscard —
+     plain arrays of source card ids) fed ONLY by Ra (63) and Book of the
+     Dead (66); and MUMMY creation (id 72 token) which inherits a revived
+     card's IP/CC. Priest (71) revives from the pile; Book weighs & may
+     revive immediately. Board-DESTROYED cards never enter the pile
+     (destroyCard is untouched). Piles reset at battle start (game.js).
+  ═══════════════════════════════════════════════════════════════ */
+
+  /* Append a discarded card's id to the owner's discard pile. */
+  function pushDiscard(owner, cardId) {
+    if (cardId == null) return;
+    if (owner === 'player') { (G.playerDiscard = G.playerDiscard || []).push(cardId); }
+    else                    { (G.aiDiscard     = G.aiDiscard     || []).push(cardId); }
+  }
+
+  /* Remove ONE occurrence of cardId from the owner's discard pile (consume on revive). */
+  function popDiscard(owner, cardId) {
+    var pile = owner === 'player' ? G.playerDiscard : G.aiDiscard;
+    if (!pile) return;
+    var i = pile.indexOf(cardId);
+    if (i !== -1) pile.splice(i, 1);
+  }
+
+  /* IP a Mummy inherits when reviving `sourceId`. Keyed per-source-card rule set
+     (Tut-only for now, structured for future additions): King Tutankhamen (61)
+     "Sacred Tomb" → the revived Mummy gets DOUBLE IP. Realized here at creation
+     because the Mummy carries the stats, not Tut's ability. */
+  function resurrectionIP(sourceId) {
+    var c  = CARDS.find(function (x) { return x.id === sourceId; });
+    var ip = c ? c.ip : 0;
+    if (sourceId === 61) ip *= 2;   // Tutankhamen — Sacred Tomb: 2x IP on resurrection
+    return ip;
+  }
+
+  /* Create a revealed Mummy (id 72 token) at locId for owner, inheriting sourceId's
+     stats. Returns false (FIZZLE) if the location has no open slot. Stats live on the
+     slot data — sd.ip drives scoring everywhere (effectiveIP), and sd.cc is honored
+     by ALL CC reads via effectiveCC(sd) (Juvenal's CC≥4, Hammurabi's lowest-CC, AI
+     CC scoring) plus the CC badge (board._faceCard). NO playTime stamp: a Mummy is
+     created, not played, so reveal-order abilities (Papyrus/Pyramid/Rosetta) ignore
+     it. wasResurrected is a general flag for any "if resurrected" card. */
+  function createMummy(owner, locId, sourceId) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var si    = (slots[locId] || []).indexOf(null);
+    if (si === -1) return false;                        // no room → fizzle
+    var src = CARDS.find(function (x) { return x.id === sourceId; });
+    var sd  = {
+      cardId: 72, ip: resurrectionIP(sourceId), cc: (src ? src.cc : 0),
+      revealed: true, ipMod: 0, contMod: 0, ipModSources: [], contModSources: [],
+      bonuses: [], turnPlayed: G.turn, wasResurrected: true, resurrectedFrom: sourceId
+    };
+    slots[locId][si] = sd;
+    if (owner === 'player') syncPlayerSlots(locId); else syncOppSlots(locId);
+    if (typeof SFX !== 'undefined' && SFX.atOnce) SFX.atOnce();   // light cue (caller adds its own too)
+    evaluateContinuous();
+    refreshSlotIPDisplays();
+    updateScores();
+    return true;
+  }
+
+  /* Priest — Egypt (id 71) "Embalming": At Once, revive one of the OWNER'S own
+     discarded cards as a Mummy at Priest's location. Player picks via the shared
+     chooser; AI revives its highest-IP discard. FIZZLES (no-op) if the discard pile
+     is empty OR Priest's location is full. The revived entry is consumed. */
+  function abilityPriestEgypt(owner, locId, done) {
+    var pile  = owner === 'player' ? G.playerDiscard : G.aiDiscard;
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    if (!pile || !pile.length || (slots[locId] || []).indexOf(null) === -1) { done(); return; }  // fizzle
+    function revive(cardId) {
+      if (createMummy(owner, locId, cardId)) popDiscard(owner, cardId);
+      done();
+    }
+    if (owner === 'player') {
+      showDiscardChooser('Revive a discarded card', pile.slice(), function (chosenId) { revive(chosenId); });
+    } else {
+      var best = pile[0];
+      pile.forEach(function (id) {
+        // Rank by the MUMMY the revive would produce (resurrectionIP honors
+        // Tut's doubling), not the card's base IP.
+        if (resurrectionIP(id) > resurrectionIP(best)) best = id;
+      });
+      revive(best);
+    }
+  }
+
+  /* Book of the Dead (id 66) "Weighing of the Heart": At Once, the owner discards a
+     hand card (player picks; AI sheds a low card, preferring an IP==CC one for a free
+     revive). The card enters the discard pile. THEN the weighing: if IP == CC it
+     resurrects immediately as a Mummy at a RANDOM location that has room (consumed
+     from the pile); if all locations are full the resurrection fizzles but the card
+     STAYS discarded (Priest-revivable later); if IP != CC it simply stays discarded. */
+  function abilityBookOfDead(owner, locId, done) {
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    if (!hand.length) { done(); return; }              // nothing to discard → no-op
+    function afterDiscard(discardedId) {
+      pushDiscard(owner, discardedId);
+      var c = CARDS.find(function (x) { return x.id === discardedId; });
+      if (c && c.ip === c.cc) {                         // weighing balances → resurrect now
+        var roomLocs = G.locations.filter(function (l) {
+          if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(l.id)) return false;  // no reviving into a flooded river
+          return ((owner === 'player' ? G.playerSlots : G.aiSlots)[l.id] || []).indexOf(null) !== -1;
+        }).map(function (l) { return l.id; });
+        if (roomLocs.length) {
+          var target = roomLocs[Math.floor(Math.random() * roomLocs.length)];
+          if (createMummy(owner, target, discardedId)) popDiscard(owner, discardedId);
+        }
+        // all full → resurrection fizzles; card remains in the discard pile
+      }
+      done();
+    }
+    if (owner === 'player') {
+      showDiscardChooser('Discard a card — Weighing of the Heart', hand.slice(), function (chosenId) {
+        discardFromHand(owner, chosenId, function () { afterDiscard(chosenId); }, { animate: true });
+      });
+    } else {
+      // AI: prefer an IP==CC card (free resurrection), highest-IP among those (best
+      // Mummy — e.g. Tut → 6-IP); otherwise shed the lowest-IP card.
+      var eq = hand.filter(function (id) { var c = CARDS.find(function (x) { return x.id === id; }); return c && c.ip === c.cc; });
+      var pick;
+      if (eq.length) {
+        pick = eq[0];
+        // Rank IP==CC candidates by the Mummy they'd produce (Tut 3/3 → 6-IP).
+        eq.forEach(function (id) { if (resurrectionIP(id) > resurrectionIP(pick)) pick = id; });
+      } else {
+        pick = hand[0];
+        hand.forEach(function (id) { var c = CARDS.find(function (x) { return x.id === id; }); var p = CARDS.find(function (x) { return x.id === pick; }); if (c && p && c.ip < p.ip) pick = id; });
+      }
+      discardFromHand(owner, pick, function () { afterDiscard(pick); }, { animate: true });
+    }
+  }
+
   var CARD_ABILITIES = {
     2:  { onAtOnce: abilityScholarOfficials },
     3:  { onAtOnce: abilityJustinian        },
@@ -2801,9 +2962,11 @@
     63: { onAtOnce: abilityRa              },             // Ra — discard lowest → permanent +IP
     64: { onAtOnce: function (o, l, done) { done(); } },  // Sphinx — Continuous protection (enforced in _soldierStrike)
     65: { onAtOnce: function (o, l, done) { done(); } },  // Imhotep — Continuous (effectiveCost -1 Scientific)
+    66: { onAtOnce: abilityBookOfDead      },             // Book of the Dead — discard + weigh (IP==CC → revive now)
     67: { onAtOnce: abilityHyksos          },             // Hyksos — transfer to opponent's side (stuck if full)
     69: { onAtOnce: function (o, l, done) { done(); } },  // Chariots — movement card; arrival -2 strike in executeMoveAnimated
     70: { onAtOnce: abilitySoldierEgypt    },             // Soldier (EGY) — strike -1 IP
+    71: { onAtOnce: abilityPriestEgypt     },             // Priest (EGY) — revive a discarded card as a Mummy here
     73: { onAtOnce: abilityFarmer          }              // Nubian Gold (token) — +1 capital next turn (Farmer machinery)
   };
 
@@ -2957,6 +3120,9 @@
     applyRiverAtOnce:          applyRiverAtOnce,
     applyNubianGoldOnPlay:     applyNubianGoldOnPlay,
     applyNextTurnRevealEffects: applyNextTurnRevealEffects,
+    createMummy:               createMummy,       // Batch C — resurrection
+    pushDiscard:               pushDiscard,
+    effectiveCC:               effectiveCC,       // CC honoring a Mummy's inherited sd.cc
     /* Shared ability helpers (callable from game.js if needed) */
     isKenteProtected:          isKenteProtected,
     destroyCard:               destroyCard,

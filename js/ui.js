@@ -380,9 +380,13 @@
     img.alt = card.name;
     var useSm = opts && opts.size === 'sm';
     if (useSm) {
-      img.src = card.image.replace(/\.jpg$/, '@sm.jpg');
+      // Small/thumbnail source: prefer an EXPLICIT card.imageSm (Egypt art uses the
+      // @0.3x small / @0.5x large export pair, which doesn't fit the @sm suffix
+      // convention); otherwise derive the legacy @sm thumbnail (prehistory cards ship
+      // real @sm files). Either way, onerror falls back to the full-size card.image.
+      img.src = card.imageSm || card.image.replace(/\.jpg$/, '@sm.jpg');
       img.onerror = function () {
-        // @sm variant missing → fall back to full-size; hide if that's missing too.
+        // small variant missing → fall back to full-size; hide if that's missing too.
         this.onerror = function () { this.style.display = 'none'; };
         this.src = card.image;
       };
