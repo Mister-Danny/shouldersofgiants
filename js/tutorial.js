@@ -471,7 +471,7 @@
           x: 0, opacity: 1, duration: 0.75, ease: 'power3.out',
           onComplete: function () {
             animating = false;
-            showOtziLine('Not so fast grandma.');
+            showOtziLine('Not so fast, grandma.');
           }
         });
 

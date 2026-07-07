@@ -35,7 +35,7 @@ SOG.OptionsPanel = (function () {
      null shows the reserved placeholder box. Slide count drives the dots. */
   var HOWTO_SLIDES = [
     { heading: 'Welcome, Explorer!',  image: null,
-      body: "You're an explorer traveling through history! Battle famous figures from the past by playing cards, and learn how civilization was built along the way." },
+      body: "You're an explorer lost in history, looking for the way home! Battle famous figures from the past by playing cards, and learn how civilization was built along the way." },
     { heading: 'The Battle Board',    image: null,
       body: "Each battle has three locations. Play cards into them — every card adds its Influence Points (IP) to the location it's in. The numbers on the location show each side's total." },
     { heading: 'Winning a Location',  image: null,

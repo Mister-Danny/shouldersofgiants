@@ -73,20 +73,18 @@ SOG.SargonBattle = (function () {
   var KEY_OPENING_SEEN = 'sog_sargon_opening_seen';
   var OPENING_DIALOGUE = [
     { who: 'sargon',   text: 'Before we begin, observe how an empire truly operates.' },
-    { who: 'explorer', text: 'Wait.' },
-    { who: 'explorer', text: 'My cards look different.' },
+    { who: 'explorer', text: 'My cards look different!' },
     { who: 'sargon',   text: 'Exactly.' },
     { who: 'sargon',   text: 'Every card now comes with a price.' },
     { who: 'sargon',   text: 'This is the Capital cost.' },
     { who: 'explorer', text: "So I can't just play whatever I want?" },
     { who: 'sargon',   text: 'Welcome to Empire.' },
-    { who: 'sargon',   text: 'Everything has a cost.' },
     { who: 'sargon',   text: 'You have five Capital each turn.' },
     { who: 'explorer', text: 'And what if I run out?' },
     { who: 'sargon',   text: "Then you wait 'til next turn." },
     { who: 'sargon',   text: 'If there is a next turn.' },
     { who: 'explorer', text: 'Five to spend, every turn.' },
-    { who: 'explorer', text: 'Got it.' },
+    { who: 'explorer', text: 'Got it!' },
     { who: 'sargon',   text: "We'll see about that." }
   ];
 
@@ -108,10 +106,10 @@ SOG.SargonBattle = (function () {
   var WIN_DIALOGUE = [
     { who: 'sargon',   text: "You've bested me." },
     { who: 'sargon',   text: 'But how?' },
-    { who: 'explorer', text: "I've learned from the past…" },
+    { who: 'explorer', text: "I've learned from the past..." },
     { who: 'explorer', text: 'And the future.' },
     { who: 'sargon',   text: "I don't understand." },
-    { who: 'explorer', text: "I've heard its best not to overthink it." },
+    { who: 'explorer', text: 'A very wise old friend told me you can see further if you stand on two feet.' },
     { who: 'sargon',   text: 'You are wise.' },
     { who: 'sargon',   text: 'And so am I.' },
     { who: 'sargon',   text: 'Take this as a symbol of our budding alliance.' }
@@ -587,14 +585,14 @@ SOG.SargonBattle = (function () {
       return b;
     }
     if (opts.firstWin) {
-      // Shown AFTER the first-win victory sequence (dialogue + card + gold + closer),
-      // so these buttons exit to the map / review the board — no Continue needed.
-      actions.appendChild(mkBtn('BACK TO MAP', function () { _exitToOverworldAfterFirstWin(); }));
+      // Shown AFTER the first-win victory sequence (dialogue + card + gold + closer).
+      // CONTINUE exits to the map (win scoreboards say CONTINUE, not BACK TO MAP).
+      actions.appendChild(mkBtn('CONTINUE', function () { _exitToOverworldAfterFirstWin(); }));
       actions.appendChild(mkBtn('GAME BOARD',  function () { _hideResultForReview(); }));
     } else {
       actions.appendChild(mkBtn('PLAY AGAIN',  function () { _restartBattle(); }));
       actions.appendChild(mkBtn('GAMEBOARD',   function () { _hideResultForReview(); }));
-      actions.appendChild(mkBtn('BACK TO MAP', function () {
+      actions.appendChild(mkBtn(won ? 'CONTINUE' : 'BACK TO MAP', function () {
         if (opts.lossBeforeWin) { _returnToMapWithReflection(); }
         else { _exitToOverworld(); }
       }));
@@ -790,6 +788,24 @@ SOG.SargonBattle = (function () {
       if (!openLocs.length) break;
 
       // strongest first — IP + early-turn bias (Megalith), then CC tiebreak
+      // Scribe (40) is a late-bloomer: hold him before the final turn unless he is
+      // the ONLY way to keep spending capital AND an open location already has 2+
+      // AI cards for his +1 stamps.
+      if (turnsLeft > 1) {
+        var _nonScribe = aff.filter(function (c) { return c.id !== 40; });
+        if (_nonScribe.length !== aff.length) {
+          if (_nonScribe.length) {
+            aff = _nonScribe;
+          } else {
+            var _scribeOk = openLocs.some(function (loc) {
+              var _arr = G.aiSlots[loc.id] || [], _n = 0;
+              for (var _q = 0; _q < _arr.length; _q++) if (_arr[_q]) _n++;
+              return (_n + (simFilled[loc.id] || 0)) >= 2 && slotsLeft(loc.id) > 0;
+            });
+            if (!_scribeOk) break;   // hold Scribe — leftover capital is by design
+          }
+        }
+      }
       aff.sort(function (a, b) { return ((b.ip + turnBias(b.id)) - (a.ip + turnBias(a.id))) || (b.cc - a.cc); });
 
       // Sargon (37) — ALWAYS into the MIDDLE location (his +3 boosts BOTH flanks

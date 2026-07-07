@@ -311,24 +311,24 @@ SOG.HangingGardensBattle = (function () {
   /* FIRST-WIN victory sequence: VICTORY flourish → Neb's win dialogue → on the final
      line ("Take this…") fire the card 50 + 25 gold grant → then the scoreboard.
      First-win only (a repeat win never reaches here — see _onWin's owned guard). */
-  function _runFirstWinSequence() {
-    // Runs from the first-win scoreboard's CONTINUE (mirrors Hammurabi): dismiss
-    // the board → Neb's win dialogue → grant card 50 + 25 gold on the "Take this…"
-    // line → exit to the overworld.
+  function _runFirstWinSequence(locResults) {
+    // First win plays the STORY FIRST (mirrors Sargon): Neb's win dialogue → grant
+    // card 50 + 25 gold on the "Take this…" line → THEN the VICTORY scoreboard
+    // (whose CONTINUE exits to the overworld).
     _removeResultPopup();
     runLines(WIN_DIALOGUE, function () {
       // "Take this…" is WIN_DIALOGUE's last line, so the grant fires on that beat.
       _grantNebCard(function () {
         _grantGold(GOLD_FIRST_WIN, function () {
-          _exitToOverworld();
+          _showResultScoreboard(true, false, locResults, { firstWin: true });
         });
       });
     });
   }
 
   /* Build + show the end-game scoreboard.
-       opts.firstWin — CONTINUE (→ card + gold) + GAME BOARD.
-       otherwise     — PLAY AGAIN + GAMEBOARD + BACK TO MAP. */
+       opts.firstWin — shown AFTER the win dialogue + card + gold: CONTINUE (→ map) + GAME BOARD.
+       otherwise     — PLAY AGAIN + GAMEBOARD + BACK TO MAP (CONTINUE on wins). */
   function _showResultScoreboard(won, isTie, locResults, opts) {
     opts = opts || {};
     _removeResultPopup();
@@ -357,12 +357,14 @@ SOG.HangingGardensBattle = (function () {
       return b;
     }
     if (opts.firstWin) {
-      actions.appendChild(mkBtn('CONTINUE',   function () { _runFirstWinSequence(); }));
+      // Shown AFTER the first-win victory sequence (dialogue + card + gold), so
+      // CONTINUE simply exits to the map.
+      actions.appendChild(mkBtn('CONTINUE',   function () { _exitToOverworld(); }));
       actions.appendChild(mkBtn('GAME BOARD', function () { _hideResultForReview(); }));
     } else {
       actions.appendChild(mkBtn('PLAY AGAIN',  function () { _restartBattle(); }));
       actions.appendChild(mkBtn('GAMEBOARD',   function () { _hideResultForReview(); }));
-      actions.appendChild(mkBtn('BACK TO MAP', function () { _exitToOverworld(); }));
+      actions.appendChild(mkBtn(won ? 'CONTINUE' : 'BACK TO MAP', function () { _exitToOverworld(); }));
     }
 
     wrap.appendChild(headline);
@@ -380,9 +382,9 @@ SOG.HangingGardensBattle = (function () {
     var firstWin = !_has(KEY_HG_COMPLETE);   // capture BEFORE setting the flag
     _set(KEY_HG_COMPLETE);
     if (firstWin) {
-      // Standardized first-win board (matches Hammurabi/Sargon): VICTORY scoreboard
-      // with CONTINUE + GAME BOARD → CONTINUE runs the win dialogue + grant → exit.
-      _showResultScoreboard(true, false, locResults, { firstWin: true });
+      // First win: victory dialogue + card acquisition + gold play FIRST, then the
+      // VICTORY scoreboard appears (CONTINUE → exit to map).
+      _runFirstWinSequence(locResults);
     } else {
       // Repeat win: skip the full story beat → flourish → +10 gold → scoreboard.
       _victoryFlourish(function () {
@@ -408,39 +410,42 @@ SOG.HangingGardensBattle = (function () {
   ══════════════════════════════════════════════════════════════ */
   var OPENING_DIALOGUE = [
     { who: 'nebuchadnezzar', text: 'Welcome, welcome!' },
-    { who: 'nebuchadnezzar', text: 'A traveler, in my gardens!' },
-    { who: 'explorer',       text: 'Oh, these are your gardens?' },
+    { who: 'nebuchadnezzar', text: 'Foreign traveler in the funny head covering...' },
+    { who: 'explorer',       text: 'You think my hat is funny?' },
+    { who: 'nebuchadnezzar', text: '...take awe in the splendor of my gardens!' },
+    { who: 'explorer',       text: 'Your gardens?' },
     { who: 'nebuchadnezzar', text: 'I built them.' },
     { who: 'nebuchadnezzar', text: 'Every terrace, every bloom, every falling stream.' },
-    { who: 'explorer',       text: 'You must be so proud.' },
+    { who: 'explorer',       text: 'You must be so proud!' },
     { who: 'nebuchadnezzar', text: 'I built the greatest city the world has ever seen.' },
-    { who: 'explorer',       text: 'It really is beautiful here.' },
-    { who: 'nebuchadnezzar', text: 'And then tell me, little traveler…' },
-    { who: 'nebuchadnezzar', text: '…who gave you permission to enter the garden of a king?' },
-    { who: 'explorer',       text: 'Uh, the door was kind of open.' },
+    { who: 'explorer',       text: 'So far...' },
+    { who: 'nebuchadnezzar', text: 'Then tell me, young traveler in the bizarre bonnet...' },
+    { who: 'nebuchadnezzar', text: '...who gave you permission to enter the garden of a king?' },
+    { who: 'explorer',       text: 'Uh. The door was kind of open?' },
     { who: 'nebuchadnezzar', text: 'No one walks my paradise uninvited.' },
     { who: 'nebuchadnezzar', text: 'No one.' },
-    { who: 'explorer',       text: 'Here we go again.' }
+    { who: 'explorer',       text: "I guess that means I'm a fried ferret." }
   ];
 
   /* ── Outcome dialogue (editable) — Nebuchadnezzar via the opponent bubble. ──────
      WIN is FIRST-WIN-ONLY (a repeat win skips straight to flourish + gold). The LAST
      WIN line ("Take this…") is the beat the card 50 + 25 gold grant fires on. */
   var WIN_DIALOGUE = [
-    { who: 'nebuchadnezzar', text: 'Hmm… How unexpected.' },
+    { who: 'nebuchadnezzar', text: 'Hmm... How unexpected.' },
     { who: 'explorer',       text: 'I won?' },
     { who: 'nebuchadnezzar', text: 'Yes, somehow the stranger in the tawdry hat prevailed.' },
     { who: 'explorer',       text: 'Hey, I like my hat.' },
     { who: 'nebuchadnezzar', text: 'How unfortunate.' },
-    { who: 'nebuchadnezzar', text: 'Perhaps, the Egyptians will find it more amusing.' },
+    { who: 'nebuchadnezzar', text: 'But perhaps, the Egyptians will find it more amusing.' },
     { who: 'explorer',       text: 'Egyptians?' },
-    { who: 'nebuchadnezzar', text: 'Take this and your little hat and be gone, will you?' }   // ← grant fires after this line
+    { who: 'nebuchadnezzar', text: 'Take this and be gone, will you?' }
   ];
   var LOSS_DIALOGUE = [
     { who: 'nebuchadnezzar', text: 'Predictable.' },
-    { who: 'nebuchadnezzar', text: 'Excellence was never meant for the likes of you.' },
+    { who: 'nebuchadnezzar', text: 'Your play was as putrid as the pileus on your head.' },
     { who: 'explorer',       text: 'Can I have another shot?' },
-    { who: 'nebuchadnezzar', text: 'I do enjoy a captive audience.' }
+    { who: 'explorer',       text: 'My road home cannot stop here.' },
+    { who: 'nebuchadnezzar', text: 'But your tears will make fantastic fertilizer.' }
   ];
   var TIE_DIALOGUE = [
     { who: 'nebuchadnezzar', text: 'A stalemate?' },
@@ -739,9 +744,9 @@ SOG.HangingGardensBattle = (function () {
   function _runFloodIntro(riverLocId, onComplete) {
     var river = (riverLocId === RIVER_EUPHRATES) ? 'Euphrates' : 'Tigris';
     runLines([
-      { who: 'explorer',       text: 'What happened?' },
+      { who: 'explorer',       text: 'What happened?!' },
       { who: 'nebuchadnezzar', text: 'The ' + river + ' flooded.' },
-      { who: 'explorer',       text: "But I can't play cards there while it's flooded." },
+      { who: 'explorer',       text: "But I can't play cards there while it's flooded!" },
       { who: 'nebuchadnezzar', text: 'Welcome to Mesopotamia.' }
     ], function () { if (onComplete) onComplete(); });
   }
@@ -863,6 +868,24 @@ SOG.HangingGardensBattle = (function () {
       if (!openLocs.length) break;
 
       // strongest first — IP + early-turn bias (Megalith), then CC tiebreak
+      // Scribe (40) is a late-bloomer: hold him before the final turn unless he is
+      // the ONLY way to keep spending capital AND an open location already has 2+
+      // AI cards for his +1 stamps.
+      if (turnsLeft > 1) {
+        var _nonScribe = aff.filter(function (c) { return c.id !== 40; });
+        if (_nonScribe.length !== aff.length) {
+          if (_nonScribe.length) {
+            aff = _nonScribe;
+          } else {
+            var _scribeOk = openLocs.some(function (loc) {
+              var _arr = G.aiSlots[loc.id] || [], _n = 0;
+              for (var _q = 0; _q < _arr.length; _q++) if (_arr[_q]) _n++;
+              return (_n + (simFilled[loc.id] || 0)) >= 2 && slotsLeft(loc.id) > 0;
+            });
+            if (!_scribeOk) break;   // hold Scribe — leftover capital is by design
+          }
+        }
+      }
       aff.sort(function (a, b) { return ((b.ip + turnBias(b.id)) - (a.ip + turnBias(a.id))) || (b.cc - a.cc); });
       // Nebuchadnezzar (50) — get him onto the board as EARLY as possible: whenever
       // he's affordable, play him before other cards, so he lands on the first turn

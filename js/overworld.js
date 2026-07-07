@@ -53,41 +53,58 @@ var Overworld = (function () {
               Walk to the node happens AFTER this dialogue. */
 
   var PHASE1_DIALOGUE = [
-    { who: 'explorer', text: 'Huh\u2026 That was strange.' },
-    { who: 'explorer', text: 'I should probably be more careful about going through dark doorways.' },
-    { who: 'explorer', text: 'At least this place looks familiar\u2026' },
-    { who: 'explorer', text: 'Is that Mount Kilimanjaro?' },
-    { who: 'explorer', text: 'I think that means I\u2019m in East Africa.' },
-    { who: 'explorer', text: 'But where are all the people?' }
+    { who: 'explorer', text: "Jumpin' jackrabbits..." },
+    { who: 'explorer', text: "I don't think that was a normal doorway." },
+    { who: 'explorer', text: 'Where am I?' },
+    { who: 'explorer', text: 'Something about this place does seem oddly familiar.' },
+    { who: 'explorer', text: "But it's definitely not home." },
+    { who: 'explorer', text: "And I'm definitely going to be late to soccer practice." },
+    { who: 'explorer', text: 'What do I do?' },
+    { who: 'explorer', text: 'And where are all the people?' }
   ];
 
   /* Post-Neanderthal-victory overworld dialogue \u2014 8 lines, click-to-advance.
      Fires once after the player wins the Neanderthal battle and returns to
      the overworld.  Ends with Lucy handing the player her card. */
   var POST_NEANDERTHAL_DIALOGUE = [
-    { who: 'explorer', text: 'Wow, I can\u2019t believe I just interacted with a real Neanderthal.' },
-    { who: 'lucy',     text: 'That\u2019s an interesting way to describe a near-death experience.'  },
-    { who: 'explorer', text: 'I couldn\u2019t have done it without you.'                            },
-    { who: 'lucy',     text: 'You Homo sapiens wouldn’t exist if it weren’t for me.'             },
-    { who: 'explorer', text: 'I can\u2019t wait to see the rest of the Ancient World.'             },
+    { who: 'explorer', text: 'Wow, he gave me his card.' },
+    { who: 'explorer', text: 'That was so nice of him.' },
+    { who: 'lucy',     text: "That wasn't nice." },
+    { who: 'lucy',     text: 'To the winners of history go the spoils.' },
+    { who: 'explorer', text: "I'm not sure what that means." },
+    { who: 'explorer', text: 'But it sounds really smart.' },
+    { who: 'lucy',     text: "You'll learn." },
+    { who: 'explorer', text: "With your help, I'll be home in no time." },
+    { who: 'explorer', text: 'Where to next?' },
     { who: 'lucy',     text: 'About that.' },
-    { who: 'lucy',     text: 'I can walk, but these old bones don\u2019t migrate.'    },
-    { who: 'explorer', text: 'I guess this is goodbye?'                                            },
-    { who: 'lucy',     text: 'So you always remember me…'                                      }
+    { who: 'lucy',     text: "I can walk, but these old bones don't migrate." },
+    { who: 'explorer', text: "Wait. You're not coming?" },
+    { who: 'explorer', text: "But I don't know anything about anything yet!" },
+    { who: 'lucy',     text: 'Give yourself some credit.' },
+    { who: 'lucy',     text: "You outsmarted a knuckle-draggin' Neanderthal." },
+    { who: 'explorer', text: 'I guess...' },
+    { who: 'lucy',     text: 'Here. Take this.' }
+  ];
+  // Second half of Lucy's goodbye — plays AFTER her card-acquisition reveal.
+  var POST_NEANDERTHAL_DIALOGUE_B = [
+    { who: 'explorer', text: 'Your card?' },
+    { who: 'lucy',     text: 'Every time you stand on two legs and reach into your deck...' },
+    { who: 'lucy',     text: 'I will be there.' }
   ];
 
   /* Otzi encounter dialogue — fires when the player first clicks the
      Egypt signpost (sog_battle_otzi_complete not yet set). Click-to-
      advance, portrait boxes, same runner as all other overworld dialogue. */
   var OTZI_PRE_BATTLE_DIALOGUE = [
-    { who: "otzi",     text: "Where do you think you’re going?"                              },
-    { who: "explorer", text: "I’m ready to see the rest of the world."                       },
-    { who: "otzi",     text: "You look like you’re ready to take an arrowhead to the back." },
-    { who: "explorer", text: "That’s not very nice."                                          },
-    { who: "otzi",     text: "The world isn’t very nice."                                    },
-    { who: "explorer", text: "Okay, I’ll just be on my way..."                                      },
-    { who: "otzi",     text: "No, you won’t."                                                       },
-    { who: "explorer", text: "I’m starting to sense a pattern."                                     }
+    { who: "otzi",     text: "Where do you think you're going?" },
+    { who: "explorer", text: "I'm trying to find my way home." },
+    { who: "otzi",     text: "You look like you're trying to find an arrowhead to the back of the head." },
+    { who: "explorer", text: "That's not nice." },
+    { who: "otzi",     text: "The world isn't nice." },
+    { who: "explorer", text: "Okay! Great talk! I'll just be on my way—" },
+    { who: "otzi",     text: "No. You won't." },
+    { who: "explorer", text: "Dancin' dingos..." },
+    { who: "explorer", text: "I'm starting to sense a pattern here." }
   ];
 
   /* ── Phase D1 — Otzi→Mesopotamia travel dialogue ───────────────────
@@ -96,41 +113,41 @@ var Overworld = (function () {
      swaps the map. Triggered once from the Otzi-victory "Back to Map" button when
      sog_mesopotamia_arrival_complete is not yet set.                              */
   var D1_SCENE1_DIALOGUE = [
-    { who: 'explorer', text: 'History seems to have a lot of conflict.'                                       },
-    { who: 'hunter',   text: 'Tell me about it.'                                                               },
-    { who: 'explorer', text: 'Oh, hey Hunter, why is that?'                                                    },
-    { who: 'hunter',   text: "Don't you see these other tribes butting in on my territory?"                    },
-    { who: 'explorer', text: 'Not really.'                                                                     },
-    { who: 'hunter',   text: "How am I supposed to feed my tribe with these outlanders killing all my antelope?" },
-    { who: 'explorer', text: 'Share?'                                                                          },
-    { who: 'hunter',   text: 'Yeah, right.'                                                                    },
-    { who: 'explorer', text: "Well, I'm going to travel east."                                                 },
-    { who: 'explorer', text: 'Maybe you can settle somewhere new?'                                             },
-    { who: 'hunter',   text: "That's so crazy, it just might work."                                           },
-    { who: 'explorer', text: "Let's go!"                                                                       }
+    { who: 'hunter',   text: 'Hey, where are you going?' },
+    { who: 'explorer', text: "I need to get home, so I'm going to explore beyond this area." },
+    { who: 'hunter',   text: 'What do you mean beyond this area?' },
+    { who: 'explorer', text: "It's a big world out there." },
+    { who: 'hunter',   text: 'How big?' },
+    { who: 'explorer', text: "I don't know how to answer that." },
+    { who: 'hunter',   text: 'Big enough to get away from these other tribes.' },
+    { who: 'explorer', text: 'I think so.' },
+    { who: 'hunter',   text: "Alright, I'm coming with you." },
+    { who: 'explorer', text: "Let's go!" }
   ];
 
   var D1_SCENE2_DIALOGUE = [
-    { who: 'explorer', text: 'Wow, look at that huge river!'                                   },
-    { who: 'hunter',   text: 'Ah, Kemet, the black land...'                    },
-    { who: 'explorer', text: "What's that supposed to mean?"                                                   },
-    { who: 'hunter',   text: "Look at the soil. It's so rich. It's black."                                                  },
-    { who: 'explorer', text: 'Oh okay.'                                                                        },
-    { who: 'hunter',   text: "I'd heard rumors of this place along the Nile."                                   },
-    { who: 'explorer', text: 'Oh right, the Nile.' },
-    { who: 'explorer', text: 'This is Egypt!' },
-    { who: 'explorer', text: 'But where are all the pyramids?'                                     },
-    { who: 'hunter',   text: "What's a pyramid?"                                                               },
-    { who: 'explorer', text: "I think we're too early." },
-    { who: 'explorer', text: "Perhaps, we'll come back later."                },
-    { who: 'hunter',   text: 'Whatever you say stranger.'                                                      }
+    { who: 'explorer', text: 'WOW. Look at that huge river!' },
+    { who: 'hunter',   text: 'Ah, Kemet. The black land...' },
+    { who: 'explorer', text: 'The black land? It looks pretty green to me.' },
+    { who: 'hunter',   text: "Look at the soil. It's so rich, it's black." },
+    { who: 'explorer', text: 'Ohhh. Rich soil, big river...' },
+    { who: 'explorer', text: 'Wait. Is that the Nile?' },
+    { who: 'explorer', text: 'I know Egypt!' },
+    { who: 'explorer', text: 'It has pyramids and mummies and King Tut!' },
+    { who: 'hunter',   text: "What's a pyramid?" },
+    { who: 'explorer', text: "You're right. Where are all the pyramids?" },
+    { who: 'explorer', text: "Am I so early there aren't even pyramids yet?" },
+    { who: 'hunter',   text: "I cannot express enough that I have no idea what you're talking about." },
+    { who: 'explorer', text: "Right. We'll have to come back later." },
+    { who: 'explorer', text: "It's going to be so cool." },
+    { who: 'hunter',   text: 'Whatever you say, stranger.' }
   ];
 
   var D1_SCENE3_DIALOGUE = [
     { who: 'hunter',   text: 'Mesopotamia!' },
-    { who: 'explorer', text: "What's a Meso-potato?" },
+    { who: 'explorer', text: 'Mess-o-potato?' },
     { who: 'hunter',   text: 'Mesopotamia. It means the land between the rivers.' },
-    { who: 'explorer', text: "That must be why it's so green." }
+    { who: 'explorer', text: "Ohhh. Two rivers! That must be why it's so green!" }
   ];
 
   /* ── Phase D2a — Mesopotamia extended arrival dialogue ─────────────
@@ -138,27 +155,32 @@ var Overworld = (function () {
      River walk → Hunter transformation → farming dialectic → Walls of
      Uruk node → Farmer departure → player regains control.           */
   var D2A_FARMING_DIALOGUE = [
-    { who: 'explorer', text: 'You look different.'                                                             },
-    { who: 'farmer',   text: 'I feel different.'                                                               },
-    { who: 'farmer',   text: "Maybe I don't need to hunt animals all of the time."                            },
-    { who: 'explorer', text: 'What will you do instead?'                                                       },
-    { who: 'farmer',   text: 'On this land, I can grow anything.' },
-    { who: 'explorer', text: 'I see.' },
-    { who: 'farmer',   text: 'And if I grow enough, I could have a surplus to sell.' },
-    { who: 'farmer',   text: 'And from there, people can specialize in different jobs.' },
-    { who: 'farmer',   text: 'And with specialization, comes…' }
+    { who: 'explorer', text: 'You LOOK different.' },
+    { who: 'farmer',   text: 'I am different.' },
+    { who: 'farmer',   text: 'I no longer have a desire to hunt all the time.' },
+    { who: 'explorer', text: "You don't?" },
+    { who: 'farmer',   text: 'No. On this land, I can grow anything.' },
+    { who: 'explorer', text: "If you grow your own food, you won't have to fight over antelope again!" },
+    { who: 'farmer',   text: 'Exactly!' },
+    { who: 'farmer',   text: 'And if I grow enough, I might have extra to trade.' },
+    { who: 'explorer', text: 'I think they call that a surplus.' },
+    { who: 'farmer',   text: "I don't care what you call it," },
+    { who: 'farmer',   text: 'If I grow enough to trade someone else can make my tools and I can just focus on farming.' },
+    { who: 'explorer', text: "I think you're talking about job specialization." },
+    { who: 'farmer',   text: "I think we're talking about building something bigger than a tribe..." }
   ];
 
   /* \u2500\u2500 Phase D2b \u2014 Gilgamesh encounter dialogue \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
   var D2B_GILGAMESH_DIALOGUE = [
     { who: 'gilgamesh', text: 'Welcome to my city, Uruk.'                          },
-    { who: 'explorer',  text: 'Oh hi! You must be the mayor.'                      },
-    { who: 'gilgamesh', text: 'How dare you confuse me for a civil servant?!'    },
+    { who: 'explorer',  text: 'Oh hi! You must be the mayor!' },
+    { who: 'gilgamesh', text: 'How DARE you confuse me for a civil servant?!' },
     { who: 'explorer',  text: 'What?'                                              },
-    { who: 'gilgamesh', text: 'I am Gilgamesh. King Gilgamesh.' },
+    { who: 'gilgamesh', text: 'I am Gilgamesh.' },
+    { who: 'gilgamesh', text: 'KING Gilgamesh.' },
     { who: 'explorer',  text: 'But you said it was just a city.' },
-    { who: 'gilgamesh', text: 'Just a city? It’s my city-state.' },
-    { who: 'explorer',  text: 'Oh, I\u2019m sorry\u2026'                          },
+    { who: 'gilgamesh', text: "Just a city? It's my city-STATE." },
+    { who: 'explorer',  text: "Oh, I'm sorry..."                          },
     { who: 'gilgamesh', text: 'You will be.'                                       }
   ];
 
@@ -168,25 +190,32 @@ var Overworld = (function () {
      intervention now lives in the Gilgamesh battle module (_runCuneiformIntervention
      in sog-adventure-gilgamesh.js).                                          */
   var D3_GILGAMESH_CHALLENGE_AGAIN = [
-    { who: 'gilgamesh', text: 'You dare to challenge me again?!'                 },
-    { who: 'explorer',  text: 'I have learned from my mistakes.'                 },
+    { who: 'gilgamesh', text: 'You dare to challenge me again?!' },
+    { who: 'explorer',  text: "I'm not the same kid you beat last time." },
+    { who: 'explorer',  text: "I've been reading." },
+    { who: 'gilgamesh', text: 'You naive little puppet.' },
     { who: 'gilgamesh', text: 'Prepare to be swept into the dustbin of history.' }
   ];
   // Post-loss intervention dialogue, split around the Cuneiform card grant.
   var D3_FARMER_POSTLOSS_A = [
-    { who: 'farmer',   text: 'Hey, that was a tough battle you lost.'      },
-    { who: 'explorer', text: 'His cards were so much more advanced.'       },
-    { who: 'farmer',   text: 'Of course. You were playing in Prehistory.'  },
-    { who: 'farmer',   text: "You didn't stand a chance."                  },
-    { who: 'explorer', text: 'What do I do?'                               },
-    { who: 'farmer',   text: 'Bring your cards up to date.'                },
-    { who: 'explorer', text: 'How?'                                        },
-    { who: 'farmer',   text: 'With writing.'                               }
+    { who: 'farmer',   text: 'Hey. That was a tough battle.' },
+    { who: 'explorer', text: 'His cards were so much more advanced than mine.' },
+    { who: 'farmer',   text: 'Of course they were. You were playing in Prehistory.' },
+    { who: 'farmer',   text: "You didn't stand a chance." },
+    { who: 'explorer', text: "Then what do I do? I can't get stuck here!" },
+    { who: 'farmer',   text: 'You need to bring your cards up to date.' }
   ];
   // [Cuneiform card acquisition fires here]
   var D3_FARMER_POSTLOSS_B = [
-    { who: 'farmer',   text: 'With Cuneiform, you give your cards the ability to record what we know and pass it on.' },
-    { who: 'explorer', text: 'Thank you.'                                  }
+    { who: 'explorer', text: "What's Cuneiform?" },
+    { who: 'farmer',   text: 'The first written language.' },
+    { who: 'explorer', text: 'Oh, how does it work?' },
+    { who: 'farmer',   text: 'You should read it, obviously.' },
+    { who: 'explorer', text: 'Oh, right.' },
+    { who: 'farmer',   text: 'But in effect, it will empower those old prehistoric cards you have.' },
+    { who: 'explorer', text: 'Thank you.' },
+    { who: 'farmer',   text: "Don't mention it." },
+    { who: 'farmer',   text: "Seriously, he'll kill me." }
   ];
 
   /* ── Phase D4 — Sargon encounter (DRAFT dialogue; edit freely) ────────────
@@ -196,11 +225,11 @@ var Overworld = (function () {
      branches on the active deck size (see onNodeClick 'sargon').                */
   // (a) Reveal — bookend Explorer lines around the dust-storm node reveal.
   var D4_SARGON_REVEAL_INTRO = [
-    { who: 'explorer', text: "Wow, I can't wait to use my new cards!" }
+    { who: 'explorer', text: "Wow, I can't wait to try out these new cards!" }
   ];
   var D4_SARGON_REVEAL_OUTRO = [
-    { who: 'explorer', text: 'Uh, that was mysterious…' },
-    { who: 'explorer', text: 'Better go check it out.'       }
+    { who: 'explorer', text: 'Okay, that was mysterious.' },
+    { who: 'explorer', text: 'I have to go check it out.' }
   ];
   // (b) Deck NOT ready (< 15 cards): Sargon turns the Explorer away. Split so
   //     Sargon's portrait can slide out before the Explorer's closing line.
@@ -211,97 +240,98 @@ var Overworld = (function () {
     { who: 'sargon',   text: 'You need a deck of at least 15 cards before you can face Sargon, the Great.' }
   ];
   var D4_SARGON_TURNED_AWAY_B = [
-    { who: 'explorer', text: 'Maybe I need to earn more gold to buy more cards.' }
+    { who: 'explorer', text: '15 cards...' },
+    { who: 'explorer', text: "I'd better earn more gold and grow my collection." }
   ];
   // (c) Deck ready (exactly 15 cards): the full Emperor encounter, then battle.
   var D4_SARGON_ENCOUNTER = [
-    { who: 'sargon',   text: 'Who dares to cross, Sargon the Great?' },
-    { who: 'explorer', text: 'It is I, just an explorer seeking to learn about history…' },
-    { who: 'explorer', text: 'Great King Sargon.'                    },
-    { who: 'sargon',   text: 'King?!'                                },
-    { who: 'sargon',   text: 'Sargon is no King.'                    },
-    { who: 'explorer', text: 'Oh'                                    },
-    { who: 'sargon',   text: "Sargon is the world's first Emperor!"  },
-    { who: 'explorer', text: "What's the difference?"                },
-    { who: 'sargon',   text: "I don't rule over one city-state."     },
-    { who: 'sargon',   text: "I rule over all of Mesopotamia's city-states." },
-    { who: 'explorer', text: 'Right.'                                },
-    { who: 'sargon',   text: 'That includes you!'                    },
-    { who: 'explorer', text: 'Of course it does.'                    }
+    { who: 'sargon',   text: 'Who dares to cross Sargon the Great?' },
+    { who: 'explorer', text: 'It is I! Just a humble explorer, trying to get home in time for soccer practice...' },
+    { who: 'explorer', text: 'Great King Sargon.' },
+    { who: 'sargon',   text: 'King?!' },
+    { who: 'sargon',   text: 'Sargon is no King.' },
+    { who: 'explorer', text: 'Uhh, what?' },
+    { who: 'sargon',   text: "Sargon is the world's first EMPEROR!" },
+    { who: 'explorer', text: "Isn't that like the same thing?" },
+    { who: 'sargon',   text: "I don't rule over one measly city-state." },
+    { who: 'sargon',   text: 'I rule over ALL the city-states of Mesopotamia!' },
+    { who: 'explorer', text: 'Of course you do.' },
+    { who: 'sargon',   text: 'That includes you!' },
+    { who: 'explorer', text: 'Of course it does.' }
   ];
   // Closing reflection on the map after losing to Sargon (before defeating him).
   // The Sargon-side smack-talk plays on the battle screen (sog-adventure-sargon);
   // this Explorer line plays once back on the overworld via returnFromSargonLoss.
   var D4_SARGON_LOSS_REFLECT = [
-    { who: 'explorer', text: 'Perhaps, I need to build up my deck before I take on an Empire.' }
+    { who: 'explorer', text: 'Okay. Maybe I build up my deck before I take on an entire EMPIRE.' }
   ];
   // After beating Sargon, once the Hammurabi node has risen from the dirt.
   var D4_SARGON_WIN_REFLECT = [
-    { who: 'explorer', text: 'As one empire falls, another one rises.' }
+    { who: 'explorer', text: 'I guess when one empire falls, another one rises.' }
   ];
   // After beating Hammurabi — bookend Explorer lines around the Hanging Gardens
   // sparkle reveal. REFLECT plays before the shimmer; REACTION after the node
   // sparkle-fades in. Editable.
   var D5_HANGING_GARDENS_REFLECT = [
     { who: 'explorer', text: 'That was a close one.' },
-    { who: 'explorer', text: 'True justice really is blind.' }
+    { who: 'explorer', text: 'I almost lost an eye in there.' },
+    { who: 'explorer', text: "Perhaps, that's why justice is blind?" }
   ];
   var D5_HANGING_GARDENS_REACTION = [
-    { who: 'explorer', text: 'Wow, look at that palace!' },
-    { who: 'explorer', text: 'All the gardens…' },
-    { who: 'explorer', text: 'That has to be a safe place to explore.' }
+    { who: 'explorer', text: 'Whoa!' },
+    { who: 'explorer', text: 'Cool Gardens...' },
+    { who: 'explorer', text: 'How is that even possible?' },
+    { who: 'explorer', text: 'Finally, a safe place to explore.' }
   ];
   // Hanging Gardens node-CLICK sequence (walk-up → dialogue + knock/door sfx → wipe
   // into the battle STUB). The lines come in two groups: group A, then knocking.m4a
   // plays in full, then group B, then opendoor.m4a plays in full, then the wipe.
   // Editable.
   var D5_HANGING_GARDENS_CLICK_A = [
-    { who: 'explorer', text: 'Wow, this place is wonderful!' },
-    { who: 'explorer', text: 'And no sign of a mean King.' }
+    { who: 'explorer', text: 'This place is literally wonderful!' },
+    { who: 'explorer', text: 'And no sign of a mean king anywhere.' }
   ];
   var D5_HANGING_GARDENS_CLICK_B = [
-    { who: 'explorer', text: 'If no one is going to answer the door' },
-    { who: 'explorer', text: "I'm going to explore myself." }
+    { who: 'explorer', text: 'Well, if no one is going to answer the door...' }
   ];
   // ── Egypt on-ramp (post-Nebuchadnezzar) ──────────────────────────────────
   // Beat 1: plays on the Mesopotamia overworld after beating Nebuchadnezzar
   // (after a ~5s "looking around expectantly" idle). Then the To Egypt exit
   // flashes for 3s. EDITABLE.
   var EGYPT_ONRAMP_DIALOGUE = [
-    { who: 'explorer', text: 'Okay…' },
+    { who: 'explorer', text: "Okay. I'm done, right?" },
     { who: 'explorer', text: 'Abracadabra?!' },
     { who: 'explorer', text: 'Open sesame?!' },
-    { who: 'explorer', text: 'Something magically mysterious can pop up now…' },
-    { who: 'explorer', text: 'Is that it?' },
-    { who: 'explorer', text: 'Is my historical adventure over?' },
-    { who: 'explorer', text: 'Hmm…' },
+    { who: 'explorer', text: 'Come on... magic doorway home is now where you take me.' },
+    { who: 'explorer', text: 'Well, no sense in just standing here.' },
     { who: 'explorer', text: 'Nebuchadnezzar did say something about Egypt.' },
-    { who: 'explorer', text: 'Maybe I should check that out.' }
+    { who: 'explorer', text: 'Maybe the only way back is forward.' }
   ];
   // Beat 2: plays once when the player reaches the Egypt map with the Double
   // Crown node live (sog_egypt_node_live). EDITABLE.
   var EGYPT_NODE_ARRIVAL_DIALOGUE = [
-    { who: 'explorer', text: 'Still no pyramids?' },
-    { who: 'explorer', text: "That's a bummer." },
-    { who: 'explorer', text: "What's that funny hat?" }
+    { who: 'explorer', text: 'STILL no pyramids?' },
+    { who: 'explorer', text: 'How early am I?!' },
+    { who: 'explorer', text: 'Oohh!' },
+    { who: 'explorer', text: "Now that's a funny hat..." }
   ];
 
   // Hammurabi (Babylon) encounter — plays on node click when the active deck has
   // the full 15 cards, then the battle launches.
   var D4_HAMMURABI_ENCOUNTER = [
     { who: 'hammurabi', text: 'Halt.' },
-    { who: 'hammurabi', text: 'State your business before the law.' },
+    { who: 'hammurabi', text: 'State your business before the Law.' },
     { who: 'explorer',  text: 'What law?' },
     { who: 'explorer',  text: 'I was just admiring this big stone tablet.' },
     { who: 'hammurabi', text: 'That "tablet" is the Code.' },
     { who: 'explorer',  text: 'Code for what?' },
-    { who: 'hammurabi', text: 'My code for two hundred and eighty-two laws.' },
-    { who: 'explorer',  text: "That's a lot of rules." },
+    { who: 'hammurabi', text: 'My code of 282 laws.' },
+    { who: 'explorer',  text: "That's a lot of laws." },
     { who: 'hammurabi', text: 'Not if you want to keep order.' },
     { who: 'explorer',  text: 'And if someone breaks one?' },
     { who: 'hammurabi', text: 'They pay the price.' },
-    { who: 'explorer',  text: 'That sounds fair.' },
-    { who: 'hammurabi', text: 'Now time to put you on trial.' }
+    { who: 'explorer',  text: 'Fair enough.' },
+    { who: 'hammurabi', text: 'Now, time to put you on trial.' }
   ];
   // Turned away when the deck is under 15 cards (split so Hammurabi's portrait can
   // slide out before the Explorer's closing line). PLACEHOLDER — edit freely.
@@ -317,23 +347,36 @@ var Overworld = (function () {
   var KEY_CUNEIFORM_GRANTED  = 'sog_cuneiform_granted';
 
   var PHASE2_DIALOGUE = [
-    { who: 'lucy',     text: 'Mmmhm\u2026' },
-    { who: 'lucy',     text: 'I\u2019m standing right here.' },
-    { who: 'explorer', text: 'Woah, you can talk?' },
-    { who: 'explorer', text: 'I thought you were an ape?' },
-    { who: 'lucy',     text: 'Australopithecus to the uninitiated.' },
-    { who: 'explorer', text: 'Uh, yeah... I totally know what that means.' },
-    { who: 'lucy',     text: 'It means I\u2019m one of the earliest human ancestors to stand on two legs.' },
-    { who: 'explorer', text: 'Congratulations!' },
-    { who: 'lucy',     text: 'You\u2019re welcome.' },
-    { who: 'explorer', text: 'But that doesn\u2019t explain why you can talk.' },
-    { who: 'lucy',     text: 'Nothing will.' },
-    { who: 'lucy',     text: 'Don\u2019t over think it.' },
-    { who: 'explorer', text: 'Fair enough.' },
-    { who: 'explorer', text: 'But that must mean I traveled back in time.' },
-    { who: 'explorer', text: 'Like way back.' },
-    { who: 'lucy',     text: 'Like I said, don\u2019t over think it.' },
-    { who: 'explorer', text: 'Well then, I guess I better get going.' }
+    { who: 'lucy',     text: 'Mmmhm...' },
+    { who: 'lucy',     text: "I'm standing right here." },
+    { who: 'explorer', text: 'Woah, you can talk?!' },
+    { who: 'explorer', text: 'I thought you were an ape!' },
+    { who: 'lucy',     text: 'Australopithecus, to the uninitiated.' },
+    { who: 'explorer', text: 'Australo-what-now?' },
+    { who: 'lucy',     text: "It means I'm one of your earliest bipedal human ancestors to stand on two legs." },
+    { who: 'explorer', text: "My ancestor? Are you saying we're related?" },
+    { who: 'lucy',     text: "I'm like your great aunt a million times over." },
+    { who: 'explorer', text: "That's cool." },
+    { who: 'explorer', text: 'But wait.' },
+    { who: 'explorer', text: 'How are you TALKING?' },
+    { who: 'explorer', text: 'How am I even HERE?' },
+    { who: 'explorer', text: 'Did I time travel?' },
+    { who: 'explorer', text: 'Is this—' },
+    { who: 'lucy',     text: 'Relax.' },
+    { who: 'lucy',     text: "I might be millions of years old, but I don't have all the answers." },
+    { who: 'explorer', text: "That doesn't help my nerves." },
+    { who: 'explorer', text: 'I have to get home.' },
+    { who: 'explorer', text: 'I have soccer practice.' },
+    { who: 'lucy',     text: 'Soccer practice?' },
+    { who: 'explorer', text: "It's very important." },
+    { who: 'lucy',     text: 'If you say so.' },
+    { who: 'lucy',     text: 'All I know is that by standing upright on my own two feet...' },
+    { who: 'lucy',     text: 'I always get to where I want to go.' },
+    { who: 'explorer', text: "That's actually very inspiring." },
+    { who: 'explorer', text: 'Perhaps, I will find my way home.' },
+    { who: 'lucy',     text: 'You do that.' },
+    { who: 'lucy',     text: "Now, I'm going to use my bipedal powers to get myself a drink." },
+    { who: 'lucy',     text: 'Let me know if you need me.' }
   ];
 
   var PHASE1_WAIT_MS = 3000;    // 3s arrival pause before Phase 1 fires
@@ -341,15 +384,17 @@ var Overworld = (function () {
   /* ── Post-Otzi East Africa flow dialogue (reuses the standard runner) ── */
   // One-time, first return to East Africa after beating Otzi.
   var EASTAFRICA_POSTOTZI_DIALOGUE = [
-    { who: 'explorer', text: 'Who knew history had so much conflict?'                  },
-    { who: 'hunter',   text: 'Tell me about it.'                                       },
-    { who: 'explorer', text: 'What do you mean?'                                       },
-    { who: 'hunter',   text: 'These other tribes won’t leave my antelope alone.' },
-    { who: 'explorer', text: 'Are they like your pets?' },
-    { who: 'hunter',   text: 'They’re like my lunch.' },
-    { who: 'explorer', text: 'Oh, right.' },
-    { who: 'explorer', text: 'Couldn’t you share?'                                },
-    { who: 'hunter',   text: 'What does that mean?'                                    }
+    { who: 'explorer', text: 'Who knew history had so much conflict?' },
+    { who: 'hunter',   text: 'Tell me about it.' },
+    { who: 'explorer', text: "Oh, hi. You're not going to want to fight me, are you?" },
+    { who: 'hunter',   text: 'Are you from one of those tribes taking my antelope?' },
+    { who: 'explorer', text: 'No. Definitely not.' },
+    { who: 'hunter',   text: 'Alright, then.' },
+    { who: 'explorer', text: "I'm so sorry people are stealing your pets." },
+    { who: 'hunter',   text: "Pets? They're my lunch." },
+    { who: 'explorer', text: 'Oh. I see.' },
+    { who: 'explorer', text: "Well, couldn't you share?" },
+    { who: 'hunter',   text: 'What does that mean?' }
   ];
   // One-time, on the FIRST return from the marketplace — un-greys the deck builder.
   var DECKBUILDER_UNLOCK_DIALOGUE = [
@@ -359,7 +404,7 @@ var Overworld = (function () {
   // One-time, first click of the To Egypt box — plays before the walk-off.
   var TOEGYPT_GOODBYE_DIALOGUE = [
     { who: 'hunter',   text: 'Hey, where are you going?'                               },
-    { who: 'explorer', text: 'I want to see the rest of the world.'                    },
+    { who: 'explorer', text: "I'm going to try and find my way home by exploring the rest of the world." },
     { who: 'hunter',   text: 'There’s more world out there?'                      },
     { who: 'explorer', text: 'Of course.'                                              },
     { who: 'hunter',   text: 'Maybe there are places where I won’t have to fight others for resources?' },
@@ -1527,16 +1572,22 @@ var Overworld = (function () {
     isDialogueLocked = true;
     cancelIdle();
 
+    // Lucy's goodbye plays in two halves around her card-acquisition reveal:
+    // A (…"Take this.") → grant → B ("Your card?" … "I will be there.") → complete.
     runDialogue(POST_NEANDERTHAL_DIALOGUE, function () {
-      isDialogueLocked = false;
-      // runDialogue already faded out the boxes — now show Lucy's card.
       var lucyCard = (typeof CARDS !== 'undefined') &&
                      CARDS.find(function (c) { return c.id === 33; });
       var preh = window.SOG && window.SOG.Adventure && window.SOG.Adventure.Prehistory;
+      var afterGrant = function () {
+        runDialogue(POST_NEANDERTHAL_DIALOGUE_B, function () {
+          isDialogueLocked = false;
+          _completePostVictorySequence();
+        });
+      };
       if (lucyCard && preh && typeof preh.showCardAcquisition === 'function') {
-        preh.showCardAcquisition(lucyCard, null, _completePostVictorySequence);
+        preh.showCardAcquisition(lucyCard, null, afterGrant);
       } else {
-        _completePostVictorySequence();
+        afterGrant();
       }
     });
   }
@@ -1767,7 +1818,7 @@ var Overworld = (function () {
      Mesopotamia map. Chosen to clear the southwest exit zone
      (x:0-20, y:70-100) and the existing nodes (Akkad 42,52; Hammurabi
      58,60) while leaving the Walls of Uruk node (40,72) unobscured. */
-  var D2A_RIVER_STOP = { x: 54, y: 65 };
+  var D2A_RIVER_STOP = { x: 66, y: 65 };
 
   function _d2aSequence() {
     log('[D2a] River walk beginning');
@@ -1889,14 +1940,18 @@ var Overworld = (function () {
 
     // "Cities!" and "Bye!" — Farmer still visible
     _runLinesKeepOpen([
-      { who: 'explorer', text: 'Cities!' },
-      { who: 'farmer',   text: "But the land isn't going to farm itself. Bye!" }
+      { who: 'explorer', text: "Leapin' llamas..." },
+      { who: 'explorer', text: 'Did you just create a city?!' },
+      { who: 'farmer',   text: 'I am but a humble farmer who needs to tend his land.' },
+      { who: 'farmer',   text: 'So long.' }
     ], function () {
       // Farmer slides down — NPC gone, but dialogue mode stays active
       hud.slideOutNpc(function () {
         // Explorer delivers the final line alone
         _runLinesKeepOpen([
-          { who: 'explorer', text: "Lets go check out that city!" }
+          { who: 'explorer', text: 'Wow, a real ancient city...' },
+          { who: 'explorer', text: 'Maybe somebody there will help me get home.' },
+          { who: 'explorer', text: "Let's go check it out!" }
         ], function () {
           // Exit dialogue mode (fades back to resting state)
           hud.exitDialogueMode(function () {
@@ -2147,8 +2202,14 @@ var Overworld = (function () {
     isDialogueLocked = true;
     cancelIdle();
     runDialogue(D4_SARGON_REVEAL_INTRO, function () {
-      // HUD closed → the map is visible for the storm.
+      // HUD closed → the map is visible for the storm. Fade the map music out
+      // ENTIRELY so the storm (sargonintro.mp3) plays against silence, then fade
+      // it back in once the reveal animation is done.
+      if (window.SOG && SOG.music && typeof SOG.music.fadeOutAndStop === 'function') {
+        SOG.music.fadeOutAndStop(600);
+      }
       _dustStormRevealSargon(function () {
+        _playMapMusic();   // reveal done → fade the map music back in
         runDialogue(D4_SARGON_REVEAL_OUTRO, function () {
           try { localStorage.setItem(KEY_SARGON_NODE_REVEALED, 'true'); } catch (e) {}
           isDialogueLocked = false;
@@ -2756,10 +2817,11 @@ var Overworld = (function () {
     { who: 'trader',   text: 'And they can all be yours, for the right price in gold.' },
     { who: 'explorer', text: 'How does it work?' },
     { who: 'trader',   text: 'Simple. Tap any card to take a closer look.' },
-    { who: 'trader',   text: 'If you have enough gold, the Buy button lights up.' },
-    { who: 'trader',   text: 'Tap it, confirm, and the card is yours.' },
+    { who: 'trader',   text: 'If you have enough gold, then click the Buy button and the card is yours.' },
+    { who: 'trader',   text: 'If not, come back with more gold.' },
     { who: 'explorer', text: 'And then?' },
-    { who: 'trader',   text: 'Then it joins your collection — ready for you to build into your deck.' },
+    { who: 'trader',   text: 'Then it joins your collection.' },
+    { who: 'trader',   text: 'Ready for you in your deck builder.' },
     { who: 'trader',   text: 'Spend wisely.' },
     { who: 'trader',   text: "Gold doesn't grow on date palms." }
   ];
@@ -3514,9 +3576,15 @@ var Overworld = (function () {
       _clearWipe();
       var hud = window.SOG && window.SOG.HUD;
       if (hud && typeof hud.show === 'function') hud.show();
-      _playMapMusic();
+      // Hold the music: fade out whatever is playing (the Sargon battle track) so
+      // the Hammurabi earth-rise plays against silence (its own earthspell.mp3),
+      // then fade the map music back in once the reveal has fully finished.
+      if (window.SOG && SOG.music && typeof SOG.music.fadeOutAndStop === 'function') {
+        SOG.music.fadeOutAndStop(600);
+      }
       setTimeout(function () {
         _maybeRevealHammurabiNode(function () {
+          _playMapMusic();   // node has risen — fade the overworld track back in
           // The node has risen — Explorer chimes in, then control is restored so
           // the player can choose to click the node.
           runDialogue(D4_SARGON_WIN_REFLECT, function () {

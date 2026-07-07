@@ -220,9 +220,12 @@ window.SOG.Adventure.Prehistory = (function () {
     var ow = window.Overworld;
     if (ow && typeof ow.runPreBattleLines === 'function') {
       ow.runPreBattleLines([
+        { who: 'explorer',    text: 'This fire seems promising.' },
+        { who: 'explorer',    text: 'Maybe someone here knows something.' },
+        { who: 'neanderthal', text: 'Ughh...' },
+        { who: 'explorer',    text: "Jugglin' jaguars... is that a caveman?" },
         { who: 'neanderthal', text: 'AARRGH!' },
-        { who: 'explorer',    text: 'Uh oh…' },
-        { who: 'explorer',    text: 'Help?' }
+        { who: 'explorer',    text: 'HELP?!' }
       ], function () {
         log('Phase C — pre-battle dialogue complete');
         if (onDone) onDone();
@@ -471,16 +474,15 @@ window.SOG.Adventure.Prehistory = (function () {
   ];
 
   var COACHING_PHASE_2 = [
-    { who: 'lucy', text: "If this Neanderthal wants to get rocked, we're ready to roll." },
-    { who: 'lucy', text: 'Pay attention, this is important...' },
+    { who: 'lucy', text: "Alright, lets try and avoid an early extinction event." },
     { who: 'lucy', text: 'See those cards?' },
     { who: 'lucy', text: 'You play one each turn on your side of The Camp.' },
     { who: 'lucy', text: 'See that number?',                  startIPPulse: true },
     { who: 'lucy', text: 'Those are Influence Points, or IP for short.' },
     { who: 'lucy', text: 'Your goal here is to gain the most IP at The Camp after four turns.' },
     { who: 'lucy', text: 'Oh, and most cards have special abilities.' },
-    { who: 'lucy', text: 'If you want to win, click on them to read what they have in store.' },
-    { who: 'lucy', text: "When you're ready to send this guy back to whatever came before the Stone Age..." },
+    { who: 'lucy', text: 'If you want to survive, click on them to read what they have in store.' },
+    { who: 'lucy', text: "When you're ready, send this guy back to whatever came before the Stone Age..." },
     { who: 'lucy', text: 'Click and drag your first card into play.' }
   ];
 
@@ -616,10 +618,10 @@ window.SOG.Adventure.Prehistory = (function () {
   ];
 
   var LOSS_DIALOGUE = [
-    { who: 'neanderthal', text: 'You no match for me.'        },
-    { who: 'lucy',        text: 'How did you let that happen?' },
-    { who: 'neanderthal', text: 'Me the strongest.'           },
-    { who: 'lucy',        text: "Click and read your card abilities and he doesn't stand a chance." }
+    { who: 'neanderthal', text: 'You no match for me.' },
+    { who: 'lucy',        text: 'That was embarrassing.' },
+    { who: 'lucy',        text: 'Did you even read the cards?' },
+    { who: 'lucy',        text: "If you click on your cards and learn what they do, he doesn't stand a chance." }
   ];
 
   var TIE_DIALOGUE = [

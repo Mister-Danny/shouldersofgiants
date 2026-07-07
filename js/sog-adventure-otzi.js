@@ -38,39 +38,45 @@ SOG.OtziBattle = (function () {
 
   /* ── Dialogue scripts ────────────────────────────────────────── */
   var PRE_SHAKE_LINES = [
-    { who: 'explorer', text: 'I know this game.'         },
+    { who: 'explorer', text: 'Okay, I know this game!'   },
     { who: 'explorer', text: 'Play a card each turn.'    },
     { who: 'explorer', text: 'Score the most points.'    },
-    { who: 'explorer', text: 'Easy'                      },
+    { who: 'explorer', text: "I've got this."            },
     { who: 'otzi',     text: 'The world is a big place.' }
   ];
 
   var POST_SHAKE_LINES = [
-    { who: 'explorer', text: 'Oh…'                                                 },
-    { who: 'otzi',     text: 'You can now play 2 cards each turn.'                      },
-    { who: 'explorer', text: 'Cool.' },
-    { who: 'explorer', text: 'But how do I win?'                                             },
-    { who: 'otzi',     text: "You won't"                                            },
-    { who: 'otzi',     text: 'But try to gain the most IP at 2 of the 3 locations.'    }
+    { who: 'explorer', text: 'Oh' },
+    { who: 'otzi',     text: 'You can now play 2 cards each turn.' },
+    { who: 'explorer', text: 'Bigger world, more cards.' },
+    { who: 'explorer', text: 'Makes sense...' },
+    { who: 'explorer', text: 'How do I win?' },
+    { who: 'otzi',     text: "You won't." },
+    { who: 'otzi',     text: 'But try to gain the most IP at 2 of the 3 locations.' }
   ];
 
   /* ── Post-battle dialogue scripts ───────────────────────────────── */
+  // Win dialogue plays in two halves around the Otzi-token card-acquisition
+  // animation: WIN_DIALOGUE → grant reveal → WIN_TOKEN_LINE (see _routePostBattle).
   var WIN_DIALOGUE = [
-    { who: 'otzi',     text: 'How did you beat me?'                                   },
-    { who: 'explorer', text: 'Hard work and perseverance?'                            },
-    { who: 'otzi',     text: 'Whatever that means.'                                   },
-    { who: 'explorer', text: 'It means a lot.'                                        },
+    { who: 'otzi',     text: 'How did you beat me?'      },
+    { who: 'explorer', text: 'I do my homework.'         },
+    { who: 'otzi',     text: 'Hm. Whatever that means.'  },
+    { who: 'explorer', text: 'It means a lot.'           },
     { who: 'otzi',     text: 'Right.' },
-    { who: 'otzi',     text: 'I guess you can have this...' },
-    { who: 'otzi',     text: 'A token of me — frozen in time.'   }
+    { who: 'otzi',     text: 'I guess you can have this...' }
+  ];
+  var WIN_TOKEN_LINE = [
+    { who: 'otzi',     text: 'A token of me frozen in time.' }
   ];
   var LOSS_DIALOGUE = [
-    { who: 'otzi',     text: "As I said. You’re not ready."                      },
-    { who: 'explorer', text: 'Let me try again.'                                       },
-    { who: 'otzi',     text: "The world doesn’t give second chances." },
-    { who: 'otzi',     text: "But I will." },
-    { who: 'explorer', text: '…thanks?'                                           },
-    { who: 'otzi',     text: "Don’t waste it."                                    }
+    { who: 'otzi',     text: "As I said. You're not ready." },
+    { who: 'explorer', text: 'Please let me try again.' },
+    { who: 'explorer', text: 'I have to get home.' },
+    { who: 'otzi',     text: "The world doesn't give second chances." },
+    { who: 'otzi',     text: 'But I will.' },
+    { who: 'explorer', text: 'Really? Thank you!' },
+    { who: 'otzi',     text: "Don't waste it." }
   ];
   var TIE_DIALOGUE = [
     { who: 'otzi',     text: 'A stalemate. Curious.'         },
@@ -80,6 +86,7 @@ SOG.OtziBattle = (function () {
   ];
 
   var KEY_CARD_OTZI_UNLOCKED = 'sog_card_otzi_unlocked';
+  var KEY_OTZI_OPENING_SEEN  = 'sog_otzi_opening_seen';   // intro lines watched once → every later entry skips them
 
   /* ── Timing ──────────────────────────────────────────────────── */
   var TYPE_SPEED_MS = 32;
@@ -511,36 +518,46 @@ SOG.OtziBattle = (function () {
 
   /* Route outcome to the correct dialogue then scoreboard. */
   function _routePostBattle(won, isTie, locResults, usedTiebreaker, playerTotal, otziTotal) {
-    var lines = won ? WIN_DIALOGUE : (isTie ? TIE_DIALOGUE : LOSS_DIALOGUE);
-    runLines(lines, function () {
-      hideBubbles();
-      if (won) {
+    if (won) {
+      // Win lines up to "I guess you can have this..." → card-acquisition reveal →
+      // the "A token of me..." line → scoreboard. (The token line now lands AFTER
+      // the card animation.)
+      runLines(WIN_DIALOGUE, function () {
+        hideBubbles();
+        var showTokenThenScore = function () {
+          runLines(WIN_TOKEN_LINE, function () {
+            hideBubbles();
+            _showOtziScoreboard('win', locResults, usedTiebreaker, playerTotal, otziTotal);
+          });
+        };
         var cardAlreadyOwned = false;
         try { cardAlreadyOwned = localStorage.getItem(KEY_CARD_OTZI_UNLOCKED) === 'true'; } catch (e) {}
-        if (cardAlreadyOwned) {
-          _showOtziScoreboard('win', locResults, usedTiebreaker, playerTotal, otziTotal);
+        if (cardAlreadyOwned) { showTokenThenScore(); return; }   // repeat win: no reveal
+        var otziCard = (typeof CARDS !== 'undefined') &&
+                      CARDS.find(function (c) { return c.id === 35; });
+        var preh = window.SOG && window.SOG.Adventure && window.SOG.Adventure.Prehistory;
+        if (otziCard && preh && typeof preh.showCardAcquisition === 'function') {
+          preh.showCardAcquisition(otziCard, null, function () {
+            try { localStorage.setItem(KEY_CARD_OTZI_UNLOCKED, 'true'); } catch (e) {}
+            // Single source of truth: also record Otzi (35) in the player
+            // collection (the standalone flag stays — it gates re-showing
+            // this acquisition reveal on a repeat win).
+            if (window.SOG && SOG.collection && typeof SOG.collection.unlockCard === 'function') {
+              SOG.collection.unlockCard(35);
+            }
+            showTokenThenScore();
+          });
         } else {
-          var otziCard = (typeof CARDS !== 'undefined') &&
-                        CARDS.find(function (c) { return c.id === 35; });
-          var preh = window.SOG && window.SOG.Adventure && window.SOG.Adventure.Prehistory;
-          if (otziCard && preh && typeof preh.showCardAcquisition === 'function') {
-            preh.showCardAcquisition(otziCard, null, function () {
-              try { localStorage.setItem(KEY_CARD_OTZI_UNLOCKED, 'true'); } catch (e) {}
-              // Single source of truth: also record Otzi (35) in the player
-              // collection (the standalone flag stays — it gates re-showing
-              // this acquisition reveal on a repeat win).
-              if (window.SOG && SOG.collection && typeof SOG.collection.unlockCard === 'function') {
-                SOG.collection.unlockCard(35);
-              }
-              _showOtziScoreboard('win', locResults, usedTiebreaker, playerTotal, otziTotal);
-            });
-          } else {
-            _showOtziScoreboard('win', locResults, usedTiebreaker, playerTotal, otziTotal);
-          }
+          showTokenThenScore();
         }
-      } else {
-        _showOtziScoreboard(isTie ? 'tie' : 'loss', locResults, usedTiebreaker, playerTotal, otziTotal);
-      }
+      });
+      return;
+    }
+    // Tie / loss: dialogue → scoreboard (unchanged).
+    var lines = isTie ? TIE_DIALOGUE : LOSS_DIALOGUE;
+    runLines(lines, function () {
+      hideBubbles();
+      _showOtziScoreboard(isTie ? 'tie' : 'loss', locResults, usedTiebreaker, playerTotal, otziTotal);
     });
   }
 
@@ -704,7 +721,7 @@ SOG.OtziBattle = (function () {
     againBtn.onclick = function () { overlay.parentNode.removeChild(overlay); teardown(); SOG.OtziBattle.start(); };
 
     var mapBtn = document.createElement('button');
-    mapBtn.textContent = 'BACK TO MAP';
+    mapBtn.textContent = (outcome === 'win') ? 'CONTINUE' : 'BACK TO MAP';
     mapBtn.style.cssText = againBtn.style.cssText;
     mapBtn.onclick = function () { overlay.parentNode.removeChild(overlay); _exitOtziBattleToOverworld(outcome === 'win'); };
 
@@ -847,11 +864,16 @@ SOG.OtziBattle = (function () {
       if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(OTZI_CONFIG.presentation);
       _otziApplyTurnPresentation(1);
       _otziParkSideLocations();
-      // Skip the entry dialogue once Ötzi is beaten — the shake / side-location
-      // reveal / deal still run (they set up the board); only the lines are skipped.
-      var _beaten = false;
-      try { _beaten = localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true'; } catch (e) {}
-      var _lines = function (arr, next) { if (_beaten) { if (next) next(); return; } runLines(arr, next); };
+      // Skip the entry dialogue once it has been WATCHED once (any retry — Play
+      // Again after a loss included) or once Ötzi is beaten. The shake /
+      // side-location reveal / deal still run (they set up the board); only the
+      // lines are skipped.
+      var _skipLines = false;
+      try {
+        _skipLines = localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true' ||
+                     localStorage.getItem(KEY_OTZI_OPENING_SEEN)  === 'true';
+      } catch (e) {}
+      var _lines = function (arr, next) { if (_skipLines) { if (next) next(); return; } runLines(arr, next); };
       fadeOutCover(function () {
         _lines(PRE_SHAKE_LINES, function () {
           // Woosh lands a beat INTO the shake (not at its very start) so it syncs
@@ -861,6 +883,8 @@ SOG.OtziBattle = (function () {
           shakeCamera(function () {
             revealSideLocations(function () {
               _lines(POST_SHAKE_LINES, function () {
+                // Full intro watched → never replay it (matches the boss battles).
+                try { localStorage.setItem(KEY_OTZI_OPENING_SEEN, 'true'); } catch (e) {}
                 dealCards(function () { done(); });
               });
             });

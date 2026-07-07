@@ -166,9 +166,9 @@ SOG.HammurabiBattle = (function () {
   var WIN_DIALOGUE = [
     { who: 'hammurabi', text: 'Impossible.' },
     { who: 'hammurabi', text: 'The law was clearly on my side.' },
-    { who: 'explorer',  text: 'Maybe you need to study your own Code.' },
+    { who: 'explorer',  text: 'I read every rule on the board. Twice.' },
     { who: 'hammurabi', text: 'If you have won, then the law must recognize it.' },
-    { who: 'hammurabi', text: 'Take this' },
+    { who: 'hammurabi', text: 'Take this.' },
     { who: 'hammurabi', text: 'Let it be entered into the record.' }
   ];
   // First-win sendoff — plays after the card + gold are granted.
@@ -180,7 +180,7 @@ SOG.HammurabiBattle = (function () {
   var LOSS_DIALOGUE = [
     { who: 'hammurabi', text: 'The verdict stands.' },
     { who: 'hammurabi', text: 'The law does not make exceptions.' },
-    { who: 'explorer',  text: 'Can I appeal?' },
+    { who: 'explorer',  text: "Can I appeal? Please? I'm kind of on a deadline to get home." },
     { who: 'hammurabi', text: 'You may.' },
     { who: 'hammurabi', text: 'The law is patient.' }
   ];
@@ -347,6 +347,9 @@ SOG.HammurabiBattle = (function () {
     _removeResultPopup();
     _swapOpponentBubblePortrait();
     runLines(WIN_DIALOGUE, function () {
+      // The verdict is entered into the record — gavel strikes, then the card reveal.
+      _playSfx('sfx/gavel.m4a');
+      setTimeout(function () {
       _grantHammurabiCard(function () {
         _grantGold(GOLD_FIRST_WIN, function () {
           runLines(WIN_DIALOGUE_CLOSER, function () {
@@ -354,6 +357,7 @@ SOG.HammurabiBattle = (function () {
           });
         });
       });
+      }, 600);
     });
   }
 
@@ -393,7 +397,7 @@ SOG.HammurabiBattle = (function () {
     } else {
       actions.appendChild(mkBtn('PLAY AGAIN',  function () { _restartBattle(); }));
       actions.appendChild(mkBtn('GAMEBOARD',   function () { _hideResultForReview(); }));
-      actions.appendChild(mkBtn('BACK TO MAP', function () { _exitToOverworld(); }));
+      actions.appendChild(mkBtn(won ? 'CONTINUE' : 'BACK TO MAP', function () { _exitToOverworld(); }));
     }
 
     wrap.appendChild(headline);
@@ -428,7 +432,11 @@ SOG.HammurabiBattle = (function () {
     var show = function () { _showResultScoreboard(false, isTie, locResults, {}); };
     if (_has(KEY_HAMMURABI_COMPLETE)) { show(); return; }
     _swapOpponentBubblePortrait();
-    runLines(isTie ? TIE_DIALOGUE : LOSS_DIALOGUE, show);
+    runLines(isTie ? TIE_DIALOGUE : LOSS_DIALOGUE, function () {
+      // Loss verdict lands with a gavel strike before the scoreboard (tie: none).
+      if (!isTie) { _playSfx('sfx/gavel.m4a'); setTimeout(show, 600); return; }
+      show();
+    });
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -453,27 +461,52 @@ SOG.HammurabiBattle = (function () {
     var els = document.querySelectorAll('.battle-location .battle-loc-ability');
     Array.prototype.forEach.call(els, function (el) { el.style.opacity = '0'; });
   }
+  /* gavel.m4a has TWO pounds — measured onsets at ~30ms and ~520ms. Both opening
+     beats sync their tile motion to these timestamps. */
+  var GAVEL_POUND_1_MS = 30;
+  var GAVEL_POUND_2_MS = 520;
+
+  /* One bounce of every location tile (drop up + bounce-settle). mag = pixels. */
+  function _bounceTiles(tiles, mag) {
+    tiles.forEach(function (tile) {
+      if (typeof gsap === 'undefined') return;
+      gsap.timeline()
+        .to(tile, { y: -mag, duration: 0.12, ease: 'power2.out' })
+        .to(tile, { y: 0,    duration: 0.3,  ease: 'bounce.out' });
+    });
+  }
+
+  /* First gavel beat (before "Does the accused understand…"): the location tiles
+     BOUNCE INTO PLACE — one bounce on each of the gavel's two pounds. The ability
+     text stays hidden (that's the second beat). */
+  function _slamLocations(onDone) {
+    var tiles = Array.prototype.slice.call(document.querySelectorAll('.battle-location'));
+    if (!tiles.length) { if (onDone) onDone(); return; }
+    _playSfx('sfx/gavel.m4a');
+    setTimeout(function () { _bounceTiles(tiles, 16); }, GAVEL_POUND_1_MS);
+    setTimeout(function () { _bounceTiles(tiles, 9);  }, GAVEL_POUND_2_MS);
+    setTimeout(function () { if (onDone) onDone(); }, GAVEL_POUND_2_MS + 600);
+  }
+
+  /* Second gavel beat (before "I see now…"): the ability text FALLS INTO PLACE on
+     each nameplate on the first pound, and the tiles bounce on the second pound. */
   function _revealLocationAbilities(onDone) {
     var tiles = Array.prototype.slice.call(document.querySelectorAll('.battle-location'));
     if (!tiles.length) { if (onDone) onDone(); return; }
-    // All three laws are struck into the Code at ONCE — a single stone-stamp, every
-    // tile shaking and its ability fading in together (no left→right stagger).
-    SOG.sfx.play('sfx/cuneiformstamp.mp3');
-    tiles.forEach(function (tile) {
-      var ab = tile.querySelector('.battle-loc-ability');
-      if (typeof gsap !== 'undefined') {
-        gsap.timeline()
-          .to(tile, { x: -5, duration: 0.05, ease: 'none' })
-          .to(tile, { x:  5, duration: 0.06, ease: 'none' })
-          .to(tile, { x: -3, duration: 0.05, ease: 'none' })
-          .to(tile, { x:  3, duration: 0.05, ease: 'none' })
-          .to(tile, { x:  0, duration: 0.05, ease: 'none' });
-        if (ab) gsap.fromTo(ab, { opacity: 0 }, { opacity: 1, duration: 0.4 });
-      } else if (ab) {
-        ab.style.opacity = '1';
-      }
-    });
-    setTimeout(function () { if (onDone) onDone(); }, 1000);   // after the shake + fade
+    _playSfx('sfx/gavel.m4a');
+    setTimeout(function () {
+      tiles.forEach(function (tile) {
+        var ab = tile.querySelector('.battle-loc-ability');
+        if (!ab) return;
+        if (typeof gsap !== 'undefined') {
+          gsap.fromTo(ab, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out' });
+        } else {
+          ab.style.opacity = '1';
+        }
+      });
+    }, GAVEL_POUND_1_MS);
+    setTimeout(function () { _bounceTiles(tiles, 9); }, GAVEL_POUND_2_MS);
+    setTimeout(function () { if (onDone) onDone(); }, GAVEL_POUND_2_MS + 600);
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -487,13 +520,24 @@ SOG.HammurabiBattle = (function () {
      flagged `revealBefore: true` is delivered (Hammurabi's "As Shamash…").
   ══════════════════════════════════════════════════════════════ */
   var OPENING_DIALOGUE = [
-    { who: 'explorer',  text: 'What did I do?' },
-    { who: 'hammurabi', text: 'You answer to no city.' },
-    { who: 'explorer',  text: 'Sure, I do.' },
-    { who: 'hammurabi', text: 'Then name the law of the land of the Fertile Crescent.' },
-    { who: 'explorer',  text: 'The… land has laws?' },
-    { who: 'hammurabi', text: 'As Shamash, the God of Justice, has declared it.', revealBefore: true },
-    { who: 'explorer',  text: 'I see. Every location plays by its own rules.' },
+    { who: 'hammurabi', text: 'Order. Order.' },
+    { who: 'hammurabi', text: 'The Court of Hammurabi is now in session.' },
+    { who: 'explorer',  text: 'What did I do?!' },
+    { who: 'hammurabi', text: 'The stranger before me is in violation of Law 7.' },
+    { who: 'explorer',  text: "I'm innocent." },
+    { who: 'hammurabi', text: 'You answer to no city--' },
+    { who: 'hammurabi', text: 'Arriving with no witness, no contract, no account of oneself.' },
+    { who: 'explorer',  text: "That doesn't make me a criminal!" },
+    { who: 'hammurabi', text: 'Under the Code, a stranger who cannot account for himself is judged as a thief.' },
+    { who: 'explorer',  text: "A thief?! But I didn't take anything!" },
+    { who: 'hammurabi', text: 'Then where did you get that funny hat?' },
+    { who: 'explorer',  text: "I don't know. Costco?" },
+    { who: 'hammurabi', text: 'This is not the Costco.' },
+    { who: 'hammurabi', text: 'Without a receipt, you stand trial.' },
+    { who: 'hammurabi', text: 'As Shamash, the God of Justice, has declared it.' },
+    { who: 'hammurabi', text: 'Does the accused understand the law of the land?', slamBefore: true },
+    { who: 'explorer',  text: 'Maybe' },
+    { who: 'explorer',  text: 'I see now. Each location plays by its own rules.', revealBefore: true },
     { who: 'hammurabi', text: 'No, they play by my rules.' },
     { who: 'hammurabi', text: 'Now, you will obey.' }
   ];
@@ -568,6 +612,7 @@ SOG.HammurabiBattle = (function () {
   // makes it fire once; _revealInProgress blocks input so the player can't click
   // past the reveal (or skip the upcoming line) while it animates.
   var _revealFired = false;
+  var _slamFired  = false;
   var _revealInProgress = false;
 
   function runLines(lines, onAllDone) {
@@ -576,6 +621,7 @@ SOG.HammurabiBattle = (function () {
     _dlg.lineIdx   = 0;
     _dlg.onAllDone = onAllDone;
     _revealFired      = false;
+    _slamFired        = false;
     _revealInProgress = false;
     _dlg.clickHandler = function (e) {
       if (e.type === 'keydown' && e.key !== ' ' && e.key !== 'Enter') return;
@@ -599,6 +645,17 @@ SOG.HammurabiBattle = (function () {
     // the laws fade in; once the reveal's onDone fires we re-enter and Hammurabi
     // speaks. Input stays blocked (advanceLine guards on _revealInProgress) so the
     // player can't click past the reveal or skip the upcoming line.
+    // Slam-BEFORE-line: first gavel — the tiles slam into place (no abilities yet).
+    if (line.slamBefore && !_slamFired) {
+      _slamFired        = true;
+      _revealInProgress = true;
+      _slamLocations(function () {
+        _revealInProgress = false;
+        showLine();   // _slamFired now set → falls through to deliver the line
+      });
+      return;
+    }
+
     if (line.revealBefore && !_revealFired) {
       _revealFired      = true;
       _revealInProgress = true;
@@ -816,6 +873,24 @@ SOG.HammurabiBattle = (function () {
       if (!openLocs.length) break;
 
       // strongest first — IP + early-turn bias (Megalith), then CC tiebreak
+      // Scribe (40) is a late-bloomer: hold him before the final turn unless he is
+      // the ONLY way to keep spending capital AND an open location already has 2+
+      // AI cards for his +1 stamps.
+      if (turnsLeft > 1) {
+        var _nonScribe = aff.filter(function (c) { return c.id !== 40; });
+        if (_nonScribe.length !== aff.length) {
+          if (_nonScribe.length) {
+            aff = _nonScribe;
+          } else {
+            var _scribeOk = openLocs.some(function (loc) {
+              var _arr = G.aiSlots[loc.id] || [], _n = 0;
+              for (var _q = 0; _q < _arr.length; _q++) if (_arr[_q]) _n++;
+              return (_n + (simFilled[loc.id] || 0)) >= 2 && slotsLeft(loc.id) > 0;
+            });
+            if (!_scribeOk) break;   // hold Scribe — leftover capital is by design
+          }
+        }
+      }
       aff.sort(function (a, b) { return ((b.ip + turnBias(b.id)) - (a.ip + turnBias(a.id))) || (b.cc - a.cc); });
 
       // Hammurabi (47) — Eye-for-an-Eye only does work at a location where the AI

@@ -18,9 +18,8 @@
 
 - **Explorer:** Huh… That was strange.
 - **Explorer:** I should probably be more careful about going through dark doorways.
-- **Explorer:** At least this place looks familiar…
-- **Explorer:** Is that Mount Kilimanjaro?
-- **Explorer:** I think that means I’m in East Africa.
+- **Explorer:** This place looks familiar…
+Explorer: I think I saw it on a map in my history book...
 - **Explorer:** But where are all the people?
 
 ## 1.2 — Meeting Lucy (Phase 2)
@@ -40,6 +39,8 @@ Lucy: You're welcome.
 - **Lucy:** Nothing will. 
 Lucy: Don’t over think it.
 - **Explorer:** Fair enough. 
+Explorer: Well, can you tell me where we are then?
+Lucy: My friends and I call it home.
 Explorer: But that must mean I traveled back in time. 
 Explorer: Like way back.
 - **Lucy:** Like I said, don’t over think it.
