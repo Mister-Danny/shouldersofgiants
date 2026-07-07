@@ -292,7 +292,7 @@ SOG.GilgameshBattle = (function () {
      with "Thank you". Skipped on Attempt 2+ / re-entries. */
   var OPENING_PRE = [
     { who: 'otzi',     text: 'Prepare to be smited into the great beyond.' },
-    { who: 'explorer', text: 'Gulp' },
+    { who: 'explorer', text: 'Gulp.' },
     { who: 'explorer', text: 'How do you play this, again?' }
   ];
   var OPENING_PROMPT = 'Click on me, if you need a reminder.';
@@ -312,7 +312,7 @@ SOG.GilgameshBattle = (function () {
           _openRulesPopup(function () {
             _glowOpponentPortrait(false);
             var ot = getBubbleEl('otzi'); if (ot) ot.classList.remove('is-visible', 'is-ready');
-            runLines([{ who: 'explorer', text: 'Thank you.' }], function () {
+            runLines([{ who: 'explorer', text: 'Thank you!' }], function () {
               try { localStorage.setItem('sog_gilgamesh_opening_seen', 'true'); } catch (e) {}
               if (onComplete) onComplete();
             });
@@ -499,40 +499,99 @@ SOG.GilgameshBattle = (function () {
                     function (id) { return _gAiCardsAt(id).length; });
       case 43: // Gilgamesh card → contest the location we're most behind at
         return best(function () { return true; }, function (id) { return -_gLocGap(id); });
+      case 44: // Enkidu → the AI's biggest stack (his +1 hits adjacent slots)
+        return best(function (l) { return _gAiCardsAt(l.id).length > 0; },
+                    function (id) { return _gAiCardsAt(id).length; });
       default:
         return null; // Chariot/Priest/Farmer/Canals: no strong location context
     }
   }
-  // General fallback location rules: spread out, contest losses, don't pile on.
-  function _gLocPlayScore(locId) {
+  // General fallback location rules: spread out, contest CLOSE losses, don't
+  // pile onto safe wins, abandon lost causes. On the FINAL turn the score is
+  // marginal-outcome placement instead: flipping a loss with THIS card is gold,
+  // shoring a narrow lead is silver, and both safe wins and unwinnable holes
+  // are wasted plays. (Gaps read REVEALED cards only — the player's face-down
+  // current-turn plays stay invisible, same information the player has.)
+  function _gLocPlayScore(locId, cardIp, lastTurn) {
     var count = _gAiCardsAt(locId).length;
     var gap   = _gLocGap(locId);
     var score = 0;
+    if (lastTurn) {
+      if (gap < 0 && gap + cardIp >= 0)      score += 8;   // this card flips the location
+      else if (gap >= 0 && gap <= 2)         score += 4;   // secure a narrow lead
+      else if (gap < 0 && gap + cardIp < 0)  score -= 6;   // unwinnable even with this card
+      else if (gap > 4)                      score -= 4;   // already safely won
+      if (count >= 4) score -= 10;                          // no slot pressure valve
+      return score;
+    }
     if (count >= 3) score -= 6;   // avoid stacking 3+ on one location
     else if (count >= 2) score -= 2;
-    if (gap >= 3) score -= 3;     // already comfortably won — don't reinforce
-    if (gap < 0)  score += 3;     // contest a location we're losing
+    if (gap >= 4)  score -= 4;    // already comfortably won — don't reinforce
+    if (gap < 0 && gap >= -5) score += 3;   // contest a CLOSE loss (2-of-3 focus)
+    if (gap < -7)  score -= 5;    // deep hole — stop feeding a lost cause
     if (count === 0) score += 1;  // prefer spreading to fresh locations
     return score;
   }
-  function _gFallbackLoc() {
+  function _gFallbackLoc(cardId) {
     var open = _gAiOpenLocs();
     if (!open.length) return null;
-    open.sort(function (a, b) { return _gLocPlayScore(b.id) - _gLocPlayScore(a.id); });
+    var G    = SOG.state.G;
+    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
+    var ip   = card ? card.ip : 0;
+    var lastTurn = !!(G.config && G.config.structure && G.turn >= G.config.structure.turns);
+    open.sort(function (a, b) { return _gLocPlayScore(b.id, ip, lastTurn) - _gLocPlayScore(a.id, ip, lastTurn); });
     return open[0].id;
   }
-  // How eagerly to play a card this turn (higher = sooner; held → -1).
+  // Synergy-pull sanity clamp. The preferred-loc rules chase +1-style combo value
+  // and would happily snowball every card onto one location (Scribe→most cards,
+  // Enkidu→biggest stack, Priest→the Ziggurat…) while losing the other two.
+  // A synergy nudge is never worth feeding a runaway win — 2-of-3 locations is
+  // the win condition — so the preference is DROPPED (→ strategic fallback) when
+  // that location is already comfortably won, already stacked while ahead, or
+  // holds 3+ cards. Contested targets (e.g. Soldier striking into a loss) pass
+  // through untouched.
+  function _gClampPreferred(pref) {
+    if (pref === null) return null;
+    var count = _gAiCardsAt(pref).length;
+    var gap   = _gLocGap(pref);
+    if (count >= 3) return null;                 // never a 4th card by synergy pull
+    if (gap >= 4)  return null;                  // runaway win — stop reinforcing
+    if (count >= 2 && gap >= 0) return null;     // stacked AND ahead — spread out
+    return pref;
+  }
+  // How eagerly to play a card this turn (higher = sooner; held / castoff → negative).
+  // Base = the card's IP, so the strongest material actually reaches the board
+  // (8 plays from a 10-card deck = 2 castoffs; make them the junk, not Enkidu).
+  // Situational bonuses/penalties layer on top. Negative scores are skipped while
+  // anything better exists (the selectPlays 'playable' filter).
   function _gCardPlayScore(cardId, turn) {
-    if (_gAiHeld(cardId, turn)) return -1;
+    // Held cards score FAR below any castoff, so even the all-negative fallback
+    // pool (junk-only hands) plays the junk first and keeps holds held.
+    if (_gAiHeld(cardId, turn)) return -100;
+    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
+    var base = card ? card.ip : 0;
     var pref = _gPreferredLoc(cardId);
     switch (cardId) {
-      case 49: return pref !== null ? 5 : 0;     // Phoenicians with a Cultural target ready
-      case 42: return pref !== null ? 3 : 0;     // Soldier with a strike target
-      case 45: return pref !== null ? 3 : 0;     // Ziggurat next to a Religious card
-      case 38: return pref !== null ? 2 : 0;     // Priest — prefers a loc with a Ziggurat (its +1)
-      case 40: return pref !== null ? 2 : 0;     // Scribe co-located with earlier plays
-      case 43: return turn >= 3 ? 4 : -1;        // Gilgamesh card late = big scorer
-      default: return 0;
+      case 49: return base + (pref !== null ? 5 : -1);    // Phoenicians with a Cultural target ready
+      case 42: return base + (pref !== null ? 4 : -2.5);  // Soldier: strike value, else dead weight
+      case 45: return base + (pref !== null ? 3 : 0);     // Ziggurat next to a Religious card
+      case 38: return base + (pref !== null ? 2 : -0.5);  // Priest eats a hand card — wants the Ziggurat payoff
+      case 40: {
+        // Scribe is a late-bloomer: strongest on the FINAL turn (max stamp targets).
+        // Earlier he's HELD — playable only when nothing better exists (the 2-plays
+        // quota must be filled), and even then only ranking above other holds when
+        // 2+ of his targets are already on board.
+        var _sG    = SOG.state.G;
+        var _sLast = !!(_sG.config && _sG.config.structure && turn >= _sG.config.structure.turns);
+        var _sTgts = pref !== null ? _gAiCardsAt(pref).length : 0;
+        if (_sLast) return base + 3 + Math.min(_sTgts, 3);
+        return _sTgts >= 2 ? -99 : -100;
+      }
+      case 44: return base + (pref !== null ? 1 : 0);     // Enkidu into a stack (adjacency payoff)
+      case 43: return base + 4;                            // Gilgamesh (held until turn 3) = top priority when live
+      case 39: return base - 2.5;                          // Farmer: Harvest is dead in a no-capital battle → castoff
+      case 41: return base - 2;                            // Canals: only boosts Farmer here → castoff
+      default: return base;
     }
   }
 
@@ -548,7 +607,7 @@ SOG.GilgameshBattle = (function () {
     { who: 'otzi',     text: 'Muahaha...' },
     { who: 'explorer', text: 'I never had a chance.' },
     { who: 'otzi',     text: 'What did you expect in my city-state?' },
-    { who: 'explorer', text: 'Your cards were too overpowering.' }
+    { who: 'explorer', text: "Your cards were too strong. Everything I've learned so far... it wasn't enough." }
   ];
 
   // True if THIS win is the player's first-ever Gilgamesh win. Captured in
@@ -714,8 +773,8 @@ SOG.GilgameshBattle = (function () {
      hand-off) is retired — Enkidu now just lives in Gilgamesh's deck. */
   function _runPostVictorySequence() {
     runLines([
-      { who: 'explorer', text: 'I did it!' },
-      { who: 'otzi',     text: 'How was that possible?' },
+      { who: 'explorer', text: 'I DID IT!' },
+      { who: 'otzi',     text: 'How is that possible?' },
       { who: 'explorer', text: 'I learned from history.' },
       { who: 'otzi',     text: "By doing so, you've earned this." }
     ], function () {
@@ -845,7 +904,7 @@ SOG.GilgameshBattle = (function () {
       // Streamlined post-initial-victory scoreboard (win or loss): no narrative.
       actions.appendChild(mkBtn('PLAY AGAIN',  function () { _removeResultPopup(); _onPlayAgain(); }));
       actions.appendChild(mkBtn('GAMEBOARD',   function () { _hideResultForReview(); }));
-      actions.appendChild(mkBtn('BACK TO MAP', function () { _removeResultPopup(); _exitToOverworld(); }));
+      actions.appendChild(mkBtn(won ? 'CONTINUE' : 'BACK TO MAP', function () { _removeResultPopup(); _exitToOverworld(); }));
     } else if (won) {
       // First victory → the post-victory reward sequence (Gilgamesh-card grant +
       // closing dialogue; gold + market in part 4).
@@ -877,18 +936,22 @@ SOG.GilgameshBattle = (function () {
   // Farmer dialogue runs in two halves around the Cuneiform card-acquisition
   // animation (A → grant reveal → B).
   var FARMER_POSTLOSS_A = [
-    { who: 'farmer',   text: 'Hey, I think you could use this.' },
-    { who: 'explorer', text: 'What?' }
+    { who: 'farmer',   text: 'Hey. That was a tough battle.' },
+    { who: 'explorer', text: 'His cards were so much more advanced than mine.' },
+    { who: 'farmer',   text: 'Of course they were. You were playing in Prehistory.' },
+    { who: 'farmer',   text: "You didn't stand a chance." },
+    { who: 'explorer', text: "Then what do I do? I can't get stuck here!" },
+    { who: 'farmer',   text: 'You need to bring your cards up to date.' }
   ];
   var FARMER_POSTLOSS_B = [
-    { who: 'explorer', text: "What's this?" },
-    { who: 'farmer',   text: 'Cuneiform, the first written language.' },
-    { who: 'explorer', text: 'Oh wow, how does it work?' },
+    { who: 'explorer', text: "What's Cuneiform?" },
+    { who: 'farmer',   text: 'The first written language.' },
+    { who: 'explorer', text: 'Oh, how does it work?' },
     { who: 'farmer',   text: 'You should read it, obviously.' },
     { who: 'explorer', text: 'Oh, right.' },
     { who: 'farmer',   text: 'But in effect, it will empower those old prehistoric cards you have.' },
     { who: 'explorer', text: 'Thank you.' },
-    { who: 'farmer',   text: "Don't mention." },
+    { who: 'farmer',   text: "Don't mention it." },
     { who: 'farmer',   text: "Seriously, he'll kill me." }
   ];
   var GILGAMESH_POSTLOSS_CHALLENGE = [
@@ -1139,8 +1202,8 @@ SOG.GilgameshBattle = (function () {
       var pool = playable.length ? playable : ranked;
       pool.sort(function (a, b) { return b.score - a.score; });
       var cardId = pool[0].cid;
-      var locId  = _gPreferredLoc(cardId);
-      if (locId === null) locId = _gFallbackLoc();
+      var locId  = _gClampPreferred(_gPreferredLoc(cardId));
+      if (locId === null) locId = _gFallbackLoc(cardId);
       if (locId === null) break;
       var slotIndex = G.aiSlots[locId].indexOf(null);
       if (slotIndex === -1) break;
@@ -1170,10 +1233,13 @@ SOG.GilgameshBattle = (function () {
     var activeIds = (window.Decks && typeof window.Decks.getActiveCards === 'function')
       ? window.Decks.getActiveCards() : [];
     var playerDeck;
-    if (activeIds && activeIds.length) {
+    // 4 turns x 2 plays with replenish draws needs >= 10 cards for the player to
+    // keep drawing through the final turn. A degraded state (cleared progress →
+    // starters-only 8-card collection) would starve the turn-4 draw, so the
+    // explicit-list safety net now catches ANY too-small deck, not just an empty one.
+    if (activeIds && activeIds.length >= 10) {
       playerDeck = { source: 'active-deck', shuffle: true };   // game.js → Decks.getActiveCards()
     } else {
-      // Safety net: never start the battle with an empty deck.
       var pIds = PREHISTORY_IDS.slice();
       if (_has(KEY_CUNEIFORM_GRANTED)) pIds.push(46);
       playerDeck = { source: 'explicit', ids: pIds, shuffle: true };

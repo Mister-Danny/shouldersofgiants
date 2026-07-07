@@ -253,8 +253,8 @@
 
       var playerHighCCCards = G.playerSlots[loc.id].reduce(function (n, s) {
         if (!s) return n;
-        var c = CARDS.find(function (x) { return x.id === s.cardId; });
-        return n + (c && c.cc >= 4 ? 1 : 0);
+        // honors a Mummy's inherited CC (sd.cc) via abilities.effectiveCC
+        return n + (SOG.abilities.effectiveCC(s) >= 4 ? 1 : 0);
       }, 0);
 
       var playerCards = G.playerSlots[loc.id].filter(Boolean);
@@ -339,6 +339,9 @@
       if (cardId === 31 && turnsLeft <= 1) b -= 1;// a last-turn Megalith is nearly worthless
       return b;
     }
+    if (cardId === 40) {                          // Scribe — late-bloomer: his At-Once stamps
+      return turnsLeft <= 1 ? 3 : -6;             // +1 per OTHER own card here → max targets on
+    }                                             // the FINAL turn; early he sinks to last resort
     return 0;
   }
 
@@ -373,6 +376,8 @@
         var rel = ownIds.filter(function (id) { return typeOf(id) === 'Religious'; }).length;
         return Math.min(rel, 2) * 1.5;
       }
+      case 40: // Scribe — stamps +1 on each of the owner's OTHER cards here: go where they are.
+        return Math.min(ownIds.length, 3) * 1.5;
       case 54: { // Papyrus (Egypt) — copies the LAST card played to hand; worth more
                  // after the AI has already played something worthwhile. Board-wide
                  // read (constant across locs → a card-priority nudge). Excludes self.
@@ -421,6 +426,24 @@
           return id !== 53 && typeOf(id) === 'Cultural';
         }).length;
         return Math.min(culturalInHand, 3) * 0.8;
+      }
+      case 71: { // Priest (Egypt) — revive a discarded card as a Mummy HERE; worth
+                 // more when the AI has discards to revive AND this location has room.
+        var disc = side === 'opp' ? G.aiDiscard : G.playerDiscard;
+        if (!disc || !disc.length) return -1;              // nothing to revive → whiffs
+        var here = (side === 'opp' ? G.aiSlots : G.playerSlots)[locId] || [];
+        var tentHere = tentative.filter(function (p) { return p.locId === locId; }).length;
+        // Priest occupies one slot HIMSELF and the revived Mummy needs another —
+        // require TWO free slots or the revive is a guaranteed fizzle.
+        if ((here.filter(function (s) { return s; }).length + tentHere) >= here.length - 1) return -1;
+        var bestDisc = disc.reduce(function (m, id) { var c = CARDS.find(function (x) { return x.id === id; }); return c ? Math.max(m, c.ip) : m; }, 0);
+        return 1 + Math.min(bestDisc, 6) * 0.4;            // scales with the best revive available
+      }
+      case 66: { // Book of the Dead (Egypt) — discard + weigh; a free resurrection
+                 // when the AI holds an IP==CC card. Constant across locs (card nudge).
+        var bhand = side === 'opp' ? G.aiHand : G.playerHand;
+        var hasEq = (bhand || []).some(function (id) { var c = CARDS.find(function (x) { return x.id === id; }); return c && c.ip === c.cc; });
+        return hasEq ? 1.5 : 0;
       }
       default:
         return 0;
