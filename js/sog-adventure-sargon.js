@@ -731,6 +731,15 @@ SOG.SargonBattle = (function () {
     var capital = CAP;
     var CARDS_  = (typeof CARDS !== 'undefined') ? CARDS : [];
     function cardById(id) { for (var i = 0; i < CARDS_.length; i++) if (CARDS_[i].id === id) return CARDS_[i]; return null; }
+    // AI-side effective cost — the SAME path the player uses (owner 'ai'), so any
+    // location/card discount applies to the AI's affordability + budget. Sargon's
+    // deck/locations carry NO cost discounts today, so this equals base CC — it's a
+    // no-op that keeps the selector uniform + correct if a discount card is decked.
+    var _repLoc = (G.locations && G.locations[0]) ? G.locations[0].id : null;
+    function aiCost(card, locId) {
+      return (window.SOG && SOG.board && SOG.board.effectiveCost)
+        ? SOG.board.effectiveCost(card, (locId != null ? locId : _repLoc), 'ai') : card.cc;
+    }
 
     var hand      = G.aiHand.slice();
     var simFilled = {};   // locId → placements simulated this turn (so we don't over-fill a slot)
@@ -781,7 +790,7 @@ SOG.SargonBattle = (function () {
       var aff = [];
       for (var h = 0; h < hand.length; h++) {
         var c = cardById(hand[h]);
-        if (c && c.cc <= capital) aff.push(c);
+        if (c && aiCost(c) <= capital) aff.push(c);
       }
       if (!aff.length) break;
       var openLocs = G.locations.filter(function (loc) { return slotsLeft(loc.id) > 0; });
@@ -825,7 +834,7 @@ SOG.SargonBattle = (function () {
       }
 
       plays.push({ cardId: pick.id, locId: locId });
-      capital -= pick.cc;
+      capital -= aiCost(pick, locId);
       simFilled[locId] = (simFilled[locId] || 0) + 1;
       simIP[locId]     = (simIP[locId] || 0) + (pick.ip || 0);
       var idx = hand.indexOf(pick.id);
