@@ -174,7 +174,7 @@
     hand.forEach(function (cardId) {
       if (budget <= 0) return;
       var card = CARDS.find(function (c) { return c.id === cardId; });
-      if (!card || card.cc > budget) return;
+      if (!card) return;   // affordability re-checked below at the chosen location (discounts apply)
 
       // Randomly skip ~1 in 3 affordable cards to simulate carelessness
       if (Math.random() < 0.33) return;
@@ -197,6 +197,12 @@
       }
       aiFirstPlayed = true;
 
+      // AI-side effective cost at the CHOSEN location (owner-aware — location/card
+      // discounts apply symmetrically). Skip if unaffordable after the discount.
+      var cost = (SOG.board && SOG.board.effectiveCost)
+        ? SOG.board.effectiveCost(card, t.locId, 'ai') : card.cc;
+      if (cost > budget) return;
+
       // Resurrection bonus stored as named ipMod entry (parity with player commitPlay)
       var resBonus  = G.aiCardIPBonus[cardId] || 0;
       var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
@@ -205,7 +211,7 @@
       G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
       G.aiRevealQueue.push(cardId);
       G.aiActionLog.push({ type: 'play', cardId: cardId });  // bug 16: unified action log
-      budget -= card.cc;
+      budget -= cost;
 
       var slotEl = helpers.getSlotEl('opp', t.locId, t.slotIndex);
       if (slotEl) { slotEl.dataset.cardId = cardId; helpers.setSlotFaceDown(slotEl); }
@@ -276,43 +282,10 @@
     return result;
   }
 
-  /**
-   * Effective capital cost for an AI card at a location, accounting for
-   * already-revealed discount cards (Henry anywhere, Cosimo anywhere, Levant).
-   */
-  function _giantEffectiveCC(cardId, locId) {
-    var card = CARDS.find(function (c) { return c.id === cardId; });
-    if (!card) return 99;
-    var cc = card.cc;
-
-    // Henry the Navigator (id=22): reduces Exploration cc globally
-    if (card.type === 'Exploration' && cardId !== 22) {
-      var henryOnBoard = G.locations.some(function (l) {
-        return G.aiSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 22; });
-      });
-      if (henryOnBoard) cc = Math.max(1, cc - 1);
-    }
-    // Cosimo de'Medici (id=19): reduces Cultural cc from anywhere
-    if (card.type === 'Cultural' && cardId !== 19) {
-      var cosimoAny = G.locations.some(function (l) {
-        return G.aiSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 19; });
-      });
-      if (cosimoAny) cc = Math.max(1, cc - 1);
-    }
-    // Levant (RELIGIOUS_DISCOUNT)
-    var loc = G.locations.find(function (l) { return l.id === locId; });
-    if (loc && loc.abilityKey === 'RELIGIOUS_DISCOUNT' && card.type === 'Religious') {
-      cc = Math.max(1, cc - 1);
-    }
-    // Nebuchadnezzar (id=50): At Once, his owner's in-hand Mesopotamia cards get a
-    // ONE-TIME -1 CC stamp (G.nebCCDiscount, set in abilities.js when Neb reveals).
-    // The AI is the 'opp' side — read its stamp per-card (no longer a continuous aura).
-    if (card.era === 'Mesopotamia' && cardId !== 50 &&
-        G.nebCCDiscount && G.nebCCDiscount.opp[cardId]) {
-      cc = Math.max(1, cc - 1);
-    }
-    return cc;
-  }
+  // (Removed _giantEffectiveCC — the Giant strategy now uses the SAME owner-aware
+  //  SOG.board.effectiveCost(card, locId, 'ai') as the player + every other AI
+  //  path, so discounts are computed in one place. It previously handled only
+  //  Henry/Cosimo/Levant/Neb and missed Imhotep + Babylon.)
 
   /**
    * Score a single (cardId, locId) candidate play.
@@ -602,7 +575,9 @@
           if (locFilter && loc.id !== locFilter) return;
           var avail = boardAnalysis[loc.id].availableSlots - (slotsUsed[loc.id] || 0);
           if (avail <= 0) return;
-          var cc    = _giantEffectiveCC(cardId, loc.id);
+          var _card = CARDS.find(function (c) { return c.id === cardId; });
+          var cc    = (_card && SOG.board && SOG.board.effectiveCost)
+            ? SOG.board.effectiveCost(_card, loc.id, 'ai') : (_card ? _card.cc : 99);
           if (cc > remaining) return;
           var score = _giantScorePlay(cardId, loc.id, boardAnalysis, selected);
           if (score === null) return;
