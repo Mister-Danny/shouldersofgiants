@@ -50,6 +50,7 @@ SOG.HUD = (function () {
     sargon:      { portrait: 'images/portraits/sargonportrait.jpg', bleepHz: 440, side: 'npc', frame: 'sargon'    },
     hammurabi:   { portrait: 'images/portraits/hammurabi.jpg', bleepHz: 240, side: 'npc', frame: 'hammurabi' },
     nebuchadnezzar: { portrait: 'images/portraits/nebuchadnezzar.jpg', bleepHz: 200, side: 'npc', frame: 'neb' },
+    narmer:      { portrait: 'images/portraits/narmerportrait.jpeg', bleepHz: 260, side: 'npc' },
     trader:      { portrait: 'images/portraits/mesotrader@0.5x.jpg', bleepHz: 300, side: 'npc'   }
   };
 

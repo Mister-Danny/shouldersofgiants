@@ -467,42 +467,53 @@
     return (s.transcribedFrom != null) ? s.transcribedFrom : s.cardId;
   }
 
-  function effectiveCost(card, locId) {
+  /**
+   * Effective capital cost for `card` played at `locId`, for `owner`.
+   * `owner` is 'player' (default) or 'ai'. Cost DISCOUNTS that read the board
+   * (Cosimo/Henry/Imhotep revealed cards) or a per-owner stamp (Neb) resolve
+   * against THAT owner's side, so the AI and player see the same discounts
+   * symmetrically. Passing no owner is byte-for-byte identical to the old
+   * player-only behaviour. Location-based discounts (Levant religious, Babylon
+   * base-5) are owner-agnostic.
+   */
+  function effectiveCost(card, locId, owner) {
     if (G.prehistoryMode) return 0;
+    var forAi   = owner === 'ai';
+    var slots   = forAi ? G.aiSlots : G.playerSlots;
+    var nebSide = forAi ? 'opp' : 'player';
     var loc  = G.locations.find(function (l) { return l.id === locId; });
     var cost = card.cc;
     if (loc && loc.abilityKey === 'RELIGIOUS_DISCOUNT' && card.type === 'Religious')
       cost = Math.max(0, cost - 1);
     if (card.type === 'Cultural' &&
         G.locations.some(function (l) {
-          return G.playerSlots[l.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 19; });
+          return slots[l.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 19; });
         }))
       cost = Math.max(0, cost - 1);
     if (card.type === 'Exploration' &&
         G.locations.some(function (l) {
-          return G.playerSlots[l.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 22; });
+          return slots[l.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 22; });
         }))
       cost = Math.max(0, cost - 1);
     // Nebuchadnezzar (id 50) — "Builder of Babylon": At Once, his owner's in-hand
     // Mesopotamia cards get a ONE-TIME -1 CC stamp (set in abilities.js when Neb
-    // reveals). This is the player charge/display path, so read the player stamp.
+    // reveals). Read the stamp for THIS owner (player charge/display vs AI budget).
     // The stamp persists on the card while it sits in hand; later-drawn cards aren't
     // stamped. (Not continuous — leaving the cheaper aura was too strong.)
-    if (card.era === 'Mesopotamia' && G.nebCCDiscount && G.nebCCDiscount.player[card.id])
+    if (card.era === 'Mesopotamia' && G.nebCCDiscount && G.nebCCDiscount[nebSide] && G.nebCCDiscount[nebSide][card.id])
       cost = Math.max(0, cost - 1);
     // Babylon (BABYLON_COST_5 location, Nebuchadnezzar battle): BASE-cost-5 cards cost
     // -1 while a Babylon location is present. Global (not at-Babylon-only). Keyed off
     // card.cc (base), so it STACKS with the Neb-50 discount above. Inert in battles
-    // with no Babylon location.
+    // with no Babylon location. Owner-agnostic (location-based).
     if (card.cc === 5 &&
         G.locations.some(function (l) { return l.abilityKey === 'BABYLON_COST_5'; }))
       cost = Math.max(0, cost - 1);
     // Imhotep (id 65) — "Ancient Engineering": -1 CC to SCIENTIFIC cards played at
-    // HIS location (a revealed player-side Imhotep here). Layered like Babylon.
-    // Inert until Egypt cards are decked (no id-65 in any current deck).
+    // HIS location (a revealed Imhotep on THIS owner's side here). Layered like Babylon.
     if (card.type === 'Scientific' &&
-        G.playerSlots[locId] &&
-        G.playerSlots[locId].some(function (s) { return s && s.revealed && abilityIdOf(s) === 65; }))
+        slots[locId] &&
+        slots[locId].some(function (s) { return s && s.revealed && abilityIdOf(s) === 65; }))
       cost = Math.max(0, cost - 1);
     return cost;
   }
@@ -511,15 +522,50 @@
     return sd.ip + (sd.ipMod || 0) + (sd.contMod || 0);
   }
 
-  /* Is a location currently open to NEW plays? False only when a battle has marked
+  /* Is a location currently open to NEW plays? False when a battle has marked
      the location's `flooded` flag (the Nebuchadnezzar flood mechanic sets it via its
-     onTurnStart scheduler). Inert everywhere else — no battle sets the flag, so this
-     always returns true. Read by the play-gates (player + AI) to block flooded rivers
-     without touching cards already revealed there. */
-  function isLocationPlayable(locId) {
+     onTurnStart scheduler), or when the battle's ADVANCE GATE locks it for `owner`
+     (the Narmer advance-board mechanic — see below). Inert everywhere else — no
+     other battle sets the flag or the config rule, so this returns true. Read by
+     the play-gates (player + AI) to block plays without touching revealed cards.
+
+     `owner` ('player' | 'ai', default 'player') matters only for the advance gate,
+     which is per-side; the flood check is symmetric and ignores it. */
+  function isLocationPlayable(locId, owner) {
     if (!G.locations) return true;
     var loc = G.locations.find(function (l) { return l.id === locId; });
-    return !(loc && loc.flooded);
+    if (loc && loc.flooded) return false;
+    if (!isAdvanceUnlocked(locId, owner)) return false;
+    return true;
+  }
+
+  /* ── ADVANCE GATE (Narmer battle) ──────────────────────────────────
+     Config-gated: active only when G.config.rules.advanceGate is set —
+       { playerHome, contested, aiHome }  (location ids)
+     Symmetric, LIVE rule, re-evaluated at every play-time check:
+       • a side's own home is always playable;
+       • the contested location unlocks only while that side's home is FULL
+         (all slots occupied — face-down cards count);
+       • the opponent's home unlocks only while the home is full AND the side
+         has at least one card at the contested location.
+     Because it reads the live slot arrays, a card LEAVING a home slot (Chariot
+     move) re-locks forward play until the home is refilled — there is no
+     stored "unlocked" state. Movement placement deliberately does NOT consult
+     this predicate (isLegalMoveTarget / runAdventureMovements), so moves can
+     break through the gate; only NEW plays are gated. */
+  function isAdvanceUnlocked(locId, owner) {
+    var ag = G.config && G.config.rules && G.config.rules.advanceGate;
+    if (!ag) return true;
+    var side     = owner === 'ai' ? 'ai' : 'player';
+    var homeId   = side === 'ai' ? ag.aiHome : ag.playerHome;
+    var oppHome  = side === 'ai' ? ag.playerHome : ag.aiHome;
+    var slots    = side === 'ai' ? G.aiSlots : G.playerSlots;
+    if (!slots) return true;
+    function homeFull()   { var s = slots[homeId];       return !!s && s.indexOf(null) === -1; }
+    function atContested(){ var s = slots[ag.contested]; return !!s && s.some(function (x) { return !!x; }); }
+    if (locId === ag.contested) return homeFull();
+    if (locId === oppHome)      return homeFull() && atContested();
+    return true;   // own home (and anything else) — always playable
   }
 
   /**

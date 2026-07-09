@@ -9719,6 +9719,94 @@ body.hanging-gardens-battle .adv-bubble .adv-bubble-hint {
   margin-top: 6px;
 }
 
+/* ── Narmer (Egypt) battle speech bubbles — same comic-book treatment as
+   Hammurabi / Sargon / Hanging Gardens (its own body class, so the default
+   top-right .adv-bubble box + otzi-battle rules don't reach it). Narmer's
+   in-battle dialogue (intro / win / loss / tie) all render through the shared
+   #adv-bubble-otzi (opponent) + #adv-bubble-explorer bubbles, exactly like the
+   other bosses — this block is what styles them as bubbles rather than the
+   raw top-right box. */
+body.narmer-battle #adv-bubble-otzi {
+  top: 80px;
+  transform: translateY(-50%);
+  right: 152px;
+  left: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 270px;
+  gap: 0;
+  background: #f0ebe0;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: -4px 4px 0 #111;
+}
+body.narmer-battle #adv-bubble-otzi::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-left-color: #111;
+}
+body.narmer-battle #adv-bubble-otzi::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-left-color: #f0ebe0;
+}
+body.narmer-battle #adv-bubble-explorer {
+  top: 624px;
+  transform: translateY(-50%);
+  left: 168px;
+  right: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 200px;
+  gap: 0;
+  background: #fffef5;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: 4px 4px 0 #111;
+}
+body.narmer-battle #adv-bubble-explorer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-right-color: #111;
+}
+body.narmer-battle #adv-bubble-explorer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-right-color: #fffef5;
+}
+body.narmer-battle .adv-bubble .adv-bubble-portrait { display: none; }
+body.narmer-battle .adv-bubble .adv-bubble-text {
+  font-size: 18px;
+  line-height: 1.45;
+  color: #111;
+  text-shadow: none;
+  min-height: 28px;
+}
+body.narmer-battle .adv-bubble .adv-bubble-hint {
+  color: #666;
+  margin-top: 6px;
+}
+
 /* Radial wipe — fullscreen black, clipped to an expanding circle.
    Inline clip-path style is set by JS each frame during the GSAP
    tween. .active toggles visibility; opacity stays at 1 throughout
@@ -11436,3 +11524,71 @@ body[data-screen="home"] #music-ctrl,
 body[data-screen="deckbuilder"] #music-ctrl { display: flex; }
 
 /* (Battle Options gear is now styled via .battle-icon-strip .btn-hud-icon.) */
+
+/* ══════════════════════════════════════════════════════════════════
+   NARMER ADVANCE BATTLE (body.narmer-battle) — advance-gate lock
+   affordance. Purely visual: the rule itself is enforced in the play
+   predicate (board.js isAdvanceUnlocked); sog-adventure-narmer.js
+   toggles these classes from the same predicate. Scoped to the
+   narmer-battle body class so no other battle is affected.
+══════════════════════════════════════════════════════════════════ */
+body.narmer-battle .battle-slots-player { position: relative; }
+
+/* Player-side lock: grey the player's slot row… */
+body.narmer-battle .battle-col.advance-locked-player .battle-slots-player .battle-card-slot {
+  opacity: 0.35;
+  filter: grayscale(0.85);
+}
+/* …and float a 🔒 hint naming the unlock condition over it. */
+body.narmer-battle .battle-col.advance-locked-player .battle-slots-player::after {
+  content: '🔒 ' attr(data-lock-hint);
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  pointer-events: none;
+  font-family: 'CTGalbite', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  color: #f3e6c4;
+  text-shadow: 1px 1px 0 #000;
+  background: rgba(26, 12, 4, 0.85);
+  border: 2px solid #d4aa50;
+  border-radius: 8px;
+  padding: 5px 10px;
+  max-width: 90%;
+}
+
+/* AI-side lock: a subtle grey on Narmer's row so the symmetric rule reads. */
+body.narmer-battle .battle-col.advance-locked-ai .battle-slots-opp .battle-card-slot {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+
+/* Narmer battle column art (loc ids 111-113 exist only in that battle; the
+   body scope keeps them inert everywhere else). User-supplied Egypt art. */
+body.narmer-battle .battle-col[data-loc-id="111"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/loweregypt.jpeg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.narmer-battle .battle-col[data-loc-id="112"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/memphis.jpeg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.narmer-battle .battle-col[data-loc-id="113"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/upperegypt.jpeg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}

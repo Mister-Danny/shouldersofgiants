@@ -405,7 +405,7 @@ const CARDS = [
   // text-only type (existing guarded fallback, same as Labor). ip may be negative
   // (Hyksos).
   {
-    id: 51, name: "Narmer", cc: 5, ip: 6,                       // WIRED (continuous averaging)
+    id: 51, name: "Narmer", cc: 5, ip: 7,                       // WIRED (continuous averaging)
     type: "Political", type2: null, era: "Egypt",
     abilityName: "The Unifier",
     ability: "Continuous:\nShares your total IP equally across this location and those adjacent to it.",
@@ -453,7 +453,7 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/egyptscribe@0.3x.jpg", locked: true
   },
   {
-    id: 57, name: "Pyramid", cc: 3, ip: 0,                      // WIRED (continuous double-last-Political)
+    id: 57, name: "Pyramid", cc: 3, ip: 1,                      // WIRED (continuous double-last-Political)
     type: "Scientific", type2: null, era: "Egypt",
     abilityName: "Monumental Legacy",
     ability: "Continuous:\nDoubles the IP of the last Political card you played here.",
@@ -477,7 +477,7 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/obelisk@0.3x.jpg", locked: true
   },
   {
-    id: 60, name: "Khufu", cc: 4, ip: 4,                        // WIRED (draw a Scientific card)
+    id: 60, name: "Khufu", cc: 4, ip: 5,                        // WIRED (draw a Scientific card)
     type: "Political", type2: null, era: "Egypt",
     abilityName: "Great Pyramid",
     ability: "At Once:\nDraw a Scientific card.",
@@ -549,10 +549,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/trader@0.3x.jpg", locked: true
   },
   {
-    id: 69, name: "Chariots", cc: 2, ip: 2,                     // TODO (Egypt): NOT YET WIRED — movement
+    id: 69, name: "Chariots", cc: 2, ip: 2,                     // WIRED (once-per-battle move + arrival strike -2; Sphinx protection applies)
     type: "Military", type2: null, era: "Egypt",
     abilityName: "Chariot of Ra",
-    ability: "Move to an adjacent location.\n(Not yet wired.)",
+    ability: "Can move once on its own.\nWhen it arrives, strike an opposing card and reduce it by -2 IP.",
     image:   "images/cards/egyptcards/egyptchariot@0.5x.jpg",
     imageSm: "images/cards/egyptcards/egyptchariot@0.3x.jpg", locked: true
   },

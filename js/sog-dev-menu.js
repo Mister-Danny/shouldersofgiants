@@ -63,7 +63,7 @@ SOG.DevMenu = (function () {
   // leave battle DOM / event listeners / stale flags behind. Guarded so a
   // missing module never throws. Add new battle modules here as they ship.
   function teardownBattles() {
-    ['GilgameshBattle', 'OtziBattle'].forEach(function (name) {
+    ['GilgameshBattle', 'OtziBattle', 'NarmerBattle'].forEach(function (name) {
       try {
         if (window.SOG && SOG[name] && typeof SOG[name].teardown === 'function') SOG[name].teardown();
       } catch (e) { console.warn('[DevMenu] teardown failed for', name, e); }
@@ -158,6 +158,19 @@ SOG.DevMenu = (function () {
         unlockCards([46]);
         gotoOverworld('mesopotamia');
         hide();
+      }
+    },
+
+    {
+      section: '🌍 Adventure Mode — Scene Jumps',
+      label: 'Narmer Battle — Direct Entry (Stage 1)',
+      description: 'Advance-gate mechanic test board (placeholder decks, no dialogue)',
+      run: function () {
+        ensureAdventurer();
+        hide();
+        stopHomeMusic();
+        teardownBattles();
+        if (window.SOG && SOG.NarmerBattle && SOG.NarmerBattle.start) SOG.NarmerBattle.start();
       }
     },
 

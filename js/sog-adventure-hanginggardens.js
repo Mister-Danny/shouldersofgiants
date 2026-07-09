@@ -813,6 +813,15 @@ SOG.HangingGardensBattle = (function () {
     var capital = (typeof ctx.capital === 'number') ? ctx.capital : baseCap;
     var CARDS_  = (typeof CARDS !== 'undefined') ? CARDS : [];
     function cardById(id) { for (var i = 0; i < CARDS_.length; i++) if (CARDS_[i].id === id) return CARDS_[i]; return null; }
+    // AI-side effective cost — the SAME path the player uses, so the Neb-50
+    // Mesopotamia stamp + Babylon base-5 discount apply to the AI's affordability
+    // + budget (both are GLOBAL here, so any locId gives the same value). Falls
+    // back to base CC if the engine helper is unavailable.
+    var _repLoc = (G.locations && G.locations[0]) ? G.locations[0].id : null;
+    function aiCost(card, locId) {
+      return (window.SOG && SOG.board && SOG.board.effectiveCost)
+        ? SOG.board.effectiveCost(card, (locId != null ? locId : _repLoc), 'ai') : card.cc;
+    }
 
     var hand      = G.aiHand.slice();
     var simFilled = {};
@@ -858,7 +867,7 @@ SOG.HangingGardensBattle = (function () {
       var aff = [];
       for (var h = 0; h < hand.length; h++) {
         var c = cardById(hand[h]);
-        if (c && c.cc <= capital) aff.push(c);
+        if (c && aiCost(c) <= capital) aff.push(c);   // affordability honors discounts
       }
       if (!aff.length) break;
       // Exclude FLOODED rivers so the AI never even considers placing there.
@@ -896,7 +905,7 @@ SOG.HangingGardensBattle = (function () {
       var locId = biasedLoc(pick.id, openLocs, weakestOpenLoc(openLocs));
 
       plays.push({ cardId: pick.id, locId: locId });
-      capital -= pick.cc;
+      capital -= aiCost(pick, locId);   // spend the discounted cost
       simFilled[locId] = (simFilled[locId] || 0) + 1;
       simIP[locId]     = (simIP[locId] || 0) + (pick.ip || 0);
       var idx = hand.indexOf(pick.id);

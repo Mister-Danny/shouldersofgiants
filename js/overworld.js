@@ -42,6 +42,7 @@ var Overworld = (function () {
   var KEY_NEB_COMPLETE              = 'sog_battle_nebuchadnezzar_complete'; // set on the Nebuchadnezzar (Hanging Gardens) win
   var KEY_EGYPT_NODE_LIVE           = 'sog_egypt_node_live';            // post-Neb: Egypt Double Crown node is active + post-Neb beat has played (set once, at end of the beat)
   var KEY_EGYPT_NODE_ARRIVAL        = 'sog_egypt_node_arrival_seen';    // one-time Egypt "funny hat" arrival beat (fires when reaching Egypt with the node live)
+  var KEY_MET_NARMER                = 'sog_met_narmer';                 // set after the first Double Crown encounter → later clicks skip straight to the battle
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -316,6 +317,42 @@ var Overworld = (function () {
     { who: 'explorer', text: "Now that's a funny hat..." }
   ];
 
+  // Narmer (Egypt) encounter — plays on every Double Crown node click (walk up
+  // first), then hands off to the battle-start STUB (the Narmer battle isn't
+  // built yet). EDITABLE.
+  var NARMER_ENCOUNTER_DIALOGUE = [
+    { who: 'narmer',   text: 'Hello, good traveler!' },
+    { who: 'narmer',   text: 'Welcome, welcome…' },
+    { who: 'explorer', text: 'Are you another mean ruler?' },
+    { who: 'narmer',   text: 'Some like to call me Menes, but in Egypt, I am Narmer, the first pharaoh.' },
+    { who: 'explorer', text: 'Thank goodness.' },
+    { who: 'explorer', text: 'By the way, I love your hat.' },
+    { who: 'narmer',   text: 'This is no hat, my friend.' },
+    { who: 'narmer',   text: 'This is the Double Crown.' },
+    { who: 'explorer', text: 'Double?' },
+    { who: 'explorer', text: 'Why would you put a crown on a crown?' },
+    { who: 'narmer',   text: 'It evokes unity.' },
+    { who: 'narmer',   text: 'The White Crown of Upper Egypt to the south.' },
+    { who: 'narmer',   text: 'The Red Crown of Lower Egypt to the north.' },
+    { who: 'explorer', text: "Wouldn't Upper be north? And Lower be south?" },
+    { who: 'narmer',   text: 'My people do not follow the compass. We follow the river.' },
+    { who: 'narmer',   text: '"Upper" refers to upstream on the Nile River.' },
+    { who: 'explorer', text: 'Ohhh.' },
+    { who: 'explorer', text: 'I think I get it.' },
+    { who: 'narmer',   text: 'It doesn’t matter whether or not you "get it."' },
+    { who: 'narmer',   text: 'This crown is what holds this Kingdom together.' },
+    { who: 'explorer', text: 'I’m sensing a turn…' },
+    { who: 'narmer',   text: 'What does your crown represent?' },
+    { who: 'explorer', text: 'This hat? It represents me not wanting to get sunburned.' },
+    { who: 'narmer',   text: 'You belong to nothing?' },
+    { who: 'explorer', text: 'I wouldn’t say that…' },
+    { who: 'narmer',   text: 'An unknown. A crack in a perfect whole.' },
+    { who: 'explorer', text: 'Yup. This took a turn.' },
+    { who: 'narmer',   text: 'Unity does not exist unless we are all as one.' },
+    { who: 'explorer', text: 'Gulp.' },
+    { who: 'narmer',   text: 'And you are not one of us.' }
+  ];
+
   // Hammurabi (Babylon) encounter — plays on node click when the active deck has
   // the full 15 cards, then the battle launches.
   var D4_HAMMURABI_ENCOUNTER = [
@@ -528,7 +565,8 @@ var Overworld = (function () {
           // First Egypt node — Narmer's Double Crown. Goes live after beating
           // Nebuchadnezzar (sog_egypt_node_live, set at the end of the post-Neb
           // beat). Placed at the base of the Nile Delta (the green fan, top-left).
-          // Click → walk up → "Egypt Battle 1 — Coming Soon" STUB (battle not built).
+          // Click → walk up → Narmer encounter dialogue → "Narmer Battle —
+          // Coming Soon" STUB (battle not built).
           // ART: doublecrown.png is a PLACEHOLDER — swap when the real art lands.
           // Position (x/y) + scale are KNOBS for fine-tuning.
           id:    'double-crown',
@@ -1218,14 +1256,21 @@ var Overworld = (function () {
       return;
     }
 
-    // ── The Double Crown (Egypt) — walk up to the node, then the Egypt Battle 1
-    //    STUB ("Coming Soon"). No battle is built yet; mirror the other node
-    //    walk-ups but land on the placeholder instead of a real battle. ──
+    // ── The Double Crown (Egypt) — walk up to the node, then the Narmer advance
+    //    battle. FIRST click plays the encounter dialogue (Explorer + Narmer
+    //    portraits) → battle; once met (sog_met_narmer), later clicks skip the
+    //    encounter and drop straight into the battle. ──
     if (node.id === 'double-crown' && currentMapId === 'egypt') {
       isDialogueLocked = true;
       cancelIdle();
+      var metNarmer = false;
+      try { metNarmer = localStorage.getItem(KEY_MET_NARMER) === 'true'; } catch (e) {}
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
-        _launchEgyptBattle1();
+        if (metNarmer) {
+          _launchNarmerBattle();
+        } else {
+          _runNarmerEncounter(NARMER_ENCOUNTER_DIALOGUE, _launchNarmerBattle);
+        }
       });
       return;
     }
@@ -2188,6 +2233,20 @@ var Overworld = (function () {
     });
   }
 
+  /* Narmer (Egypt) encounter — mirrors _runGilgameshEncounter. Sets KEY_MET_NARMER
+     on completion so later Double Crown clicks skip straight into the battle. */
+  function _runNarmerEncounter(lines, onDone) {
+    var hud = window.SOG && window.SOG.HUD;
+    if (!hud || typeof hud.enterDialogueMode !== 'function') { if (onDone) onDone(); return; }
+    hud.enterDialogueMode(null, function () {
+      _runLinesKeepOpen(lines, function () {
+        try { localStorage.setItem(KEY_MET_NARMER, 'true'); } catch (e) {}
+        if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+        if (onDone) onDone();
+      });
+    });
+  }
+
   /* ── Phase D4 — Sargon node reveal (dust storm) ──────────────────────────
      One-time, fired from _exitMarket on the first marketplace return (after the
      deck-builder unlock). Sequence: Explorer "can't wait" → sargonintro.mp3 +
@@ -2676,44 +2735,23 @@ var Overworld = (function () {
     });
   }
 
-  /* Egypt Battle 1 — STUB. The battle isn't built yet, so instead of a wipe into
-     a real battle we surface a clear "Coming Soon" placeholder over the map, then
-     return the player to idle. TODO (Egypt Battle 1): replace this with the real
-     launch (mirror _launchHammurabiBattle: _fireWipeFromNode('double-crown', …)
-     → SOG.EgyptBattle1.start()). */
-  function _launchEgyptBattle1() {
-    log('[Egypt] Double Crown clicked — Egypt Battle 1 not built yet (STUB)');
-    _showStubToast('Egypt Battle 1 — Coming Soon', function () {
-      isDialogueLocked = false;
-      scheduleIdle();
+  /* Narmer Battle — fire the radial wipe from the Double Crown node, then start
+     the advance-board battle (Stage 1/2 built: SOG.NarmerBattle). Mirrors
+     _launchHammurabiBattle. Graceful fallback to idle if the module is missing.
+     The battle's script (scriptHook 'narmer') fades the wipe cover out in
+     onBattleStart to reveal the board. */
+  function _launchNarmerBattle() {
+    _fireWipeFromNode('double-crown', function () {
+      var nb = window.SOG && window.SOG.NarmerBattle;
+      if (nb && typeof nb.start === 'function') {
+        nb.start();
+      } else {
+        console.warn('[Overworld] SOG.NarmerBattle not found — battle not built yet');
+        _clearWipe();
+        isDialogueLocked = false;
+        scheduleIdle();
+      }
     });
-  }
-
-  /* Minimal self-contained "coming soon" placeholder toast for unbuilt battles.
-     Fades a small SNES-styled card in over the overworld, holds, fades out, then
-     calls onDone. Inline-styled so it needs no CSS; remove when real battles land. */
-  function _showStubToast(text, onDone) {
-    var host = document.getElementById('screen-overworld') || document.body;
-    var el = document.createElement('div');
-    el.textContent = text;
-    el.style.cssText = [
-      'position:absolute', 'left:50%', 'top:50%', 'transform:translate(-50%,-50%)',
-      'z-index:60', 'padding:18px 30px',
-      "font-family:'CTGalbite','Courier New',monospace", 'font-size:22px',
-      'color:#f3e6c4', 'text-shadow:2px 2px 0 #000', 'text-align:center',
-      'background:linear-gradient(#2a1608,#3a200c,#2a1608)',
-      'border:3px solid #d4aa50', 'border-radius:10px',
-      'box-shadow:0 0 0 3px #1a0c04, 0 0 0 6px #6a4418, 0 0 0 7px #1a0c04',
-      'opacity:0', 'transition:opacity 0.3s ease', 'pointer-events:none'
-    ].join(';');
-    host.appendChild(el);
-    // fade in → hold → fade out → cleanup
-    requestAnimationFrame(function () { el.style.opacity = '1'; });
-    setTimeout(function () { el.style.opacity = '0'; }, 1600);
-    setTimeout(function () {
-      if (el.parentNode) el.parentNode.removeChild(el);
-      if (onDone) onDone();
-    }, 2000);
   }
 
   /* Fire the radial wipe from the node, then start the real Gilgamesh battle. */

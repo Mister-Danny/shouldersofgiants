@@ -1793,7 +1793,12 @@
     // Returns true if popup is now visible — abort the navigation
     // and let the popup's own "Play Again" button re-fire this click.
     if (window.Feedback && window.Feedback.maybeShowPopup()) return;
+    // A battle config may supply a replay() to re-run THE SAME battle (e.g. the
+    // Narmer advance-board battle rebuilds a fresh config). Arcadium / 2P set
+    // none → fall through to the default (re-resolve a new Arcadium game).
+    var _replay = G.config && typeof G.config.replay === 'function' ? G.config.replay : null;
     _playPendingCelebrations(function () {
+      if (_replay) { _replay(); return; }
       showScreen('screen-battle');
       initGame();
     });

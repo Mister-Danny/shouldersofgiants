@@ -48,9 +48,11 @@
     function commitPlay(cardId, locId) {
       var card = CARDS.find(function (c) { return c.id === cardId; });
       if (!card) return;
-      // Flooded location (Nebuchadnezzar flood) blocks NEW plays — the AI has its own
-      // play path, so it must check too. Inert elsewhere (no location ever flooded).
-      if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(locId)) return;
+      // Flooded location (Nebuchadnezzar flood) or an advance-gate lock (Narmer
+      // battle) blocks NEW plays — the AI has its own play path, so it must check
+      // too, as the AI side ('ai': the advance gate is per-side; flood is
+      // symmetric). Inert elsewhere (no flood flag, no advanceGate config).
+      if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(locId, 'ai')) return;
       var slotIndex = G.aiSlots[locId].indexOf(null);
       if (slotIndex === -1) return;
       // Resurrection bonus stored as named ipMod entry (parity with player commitPlay)
@@ -904,8 +906,17 @@
     });
     if (!found) { _tryAiBarter(G, onDone); return; }   // no Chariot → still consider a Trader barter
 
-    var dest = _bestChariotDest(G, found.locId, helpers.effectiveIP(found.sd));
-    if (dest === null) { _tryAiBarter(G, onDone); return; }
+    // Battle-supplied movement decision (config-gated, like selectPlays): a battle
+    // whose Chariot strategy differs from the generic strike/flip heuristic (the
+    // Narmer advance board weighs breakthrough value vs the home re-lock) provides
+    // cfg.ai.settings.chariotMoveDecision(G, found) → destination locId, or null to
+    // HOLD (the chariot stays eligible on later turns). Every other battle takes
+    // _bestChariotDest unchanged.
+    var _mvSettings = G.config && G.config.ai && G.config.ai.settings;
+    var dest = (_mvSettings && typeof _mvSettings.chariotMoveDecision === 'function')
+      ? _mvSettings.chariotMoveDecision(G, found)
+      : _bestChariotDest(G, found.locId, helpers.effectiveIP(found.sd));
+    if (dest === null || dest === undefined) { _tryAiBarter(G, onDone); return; }
 
     found.sd._advChariotMoved = true;   // persists with the card → never moves again
     SOG.game.executeMoveAnimated('opp', found.cardId, found.locId, dest, {}, function () {
