@@ -450,7 +450,9 @@
       if (slotIndex === -1) return;
       var baseIP = card.ip + (G.aiCardIPBonus[a.cardId] || 0);
       G.aiSlots[locId][slotIndex] = { cardId: a.cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
-      G.aiHand = G.aiHand.filter(function (id) { return id !== a.cardId; });
+      // Remove ONE instance (filter would delete both copies of a duplicated id).
+      var _2phi = G.aiHand.indexOf(a.cardId);
+      if (_2phi !== -1) G.aiHand.splice(_2phi, 1);
       G.aiRevealQueue.push(a.cardId);
       var slotEl = getSlotEl('opp', locId, slotIndex);
       if (slotEl) { slotEl.dataset.cardId = String(a.cardId); setSlotFaceDown(slotEl); }
@@ -800,10 +802,30 @@
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var card  = CARDS.find(function (c) { return c.id === cardId; });
 
-    // Find card at fromLocId by cardId (snapBack already placed it here)
+    // Resolve the moving card's SOURCE slot — duplicate-cardId safe (twins can
+    // DIVERGE: one Chariots may have spent _advChariotMoved, one Megalith twin
+    // may carry accumulated ipMod — the EXACT queued card must move):
+    //   1) opts.sd — the exact slot-data object (direct callers: adventure
+    //      Chariot, Empress Wu push, Ötzi flee). Object identity survives
+    //      snapbacks/compaction (same references move between slots).
+    //   2) opts.fromSlotIndex — recorded at queue time in the action log,
+    //      validated (the slot must still hold an sd with this cardId; an
+    //      earlier move out of the same location can compact/shift indexes).
+    //   3) Fallback: first cardId match at fromLocId (2P serialised entries
+    //      carry no coordinates) — noted in debug when coordinates went stale.
     var snapIdx = -1;
-    for (var fi = 0; fi < slots[fromLocId].length; fi++) {
-      if (slots[fromLocId][fi] && slots[fromLocId][fi].cardId === cardId) { snapIdx = fi; break; }
+    if (opts.sd) snapIdx = slots[fromLocId].indexOf(opts.sd);
+    if (snapIdx === -1 && opts.fromSlotIndex != null) {
+      var _qSd = slots[fromLocId][opts.fromSlotIndex];
+      if (_qSd && _qSd.cardId === cardId) snapIdx = opts.fromSlotIndex;
+    }
+    if (snapIdx === -1) {
+      for (var fi = 0; fi < slots[fromLocId].length; fi++) {
+        if (slots[fromLocId][fi] && slots[fromLocId][fi].cardId === cardId) { snapIdx = fi; break; }
+      }
+      if (snapIdx !== -1 && (opts.sd || opts.fromSlotIndex != null) && window.SOG_DEBUG) {
+        console.warn('[move] source slot resolved by cardId FALLBACK (queued coordinates stale): card ' + cardId + ' at loc ' + fromLocId);
+      }
     }
     if (snapIdx === -1) { done(); return; }
 
@@ -852,15 +874,22 @@
       ipModSourcesAdded.push({ source: 'Magellan', delta: 1 });
     }
 
-    // Mark moveLog entry as executed
+    // Mark moveLog entry as executed — prefer the entry queued for THIS exact
+    // source slot (fromLocId + fromSlotIndex) so twin queued moves of the same
+    // cardId can't cross-mark each other's entries; fall back to the first
+    // queued cardId match (entries without a recorded index).
+    var _mlIdx = -1;
     for (var li = 0; li < G.moveLog.length; li++) {
-      if (G.moveLog[li].cardId === cardId && G.moveLog[li].queued) {
-        G.moveLog[li].queued            = false;
-        G.moveLog[li].ipModAdded        = ipModAdded;
-        G.moveLog[li].ipModSourcesAdded = ipModSourcesAdded;
-        G.moveLog[li].toSlotIdx         = toIndex;
-        break;
-      }
+      var _ml = G.moveLog[li];
+      if (_ml.cardId !== cardId || !_ml.queued) continue;
+      if (_ml.fromLocId === fromLocId && _ml.fromSlotIndex === snapIdx) { _mlIdx = li; break; }
+      if (_mlIdx === -1) _mlIdx = li;
+    }
+    if (_mlIdx !== -1) {
+      G.moveLog[_mlIdx].queued            = false;
+      G.moveLog[_mlIdx].ipModAdded        = ipModAdded;
+      G.moveLog[_mlIdx].ipModSourcesAdded = ipModSourcesAdded;
+      G.moveLog[_mlIdx].toSlotIdx         = toIndex;
     }
 
     function applyMove() {
@@ -1012,7 +1041,7 @@
      no half-swap. Once-per-battle flag `_advTraderBartered` is set here (on real
      resolution) so re-choosing during selection stays free. Animates a two-card
      cross-slide both sides see, then re-tallies. */
-  function executeBarter(owner, traderCardId, partnerCardId, done) {
+  function executeBarter(owner, traderCardId, partnerCardId, done, coords) {
     done = done || function () {};
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
 
@@ -1025,8 +1054,24 @@
       }
       return null;
     }
+    // Coordinate resolution (duplicate-cardId safe): coords — recorded at queue
+    // time — pin the exact trader/partner slots. Validated (the slot must still
+    // hold an sd with the expected cardId); a stale coordinate falls back to the
+    // first-match locate() scan (pre-coordinate behaviour).
+    function locateAt(locId, idx, cardId) {
+      if (locId == null || idx == null) return null;
+      var arr = slots[locId];
+      var s = arr && arr[idx];
+      return (s && s.cardId === cardId) ? { locId: locId, idx: idx, sd: s } : null;
+    }
 
-    var t = locate(traderCardId), p = locate(partnerCardId);
+    var t = null, p = null;
+    if (coords) {
+      t = locateAt(coords.traderLocId,  coords.traderIdx,  traderCardId);
+      p = locateAt(coords.partnerLocId, coords.partnerIdx, partnerCardId);
+    }
+    if (!t) t = locate(traderCardId);
+    if (!p) p = locate(partnerCardId);
     // Fizzle safely: a partner (or the Trader) destroyed before this beat.
     if (!t || !p || (t.locId === p.locId && t.idx === p.idx)) {
       G.traderBarter = null;
@@ -1166,16 +1211,27 @@
     var sO = G.playerFirst ? 'opp'    : 'player';
     var seq = [];
     var len = Math.max(fQ.length, sQ.length);
+    // 'play' entries carry the commit-time slot COORDINATES (locId + slotIndex —
+    // the player log stores the loc as toLocId, the AI log as locId) so revealNext
+    // can resolve the exact slot even with DUPLICATE cardIds on board (Papyrus
+    // copies, Nubian Gold tokens). Entries without them (2P serialised actions)
+    // fall back to the cardId scan.
     for (var i = 0; i < len; i++) {
       if (i < fQ.length) {
         var fi = fQ[i];
         seq.push({ type: fi.type, owner: fO, cardId: fi.cardId,
-                   fromLocId: fi.fromLocId, toLocId: fi.toLocId, partnerCardId: fi.partnerCardId });
+                   locId: (fi.locId != null ? fi.locId : (fi.type === 'play' ? fi.toLocId : undefined)),
+                   slotIndex: fi.slotIndex, fromSlotIndex: fi.fromSlotIndex,
+                   fromLocId: fi.fromLocId, toLocId: fi.toLocId,
+                   partnerCardId: fi.partnerCardId, barterCoords: fi.barterCoords });
       }
       if (i < sQ.length) {
         var si2 = sQ[i];
         seq.push({ type: si2.type, owner: sO, cardId: si2.cardId,
-                   fromLocId: si2.fromLocId, toLocId: si2.toLocId, partnerCardId: si2.partnerCardId });
+                   locId: (si2.locId != null ? si2.locId : (si2.type === 'play' ? si2.toLocId : undefined)),
+                   slotIndex: si2.slotIndex, fromSlotIndex: si2.fromSlotIndex,
+                   fromLocId: si2.fromLocId, toLocId: si2.toLocId,
+                   partnerCardId: si2.partnerCardId, barterCoords: si2.barterCoords });
       }
     }
     return seq;
@@ -1191,16 +1247,21 @@
       refreshHandCostDisplays();
       updateScores();
       /* Cards PLAYED THIS TURN, both sides — built ONCE and reused by the At-Once
-         river stamp and the onAfterReveal hook below. The card's location + slot are
-         found by SEARCHING the owner's slots for the cardId, NOT read from the action
-         log (the AI log omits toLocId). A card played this turn hasn't relocated yet
-         at reveal-end, so its current slot IS its play location; cardId is unique
-         within one owner's deck, so owner+cardId pins it exactly. */
+         river stamp and the onAfterReveal hook below. PRIMARY: the commit-time
+         (locId, slotIndex) carried on the seq entry — exact even with DUPLICATE
+         cardIds on a side (Papyrus copies; cardId is NOT unique per side anymore).
+         FALLBACK (2P entries without coordinates): search the owner's slots for
+         the cardId — a card played this turn hasn't relocated yet at reveal-end,
+         so its current slot IS its play location. */
       var revealed = [];
       seq.forEach(function (it) {
         if (it.type !== 'play') return;
         var oSlots  = (it.owner === 'player') ? G.playerSlots : G.aiSlots;
         var foundLoc = null, foundIdx = -1;
+        if (it.locId != null && it.slotIndex != null && oSlots[it.locId]) {
+          var cs = oSlots[it.locId][it.slotIndex];
+          if (cs && cs.cardId === it.cardId) { foundLoc = it.locId; foundIdx = it.slotIndex; }
+        }
         for (var li = 0; li < G.locations.length && foundLoc === null; li++) {
           var arr = oSlots[G.locations[li].id];
           if (!arr) continue;
@@ -1305,29 +1366,55 @@
     };
 
     if (item.type === 'move') {
-      executeMoveAnimated(item.owner, item.cardId, item.fromLocId, item.toLocId, item.opts || {}, proceed);
+      // fromSlotIndex (recorded at queue time) pins the exact source slot —
+      // duplicate-cardId safe; executeMoveAnimated validates + falls back.
+      executeMoveAnimated(item.owner, item.cardId, item.fromLocId, item.toLocId,
+                          { fromSlotIndex: item.fromSlotIndex }, proceed);
       return;
     }
 
     if (item.type === 'barter') {
-      executeBarter(item.owner, item.cardId, item.partnerCardId, proceed);
+      // barterCoords (recorded at queue time) pin both swap slots — duplicate-
+      // cardId safe; executeBarter validates + falls back to the cardId scan.
+      executeBarter(item.owner, item.cardId, item.partnerCardId, proceed, item.barterCoords);
       return;
     }
 
     // type === 'play'
-    // Plays are matched by cardId (findSlotEl + findIndex below). This relies on
-    // the singleton-deck invariant: a deck can hold at most one copy of any card
-    // (decks.js addCard rejects duplicates) and the two sides never share ids, so
-    // each cardId is unique on a side. If multi-copy decks are ever introduced,
-    // a second copy would resolve to the first's (already-revealed) slot and stay
-    // revealed:false — switch this to a position-based match (toLocId + slot).
-    var slotEl = findSlotEl(item.owner, item.cardId);
-    var rLocId = slotEl ? getCardLocId(item.owner, item.cardId) : null;
+    // Resolve the play's SLOT — duplicate-cardId safe (Papyrus copies a card to
+    // hand, so a side CAN hold two copies of one id; Nubian Gold tokens likewise).
+    //   PRIMARY: the (locId, slotIndex) recorded at commit time, validated (the
+    //   slot must still hold an UNREVEALED sd with this cardId — a queued-move
+    //   snapback can shift player slot indexes).
+    //   FALLBACK (2P serialised entries carry no coordinates; shifted indexes):
+    //   scan for the cardId PREFERRING an unrevealed slot. The reveal target is
+    //   by definition unrevealed, so an already-revealed twin is never matched —
+    //   the old first-match scan resolved the copy to the original's face-up slot
+    //   and left the copy face-down forever (0 IP, still occupying a slot).
     var rSlots = item.owner === 'player' ? G.playerSlots : G.aiSlots;
-    var rSi    = rLocId !== null
-      ? rSlots[rLocId].findIndex(function (s) { return s && s.cardId === item.cardId; })
-      : -1;
-    var rSd    = rSi !== -1 ? rSlots[rLocId][rSi] : null;
+    var rLocId = null, rSi = -1;
+    if (item.locId != null && item.slotIndex != null && rSlots[item.locId]) {
+      var cSd = rSlots[item.locId][item.slotIndex];
+      if (cSd && cSd.cardId === item.cardId && !cSd.revealed) {
+        rLocId = item.locId; rSi = item.slotIndex;
+      }
+    }
+    if (rLocId === null) {
+      var fbLoc = null, fbIdx = -1;                    // first match of ANY state
+      for (var rli = 0; rli < G.locations.length && rLocId === null; rli++) {
+        var rlid = G.locations[rli].id, rarr = rSlots[rlid];
+        if (!rarr) continue;
+        for (var rsi2 = 0; rsi2 < rarr.length; rsi2++) {
+          var rs2 = rarr[rsi2];
+          if (!rs2 || rs2.cardId !== item.cardId) continue;
+          if (!rs2.revealed) { rLocId = rlid; rSi = rsi2; break; }   // prefer unrevealed
+          if (fbLoc === null) { fbLoc = rlid; fbIdx = rsi2; }
+        }
+      }
+      if (rLocId === null && fbLoc !== null) { rLocId = fbLoc; rSi = fbIdx; }
+    }
+    var rSd    = rLocId !== null ? rSlots[rLocId][rSi] : null;
+    var slotEl = rLocId !== null ? getSlotEl(item.owner, rLocId, rSi) : null;
     // Gate on data state (sd.revealed), not on DOM class. The slot's classList
     // is derived from the slot data; checking sd.revealed reads the canonical
     // source of truth and correctly skips slots whose reveal has already fired

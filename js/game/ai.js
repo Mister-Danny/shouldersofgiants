@@ -68,9 +68,15 @@
       // unchanged (Ötzi's AI Tribe stays inert exactly as today).
       if (G.config && G.config.ai && G.config.ai.movement === 'adventure') _sd.turnPlayed = G.turn;
       G.aiSlots[locId][slotIndex] = _sd;
-      G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
+      // Remove ONE instance from hand (filter would delete BOTH copies of a
+      // duplicated id — e.g. a Papyrus copy alongside a Nubian Gold twin).
+      var _hi = G.aiHand.indexOf(cardId);
+      if (_hi !== -1) G.aiHand.splice(_hi, 1);
       G.aiRevealQueue.push(cardId);
-      G.aiActionLog.push({ type: 'play', cardId: cardId });  // bug 16: unified action log
+      // locId/slotIndex recorded so the reveal pipeline resolves THIS play's slot
+      // by coordinates — cardId alone is ambiguous once duplicates exist (Papyrus
+      // copies). Bug 16: unified action log.
+      G.aiActionLog.push({ type: 'play', cardId: cardId, locId: locId, slotIndex: slotIndex });
       var slotEl = helpers.getSlotEl('opp', locId, slotIndex);
       if (slotEl) { slotEl.dataset.cardId = cardId; helpers.setSlotFaceDown(slotEl); }
     }
@@ -208,9 +214,12 @@
       var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
       var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
       G.aiSlots[t.locId][t.slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
-      G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
+      // Remove ONE instance (filter would delete both copies of a duplicated id).
+      var _ehi = G.aiHand.indexOf(cardId);
+      if (_ehi !== -1) G.aiHand.splice(_ehi, 1);
       G.aiRevealQueue.push(cardId);
-      G.aiActionLog.push({ type: 'play', cardId: cardId });  // bug 16: unified action log
+      // Coordinates recorded for duplicate-safe reveal resolution (bug 16 log).
+      G.aiActionLog.push({ type: 'play', cardId: cardId, locId: t.locId, slotIndex: t.slotIndex });
       budget -= cost;
 
       var slotEl = helpers.getSlotEl('opp', t.locId, t.slotIndex);
@@ -869,32 +878,47 @@
     //  • NOT on the turn it was revealed — a card can only be selected to move
     //    on a turn AFTER it enters play. turnPlayed is the play turn; during the
     //    reveal pass G.turn is still that turn, so require G.turn > turnPlayed.
-    var found = null;
+    // Gather ALL eligible Chariots (both twins if a Papyrus copy exists), in
+    // location order. We move the FIRST whose decision resolves to a destination
+    // — a Chariot that decides to HOLD must NOT block another one that would move
+    // this turn (the old first-eligible-only scan let a holder end the pass).
+    var eligible = [];
     G.locations.forEach(function (loc) {
       (G.aiSlots[loc.id] || []).forEach(function (s) {
-        if (found || !s || !s.revealed) return;
+        if (!s || !s.revealed) return;
         if ((s.cardId === 48 || s.cardId === 69) && !s._advChariotMoved &&
             (s.turnPlayed == null || G.turn > s.turnPlayed)) {
-          found = { locId: loc.id, sd: s, cardId: s.cardId };
+          eligible.push({ locId: loc.id, sd: s, cardId: s.cardId });
         }
       });
     });
-    if (!found) { _tryAiBarter(G, onDone); return; }   // no Chariot → still consider a Trader barter
+    if (!eligible.length) { _tryAiBarter(G, onDone); return; }   // no Chariot → still consider a Trader barter
 
-    // Battle-supplied movement decision (config-gated, like selectPlays): a battle
-    // whose Chariot strategy differs from the generic strike/flip heuristic (the
-    // Narmer advance board weighs breakthrough value vs the home re-lock) provides
-    // cfg.ai.settings.chariotMoveDecision(G, found) → destination locId, or null to
-    // HOLD (the chariot stays eligible on later turns). Every other battle takes
-    // _bestChariotDest unchanged.
+    // Movement decision: the battle's chariotMoveDecision (Narmer weighs the home
+    // re-lock) EXCEPT on the FINAL turn — no future plays remain, so the re-lock
+    // cost is moot. There we fall through to the generic _bestChariotDest, which
+    // still only moves when it's NET-POSITIVE (source safe to leave OR the
+    // destination flips), so a won home isn't recklessly abandoned. Non-final
+    // turns and battles without a decision fn are unchanged.
     var _mvSettings = G.config && G.config.ai && G.config.ai.settings;
-    var dest = (_mvSettings && typeof _mvSettings.chariotMoveDecision === 'function')
-      ? _mvSettings.chariotMoveDecision(G, found)
-      : _bestChariotDest(G, found.locId, helpers.effectiveIP(found.sd));
-    if (dest === null || dest === undefined) { _tryAiBarter(G, onDone); return; }
+    var _lastTurn   = !!(G.config && G.config.structure && G.config.structure.turns
+                         && G.turn >= G.config.structure.turns);
+    var _decide = (!_lastTurn && _mvSettings && typeof _mvSettings.chariotMoveDecision === 'function')
+      ? function (f) { return _mvSettings.chariotMoveDecision(G, f); }
+      : function (f) { return _bestChariotDest(G, f.locId, helpers.effectiveIP(f.sd)); };
+
+    var found = null, dest = null;
+    for (var _ei = 0; _ei < eligible.length; _ei++) {
+      var _d = _decide(eligible[_ei]);
+      if (_d !== null && _d !== undefined) { found = eligible[_ei]; dest = _d; break; }
+    }
+    if (!found) { _tryAiBarter(G, onDone); return; }   // every eligible Chariot chose to hold
 
     found.sd._advChariotMoved = true;   // persists with the card → never moves again
-    SOG.game.executeMoveAnimated('opp', found.cardId, found.locId, dest, {}, function () {
+    // Pass the exact slot-data object — duplicate-cardId safe (a Papyrus-copied
+    // twin Chariots may have already spent its once-per-battle move flag; the
+    // sd pins WHICH one moves).
+    SOG.game.executeMoveAnimated('opp', found.cardId, found.locId, dest, { sd: found.sd }, function () {
       _tryAiBarter(G, onDone);
     });
   }
@@ -910,11 +934,11 @@
 
     var trader = null;
     G.locations.forEach(function (loc) {
-      (G.aiSlots[loc.id] || []).forEach(function (s) {
+      (G.aiSlots[loc.id] || []).forEach(function (s, si) {
         if (trader || !s || !s.revealed) return;
         if (s.cardId === 68 && !s._advTraderBartered &&
             (s.turnPlayed == null || G.turn > s.turnPlayed)) {
-          trader = { locId: loc.id, sd: s };
+          trader = { locId: loc.id, idx: si, sd: s };
         }
       });
     });
@@ -930,7 +954,7 @@
       var aiL = _advLocIP(G.aiSlots, loc.id);
       var pL  = _advLocIP(G.playerSlots, loc.id);
       if (aiL - pL >= 0) return;                       // only interested in locations we're losing
-      (G.aiSlots[loc.id] || []).forEach(function (s) {
+      (G.aiSlots[loc.id] || []).forEach(function (s, si) {
         if (!s || !s.revealed) return;
         var pEff = helpers.effectiveIP(s);
         if (pEff >= tEff) return;                       // swap must raise this location's total
@@ -940,14 +964,18 @@
         var marginAfterT = (aiT - tEff + pEff) - pT;
         if (aiT - pT >= 0 && marginAfterT < 0) return;
         if (!best || marginAfterL > best.margin) {
-          best = { partnerCardId: s.cardId, margin: marginAfterL };
+          best = { partnerCardId: s.cardId, locId: loc.id, idx: si, margin: marginAfterL };
         }
       });
     });
 
     if (!best) { onDone(); return; }
     trader.sd._advTraderBartered = true;
-    SOG.game.executeBarter('opp', trader.sd.cardId, best.partnerCardId, onDone);
+    // Coordinates pin the exact trader + partner slots — duplicate-cardId safe
+    // (twin partners can carry diverged ipMods; the scored one must swap).
+    SOG.game.executeBarter('opp', trader.sd.cardId, best.partnerCardId, onDone,
+                           { traderLocId: trader.locId, traderIdx: trader.idx,
+                             partnerLocId: best.locId, partnerIdx: best.idx });
   }
 
   /* ═══════════════════════════════════════════════════════════════

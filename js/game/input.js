@@ -761,9 +761,16 @@
     G.capital -= cost;
     if (typeof SFX !== 'undefined') SFX.capitalSpent();
     G.playerRevealQueue.push(cardId);
-    G.playerActionLog.push({ type: 'play', cardId: cardId, toLocId: locId });
+    // slotIndex recorded so the reveal pipeline can resolve THIS play's slot by
+    // coordinates — cardId alone is ambiguous once duplicates exist (Papyrus
+    // copies, Nubian Gold tokens). A queued-move snapback may shift the index;
+    // revealNext validates it and falls back to an unrevealed-cardId scan.
+    G.playerActionLog.push({ type: 'play', cardId: cardId, toLocId: locId, slotIndex: si });
 
-    G.playerHand = G.playerHand.filter(function (id) { return id !== cardId; });
+    // Remove ONE instance from hand (filter would delete BOTH copies of a
+    // duplicated id — e.g. two Nubian Gold tokens — when playing just one).
+    var _hi = G.playerHand.indexOf(cardId);
+    if (_hi !== -1) G.playerHand.splice(_hi, 1);
     var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"]');
     if (hEl) hEl.remove();
 
@@ -825,10 +832,21 @@
     var queued = G.moveLog.filter(function (mv) { return mv.queued; });
     if (!queued.length) return;
 
-    // Step 1: remove every preview card from its destination location
+    // Step 1: remove every preview card from its destination location.
+    // PRIMARY: the exact slot recorded at queue time (previewToIdx), validated —
+    // a cardId scan could null a revealed TWIN already living at the destination
+    // (duplicate ids exist via Papyrus copies / Nubian Gold). Fallback: the old
+    // first-match scan (entries queued before previewToIdx existed).
     var toSeen = {};
     queued.forEach(function (mv) {
-      var idx = G.playerSlots[mv.toLocId].findIndex(function (s) { return s && s.cardId === mv.cardId; });
+      var idx = -1;
+      if (mv.previewToIdx != null) {
+        var ps = G.playerSlots[mv.toLocId][mv.previewToIdx];
+        if (ps && ps.cardId === mv.cardId) idx = mv.previewToIdx;
+      }
+      if (idx === -1) {
+        idx = G.playerSlots[mv.toLocId].findIndex(function (s) { return s && s.cardId === mv.cardId; });
+      }
       if (idx !== -1) {
         G.playerSlots[mv.toLocId][idx] = null;
         clearSlotDOM('player', mv.toLocId, idx);
@@ -903,9 +921,19 @@
         // still sits at the destination preview (snapBack runs in step 2). This
         // belongs in resetTurn, NOT snapBack: snapBack also runs at reveal-start,
         // where a resolving move's flag must survive.
-        var movedSd = (G.playerSlots[mv.toLocId] || []).find(function (s) {
-          return s && s.cardId === mv.cardId;
-        });
+        // Resolve the preview sd by its recorded slot (previewToIdx) — a cardId
+        // find could clear the flag on a revealed TWIN already living at the
+        // destination (restoring a move that twin legitimately spent).
+        var movedSd = null;
+        if (mv.previewToIdx != null) {
+          var pvs = (G.playerSlots[mv.toLocId] || [])[mv.previewToIdx];
+          if (pvs && pvs.cardId === mv.cardId) movedSd = pvs;
+        }
+        if (!movedSd) {
+          movedSd = (G.playerSlots[mv.toLocId] || []).find(function (s) {
+            return s && s.cardId === mv.cardId;
+          });
+        }
         if (movedSd) { delete movedSd._advLucyMoved; delete movedSd._advChariotMoved; }
       }
     });
@@ -1096,7 +1124,7 @@
     clearSelection();
     if (SOG.abilities && typeof SOG.abilities.showDiscardChooser === 'function') {
       SOG.abilities.showDiscardChooser('Choose a card to barter with Trader', partners, function (chosenId) {
-        _setTraderBarter(traderLocId, traderSd.cardId, chosenId);
+        _setTraderBarter(traderLocId, traderIdx, traderSd.cardId, chosenId);
       });
     }
   }
@@ -1104,10 +1132,17 @@
   /* Record/replace the barter choice: queue a {type:'barter'} action-log entry
      (executes at reveal) and let the display-only preview re-skin the two slots
      (via syncPlayerSlots → _applyTraderPreview). G is NOT mutated. */
-  function _setTraderBarter(traderLocId, traderCardId, partnerCardId) {
-    var partnerLocId = null;
+  function _setTraderBarter(traderLocId, traderIdx, traderCardId, partnerCardId) {
+    // Resolve the partner's slot COORDINATES now (first match — the same slot the
+    // preview skins) and carry them through the action log, so execution swaps
+    // the exact previewed slot even with duplicate cardIds on board. (The picker
+    // itself is id-based, so twin partners are indistinguishable in the chooser —
+    // first-match keeps preview and execution consistent.)
+    var partnerLocId = null, partnerIdx = null;
     G.locations.forEach(function (loc) {
-      (G.playerSlots[loc.id] || []).forEach(function (s) { if (s && s.cardId === partnerCardId) partnerLocId = loc.id; });
+      (G.playerSlots[loc.id] || []).forEach(function (s, i) {
+        if (partnerLocId === null && s && s.cardId === partnerCardId) { partnerLocId = loc.id; partnerIdx = i; }
+      });
     });
     if (partnerLocId === null) return;
     var prev = G.traderBarter;
@@ -1115,7 +1150,9 @@
     G.playerActionLog = G.playerActionLog.filter(function (a) { return a.type !== 'barter'; });
     G.traderBarter = { traderCardId: traderCardId, partnerCardId: partnerCardId,
                        traderLocId: traderLocId, partnerLocId: partnerLocId };
-    G.playerActionLog.push({ type: 'barter', cardId: traderCardId, partnerCardId: partnerCardId });
+    G.playerActionLog.push({ type: 'barter', cardId: traderCardId, partnerCardId: partnerCardId,
+                             barterCoords: { traderLocId: traderLocId, traderIdx: traderIdx,
+                                             partnerLocId: partnerLocId, partnerIdx: partnerIdx } });
     // Re-render the involved locations (+ the previous choice's locs, to restore
     // their true faces) so the preview shows the current swap only.
     var locs = [traderLocId, partnerLocId];
@@ -1201,7 +1238,11 @@
     if (cardId === 48 || cardId === 69) sd._advChariotMoved = true;   // Chariot (48) / Chariots (69, Egypt): once per BATTLE on its own — same persistent-slot-flag pattern as Lucy (resetTurn clears it on snap-back; persists once the move resolves)
 
     G.playerActionLog.push({ type: 'move', cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId });
-    G.moveLog.push({ cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId, queued: true, isColumbus: cardId === 25 });
+    // previewToIdx: the destination slot the preview occupies during the select
+    // phase — snapBack removes exactly THAT slot (a cardId scan could null a
+    // revealed twin already living at the destination). moveLog is local-only
+    // (never serialised), so the index is safe to carry here.
+    G.moveLog.push({ cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId, previewToIdx: toIdx, queued: true, isColumbus: cardId === 25 });
 
     refreshMoveableCards();
     updateScores();

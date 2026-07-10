@@ -1017,9 +1017,12 @@
 
   function abilityScholarOfficials(owner, locId, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    // Count revealed cards at this location, excluding Scholar-Officials (id 2) itself
-    var count = 0;
-    forEachRevealedAt(slots, locId, function (s) { if (s.cardId !== 2) count++; });
+    // "Other cards here" = all revealed at this location minus THIS Scholar.
+    // Counting by id-exclusion (cardId !== 2) undercounted when a duplicated
+    // twin Scholar sat at the same location — a twin IS another card.
+    var total = 0;
+    forEachRevealedAt(slots, locId, function () { total++; });
+    var count = Math.max(0, total - 1);
     grantCapitalNextTurn(owner, count);   // shared next-turn-capital accumulator
     if (count > 0) {
       var slotIdx = slots[locId].findIndex(function (s) { return s && s.cardId === 2; });
@@ -1109,11 +1112,13 @@
     // at this location. At-Once abilities affect cards currently in play —
     // unrevealed cards aren't yet in play and aren't legal targets.
     var best = null;
-    forEachRevealedAt(oppSlots, locId, function (s) {
+    forEachRevealedAt(oppSlots, locId, function (s, i) {
       var c = CARDS.find(function (x) { return x.id === s.cardId; });
       if (!c || (c.type !== 'Political' && c.type !== 'Military')) return;
       var ip = effectiveIP(s);
-      if (!best || ip > best.ip) best = { cardId: s.cardId, ip: ip };
+      // Keep the index + sd so the push/destroy targets the EXACT scored card
+      // (a cardId re-scan would grab the first twin with a duplicated id).
+      if (!best || ip > best.ip) best = { cardId: s.cardId, ip: ip, idx: i, sd: s };
     });
     if (!best) { done(); return; }
 
@@ -1130,14 +1135,14 @@
 
     // ── Element refs ──────────────────────────────────────────────
     var wuEl    = findSlotEl(owner, 4);
-    var tgtIdx  = oppSlots[locId].findIndex(function (s) { return s && s.cardId === best.cardId; });
+    var tgtIdx  = best.idx;   // the exact scored slot (not a cardId re-scan — twin-safe)
     var tgtEl   = tgtIdx !== -1 ? getSlotEl(oppSide, locId, tgtIdx) : null;
     var destEl  = (canPush && destIdx !== -1) ? getSlotEl(oppSide, destLocId, destIdx) : null;
 
     // ── No-GSAP fallback ─────────────────────────────────────────
     if (!wuEl || typeof gsap === 'undefined') {
       if (canPush) {
-        executeMoveAnimated(oppSide, best.cardId, locId, destLocId, {}, function () {
+        executeMoveAnimated(oppSide, best.cardId, locId, destLocId, { sd: best.sd }, function () {
           updateScores(); evaluateContinuous(); refreshSlotIPDisplays(); done();
         });
       } else {
@@ -1204,7 +1209,7 @@
         if (tgtGhost) { removeEl(tgtGhost); tgtGhost = null; }
         // Hide the target's real slot so the ghost doesn't flicker against it
         if (tgtEl) gsap.set(tgtEl, { opacity: 0 });
-        executeMoveAnimated(oppSide, best.cardId, locId, destLocId, {}, function () {
+        executeMoveAnimated(oppSide, best.cardId, locId, destLocId, { sd: best.sd }, function () {
           if (tgtEl) gsap.set(tgtEl, { clearProps: 'opacity' });
           tryComplete();
         });
@@ -2311,7 +2316,7 @@
     var FLEE_DELAY_MS = 500;   // knob: reaction beat before he darts
     if (SOG.game && typeof SOG.game.executeMoveAnimated === 'function') {
       setTimeout(function () {
-        SOG.game.executeMoveAnimated(owner, 35, fromLoc, dest.id, {}, function () {
+        SOG.game.executeMoveAnimated(owner, 35, fromLoc, dest.id, { sd: ctx.slot }, function () {
           if (window.SOG_DEBUG && typeof console !== 'undefined') console.log('[Otzi] flee: card 35 (' + owner + ') relocated from loc ' + fromLoc + ' to loc ' + dest.id);
           done();
         });
@@ -2485,8 +2490,12 @@
      as Scholar-Officials (2) / Farmer, via grantCapitalNextTurn. */
   function abilityScribeEgypt(owner, locId, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var count = 0;
-    forEachRevealedAt(slots, locId, function (s) { if (s.cardId !== 56) count++; });
+    // "Every OTHER card" = all revealed cards here minus THIS Scribe. Counting
+    // by id-exclusion (cardId !== 56) undercounted when a Papyrus-duplicated
+    // twin Scribe sat at the same location — a twin IS another card.
+    var total = 0;
+    forEachRevealedAt(slots, locId, function () { total++; });
+    var count = Math.max(0, total - 1);
     grantCapitalNextTurn(owner, count);
     if (count > 0 && typeof SFX !== 'undefined' && SFX.coinSound) SFX.coinSound();
     done();
@@ -2766,8 +2775,13 @@
     if (srcId == null) { done(); return; }                 // first card here → fizzle (plain 3/3)
 
     // Stamp the adoption on Rosetta's slot data (persists like a real copy).
+    // Prefer the UNSTAMPED Rosetta: with two copies at one location (Papyrus can
+    // duplicate any card), the old first-found match would re-stamp the already-
+    // transcribed twin and leave the just-revealed one blank.
     var rIdx = -1;
-    forEachRevealedAt(slots, locId, function (s, i) { if (rIdx === -1 && s.cardId === 58) rIdx = i; });
+    forEachRevealedAt(slots, locId, function (s, i) {
+      if (rIdx === -1 && s.cardId === 58 && s.transcribedFrom == null) rIdx = i;
+    });
     if (rIdx !== -1) slots[locId][rIdx].transcribedFrom = srcId;
 
     // Fire the transcribed At-Once now (real at-once fires; continuous/eot no-op).
