@@ -1615,6 +1615,18 @@
       }
     } catch (e) {}
 
+    /* Per-node "encountered" stamp (difficulty-picker system): the player has now
+       COMPLETED this boss node's battle at least once (win OR lose). Set here — the
+       single completion point for every adventure battle, keyed by scriptHook — so
+       the overworld shows the Serf/Giant picker on subsequent clicks instead of the
+       first-encounter dialogue. Harmless for non-boss adventure scriptHooks (their
+       nodes don't read it). See overworld.js _nodeEncountered / onNodeClick. */
+    try {
+      if (G.config && G.config.scriptHook) {
+        localStorage.setItem('sog_node_encountered_' + G.config.scriptHook, 'true');
+      }
+    } catch (e) {}
+
     showResult(result);
 
     /* Progression: track wins for card unlocking (single-player only).

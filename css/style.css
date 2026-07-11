@@ -1427,6 +1427,33 @@ img    { display: block; }
 .rules-popup-list li { margin-bottom: 10px; }
 .rules-popup-prose { white-space: pre-line; }
 
+/* ── Difficulty picker (boss rematch) — two options inside the parchment rules
+   popup (overworld _showDifficultyPicker). Reuses .btn-snes structure but re-tints
+   to the bronze/parchment palette (like the welcome-modal "GOT IT" button) so the
+   buttons read as part of the wood-and-gold popup instead of the purple SNES default. */
+/* Narrow the picker panel — the wide 700px boss-rules width is overkill for two
+   buttons. Scoped to this popup so the boss rules popups keep their width. */
+.difficulty-picker-popup { width: 440px; max-width: 92vw; }
+.tier-picker { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin: 6px auto 2px; }
+.tier-pick-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-width: 150px; padding: 14px 18px; line-height: 1.2;
+  background: #3a200c;
+  border-color: #d4aa50;
+  color: #f3e6c4;
+  box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000;
+}
+.tier-pick-btn:hover {
+  background: #4a2a10;
+  border-color: #f0cf6c;
+  color: #fff5d8;
+}
+.tier-pick-btn:active {
+  box-shadow: 0 0 0 #1a0c04, 0 1px 0 #000;
+}
+.tier-pick-name { font-size: 18px; letter-spacing: 0.08em; }
+.tier-pick-sub  { font-size: 11px; text-transform: none; letter-spacing: 0.02em; opacity: 0.85; }
+
 /* ── Learning Check popup (SOG.LearningCheck) ───────────────────────
    Reuses the parchment panel (.card-popup .rules-popup); these rules cover the
    question/answer/feedback layout inside it. SNES-styled answer + action buttons

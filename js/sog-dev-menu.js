@@ -315,7 +315,7 @@ SOG.DevMenu = (function () {
     {
       section: '🎴 Card / State Toggles',
       label: 'Reset Gilgamesh Battle Progress',
-      description: 'Clear the whole Gilgamesh arc (flags + arc card grants). Upstream untouched.',
+      description: 'Clear the whole Gilgamesh arc (flags + arc card grants incl. the Gilgamesh card, + the difficulty-picker "encountered" stamp). Re-runs the first encounter AND the Gilgamesh-card acquisition animation. Upstream untouched.',
       run: function () {
         removeFlags([
           'sog_battle_gilgamesh_complete',
@@ -326,10 +326,13 @@ SOG.DevMenu = (function () {
           'sog_mesopotamia_starter_granted',
           'sog_deckbuilder_unlocked',
           'sog_market_first_visit_done',
-          'sog_market_intro_seen'
+          'sog_market_intro_seen',
+          'sog_node_encountered_gilgamesh'   // difficulty-picker stamp → re-runs the FIRST encounter (not the picker)
         ]);
-        relockCards([46, 38, 39, 40, 41, 42]); // Cuneiform + the 5 Mesopotamia starters
-        flash('Gilgamesh arc reset');
+        // Relock the Gilgamesh card (43) too — the acquisition animation only plays
+        // on a NEW unlock, so leaving 43 owned would silently skip it on the re-win.
+        relockCards([43, 46, 38, 39, 40, 41, 42]); // Gilgamesh card + Cuneiform + the 5 Mesopotamia starters
+        flash('Gilgamesh arc reset (card 43 relocked)');
       }
     },
 

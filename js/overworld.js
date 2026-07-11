@@ -1145,6 +1145,110 @@ var Overworld = (function () {
     });
   }
 
+  /* ══════════════════════════════════════════════════════════════════════════
+     DIFFICULTY-PICKER SYSTEM (boss nodes)
+     ────────────────────────────────────────────────────────────────────────
+     First visit to a boss node → the scripted encounter dialogue → battle at that
+     node's FIRST-ENCOUNTER TIER. Every visit AFTER that first battle completes
+     (win OR lose) → a Serf/Giant difficulty picker → battle at the chosen tier
+     (no encounter dialogue — it's a rematch).
+
+     "Encountered" is stamped in game.js endGame (keyed by the battle's scriptHook)
+     the moment the first battle finishes, so it's outcome-agnostic and persists in
+     localStorage. Here we only READ it to branch first-visit vs rematch.
+  ═════════════════════════════════════════════════════════════════════════════ */
+
+  // Boss node id → the battle's scriptHook (the key the "encountered" stamp uses).
+  var BOSS_NODE_KEY = {
+    'walls-of-uruk':  'gilgamesh',
+    'sargon':         'sargon',
+    'hammurabi':      'hammurabi',
+    'hanging-gardens':'hanging-gardens',
+    'double-crown':   'narmer'
+  };
+
+  // First-encounter AI tier per boss — DATA-DRIVEN (not hardcoded branch logic).
+  // Default 'serf'; Gilgamesh is the carve-out ('giant' — the ~90%-loss beat).
+  var FIRST_ENCOUNTER_TIER = {
+    'gilgamesh':       'giant',
+    'sargon':          'serf',
+    'hammurabi':       'serf',
+    'hanging-gardens': 'serf',
+    'narmer':          'serf'
+  };
+  function _firstEncounterTier(key) { return FIRST_ENCOUNTER_TIER[key] || 'serf'; }
+
+  // Legacy per-boss flags that ALSO imply "already encountered" — so existing saves
+  // (progress made before this system) route straight to the picker instead of
+  // replaying the first-encounter dialogue. New completions set the canonical
+  // sog_node_encountered_<key> stamp (game.js endGame); these are the fallback.
+  var LEGACY_ENCOUNTERED = {
+    'gilgamesh':       ['sog_battle_gilgamesh_complete', 'sog_gilgamesh_phase1_complete'],
+    'sargon':          ['sog_battle_sargon_complete'],
+    'hammurabi':       ['sog_battle_hammurabi_complete'],
+    'hanging-gardens': ['sog_battle_nebuchadnezzar_complete'],
+    'narmer':          ['sog_met_narmer']   // "met" (intro seen) — good enough to skip a replay
+  };
+  function _nodeEncountered(key) {
+    try {
+      if (localStorage.getItem('sog_node_encountered_' + key) === 'true') return true;
+      var legacy = LEGACY_ENCOUNTERED[key] || [];
+      for (var i = 0; i < legacy.length; i++) {
+        if (localStorage.getItem(legacy[i]) === 'true') return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  // Bake the AI tier for the NEXT battle (initGame reads + clears window.__forceTier)
+  // then fire the node's launch. Used by both the first-encounter and picker paths.
+  function _launchAtTier(tier, launchFn) {
+    window.__forceTier = tier;
+    launchFn();
+  }
+
+  /* Serf/Giant rematch picker. Reuses the parchment BattleRulesPopup (no rebuild) —
+     injects two themed .btn-snes options into its HTML body and wires them. Choosing
+     one bakes the tier + launches; the X / click-outside cancels back to the map. */
+  function _showDifficultyPicker(launchFn) {
+    if (!(window.SOG && SOG.BattleRulesPopup && typeof SOG.BattleRulesPopup.show === 'function')) {
+      // No popup available → fail safe: just launch at Serf so the node isn't dead.
+      _launchAtTier('serf', launchFn);
+      return;
+    }
+    var chosen = null;
+    SOG.BattleRulesPopup.show({
+      title: 'Choose Your Challenge',
+      panelClass: 'difficulty-picker-popup',   // narrower than the wide boss-rules panel
+      body: '<div class="tier-picker">'
+          +   '<button type="button" class="btn-snes tier-pick-btn" data-tier="serf">'
+          +     '<span class="tier-pick-name">Serf</span>'
+          +     '<span class="tier-pick-sub">A gentler bout</span>'
+          +   '</button>'
+          +   '<button type="button" class="btn-snes tier-pick-btn" data-tier="giant">'
+          +     '<span class="tier-pick-name">Giant</span>'
+          +     '<span class="tier-pick-sub">A true test</span>'
+          +   '</button>'
+          + '</div>',
+      onDismiss: function () {
+        if (chosen) { _launchAtTier(chosen, launchFn); }
+        else { isDialogueLocked = false; scheduleIdle(); }   // cancelled → stay on the map
+      }
+    });
+    // Wire the two option buttons (BattleRulesPopup renders body as HTML, so query
+    // the live nodes and attach handlers). A pick records the tier then closes the
+    // popup, and onDismiss above launches at that tier.
+    var bd = document.getElementById('battle-rules-backdrop');
+    if (bd) {
+      var btns = bd.querySelectorAll('.tier-pick-btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].addEventListener('click', (function (b) {
+          return function (e) { e.stopPropagation(); chosen = b.getAttribute('data-tier'); SOG.BattleRulesPopup.hide(); };
+        })(btns[i]));
+      }
+    }
+  }
+
   function onNodeClick(node) {
     if (isMoving || isTransitioning || isDialogueLocked) return;
     // Focus gate: at 0 focus, every node action (battle start, marketplace
@@ -1155,27 +1259,25 @@ var Overworld = (function () {
     // Clicking the Prehistory node ends the urgent idle pulse if active
     clearUrgentPulse();
 
-    // ── Walls of Uruk — Phase D3a: Gilgamesh Battle 1 ──────────
+    // ── Walls of Uruk — Gilgamesh (difficulty-picker system) ──────────
     if (node.id === 'walls-of-uruk' && currentMapId === 'mesopotamia') {
       isDialogueLocked = true;
       cancelIdle();
-      var battleDone = false, phase1Done = false, hasCuneiform = false;
-      try { battleDone   = localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; } catch (e) {}
-      try { phase1Done   = localStorage.getItem(KEY_GILGAMESH_PHASE1) === 'true'; } catch (e) {}
-      try { hasCuneiform = localStorage.getItem(KEY_CUNEIFORM_GRANTED) === 'true'; } catch (e) {}
-
       walkPath([{ x: node.x, y: node.y }], function () {
-        if (battleDone || phase1Done) {
-          // D3a placeholder — D3b replaces with the Battle 2 flow. For now,
-          // re-enter Battle 1 directly (no encounter dialogue).
-          log('[D3a] phase1/battle complete — placeholder re-entry to Battle 1');
-          _launchGilgameshBattle();
-        } else if (hasCuneiform) {
-          // Attempt 2 re-entry: "challenge again" exchange → battle.
-          _runGilgameshEncounter(D3_GILGAMESH_CHALLENGE_AGAIN, _launchGilgameshBattle);
+        if (_nodeEncountered('gilgamesh')) {
+          // Rematch → Serf/Giant picker → battle at the chosen tier (no dialogue).
+          // ── NARRATIVE-ARC HOOK ────────────────────────────────────────────
+          // The full Gilgamesh arc (Farmer/Cuneiform gift-on-loss, the "challenge
+          // again" framing, and the flag/stamp visual system) reattaches HERE
+          // later — wrapping or branching this picker path. For THIS build the only
+          // Gilgamesh carve-out is his first-encounter tier (Giant, below).
+          _showDifficultyPicker(_launchGilgameshBattle);
         } else {
-          // First run: "Welcome to my city" exchange → Battle 1 Attempt 1.
-          _runGilgameshEncounter(D2B_GILGAMESH_DIALOGUE, _launchGilgameshBattle);
+          // First encounter: "Welcome to my city" → Battle 1 at Gilgamesh's
+          // first-encounter tier (Giant — the ~90%-loss beat).
+          _runGilgameshEncounter(D2B_GILGAMESH_DIALOGUE, function () {
+            _launchAtTier(_firstEncounterTier('gilgamesh'), _launchGilgameshBattle);
+          });
         }
       });
       return;
@@ -1199,7 +1301,11 @@ var Overworld = (function () {
       isDialogueLocked = true;
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
-        _runSargonEncounter(node);
+        if (_nodeEncountered('sargon')) {
+          _showDifficultyPicker(_launchSargonBattle);   // rematch → picker (skips deck gate + dialogue)
+        } else {
+          _runSargonEncounter(node);                    // first: deck gate → encounter → battle at first tier
+        }
       });
       return;
     }
@@ -1210,7 +1316,11 @@ var Overworld = (function () {
       isDialogueLocked = true;
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
-        _runHammurabiEncounter(node);
+        if (_nodeEncountered('hammurabi')) {
+          _showDifficultyPicker(_launchHammurabiBattle);   // rematch → picker (skips deck gate + dialogue)
+        } else {
+          _runHammurabiEncounter(node);                    // first: deck gate → encounter → battle at first tier
+        }
       });
       return;
     }
@@ -1223,19 +1333,18 @@ var Overworld = (function () {
       isDialogueLocked = true;
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
-        // Post-victory: skip the intro dialogue (A lines → knock → B lines → door) —
-        // walk up, then straight into the battle via the radial wipe. Read the
-        // completion flag directly so it holds regardless of module load timing.
-        var beatenNeb = false;
-        try { beatenNeb = localStorage.getItem('sog_battle_nebuchadnezzar_complete') === 'true'; } catch (e) {}
-        if (beatenNeb) {
-          log('Hanging Gardens node — battle already won, skipping intro dialogue');
-          _launchHangingGardensBattle();
+        // Rematch (already encountered) → difficulty picker → battle at the chosen
+        // tier, skipping the intro dialogue (A lines → knock → B lines → door).
+        if (_nodeEncountered('hanging-gardens')) {
+          _showDifficultyPicker(_launchHangingGardensBattle);
           return;
         }
+        // First encounter → the intro dialogue, then the battle at Neb's
+        // first-encounter tier (Serf).
+        var firstLaunch = function () { _launchAtTier(_firstEncounterTier('hanging-gardens'), _launchHangingGardensBattle); };
         var hud = window.SOG && window.SOG.HUD;
         if (!hud || typeof hud.enterDialogueMode !== 'function') {
-          _launchHangingGardensBattle();   // no HUD → skip straight to the wipe/stub
+          firstLaunch();   // no HUD → skip straight to the wipe
           return;
         }
         hud.enterDialogueMode(null, function () {
@@ -1246,7 +1355,7 @@ var Overworld = (function () {
                 if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
                 // Door opening — WAIT for the sound to fully finish before the wipe.
                 _playSfxThen('sfx/opendoor.m4a', function () {
-                  _launchHangingGardensBattle();
+                  firstLaunch();
                 });
               });
             });
@@ -1257,19 +1366,19 @@ var Overworld = (function () {
     }
 
     // ── The Double Crown (Egypt) — walk up to the node, then the Narmer advance
-    //    battle. FIRST click plays the encounter dialogue (Explorer + Narmer
-    //    portraits) → battle; once met (sog_met_narmer), later clicks skip the
-    //    encounter and drop straight into the battle. ──
+    //    battle. FIRST click plays the encounter dialogue → battle at Narmer's
+    //    first-encounter tier (Serf); once encountered, later clicks show the
+    //    Serf/Giant difficulty picker → battle at the chosen tier. ──
     if (node.id === 'double-crown' && currentMapId === 'egypt') {
       isDialogueLocked = true;
       cancelIdle();
-      var metNarmer = false;
-      try { metNarmer = localStorage.getItem(KEY_MET_NARMER) === 'true'; } catch (e) {}
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
-        if (metNarmer) {
-          _launchNarmerBattle();
+        if (_nodeEncountered('narmer')) {
+          _showDifficultyPicker(_launchNarmerBattle);
         } else {
-          _runNarmerEncounter(NARMER_ENCOUNTER_DIALOGUE, _launchNarmerBattle);
+          _runNarmerEncounter(NARMER_ENCOUNTER_DIALOGUE, function () {
+            _launchAtTier(_firstEncounterTier('narmer'), _launchNarmerBattle);
+          });
         }
       });
       return;
@@ -2579,12 +2688,9 @@ var Overworld = (function () {
      Explorer line), no battle, sprite stays on the map. Exactly 15 → the full
      Emperor encounter, then the battle STUB. */
   function _runSargonEncounter(node) {
-    // After the first Sargon victory, skip the Emperor encounter dialogue (and the
-    // deck-size gate) entirely — clicking the node goes straight into a rematch.
-    var beatenSargon = false;
-    try { beatenSargon = localStorage.getItem('sog_battle_sargon_complete') === 'true'; } catch (e) {}
-    if (beatenSargon) { _launchSargonBattle(); return; }
-
+    // Rematch (already encountered) is handled at the node-click level by the
+    // difficulty picker — this runner only fires for the FIRST encounter, so no
+    // "already-beaten" skip here.
     var hud = window.SOG && window.SOG.HUD;
     if (!hud || typeof hud.enterDialogueMode !== 'function') { isDialogueLocked = false; scheduleIdle(); return; }
 
@@ -2617,11 +2723,11 @@ var Overworld = (function () {
       return;
     }
 
-    // READY (15) — full encounter, then the battle stub.
+    // READY (15) — full encounter, then the battle at Sargon's first-encounter tier (Serf).
     hud.enterDialogueMode(null, function () {
       _runLinesKeepOpen(D4_SARGON_ENCOUNTER, function () {
         if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
-        _launchSargonBattle();
+        _launchAtTier(_firstEncounterTier('sargon'), _launchSargonBattle);
       });
     });
   }
@@ -2650,18 +2756,8 @@ var Overworld = (function () {
     var hud = window.SOG && window.SOG.HUD;
     if (!hud || typeof hud.enterDialogueMode !== 'function') { isDialogueLocked = false; scheduleIdle(); return; }
 
-    // Post-victory: skip the encounter dialogue (and the deck-size gate) entirely —
-    // clicking the node goes straight into a rematch. Mirrors Sargon / Hanging
-    // Gardens. Read the completion flag directly so it holds regardless of module
-    // load timing.
-    var beatenHammurabi = false;
-    try { beatenHammurabi = localStorage.getItem('sog_battle_hammurabi_complete') === 'true'; } catch (e) {}
-    if (beatenHammurabi) {
-      log('[D4] Hammurabi node — battle already won, skipping encounter dialogue');
-      _launchHammurabiBattle();
-      return;
-    }
-
+    // Rematch (already encountered) is handled at the node-click level by the
+    // difficulty picker — this runner only fires for the FIRST encounter.
     var full = 15, deckSize = 0;
     try {
       if (window.Decks) {
@@ -2691,11 +2787,11 @@ var Overworld = (function () {
       return;
     }
 
-    // READY (15) — full encounter, then the battle.
+    // READY (15) — full encounter, then the battle at Hammurabi's first-encounter tier (Serf).
     hud.enterDialogueMode(null, function () {
       _runLinesKeepOpen(D4_HAMMURABI_ENCOUNTER, function () {
         if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
-        _launchHammurabiBattle();
+        _launchAtTier(_firstEncounterTier('hammurabi'), _launchHammurabiBattle);
       });
     });
   }

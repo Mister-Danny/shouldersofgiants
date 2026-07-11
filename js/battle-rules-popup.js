@@ -53,7 +53,7 @@ SOG.BattleRulesPopup = (function () {
     backdrop.className = 'popup-backdrop rules-popup-backdrop';
 
     var panel = document.createElement('div');
-    panel.className = 'card-popup rules-popup';
+    panel.className = 'card-popup rules-popup' + (opts.panelClass ? ' ' + opts.panelClass : '');
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'popup-close-x';
