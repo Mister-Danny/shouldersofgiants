@@ -429,10 +429,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/ramsesii@0.3x.jpg", locked: true
   },
   {
-    id: 54, name: "Papyrus", cc: 2, ip: 2,                      // WIRED (At Once: copy last-played card to hand)
+    id: 54, name: "Papyrus", cc: 2, ip: 2,                      // WIRED (At Once: copy last-played card — with its permanent buffed state — to hand)
     type: "Scientific", type2: null, era: "Egypt",             // (was "Technology" — dropped; Imhotep's Scientific discount now covers it)
     abilityName: "For the Record",
-    ability: "At Once:\nCopy the last card you played and add it to your hand.",
+    ability: "At Once:\nCreate a copy of the last card you played and add it to your hand.",
     image:   "images/cards/egyptcards/papyrus@0.5x.jpg",
     imageSm: "images/cards/egyptcards/papyrus@0.3x.jpg", locked: true
   },
@@ -453,10 +453,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/egyptscribe@0.3x.jpg", locked: true
   },
   {
-    id: 57, name: "Pyramid", cc: 3, ip: 1,                      // WIRED (continuous double-last-Political)
+    id: 57, name: "Pyramid", cc: 3, ip: 1,                      // WIRED (At Once: gain the IP of the last card played here)
     type: "Scientific", type2: null, era: "Egypt",
     abilityName: "Monumental Legacy",
-    ability: "Continuous:\nDoubles the IP of the last Political card you played here.",
+    ability: "At Once:\nGain the IP of the last card you played here.",
     image:   "images/cards/egyptcards/pyramid@0.5x.jpg",
     imageSm: "images/cards/egyptcards/pyramid@0.3x.jpg", locked: true
   },
@@ -517,10 +517,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/sphinx@0.3x.jpg", locked: true
   },
   {
-    id: 65, name: "Imhotep", cc: 3, ip: 3,                      // WIRED (effectiveCost -1 Scientific here)
+    id: 65, name: "Imhotep", cc: 4, ip: 4,                      // WIRED (effectiveCost -1 Scientific GLOBAL)
     type: "Scientific", type2: null, era: "Egypt",
     abilityName: "Ancient Engineering",
-    ability: "Continuous:\nReduces the cost to play Scientific cards at this location by -1 CC.",
+    ability: "Continuous:\nReduces the cost to play Scientific cards by -1 CC.",
     image:   "images/cards/egyptcards/imhotep@0.5x.jpg",
     imageSm: "images/cards/egyptcards/imhotep@0.3x.jpg", locked: true
   },

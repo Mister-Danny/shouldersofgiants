@@ -188,6 +188,14 @@
     G.config = injectedCfg || resolveBattleConfig(_2pCfg);
     var cfg = G.config;
 
+    /* Dev/testing (Stage A): window.__forceSerfTier bakes tier 'serf' into THIS
+       battle's config and self-clears, so the Serf brain is used for one battle
+       only (no leakage into the next). Set by the dev-menu Serf-tier launchers. */
+    if (window.__forceSerfTier) {
+      if (cfg.ai) cfg.ai.tier = 'serf';
+      window.__forceSerfTier = false;
+    }
+
     /* AI profile bridge (Step 5): populate the global the AI read sites (ai.js,
        game.js) already use FROM the config. This is the deliberate minimal
        bridge — the read sites are untouched. Value round-trips the same string
@@ -291,6 +299,9 @@
     G.aiDestroyed            = [];
     G.cardIPBonus            = {};
     G.aiCardIPBonus          = {};
+    // Papyrus (54) state-copy: PERMANENT ipMod inherited by a pending copy in
+    // hand, keyed per side by cardId; consumed (deleted) when the copy is played.
+    G.copyIPBonus            = { player: {}, opp: {} };
     G.nebCCDiscount          = { player: {}, opp: {} };  // Nebuchadnezzar one-time in-hand -1 CC stamps
     G.destroyedIPTotal       = 0;
     G.aiDestroyedIPTotal     = 0;
@@ -1494,6 +1505,7 @@
   function nextTurn() {
     G.turn    += 1;
     G.phase    = 'select';
+    if (window.SOG_DEBUG && SOG.hand) SOG.hand.assertShape('nextTurn');  // hand-of-objects migration net (dev-only no-op today)
     /* Prune expired "Next Turn:" effects. An effect declared on turn T is active
        ONLY on turn T+1; once G.turn passes that window it is dropped. Keeps effects
        declared last turn (now active) and this-turn declarations; inert when the
@@ -1577,6 +1589,26 @@
     refreshMoveableCards();
     var result = tallyResult();
     if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);
+
+    /* AI win-rate instrumentation (Stage A): log every completed ADVENTURE battle
+       (scriptHook set) — boss, tier (serf/giant), result, turn count, per-loc +
+       total scores. Guarded to adventure battles so Arcadium/2P aren't logged.
+       No PII. Read via SOG.aiLog.dump()/summary(). */
+    try {
+      if (G.config && G.config.scriptHook && SOG.aiLog && typeof SOG.aiLog.record === 'function') {
+        var _lr = (result.locResults || []).map(function (r) {
+          return { loc: r.loc && r.loc.name, playerIP: r.playerIP, aiIP: r.aiIP, winner: r.winner };
+        });
+        var _pT = _lr.reduce(function (s, r) { return s + (r.playerIP || 0); }, 0);
+        var _aT = _lr.reduce(function (s, r) { return s + (r.aiIP    || 0); }, 0);
+        var _tier = (G.config.ai && G.config.ai.tier === 'serf') ? 'serf'
+                  : (G.config.ai && G.config.ai.profile === 'heuristic') ? 'giant'
+                  : (window.aiDifficulty || 'unknown');
+        SOG.aiLog.record({ boss: G.config.scriptHook, tier: _tier, result: result.outcome,
+                           turns: G.turn, locs: _lr, playerTotal: _pT, aiTotal: _aT, ts: Date.now() });
+      }
+    } catch (e) {}
+
     showResult(result);
 
     /* Progression: track wins for card unlocking (single-player only).

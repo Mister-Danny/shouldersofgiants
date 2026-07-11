@@ -509,11 +509,14 @@
     if (card.cc === 5 &&
         G.locations.some(function (l) { return l.abilityKey === 'BABYLON_COST_5'; }))
       cost = Math.max(0, cost - 1);
-    // Imhotep (id 65) — "Ancient Engineering": -1 CC to SCIENTIFIC cards played at
-    // HIS location (a revealed Imhotep on THIS owner's side here). Layered like Babylon.
+    // Imhotep (id 65) — "Ancient Engineering": -1 CC to the owner's SCIENTIFIC
+    // cards at ALL locations while a revealed Imhotep is on THIS owner's side
+    // anywhere (GLOBAL — was location-scoped). Layered like Babylon; owner-aware
+    // (a player Imhotep never discounts the AI, and vice versa).
     if (card.type === 'Scientific' &&
-        slots[locId] &&
-        slots[locId].some(function (s) { return s && s.revealed && abilityIdOf(s) === 65; }))
+        G.locations.some(function (l) {
+          return slots[l.id] && slots[l.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 65; });
+        }))
       cost = Math.max(0, cost - 1);
     return cost;
   }

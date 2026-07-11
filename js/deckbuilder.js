@@ -83,6 +83,16 @@
 
   function isCardUnlocked(id)    { return !!(window.SOG && SOG.Cards && SOG.Cards.isUnlocked && SOG.Cards.isUnlocked(id)); }
 
+  /* DEV-ONLY testing override. When the "Unlock All Cards (dev)" toggle in the dev
+     menu is ON (localStorage sog_dev_unlock_all === 'true'), the builder treats every
+     non-token card as available so any deck can be built for testing. This is a pure
+     VIEW override at the availability gate — it NEVER writes to SOG.collection (the
+     earned-card list) or grants cards, so the player's real unlocked collection and
+     saved progress are untouched; flip it off and normal ownership rules return. */
+  function devUnlockAll() {
+    try { return localStorage.getItem('sog_dev_unlock_all') === 'true'; } catch (e) { return false; }
+  }
+
   /* UNIFIED POOL — every context (Arcadium, multiplayer, adventure): the deck
      builder offers ONLY the cards the player has collected (SOG.collection).
      Adventure Mode is the only way to gain cards, so Arcadium/multiplayer build
@@ -91,7 +101,12 @@
      card IS the gate now). Battle/AI/challenge decks source cards elsewhere
      (e.g. game.js buildAiDeck, fixed adventure-battle decks) and are unaffected. */
   function isCardAvailable(card) {
-    return !!card && isCardUnlocked(card.id);
+    if (!card) return false;
+    // Tokens (Mummy 72 / Nubian Gold 73, flagged token:true) are in-game-created,
+    // non-deckable placeholder cards — never selectable, even under the dev override.
+    if (card.token) return false;
+    if (devUnlockAll()) return true;               // dev testing override (collection untouched)
+    return isCardUnlocked(card.id);
   }
 
   /* ── Entry point ─────────────────────────────────────────────── */

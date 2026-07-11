@@ -529,29 +529,9 @@
         });
       });
 
-      // Pyramid (id 57): DOUBLES the IP of the OWNER'S most-recently-played
-      // Political card here (by reveal order = sd.playTime). Implemented as
-      // +cardBaseIP on that one card (so a base-3 Political shows 6). If the
-      // "last" card carries other mods, only its BASE is doubled (documented).
-      ['player', 'opp'].forEach(function (own) {
-        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        if (!sl[loc.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 57; })) return;
-        var last = null, lastTime = -Infinity;
-        sl[loc.id].forEach(function (s) {
-          if (!s || !s.revealed) return;
-          var c = CARDS.find(function (x) { return x.id === s.cardId; });
-          if (!c || c.type !== 'Political') return;
-          var t = (typeof s.playTime === 'number') ? s.playTime : -1;
-          if (t >= lastTime) { lastTime = t; last = s; }
-        });
-        if (last) {
-          var lc  = CARDS.find(function (x) { return x.id === last.cardId; });
-          var add = lc ? lc.ip : 0;
-          last.contMod = (last.contMod || 0) + add;
-          last.contModSources.push({ source: 'Pyramid', delta: add });
-          addBonus(last, add, 'card', 57, nextEventId(), 'A', true);
-        }
-      });
+      // Pyramid (id 57) is no longer Continuous — it is now an At Once ability
+      // (abilityPyramid): the Pyramid permanently GAINS the IP of the last card
+      // its owner played at its location. See CARD_ABILITIES[57].
 
       // Scribe (id 40) is no longer Continuous — it is now an At Once ability
       // (abilityScribe) that applies a one-time +1 IP to the owner's other cards
@@ -1802,6 +1782,15 @@
       }
       var gain = 3 + (isCultural(hostSd) ? 1 : 0);   // +3 base (its IP), +1 if Cultural
       addIPMod(hostSd, gain, 'The Phoenicians');
+      // Transfer Phoenicians' "last played here" position onto the host. Phoenicians
+      // is the most-recent card the owner played at this location, and it dissolves
+      // INTO the host — so downstream "last card played here" readers (Pyramid 57,
+      // Papyrus 54, which pick the highest sd.playTime) must see the HOST as the
+      // latest play, not a card played earlier this location (e.g. a Hieroglyphics
+      // laid down just before). Phoenicians itself never gets a playTime stamp
+      // (game.js assigns it AFTER the At-Once, by which point it is consumed), so we
+      // mint a fresh play-order token here to outrank every earlier card here.
+      hostSd.playTime = ++G.playOrderCounter;
       SOG.ui.showIPFloat(owner, hostSd.cardId, gain);
       evaluateContinuous();
       refreshSlotIPDisplays();
@@ -2675,27 +2664,34 @@
 
   /* ── Batch B: copy/transcribe cards + the "Next Turn:" timing class ────────── */
 
-  /* Papyrus (54) — "For the Record". At Once: COPY the owner's most-recently-
-     played card and add that copy (same card id) to the owner's hand — the token-
-     grant pattern (like Nubian Gold), respecting the 7-card hand cap. "Last card
-     you played" = the owner's revealed card with the highest playTime BEFORE
-     Papyrus (Papyrus's own playTime is stamped AFTER this At-Once fires, so it is
-     naturally excluded; excluded by id too, defensively). Board-wide, not
-     location-scoped (matches "the last card you played"). Fizzles (no-op) if the
-     owner has no prior play this battle, or the hand is already full. */
+  /* Papyrus (54) — "For the Record". At Once: create a COPY of the owner's
+     most-recently-played card — carrying its CURRENT PERMANENT on-board state —
+     and add it to the owner's hand. The copy inherits the source card's
+     accumulated ipMod (Megalith/Obelisk growth, Pyramid grabs, river stamps,
+     Scribe stamps, strikes — the PERMANENT channel), but NOT contMod (live
+     continuous boosts like Hieroglyphics/Narmer-averaging recompute wherever
+     the copy is eventually played) and NOT locationBoosts (location-level).
+     The inherited amount rides G.copyIPBonus[side][cardId] until the copy is
+     PLAYED, where commitPlay folds it into the new sd's ipMod (labelled
+     'Papyrus') and CONSUMES the entry — once. Undo re-credits it.
+     "Last card you played" = highest playTime revealed card, board-wide,
+     excluding id 54 (a Papyrus can never copy a Papyrus — including copies —
+     which is the structural bound on the copy spiral: each Papyrus instance
+     creates at most ONE copy, ever). Fizzles if no prior play or hand full.
+     Inherited amount defensively clamped to ±99 (overflow insurance). */
   function abilityPapyrus(owner, locId, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var hand  = owner === 'player' ? G.playerHand  : G.aiHand;
     var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
 
     // Find the owner's most-recently-played card across the whole board.
-    var lastId = null, lastTime = -Infinity;
+    var lastId = null, lastSd = null, lastTime = -Infinity;
     G.locations.forEach(function (loc) {
       (slots[loc.id] || []).forEach(function (s) {
         if (!s || !s.revealed) return;
-        if (s.cardId === 54) return;                       // exclude Papyrus itself
+        if (s.cardId === 54) return;                       // exclude Papyrus itself (and Papyrus copies)
         var t = (typeof s.playTime === 'number') ? s.playTime : -1;
-        if (t > lastTime) { lastTime = t; lastId = s.cardId; }
+        if (t > lastTime) { lastTime = t; lastId = s.cardId; lastSd = s; }
       });
     });
 
@@ -2703,9 +2699,65 @@
     if (hand.length >= maxHand) { done(); return; }        // hand full → fizzle (no copy)
 
     hand.push(lastId);                                     // the copy (same card id)
+
+    // Carry the source's PERMANENT accumulated IP into the pending copy.
+    var inherited = Math.max(-99, Math.min(99, (lastSd && lastSd.ipMod) || 0));
+    if (inherited) {
+      if (!G.copyIPBonus) G.copyIPBonus = { player: {}, opp: {} };
+      var side = owner === 'player' ? 'player' : 'opp';
+      G.copyIPBonus[side][lastId] = (G.copyIPBonus[side][lastId] || 0) + inherited;
+    }
+
     if (typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
     if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
     if (typeof SFX !== 'undefined' && SFX.coinSound) SFX.coinSound();
+    done();
+  }
+
+  /* Pyramid (57) — "Monumental Legacy" (REWORKED). At Once: Pyramid permanently
+     GAINS the IP of the last card the owner played at ITS location (any type) —
+     base + permanent ipMod of that card (its current accumulated state; live
+     contMod excluded, consistent with the Papyrus copy philosophy). Replaces the
+     old continuous double-last-Political. Self-identification is twin-safe: the
+     just-revealed Pyramid is the revealed 57 here with NO playTime yet (playTime
+     is stamped AFTER the At-Once fires), so an earlier-revealed twin (which has
+     one) is never re-buffed. Fizzles when no prior own play exists here, or when
+     fired via a transcribed Rosetta (no unstamped 57 to buff). */
+  function abilityPyramid(owner, locId, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+
+    // The just-revealed Pyramid: revealed 57 at this location without a playTime.
+    var pyramidSd = null;
+    (slots[locId] || []).forEach(function (s) {
+      if (pyramidSd || !s || !s.revealed) return;
+      if (s.cardId === 57 && typeof s.playTime !== 'number') pyramidSd = s;
+    });
+    if (!pyramidSd) { done(); return; }                    // transcribed/edge → fizzle
+
+    // Last card the owner played HERE (highest playTime; the Pyramid itself and
+    // other just-revealed cards have no playTime yet and are excluded).
+    var last = null, lastTime = -Infinity;
+    (slots[locId] || []).forEach(function (s) {
+      if (!s || !s.revealed || s === pyramidSd) return;
+      var t = (typeof s.playTime === 'number') ? s.playTime : -Infinity;
+      if (t > lastTime) { lastTime = t; last = s; }
+    });
+    if (!last) { done(); return; }                         // first card here → fizzle
+
+    // Grab the last card's CURRENT effective IP — base + permanent (ipMod) AND
+    // continuous (contMod) mods — i.e. the number showing on its badge right now.
+    // effectiveIP includes contMod, so a live type-aura (e.g. Hieroglyphics' +2 to
+    // a Political host like Khufu, or Narmer's averaging) is captured; using only
+    // ip+ipMod dropped those and grabbed the base value instead of the shown one.
+    var gain = Math.max(0, Math.min(99, effectiveIP(last)));
+    if (gain > 0) {
+      addIPMod(pyramidSd, gain, 'Pyramid');
+      SOG.ui.showIPFloat(owner, 57, gain);
+      if (typeof SFX !== 'undefined' && SFX.coinSound) SFX.coinSound();
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+    }
     done();
   }
 
@@ -2965,10 +3017,10 @@
     51: { onAtOnce: function (o, l, done) { done(); } },  // Narmer — Continuous (IP averaging)
     52: { onAtOnce: abilityHatshepsut      },             // Hatshepsut — give/receive swap at this loc
     53: { onAtOnce: abilityRamses          },             // Ramses II — Next Turn: 2x IP to next turn's Cultural plays
-    54: { onAtOnce: abilityPapyrus         },             // Papyrus — At Once: copy last-played card to hand
+    54: { onAtOnce: abilityPapyrus         },             // Papyrus — At Once: copy last-played card (with its permanent buffed state) to hand
     55: { onAtOnce: abilityFarmer          },             // Farmer (EGY) — +1 capital next turn (reuses Meso Farmer)
     56: { onAtOnce: abilityScribeEgypt     },             // Scribe (EGY) — capital per other card here
-    57: { onAtOnce: function (o, l, done) { done(); } },  // Pyramid — Continuous (double last Political)
+    57: { onAtOnce: abilityPyramid         },             // Pyramid — At Once: gain the IP of the last card played here
     58: { onAtOnce: abilityRosetta         },             // Rosetta Stone — adopt first-here card's ability
     59: { endOfTurn: obeliskEndOfTurn      },             // Obelisk — End of turn: +1 IP (Megalith key)
     60: { onAtOnce: abilityKhufu           },             // Khufu — draw a Scientific card

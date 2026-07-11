@@ -114,6 +114,8 @@
   /* Build the synthetic slot used to render a hand card in the info popup. */
   function buildHandPopupSd(card) {
     var bonus = (card.id === 15) ? G.destroyedIPTotal : (G.cardIPBonus[card.id] || 0);
+    // Papyrus state-copy: a pending copy's inherited IP shows in the hand popup.
+    bonus += (G.copyIPBonus && G.copyIPBonus.player && G.copyIPBonus.player[card.id]) || 0;
     var sources = [];
     var bonuses = [];
     if (bonus) {
@@ -749,6 +751,17 @@
     var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai'
                   : (G.cardIPBonusSource && G.cardIPBonusSource[cardId]) || 'Bonus';
     var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
+    // Papyrus (54) state-copy inheritance: a pending copy's inherited PERMANENT
+    // IP rides G.copyIPBonus until played — fold it into this play's ipMod
+    // (labelled 'Papyrus') and CONSUME the entry (once; undoPlay re-credits it).
+    // With a plain twin of the same id also in hand, the first play of that id
+    // takes the bonus — conserved, never duplicated.
+    var _copyB = (G.copyIPBonus && G.copyIPBonus.player && G.copyIPBonus.player[cardId]) || 0;
+    if (_copyB) {
+      resBonus += _copyB;
+      resSources.push({ source: 'Papyrus', delta: _copyB });
+      delete G.copyIPBonus.player[cardId];
+    }
     // Capture hand position so undoPlay can restore the card to the slot it
     // came from rather than appending to the end of the hand.
     var handIndex = G.playerHand.indexOf(cardId);
@@ -805,12 +818,42 @@
     // turn" ability) instead of clamping back to the base 5.
     G.capital = Math.min(G.capital, G.turnStartCapital);
     G.playerRevealQueue = G.playerRevealQueue.filter(function (id) { return id !== sd.cardId; });
+    // Remove THIS play's entry from the action log too — the reveal sequence is
+    // built from playerActionLog in play order (buildRevealSequence), so a stale
+    // entry left by an undone play mis-orders the reveal: its cardId-scan fallback
+    // resolves to a LATER re-play of the same card, flipping it out of turn (e.g.
+    // Pyramid revealing before the Phoenicians that should buff its target first).
+    // Splice the entry matching this card at this slot (commit-time slotIndex may
+    // have shifted via a queued-move snapback, so fall back to cardId + locId).
+    (function removeActionLogEntry() {
+      var log = G.playerActionLog;
+      for (var k = log.length - 1; k >= 0; k--) {
+        var e = log[k];
+        if (e && e.type === 'play' && e.cardId === sd.cardId && e.toLocId === locId &&
+            e.slotIndex === slotIndex) { log.splice(k, 1); return; }
+      }
+      for (var j = log.length - 1; j >= 0; j--) {
+        var e2 = log[j];
+        if (e2 && e2.type === 'play' && e2.cardId === sd.cardId && e2.toLocId === locId) {
+          log.splice(j, 1); return;
+        }
+      }
+    })();
     // Restore to the slot the card occupied at play time, clamped to the
     // current hand length in case the hand has shrunk since.
     var insertIdx = (typeof sd.handIndex === 'number')
       ? Math.min(sd.handIndex, G.playerHand.length)
       : G.playerHand.length;
     G.playerHand.splice(insertIdx, 0, sd.cardId);
+    // Re-credit a consumed Papyrus copy-bonus: if this play folded an inherited
+    // 'Papyrus' amount into its ipMod (see commitPlay), return it to the pending
+    // table so the copy keeps its buffed state back in hand.
+    (sd.ipModSources || []).forEach(function (src) {
+      if (src && src.source === 'Papyrus' && src.delta) {
+        if (!G.copyIPBonus) G.copyIPBonus = { player: {}, opp: {} };
+        G.copyIPBonus.player[sd.cardId] = (G.copyIPBonus.player[sd.cardId] || 0) + src.delta;
+      }
+    });
     G.playerSlots[locId][slotIndex] = null;
     compactPlayerSlots(locId);
     syncPlayerSlots(locId);
@@ -908,6 +951,20 @@
   }
 
   function resetTurn() {
+    // A committed card returning to hand must give back any Papyrus copy bonus it
+    // consumed at commit — otherwise cancelling the turn silently loses the buff
+    // (the copy re-enters hand at base IP). Mirrors undoPlay's re-credit exactly:
+    // read the Papyrus source(s) off the sd's ipModSources and route the delta back
+    // to the id-keyed side-table. resetTurn only ever returns PLAYER cards.
+    function recreditCopyBonus(sd) {
+      (sd && sd.ipModSources || []).forEach(function (src) {
+        if (src && src.source === 'Papyrus' && src.delta) {
+          if (!G.copyIPBonus) G.copyIPBonus = { player: {}, opp: {} };
+          G.copyIPBonus.player[sd.cardId] = (G.copyIPBonus.player[sd.cardId] || 0) + src.delta;
+        }
+      });
+    }
+
     // 1. Reset move-tracking flags for any queued moves
     G.moveLog.forEach(function (mv) {
       if (mv.queued) {
@@ -950,6 +1007,7 @@
       G.deferredPlays[lid].forEach(function (sd) {
         var card = CARDS.find(function (c) { return c.id === sd.cardId; });
         if (card) G.capital += effectiveCost(card, lid);
+        recreditCopyBonus(sd);
         G.playerHand.push(sd.cardId);
       });
     });
@@ -962,6 +1020,7 @@
         if (!sd || sd.revealed) continue;
         var card = CARDS.find(function (c) { return c.id === sd.cardId; });
         if (card) G.capital += effectiveCost(card, loc.id);
+        recreditCopyBonus(sd);
         G.playerHand.push(sd.cardId);
         G.playerSlots[loc.id][i] = null;
       }
@@ -993,6 +1052,8 @@
       if (!card) return;
       var displayIP = card.ip + (G.cardIPBonus[cardId] || 0);
       if (cardId === 15) displayIP += G.destroyedIPTotal;
+      // Papyrus state-copy: a pending copy's inherited IP shows on the hand card.
+      displayIP += (G.copyIPBonus && G.copyIPBonus.player && G.copyIPBonus.player[cardId]) || 0;
       var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"] .db-overlay-ip');
       if (hEl) hEl.textContent = displayIP;
     });
@@ -1019,6 +1080,16 @@
     // Mesopotamia discount. Inert in battles with no Babylon location. Mirrors
     // effectiveCost so the in-hand number matches the on-play charge.
     var babylonOnBoard        = G.locations.some(function (l) { return l.abilityKey === 'BABYLON_COST_5'; });
+    // Imhotep (id 65) — "Ancient Engineering": -1 CC to the owner's SCIENTIFIC cards
+    // at ALL locations while a revealed Imhotep sits on THIS (player) side. Global,
+    // so it belongs in the hand display; mirrors the effectiveCost clause exactly
+    // (ability-id via transcribedFrom ?? cardId, so a Rosetta-transcribed Imhotep or
+    // a Papyrus copy discounts the display just as it discounts the on-play charge).
+    var imhotepOnBoard        = G.locations.some(function (l) {
+      return G.playerSlots[l.id].some(function (s) {
+        return s && s.revealed && (s.transcribedFrom != null ? s.transcribedFrom : s.cardId) === 65;
+      });
+    });
     G.playerHand.forEach(function (cardId) {
       var card = CARDS.find(function (c) { return c.id === cardId; });
       if (!card) return;
@@ -1027,6 +1098,7 @@
       if (card.type === 'Cultural'    && cosimoOnBoard)          displayCC = Math.max(0, displayCC - 1);
       if (card.era  === 'Mesopotamia' && nebDiscount[cardId])    displayCC = Math.max(0, displayCC - 1);
       if (card.cc   === 5             && babylonOnBoard)         displayCC = Math.max(0, displayCC - 1);
+      if (card.type === 'Scientific'  && imhotepOnBoard)         displayCC = Math.max(0, displayCC - 1);
       var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"] .db-overlay-cc');
       if (hEl) hEl.textContent = displayCC;
     });

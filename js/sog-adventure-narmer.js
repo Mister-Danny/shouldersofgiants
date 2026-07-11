@@ -106,15 +106,16 @@ SOG.NarmerBattle = (function () {
     // polIP/polCount track Politicals per location so a later-queued Pyramid/
     // Hieroglyphics can score a Political queued EARLIER THIS TURN (both reveal
     // together, so the continuous boost realizes).
-    var free = {}, count = {}, ownIP = {}, polIP = {}, polCount = {};
+    var free = {}, count = {}, ownIP = {}, polIP = {}, polCount = {}, topIP = {};
     LOCS.forEach(function (id) {
       var s = (G.aiSlots && G.aiSlots[id]) || [];
       free[id]  = s.filter(function (x) { return x === null; }).length;
       count[id] = s.filter(Boolean).length;
-      ownIP[id] = 0; polIP[id] = 0; polCount[id] = 0;
+      ownIP[id] = 0; polIP[id] = 0; polCount[id] = 0; topIP[id] = 0;
       s.forEach(function (x) {
         if (!x) return;
         ownIP[id] += (x.ip || 0) + (x.ipMod || 0) + (x.contMod || 0);
+        topIP[id] = Math.max(topIP[id], (x.ip || 0) + (x.ipMod || 0));   // new Pyramid grabs any type
         if (POLITICAL_IDS[x.cardId]) { polCount[id]++; polIP[id] = Math.max(polIP[id], x.ip || 0); }
       });
     });
@@ -152,7 +153,7 @@ SOG.NarmerBattle = (function () {
         if (id === 26) s += 1;            // Tool: draw keeps the fill going
       } else {
         s = c.ip - c.cc * 0.1;
-        if (id === 57) s += polIP[locId] > 0 ? polIP[locId] : -3;          // Pyramid: worth the Political it doubles; dead alone
+        if (id === 57) s += topIP[locId] > 0 ? topIP[locId] : -3;          // Pyramid (At Once): grabs the last-played card's IP here; dead alone
         if (id === 62) s += polCount[locId] > 0 ? 2 * polCount[locId] : -2; // Hieroglyphics: +2 per Political here; dead alone
         if (id === 51) s += (locId === LOC_MEMPHIS ? 2 : 0);               // Narmer: center seat spans the whole board's averaging
         if (id === 56) s += 0.5 * count[locId];                            // Scribe: capital per prior card here
@@ -187,6 +188,7 @@ SOG.NarmerBattle = (function () {
       capital -= aiCost(card, locId);   // spend the discounted cost
       free[locId]--; count[locId]++;
       ownIP[locId] += card.ip;
+      topIP[locId] = Math.max(topIP[locId], card.ip);
       if (POLITICAL_IDS[cardId]) { polCount[locId]++; polIP[locId] = Math.max(polIP[locId], card.ip); }
       hand.splice(hand.indexOf(cardId), 1);
     }

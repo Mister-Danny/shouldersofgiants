@@ -59,6 +59,14 @@
       var resBonus  = G.aiCardIPBonus[cardId] || 0;
       var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
       var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
+      // Papyrus (54) state-copy inheritance — consume the AI side's pending copy
+      // bonus into this play's ipMod (parity with the player's commitPlay).
+      var _copyB = (G.copyIPBonus && G.copyIPBonus.opp && G.copyIPBonus.opp[cardId]) || 0;
+      if (_copyB) {
+        resBonus += _copyB;
+        resSources.push({ source: 'Papyrus', delta: _copyB });
+        delete G.copyIPBonus.opp[cardId];
+      }
       var _sd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
       // Adventure battles relocate a move-capable AI card (Chariot) post-reveal
       // via runAdventureMovements, whose "not on the card's OWN reveal turn" guard
@@ -145,7 +153,10 @@
        config sets profile 'heuristic'. */
     if (_aiProfile === 'heuristic') {
       var _hSettings    = (G.config.ai.settings) || {};
-      var _hSelectPlays = _hSettings.selectPlays;
+      // Tier routing: cfg.ai.tier === 'serf' → the shared generic Serf brain
+      // (Stage A); otherwise the battle's own per-boss selector ("Giant", Stage B).
+      var _serfTier     = !!(G.config.ai && G.config.ai.tier === 'serf');
+      var _hSelectPlays = _serfTier ? serfSelectPlays : _hSettings.selectPlays;
       if (typeof _hSelectPlays === 'function') {
         // Expose the per-turn capital budget the engine already computed above
         // (CAPITAL + G.aiBonusCapitalNextTurn, with the accumulator then zeroed) so
@@ -213,6 +224,13 @@
       var resBonus  = G.aiCardIPBonus[cardId] || 0;
       var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
       var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
+      // Papyrus (54) state-copy inheritance — consume the AI side's pending bonus.
+      var _ecopyB = (G.copyIPBonus && G.copyIPBonus.opp && G.copyIPBonus.opp[cardId]) || 0;
+      if (_ecopyB) {
+        resBonus += _ecopyB;
+        resSources.push({ source: 'Papyrus', delta: _ecopyB });
+        delete G.copyIPBonus.opp[cardId];
+      }
       G.aiSlots[t.locId][t.slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
       // Remove ONE instance (filter would delete both copies of a duplicated id).
       var _ehi = G.aiHand.indexOf(cardId);
@@ -979,6 +997,307 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     SERF TIER — one shared generic adventure AI (Stage A)
+     ───────────────────────────────────────────────────────────────
+     A single selectPlays used by ANY adventure battle (routed when
+     cfg.ai.tier === 'serf'). Plays by the SAME rules as the player —
+     real effectiveCost + the real advance-gate legality check, no
+     resource cheating. Deliberately shallow (Stage B "Giant" adds the
+     deep per-boss brains):
+       • 66/33 capital roll per turn (66%: spend everything; 33%: may
+         leave capital / stop at non-positive marginal value).
+       • Card choice by a single-turn NET-IP estimate that models the
+         effects present in the current AI decks: base IP + continuous/
+         at-once/EoT boosts, Soldier (42/70) strikes, and Hammurabi (47)
+         destruction. (Chariots/Chariot strike on ARRIVAL only, which the
+         Serf never triggers — it does not move cards — so they score as
+         bodies.)
+       • Placement: turns 1..N-1 RANDOM among legal locations (Soldiers
+         seek a location with an opponent card); FINAL turn concentrates
+         on the two most-winnable locations.
+     No multi-turn setup, hold-back, reveal-order or movement judgment.
+  ═══════════════════════════════════════════════════════════════ */
+  function _serfCardOf(id) {
+    var C = (typeof CARDS !== 'undefined') ? CARDS : [];
+    for (var i = 0; i < C.length; i++) if (C[i].id === id) return C[i];
+    return null;
+  }
+  function _serfEffIP(sd) {
+    return (SOG.board && SOG.board.effectiveIP) ? SOG.board.effectiveIP(sd)
+         : (sd.ip + (sd.ipMod || 0) + (sd.contMod || 0));
+  }
+  function _serfCC(sd) {
+    return (SOG.abilities && SOG.abilities.effectiveCC) ? SOG.abilities.effectiveCC(sd)
+         : (sd.cc != null ? sd.cc : ((_serfCardOf(sd.cardId) || {}).cc || 0));
+  }
+  function _serfAdj(locId) {
+    var idx = G.locations.findIndex(function (l) { return l.id === locId; });
+    var r = [];
+    if (idx > 0)                       r.push(G.locations[idx - 1].id);
+    if (idx < G.locations.length - 1)  r.push(G.locations[idx + 1].id);
+    return r;
+  }
+  function _serfHasSphinx(cards) { return cards.some(function (s) { return s && s.cardId === 64; }); }
+  function _serfHasKente(cards)  { return cards.some(function (s) { return s && s.cardId === 17; }); }
+
+  /* Single scalar "net-IP value" of the CURRENT board for the AI side: every AI
+     card in a slot (revealed OR the face-down plays the selector has placed this
+     turn) is treated as in-play, boosts resolved; PLUS the opponent IP the AI's
+     own strikes / destruction would remove. Player cards use their live
+     effectiveIP (stable — the Serf plans for the current board, not the
+     opponent's next move). Sum-based (net IP), per the tactical goal. */
+  function _serfValue() {
+    var locs = G.locations.map(function (l) { return l.id; });
+    var aiByLoc = {}, playerCards = {}, aiTotal = 0, playerRemoved = 0;
+
+    locs.forEach(function (lid) {
+      aiByLoc[lid] = (G.aiSlots[lid] || []).filter(Boolean).map(function (s) {
+        var c = _serfCardOf(s.cardId);
+        return { cardId: s.cardId, type: c ? c.type : '', cc: (c ? c.cc : 0),
+                 base: (s.ip != null ? s.ip : (c ? c.ip : 0)),
+                 ip: (s.ip != null ? s.ip : (c ? c.ip : 0)) + (s.ipMod || 0),
+                 dead: false };
+      });
+      playerCards[lid] = (G.playerSlots[lid] || []).filter(function (s) { return s && s.revealed; });
+    });
+
+    // ── AI boosts (additive onto each entry.ip) ──
+    locs.forEach(function (lid) {
+      var arr = aiByLoc[lid], loc = G.locations.find(function (l) { return l.id === lid; });
+      var has = function (id) { return arr.some(function (e) { return e.cardId === id; }); };
+      if (has(41)) arr.forEach(function (e) { if (e.type === 'Labor') e.ip += 1; });                                   // Canals
+      if (has(45)) arr.forEach(function (e) { if (e.type === 'Religious' && e.cardId !== 45) e.ip += 1; });            // Ziggurat
+      if (has(62)) arr.forEach(function (e) { if ((e.type === 'Religious' || e.type === 'Political') && e.cardId !== 62) e.ip += 2; }); // Hieroglyphics
+      var scribes = arr.filter(function (e) { return e.cardId === 40; }).length;                                       // Scribe (Meso) +1 to others
+      if (scribes) arr.forEach(function (e) { if (e.cardId !== 40) e.ip += scribes; });
+      if (has(49) && arr.some(function (e) { return e.type === 'Cultural' && e.cardId !== 49; })) {                    // Phoenicians (+1 if Cultural host)
+        var ph = arr.find(function (e) { return e.cardId === 49; }); if (ph) ph.ip += 1;
+      }
+      if (has(57)) {                                                                                                   // Pyramid (At Once): gains the last-played card's IP here — approximate with the top co-located other card
+        var others = arr.filter(function (e) { return e.cardId !== 57; });
+        if (others.length) {
+          var topO = others.reduce(function (a, b) { return b.base > a.base ? b : a; });
+          var pyr  = arr.find(function (e) { return e.cardId === 57; });
+          if (pyr) pyr.ip += topO.base;
+        }
+      }
+      [44, 32].forEach(function (bid) {                                                                                // Enkidu / Domesticated Animal (idx-adjacent ~ up to 2 others)
+        if (has(bid)) { var o = arr.filter(function (e) { return e.cardId !== bid; }); for (var i = 0; i < Math.min(2, o.length); i++) o[i].ip += 1; }
+      });
+      if (has(43)) { var g = arr.find(function (e) { return e.cardId === 43; }); if (g) g.ip += Math.max(0, (G.culturalCount && G.culturalCount.opp) || 0); } // Gilgamesh
+      arr.forEach(function (e) { if (e.cardId === 31 || e.cardId === 59) e.ip += 1; });                                // Megalith / Obelisk (EoT +1)
+      if (loc && loc.abilityKey === 'LABOR_PLUS_2_HERE')    arr.forEach(function (e) { if (e.type === 'Labor')    e.ip += 2; }); // Euphrates
+      if (loc && loc.abilityKey === 'MILITARY_PLUS_1_HERE') arr.forEach(function (e) { if (e.type === 'Military') e.ip += 1; }); // Tigris
+    });
+
+    // ── AI Hammurabi (47) destruction: own lowest-CC sacrifice + opp lowest-CC victim ──
+    locs.forEach(function (lid) {
+      var arr = aiByLoc[lid], pc = playerCards[lid];
+      if (!arr.some(function (e) { return e.cardId === 47; })) return;
+      if (_serfHasKente(arr) || _serfHasKente(pc)) return;                        // Kente blocks destruction
+      var sacs = arr.filter(function (e) { return e.cardId !== 47 && !e.dead; });
+      if (!sacs.length || !pc.length) return;                                     // no sacrifice or no victim → no trade
+      var sac = sacs.reduce(function (a, b) { return b.cc < a.cc ? b : a; });
+      sac.dead = true;                                                            // owner loses the sacrifice's IP
+      var vic = pc.reduce(function (a, b) { return _serfCC(b) < _serfCC(a) ? b : a; });
+      playerRemoved += _serfEffIP(vic);                                           // opponent loses the victim's IP
+    });
+
+    // ── AI Soldier (42/70) strikes: -1 to the opponent at its location ──
+    locs.forEach(function (lid) {
+      var soldiers = aiByLoc[lid].filter(function (e) { return e.cardId === 42 || e.cardId === 70; }).length;
+      var pc = playerCards[lid];
+      if (!soldiers || !pc.length || _serfHasSphinx(pc)) return;                  // no target / Sphinx protects
+      playerRemoved += Math.min(soldiers, pc.length);                            // each strike ~-1
+    });
+
+    // ── Sum AI IP (skip destroyed sacrifices) + Sargon (+3 to each adjacent loc) ──
+    locs.forEach(function (lid) {
+      aiByLoc[lid].forEach(function (e) {
+        if (!e.dead) aiTotal += e.ip;
+        if (e.cardId === 37) aiTotal += 3 * _serfAdj(lid).length;                // Sargon adjacent boost (Narmer averaging is sum-neutral → omitted)
+      });
+    });
+    return aiTotal + playerRemoved;
+  }
+
+  /* Legal + affordable (card, loc) options for the AI right now — real
+     effectiveCost (owner 'ai') + the real advance-gate/flood check
+     (isLocationPlayable(loc,'ai')), read against the LIVE board, so any plays the
+     selector has already staged into G.aiSlots this turn are reflected (filling a
+     home unlocks the next advance-gate location, exactly as at commit time). */
+  function _serfLegalOptions(hand, capital, costFree) {
+    var opts = [];
+    for (var h = 0; h < hand.length; h++) {
+      var card = _serfCardOf(hand[h]);
+      if (!card) continue;
+      var cost = costFree ? 0
+        : (SOG.board && SOG.board.effectiveCost ? SOG.board.effectiveCost(card, G.locations[0].id, 'ai') : card.cc);
+      // cost can be location-scoped (Imhotep); recomputed per loc below.
+      for (var li = 0; li < G.locations.length; li++) {
+        var lid = G.locations[li].id;
+        var arr = G.aiSlots[lid] || [];
+        if (arr.indexOf(null) === -1) continue;                                  // no open slot
+        if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(lid, 'ai')) continue; // gate/flood
+        var locCost = costFree ? 0
+          : (SOG.board && SOG.board.effectiveCost ? SOG.board.effectiveCost(card, lid, 'ai') : card.cc);
+        if (locCost > capital) continue;
+        opts.push({ cardId: hand[h], locId: lid, cost: locCost, card: card });
+      }
+    }
+    return opts;
+  }
+
+  // Stage a face-down play into G.aiSlots (occupancy for the gate; revealed:false
+  // so a same-turn Imhotep can't discount — matches the real reveal timing) / undo.
+  function _serfStage(cardId, locId) {
+    var card = _serfCardOf(cardId);
+    var idx = (G.aiSlots[locId] || []).indexOf(null);
+    if (idx === -1) return null;
+    G.aiSlots[locId][idx] = { cardId: cardId, ip: (card ? card.ip : 0), revealed: false,
+                              ipMod: (G.aiCardIPBonus && G.aiCardIPBonus[cardId]) || 0, contMod: 0,
+                              ipModSources: [], bonuses: [], _serfStub: true };
+    return idx;
+  }
+  function _serfUnstage(locId, idx) { if (idx != null && G.aiSlots[locId]) G.aiSlots[locId][idx] = null; }
+  function _serfClearAllStubs() {
+    G.locations.forEach(function (l) {
+      var arr = G.aiSlots[l.id] || [];
+      for (var i = 0; i < arr.length; i++) if (arr[i] && arr[i]._serfStub) arr[i] = null;
+    });
+  }
+
+  /* The two locations the Serf is most likely to WIN (final-turn concentration
+     target). Winnability = the PROJECTED margin = current (AI − player) margin
+     PLUS what this turn's plays could add here (open AI slots × the average IP of
+     the hand). Ranked desc, top 2. This factors in "what its plays can add" so a
+     currently-losing-but-fillable location the AI can flip is picked over one it
+     can't reach — while an already-won location still ranks high. */
+  function _serfTargetLocs(handIPavg) {
+    var add = handIPavg > 0 ? handIPavg : 2;
+    var scored = G.locations.map(function (l) {
+      var aip = (G.aiSlots[l.id] || []).reduce(function (t, s) { return t + (s && s.revealed ? _serfEffIP(s) : 0); }, 0);
+      var pip = (G.playerSlots[l.id] || []).reduce(function (t, s) { return t + (s && s.revealed ? _serfEffIP(s) : 0); }, 0);
+      var open = (G.aiSlots[l.id] || []).filter(function (s) { return s === null; }).length;
+      return { id: l.id, score: (aip - pip) + Math.min(open, 2) * add };   // cap add-potential at ~2 plays/loc
+    });
+    scored.sort(function (a, b) { return b.score - a.score; });
+    return scored.slice(0, 2).map(function (s) { return s.id; });
+  }
+
+  function serfSelectPlays(ctx) {
+    var G_ = ctx.G || G;
+    if (G_ !== G) return [];   // module-scoped G is canonical
+    var turns    = (G.config && G.config.structure && G.config.structure.turns) || 5;
+    var _turn    = (typeof ctx.turn === 'number') ? ctx.turn : G.turn;   // engine passes ctx.turn === G.turn
+    var lastTurn = _turn >= turns;
+    var costFree = !!(G.config && G.config.resource && G.config.resource.model === 'none');
+    var perTurnCap = (G.config && G.config.structure && G.config.structure.cardsPerTurn != null)
+      ? G.config.structure.cardsPerTurn : Infinity;
+
+    var spendAll = Math.random() < 0.66;   // 66% commit-everything vs 33% may leave capital
+    var hand    = (ctx.hand || G.aiHand).slice();
+    var capital = (typeof ctx.capital === 'number') ? ctx.capital : 0;
+
+    _serfClearAllStubs();                  // defensive: no stale stubs
+    var _handIPavg = hand.length
+      ? hand.reduce(function (s, id) { var c = _serfCardOf(id); return s + (c ? c.ip : 0); }, 0) / hand.length : 2;
+    var plays = [], staged = [], targetLocs = lastTurn ? _serfTargetLocs(_handIPavg) : null;
+    var rng = function (n) { return Math.floor(Math.random() * n); };
+
+    for (var guard = 0; guard < 12 && plays.length < perTurnCap; guard++) {
+      if (!hand.length) break;
+      if (!costFree && capital <= 0) break;
+
+      var opts = _serfLegalOptions(hand, capital, costFree);
+      if (!opts.length) break;
+
+      // Score each distinct CARD by its best marginal net-IP value (evaluated at
+      // its best legal location — so strike/synergy cards get proper credit).
+      var baseVal = _serfValue();
+      var byCard = {};
+      opts.forEach(function (o) {
+        var idx = _serfStage(o.cardId, o.locId);
+        var marginal = _serfValue() - baseVal;
+        _serfUnstage(o.locId, idx);
+        var cur = byCard[o.cardId];
+        if (!cur || marginal > cur.marginal) byCard[o.cardId] = { cardId: o.cardId, marginal: marginal, cost: o.cost, card: o.card };
+      });
+      var cards = Object.keys(byCard).map(function (k) { return byCard[k]; });
+      cards.sort(function (a, b) { return b.marginal - a.marginal; });
+      var pick = cards[0];
+      // 33% path: stop once the best play no longer improves net IP (may leave capital).
+      if (!spendAll && pick.marginal <= 0) break;
+
+      // Choose the placement location among this card's LEGAL locs.
+      var legalLocs = opts.filter(function (o) { return o.cardId === pick.cardId; }).map(function (o) { return o.locId; });
+      var isSoldier = (pick.cardId === 42 || pick.cardId === 70);
+      var chosen;
+      if (lastTurn) {
+        // Concentrate on the two most-winnable locations (fall back to any legal).
+        var inTargets = legalLocs.filter(function (l) { return targetLocs.indexOf(l) !== -1; });
+        var pool = inTargets.length ? inTargets : legalLocs;
+        // Within the pool, place where this card's marginal value is highest.
+        var best = null;
+        pool.forEach(function (l) {
+          var ix = _serfStage(pick.cardId, l); var v = _serfValue(); _serfUnstage(l, ix);
+          if (!best || v > best.v) best = { l: l, v: v };
+        });
+        chosen = best ? best.l : pool[rng(pool.length)];
+      } else if (isSoldier) {
+        // Seek a location that has an opponent card to strike; else random legal.
+        var withTarget = legalLocs.filter(function (l) {
+          return (G.playerSlots[l] || []).some(function (s) { return s && s.revealed; });
+        });
+        chosen = (withTarget.length ? withTarget : legalLocs)[rng(withTarget.length || legalLocs.length)];
+      } else {
+        chosen = legalLocs[rng(legalLocs.length)];   // turns 1..N-1 random placement
+      }
+
+      var sidx = _serfStage(pick.cardId, chosen);
+      if (sidx == null) break;                        // slot vanished (shouldn't happen)
+      staged.push({ locId: chosen, idx: sidx });
+      plays.push({ cardId: pick.cardId, locId: chosen });
+      hand.splice(hand.indexOf(pick.cardId), 1);      // one instance
+      if (!costFree) capital -= pick.cost;
+    }
+
+    _serfClearAllStubs();   // remove all staged stubs — the engine commits the returned plays for real
+    return plays;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     AI BATTLE LOG (classroom win-rate instrumentation) — localStorage.
+     One record per completed adventure battle. No PII.
+       SOG.aiLog.record(rec) | .dump() | .clear() | .summary()
+  ═══════════════════════════════════════════════════════════════ */
+  var _AILOG_KEY = 'sog_ai_battle_log', _AILOG_CAP = 500;
+  function _aiLogRead() { try { return JSON.parse(localStorage.getItem(_AILOG_KEY)) || []; } catch (e) { return []; } }
+  function _aiLogWrite(a) { try { localStorage.setItem(_AILOG_KEY, JSON.stringify(a.slice(-_AILOG_CAP))); } catch (e) {} }
+  var _aiLog = {
+    record: function (rec) { var a = _aiLogRead(); a.push(rec); _aiLogWrite(a); return rec; },
+    dump:   function () { var a = _aiLogRead(); if (typeof console !== 'undefined') console.table ? console.table(a) : console.log(a); return a; },
+    clear:  function () { try { localStorage.removeItem(_AILOG_KEY); } catch (e) {} if (typeof console !== 'undefined') console.log('[aiLog] cleared'); },
+    summary: function () {
+      var a = _aiLogRead(), by = {};
+      a.forEach(function (r) {
+        var k = r.boss + ' · ' + r.tier;
+        by[k] = by[k] || { n: 0, playerWins: 0, losses: 0, ties: 0 };
+        by[k].n++;
+        if (r.result === 'player') by[k].playerWins++; else if (r.result === 'ai') by[k].losses++; else by[k].ties++;
+      });
+      var rows = Object.keys(by).map(function (k) {
+        var d = by[k];
+        return { matchup: k, games: d.n, playerWinRate: d.n ? (100 * d.playerWins / d.n).toFixed(0) + '%' : '—',
+                 playerWins: d.playerWins, aiWins: d.losses, ties: d.ties };
+      });
+      if (typeof console !== 'undefined') console.table ? console.table(rows) : console.log(rows);
+      return rows;
+    }
+  };
+  SOG.aiLog = _aiLog;
+
+  /* ═══════════════════════════════════════════════════════════════
      PUBLIC EXPORTS
   ═══════════════════════════════════════════════════════════════ */
   SOG.ai = {
@@ -987,7 +1306,9 @@
     runAdventureMovements: runAdventureMovements,
     // Shared card-placement heuristics (also used by the per-battle selectors).
     cardTurnBias: cardTurnBias,
-    cardLocBias:  cardLocBias
+    cardLocBias:  cardLocBias,
+    // Stage A: the one shared generic "Serf" selector (routed by cfg.ai.tier).
+    serfSelectPlays: serfSelectPlays
   };
 
 })();

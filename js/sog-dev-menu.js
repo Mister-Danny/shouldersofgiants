@@ -63,11 +63,27 @@ SOG.DevMenu = (function () {
   // leave battle DOM / event listeners / stale flags behind. Guarded so a
   // missing module never throws. Add new battle modules here as they ship.
   function teardownBattles() {
-    ['GilgameshBattle', 'OtziBattle', 'NarmerBattle'].forEach(function (name) {
+    ['GilgameshBattle', 'OtziBattle', 'NarmerBattle', 'HammurabiBattle', 'SargonBattle', 'HangingGardensBattle'].forEach(function (name) {
       try {
         if (window.SOG && SOG[name] && typeof SOG[name].teardown === 'function') SOG[name].teardown();
       } catch (e) { console.warn('[DevMenu] teardown failed for', name, e); }
     });
+  }
+
+  /* Launch an adventure battle at SERF AI tier (Stage A testing). Sets the
+     one-shot window.__forceSerfTier flag that initGame bakes into cfg.ai.tier for
+     THIS battle only, then starts the boss module. extraFlags skip the intro
+     dialogue so playtests start straight in the battle. */
+  function _startBattleSerf(moduleName, extraFlags) {
+    ensureAdventurer();
+    if (extraFlags) setFlags(extraFlags);
+    hide();
+    stopHomeMusic();
+    teardownBattles();
+    window.__forceSerfTier = true;
+    var mod = window.SOG && SOG[moduleName];
+    if (mod && typeof mod.start === 'function') { mod.start(); }
+    else { window.__forceSerfTier = false; console.warn('[DevMenu] ' + moduleName + ' not found'); }
   }
 
   // Scene jumps leave the home screen, but bypass the normal "play" button that
@@ -174,6 +190,44 @@ SOG.DevMenu = (function () {
       }
     },
 
+    // ── 🧪 AI Tier Testing (Serf) ──
+    {
+      section: '🧪 AI Tier Testing (Serf)',
+      label: 'Gilgamesh — Serf tier',
+      description: 'Gilgamesh at Serf AI (skip intro). Logs result to SOG.aiLog.',
+      run: function () { _startBattleSerf('GilgameshBattle', { 'sog_gilgamesh_opening_seen': 'true' }); }
+    },
+    {
+      section: '🧪 AI Tier Testing (Serf)',
+      label: 'Hammurabi — Serf tier',
+      description: 'Hammurabi at Serf AI (skip intro). Logs result to SOG.aiLog.',
+      run: function () { _startBattleSerf('HammurabiBattle', { 'sog_hammurabi_opening_seen': 'true' }); }
+    },
+    {
+      section: '🧪 AI Tier Testing (Serf)',
+      label: 'Narmer — Serf tier',
+      description: 'Narmer advance battle at Serf AI (skip intro). Logs result.',
+      run: function () { _startBattleSerf('NarmerBattle', { 'sog_narmer_battle_opening_seen': 'true' }); }
+    },
+    {
+      section: '🧪 AI Tier Testing (Serf)',
+      label: 'AI Log — Summary (win rates)',
+      description: 'console.table of player win-rate per boss · tier',
+      run: function () { if (window.SOG && SOG.aiLog) SOG.aiLog.summary(); flash('AI log summary → console'); }
+    },
+    {
+      section: '🧪 AI Tier Testing (Serf)',
+      label: 'AI Log — Dump (all records)',
+      description: 'console.table of every logged adventure battle',
+      run: function () { if (window.SOG && SOG.aiLog) SOG.aiLog.dump(); flash('AI log dumped → console'); }
+    },
+    {
+      section: '🧪 AI Tier Testing (Serf)',
+      label: 'AI Log — Clear',
+      description: 'Wipe the AI battle log (localStorage sog_ai_battle_log)',
+      run: function () { if (window.SOG && SOG.aiLog) SOG.aiLog.clear(); flash('AI log cleared'); }
+    },
+
     // ── 🎴 Card / State Toggles ──
     {
       section: '🎴 Card / State Toggles',
@@ -186,6 +240,17 @@ SOG.DevMenu = (function () {
         var hud = window.SOG && window.SOG.HUD;
         if (hud && typeof hud.refreshDecks === 'function') hud.refreshDecks();
         flash('Deck builder ' + (on ? 'LOCKED' : 'UNLOCKED'));
+      }
+    },
+    {
+      section: '🎴 Card / State Toggles',
+      label: 'Toggle Unlock All Cards (dev)',
+      description: 'Deck builder shows ALL non-token cards for testing. VIEW-ONLY — does NOT touch your real collection or saved progress. Tokens (Mummy / Nubian Gold) stay excluded. Re-open the deck builder after flipping.',
+      run: function () {
+        var on = false;
+        try { on = localStorage.getItem('sog_dev_unlock_all') === 'true'; } catch (e) {}
+        setFlags({ 'sog_dev_unlock_all': on ? 'false' : 'true' });
+        flash('Unlock-all ' + (on ? 'OFF (normal rules)' : 'ON (all cards)'));
       }
     },
     {
