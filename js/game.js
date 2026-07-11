@@ -188,9 +188,14 @@
     G.config = injectedCfg || resolveBattleConfig(_2pCfg);
     var cfg = G.config;
 
-    /* Dev/testing (Stage A): window.__forceSerfTier bakes tier 'serf' into THIS
-       battle's config and self-clears, so the Serf brain is used for one battle
-       only (no leakage into the next). Set by the dev-menu Serf-tier launchers. */
+    /* Dev/testing: window.__forceTier ('serf' | 'giant') bakes an AI tier into THIS
+       battle's config and self-clears, so the chosen brain is used for one battle
+       only (no leakage into the next). Set by the dev-menu tier launchers.
+       window.__forceSerfTier stays as a back-compat alias for the Serf launchers. */
+    if (window.__forceTier && cfg.ai) {
+      cfg.ai.tier = window.__forceTier;
+      window.__forceTier = null;
+    }
     if (window.__forceSerfTier) {
       if (cfg.ai) cfg.ai.tier = 'serf';
       window.__forceSerfTier = false;
@@ -1340,6 +1345,7 @@
          proceed. Config-gated; inert for Arcadium/Prehistory/Ötzi (none sets
          ai.movement 'adventure', and none has a move-capable AI card here). */
       if (G.config && G.config.ai && G.config.ai.movement === 'adventure'
+          && G.config.ai.tier !== 'serf'   // Serf leaves movers in place; Giant repositions them
           && SOG.ai && typeof SOG.ai.runAdventureMovements === 'function') {
         SOG.ai.runAdventureMovements(function () {
           evaluateContinuous();
@@ -1601,7 +1607,7 @@
         });
         var _pT = _lr.reduce(function (s, r) { return s + (r.playerIP || 0); }, 0);
         var _aT = _lr.reduce(function (s, r) { return s + (r.aiIP    || 0); }, 0);
-        var _tier = (G.config.ai && G.config.ai.tier === 'serf') ? 'serf'
+        var _tier = (G.config.ai && G.config.ai.tier) ? G.config.ai.tier
                   : (G.config.ai && G.config.ai.profile === 'heuristic') ? 'giant'
                   : (window.aiDifficulty || 'unknown');
         SOG.aiLog.record({ boss: G.config.scriptHook, tier: _tier, result: result.outcome,

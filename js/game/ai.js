@@ -153,10 +153,13 @@
        config sets profile 'heuristic'. */
     if (_aiProfile === 'heuristic') {
       var _hSettings    = (G.config.ai.settings) || {};
-      // Tier routing: cfg.ai.tier === 'serf' → the shared generic Serf brain
-      // (Stage A); otherwise the battle's own per-boss selector ("Giant", Stage B).
-      var _serfTier     = !!(G.config.ai && G.config.ai.tier === 'serf');
-      var _hSelectPlays = _serfTier ? serfSelectPlays : _hSettings.selectPlays;
+      // Tier routing (cfg.ai.tier): 'serf' → the shared generic Serf brain (Stage A);
+      // 'giant' → the shared Giant brain bound to this boss's signature (Stage B,
+      // keyed by scriptHook); otherwise the battle's own bespoke selector.
+      var _tier         = (G.config.ai && G.config.ai.tier) || null;
+      var _hSelectPlays = (_tier === 'serf')  ? serfSelectPlays
+                        : (_tier === 'giant') ? giantSelectPlaysFor(G.config.scriptHook)
+                        : _hSettings.selectPlays;
       if (typeof _hSelectPlays === 'function') {
         // Expose the per-turn capital budget the engine already computed above
         // (CAPITAL + G.aiBonusCapitalNextTurn, with the accumulator then zeroed) so
@@ -1267,6 +1270,216 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     GIANT TIER (Stage B) — Serf + shared upgrades + per-boss signature
+     ───────────────────────────────────────────────────────────────
+     The Giant is the DEEP tier. It INHERITS the Serf's entire tactical
+     foundation (the _serf* helpers: legal-play enumeration, single-turn
+     net-IP-with-abilities evaluation, strike/destruction modelling,
+     win-target selection) and layers on the SHARED GIANT UPGRADES that
+     EVERY boss inherits, then a thin PER-BOSS SIGNATURE on top:
+
+       serf logic ─▶ shared giant upgrades ─▶ per-boss signature
+
+     SHARED GIANT UPGRADES (every Giant, reusable across all five bosses):
+       1. Always commits fully — no 33% hold-back (spendAll is always on).
+       2. Positional play on the LAST TWO turns (Serf: only the last) — the
+          Giant concentrates on its two most-winnable locations one turn
+          earlier, buying an extra turn of endgame setup.
+       3. Multi-turn setup — rewards playing recurring/aura/growth cards
+          EARLY (value ≈ per-turn effect × turns they will still pay off),
+          so setup goes down before the cards that benefit (_giantSetupBonus).
+       4. Reveal-order optimisation — sequences the returned plays so
+          discounts/auras reveal before beneficiaries and grabbers
+          (Papyrus/Pyramid) reveal last (_giantRevealOrder).
+       5. Movement judgment — the Giant repositions movers (Chariot/Trader)
+          via the existing reveal-time runAdventureMovements, which game.js
+          now gates OFF for the Serf tier (Serf leaves movers in place).
+
+     PER-BOSS SIGNATURE (thin, declarative — see _GIANT_SIGNATURES):
+       holdForEndgame : cardIds held out of the pool until the positional
+                        (last-two) turns.
+       preferType     : a card TYPE the Giant favours on ties (epsilon nudge).
+       cardBias(id,ctx): optional fn for richer future-boss preferences.
+  ═══════════════════════════════════════════════════════════════ */
+
+  /* Cards whose value RECURS (auras / growth / discount / resource) — playing
+     them earlier compounds. Value ≈ per-turn recurring IP the card confers; the
+     Giant adds (value × turns-still-remaining, capped) as a setup bonus so a
+     low-immediate-IP aura still outranks a marginally bigger body early. Reusable
+     across bosses; extend as new setup cards enter the boss decks. */
+  var _GIANT_SETUP_CARDS = {
+    40: 1.5,  // Scribe        — +1 IP to the owner's other cards here
+    41: 1,    // Canals        — +1 to Labor here
+    45: 1,    // Ziggurat      — +1 to Religious here
+    44: 1.5,  // Enkidu        — +1 to up to two others here
+    62: 2,    // Hieroglyphics — +2 to Religious/Political here
+    31: 1,    // Megalith      — End of Turn +1
+    59: 1,    // Obelisk       — End of Turn +1
+    65: 1,    // Imhotep       — global -1 CC to Scientific (resource setup)
+    2:  1     // Scholar-Officials — +capital next turn (resource setup)
+  };
+  function _giantSetupBonus(cardId, turnsLeft, positional) {
+    if (positional) return 0;                                   // endgame → play for the win now
+    var w = _GIANT_SETUP_CARDS[cardId] || 0;
+    if (!w) return 0;
+    return w * Math.min(Math.max(0, turnsLeft - 1), 2);         // horizon-capped lookahead
+  }
+
+  /* AI margin at a location = AI presence (revealed cards AND cards staged this
+     turn) minus the player's revealed IP there. Used by the positional placement
+     to spread onto the target loc the AI is LEAST ahead at, securing a 2nd win. */
+  function _giantLocMargin(lid) {
+    var aip = (G.aiSlots[lid] || []).reduce(function (t, s) { return t + (s ? _serfEffIP(s) : 0); }, 0);
+    var pip = (G.playerSlots[lid] || []).reduce(function (t, s) { return t + (s && s.revealed ? _serfEffIP(s) : 0); }, 0);
+    return aip - pip;
+  }
+
+  /* Signature tiebreak: a small nudge toward the boss's preferred TYPE. Kept
+     epsilon-sized so it only decides genuine ties, never overrides real value. */
+  function _giantTypeBias(cardId, preferType) {
+    if (!preferType) return 0;
+    var c = _serfCardOf(cardId);
+    return (c && c.type === preferType) ? 0.25 : 0;
+  }
+
+  /* Reveal-order key (lower = revealed earlier). Discounts + type-auras fire
+     first so the cards they boost are cheaper / bigger when they land; grabbers
+     (Papyrus 54 / Pyramid 57, which read the LAST-played card here) go last so
+     they capture the fully-built board. Reused for every Giant. */
+  function _giantRevealOrder(cardId) {
+    if (cardId === 65) return 0;                                // Imhotep discount — earliest
+    if (cardId === 62 || cardId === 41 || cardId === 45 || cardId === 40) return 1;  // type auras
+    if (cardId === 54 || cardId === 57) return 8;               // Papyrus / Pyramid — grab last-played → latest
+    return 4;
+  }
+
+  /* Per-boss signatures. GILGAMESH = the gentlest Giant (the on-ramp): just hold
+     Gilgamesh-the-card (43) for the endgame push + a light Cultural tiebreak. The
+     other four bosses will add their own entry here (same shape) — that is the
+     whole per-boss surface; the deep behaviour lives in the shared layer above. */
+  var _GIANT_SIGNATURES = {
+    gilgamesh: { holdForEndgame: [43], preferType: 'Cultural' }
+  };
+
+  /* The shared Giant brain. Mirrors serfSelectPlays' loop but applies the five
+     shared upgrades + the supplied per-boss signature. Leaves serfSelectPlays
+     untouched, so Serf-tier play is unchanged. */
+  function _giantSelectPlays(ctx, sig) {
+    sig = sig || {};
+    var G_ = ctx.G || G;
+    if (G_ !== G) return [];
+    var turns    = (G.config && G.config.structure && G.config.structure.turns) || 5;
+    var _turn    = (typeof ctx.turn === 'number') ? ctx.turn : G.turn;
+    var costFree = !!(G.config && G.config.resource && G.config.resource.model === 'none');
+    var perTurnCap = (G.config && G.config.structure && G.config.structure.cardsPerTurn != null)
+      ? G.config.structure.cardsPerTurn : Infinity;
+    var turnsLeft  = Math.max(1, turns - _turn + 1);
+
+    // UPGRADE 1: always commit fully (no 33% hold-back).
+    // UPGRADE 2: positional on the LAST TWO turns (Serf concentrates only on the last).
+    var positional = _turn >= turns - 1;
+
+    var hand    = (ctx.hand || G.aiHand).slice();
+    var capital = (typeof ctx.capital === 'number') ? ctx.capital : 0;
+
+    // SIGNATURE: hold designated cards until the positional window — but never stall
+    // a whole turn on it (if the ONLY cards are held ones, release them this turn).
+    var holdSet = sig.holdForEndgame || [];
+    if (!positional && holdSet.length) {
+      var _filtered = hand.filter(function (id) { return holdSet.indexOf(id) === -1; });
+      if (_filtered.length > 0) hand = _filtered;
+    }
+
+    _serfClearAllStubs();
+    var _handIPavg = hand.length
+      ? hand.reduce(function (s, id) { var c = _serfCardOf(id); return s + (c ? c.ip : 0); }, 0) / hand.length : 2;
+    var plays = [], targetLocs = positional ? _serfTargetLocs(_handIPavg) : null;
+    var rng = function (n) { return Math.floor(Math.random() * n); };
+
+    for (var guard = 0; guard < 12 && plays.length < perTurnCap; guard++) {
+      if (!hand.length) break;
+      if (!costFree && capital <= 0) break;
+
+      var opts = _serfLegalOptions(hand, capital, costFree);
+      if (!opts.length) break;
+
+      // Score each distinct CARD by best-location marginal net-IP PLUS the Giant's
+      // setup lookahead and the signature tiebreak. 'adj' ranks; 'marginal' still
+      // drives placement so a card lands where it is tactically best.
+      var baseVal = _serfValue();
+      var byCard = {};
+      opts.forEach(function (o) {
+        var idx = _serfStage(o.cardId, o.locId);
+        var marginal = _serfValue() - baseVal;
+        _serfUnstage(o.locId, idx);
+        var adj = marginal
+                + _giantSetupBonus(o.cardId, turnsLeft, positional)
+                + _giantTypeBias(o.cardId, sig.preferType)
+                + (typeof sig.cardBias === 'function' ? (sig.cardBias(o.cardId, ctx) || 0) : 0);
+        var cur = byCard[o.cardId];
+        if (!cur || adj > cur.adj) byCard[o.cardId] = { cardId: o.cardId, adj: adj, marginal: marginal, cost: o.cost, card: o.card };
+      });
+      var cards = Object.keys(byCard).map(function (k) { return byCard[k]; });
+      cards.sort(function (a, b) { return b.adj - a.adj; });
+      var pick = cards[0];
+      // UPGRADE 1: the Giant always commits (no marginal<=0 early-stop) — it fills
+      // the board every turn. (costFree bosses like Gilgamesh have no capital gate.)
+
+      var legalLocs = opts.filter(function (o) { return o.cardId === pick.cardId; }).map(function (o) { return o.locId; });
+      var isSoldier = (pick.cardId === 42 || pick.cardId === 70);
+      var chosen;
+      if (positional) {
+        // Concentrate on the two most-winnable locations — but SPREAD across them to
+        // actually SECURE two locations for the most-locations win, rather than
+        // over-stacking one (which the Serf's pure IP-sum placement tends to do).
+        // Prefer the target loc the AI is LEAST ahead at (counting cards already
+        // staged this turn); tiebreak by this card's marginal board value there.
+        var inTargets = legalLocs.filter(function (l) { return targetLocs.indexOf(l) !== -1; });
+        var pool = inTargets.length ? inTargets : legalLocs;
+        var best = null;
+        pool.forEach(function (l) {
+          var m = _giantLocMargin(l);
+          var ix = _serfStage(pick.cardId, l); var v = _serfValue(); _serfUnstage(l, ix);
+          if (!best || m < best.m - 1e-6 || (Math.abs(m - best.m) <= 1e-6 && v > best.v)) best = { l: l, m: m, v: v };
+        });
+        chosen = best ? best.l : pool[rng(pool.length)];
+      } else if (isSoldier) {
+        var withTarget = legalLocs.filter(function (l) {
+          return (G.playerSlots[l] || []).some(function (s) { return s && s.revealed; });
+        });
+        chosen = (withTarget.length ? withTarget : legalLocs)[rng(withTarget.length || legalLocs.length)];
+      } else {
+        chosen = legalLocs[rng(legalLocs.length)];   // early turns: random placement
+      }
+
+      var sidx = _serfStage(pick.cardId, chosen);
+      if (sidx == null) break;
+      plays.push({ cardId: pick.cardId, locId: chosen });
+      hand.splice(hand.indexOf(pick.cardId), 1);
+      if (!costFree) capital -= pick.cost;
+    }
+
+    _serfClearAllStubs();
+
+    // UPGRADE 4: reveal-order optimisation — stable sort by the reveal-order key so
+    // discounts/auras fire before beneficiaries and grabbers reveal last. (The
+    // engine reveals plays in returned order — see buildRevealSequence.)
+    plays = plays
+      .map(function (p, i) { return { p: p, i: i, k: _giantRevealOrder(p.cardId) }; })
+      .sort(function (a, b) { return a.k - b.k || a.i - b.i; })
+      .map(function (e) { return e.p; });
+    return plays;
+  }
+
+  /* Bind the shared Giant brain to a boss's signature (looked up by scriptHook, so
+     no new config field is needed — each boss's scriptHook names its signature).
+     Unknown boss → generic Giant (shared upgrades only, no signature). */
+  function giantSelectPlaysFor(bossKey) {
+    var sig = (bossKey && _GIANT_SIGNATURES[bossKey]) || {};
+    return function (ctx) { return _giantSelectPlays(ctx, sig); };
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      AI BATTLE LOG (classroom win-rate instrumentation) — localStorage.
      One record per completed adventure battle. No PII.
        SOG.aiLog.record(rec) | .dump() | .clear() | .summary()
@@ -1308,7 +1521,9 @@
     cardTurnBias: cardTurnBias,
     cardLocBias:  cardLocBias,
     // Stage A: the one shared generic "Serf" selector (routed by cfg.ai.tier).
-    serfSelectPlays: serfSelectPlays
+    serfSelectPlays: serfSelectPlays,
+    // Stage B: the shared "Giant" brain (Serf + upgrades) bound per boss by key.
+    giantSelectPlaysFor: giantSelectPlaysFor
   };
 
 })();

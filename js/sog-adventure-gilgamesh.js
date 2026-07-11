@@ -1252,7 +1252,11 @@ SOG.GilgameshBattle = (function () {
       decks:     { player: playerDeck, ai: aiDeck },
       locationAbilities: { select: { mode: 'explicit', locations: _gilgameshLocations() } },
       scoring:   { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },  // exact-IP tie → onTie (tie-as-loss)
-      ai:        { profile: 'heuristic', movement: 'adventure', settings: { selectPlays: gilgameshSelectPlays } },
+      // Two-tier AI: default to the GIANT brain (Serf + shared upgrades + the
+      // 'gilgamesh' signature, looked up by scriptHook in ai.js). The bespoke
+      // gilgameshSelectPlays stays as the untiered fallback; a dev-menu launcher
+      // can force 'serf' or 'giant' for A/B playtesting (window.__forceTier).
+      ai:        { profile: 'heuristic', tier: 'giant', movement: 'adventure', settings: { selectPlays: gilgameshSelectPlays } },
       presentation: {
         bodyClass:        'gilgamesh-battle',                  // Mesopotamia location art
         bodyClassExtra:   'otzi-battle',                       // shared adventure-battle styling

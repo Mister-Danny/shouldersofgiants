@@ -74,16 +74,21 @@ SOG.DevMenu = (function () {
      one-shot window.__forceSerfTier flag that initGame bakes into cfg.ai.tier for
      THIS battle only, then starts the boss module. extraFlags skip the intro
      dialogue so playtests start straight in the battle. */
-  function _startBattleSerf(moduleName, extraFlags) {
+  function _startBattleSerf(moduleName, extraFlags) { _startBattleTier(moduleName, 'serf', extraFlags); }
+
+  /* Launch an adventure battle at a chosen AI tier ('serf' | 'giant'). Sets the
+     one-shot window.__forceTier flag that initGame bakes into cfg.ai.tier for THIS
+     battle only, then starts the boss module. extraFlags skip the intro dialogue. */
+  function _startBattleTier(moduleName, tier, extraFlags) {
     ensureAdventurer();
     if (extraFlags) setFlags(extraFlags);
     hide();
     stopHomeMusic();
     teardownBattles();
-    window.__forceSerfTier = true;
+    window.__forceTier = tier;
     var mod = window.SOG && SOG[moduleName];
     if (mod && typeof mod.start === 'function') { mod.start(); }
-    else { window.__forceSerfTier = false; console.warn('[DevMenu] ' + moduleName + ' not found'); }
+    else { window.__forceTier = null; console.warn('[DevMenu] ' + moduleName + ' not found'); }
   }
 
   // Scene jumps leave the home screen, but bypass the normal "play" button that
@@ -190,39 +195,45 @@ SOG.DevMenu = (function () {
       }
     },
 
-    // ── 🧪 AI Tier Testing (Serf) ──
+    // ── 🧪 AI Tier Testing ──
     {
-      section: '🧪 AI Tier Testing (Serf)',
+      section: '🧪 AI Tier Testing',
+      label: 'Gilgamesh — Giant tier',
+      description: 'Gilgamesh at GIANT AI (Serf + upgrades + signature; skip intro). Logs result.',
+      run: function () { _startBattleTier('GilgameshBattle', 'giant', { 'sog_gilgamesh_opening_seen': 'true' }); }
+    },
+    {
+      section: '🧪 AI Tier Testing',
       label: 'Gilgamesh — Serf tier',
       description: 'Gilgamesh at Serf AI (skip intro). Logs result to SOG.aiLog.',
       run: function () { _startBattleSerf('GilgameshBattle', { 'sog_gilgamesh_opening_seen': 'true' }); }
     },
     {
-      section: '🧪 AI Tier Testing (Serf)',
+      section: '🧪 AI Tier Testing',
       label: 'Hammurabi — Serf tier',
       description: 'Hammurabi at Serf AI (skip intro). Logs result to SOG.aiLog.',
       run: function () { _startBattleSerf('HammurabiBattle', { 'sog_hammurabi_opening_seen': 'true' }); }
     },
     {
-      section: '🧪 AI Tier Testing (Serf)',
+      section: '🧪 AI Tier Testing',
       label: 'Narmer — Serf tier',
       description: 'Narmer advance battle at Serf AI (skip intro). Logs result.',
       run: function () { _startBattleSerf('NarmerBattle', { 'sog_narmer_battle_opening_seen': 'true' }); }
     },
     {
-      section: '🧪 AI Tier Testing (Serf)',
+      section: '🧪 AI Tier Testing',
       label: 'AI Log — Summary (win rates)',
       description: 'console.table of player win-rate per boss · tier',
       run: function () { if (window.SOG && SOG.aiLog) SOG.aiLog.summary(); flash('AI log summary → console'); }
     },
     {
-      section: '🧪 AI Tier Testing (Serf)',
+      section: '🧪 AI Tier Testing',
       label: 'AI Log — Dump (all records)',
       description: 'console.table of every logged adventure battle',
       run: function () { if (window.SOG && SOG.aiLog) SOG.aiLog.dump(); flash('AI log dumped → console'); }
     },
     {
-      section: '🧪 AI Tier Testing (Serf)',
+      section: '🧪 AI Tier Testing',
       label: 'AI Log — Clear',
       description: 'Wipe the AI battle log (localStorage sog_ai_battle_log)',
       run: function () { if (window.SOG && SOG.aiLog) SOG.aiLog.clear(); flash('AI log cleared'); }
