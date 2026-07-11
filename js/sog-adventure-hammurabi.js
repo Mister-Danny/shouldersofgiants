@@ -965,7 +965,10 @@ SOG.HammurabiBattle = (function () {
       },
       locationAbilities: { select: { mode: 'explicit', locations: _hammurabiLocations() } },
       scoring:  { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
-      ai:       { profile: 'heuristic', movement: 'adventure', settings: { selectPlays: hammurabiSelectPlays } },
+      // Giant AI tier by default (Serf + shared upgrades + the 'hammurabi' signature:
+      // destruction targeting + self-sacrifice bait + hold-for-target). Bespoke
+      // hammurabiSelectPlays stays as the untiered fallback; __forceTier A/Bs tiers.
+      ai:       { profile: 'heuristic', tier: 'giant', movement: 'adventure', settings: { selectPlays: hammurabiSelectPlays } },
       presentation: HAMMURABI_PRESENTATION,
       rewards:  {},                 // none yet — card-47 grant + gold come in Stage 5
       scriptHook: 'hammurabi'       // scripted battle (presentation now; dialogue/scoreboard in Stage 4/5)

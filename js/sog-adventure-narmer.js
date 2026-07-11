@@ -755,7 +755,11 @@ SOG.NarmerBattle = (function () {
       // isAdvanceUnlocked) for BOTH sides. No other battle sets this.
       rules: { advanceGate: { playerHome: LOC_LOWER_EGYPT, contested: LOC_MEMPHIS, aiHome: LOC_UPPER_EGYPT } },
       scoring:  { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
-      ai:       { profile: 'heuristic', movement: 'adventure',
+      // Giant AI tier by default (Serf + shared upgrades + the 'narmer' signature:
+      // Pyramid/Papyrus combo, Narmer→Memphis when lopsided, Imhotep early, fill
+      // home cheap / premiums forward). Bespoke narmerSelectPlays stays as the
+      // untiered fallback; window.__forceTier lets the dev menu A/B serf vs giant.
+      ai:       { profile: 'heuristic', tier: 'giant', movement: 'adventure',
                   settings: { selectPlays: narmerSelectPlays, chariotMoveDecision: narmerChariotMove } },
       presentation: {
         bodyClass:      'narmer-battle',

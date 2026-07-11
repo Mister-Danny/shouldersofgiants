@@ -934,7 +934,10 @@ SOG.HangingGardensBattle = (function () {
       },
       locationAbilities: { select: { mode: 'explicit', locations: _hgLocations() } },
       scoring:  { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
-      ai:       { profile: 'heuristic', movement: 'adventure', settings: { selectPlays: hgSelectPlays } },
+      // Giant AI tier by default (Serf + shared upgrades + the 'hanging-gardens'
+      // signature: Neb early → discount-flood, dodge flood-risky rivers late).
+      // Bespoke hgSelectPlays stays as the untiered fallback; __forceTier A/Bs tiers.
+      ai:       { profile: 'heuristic', tier: 'giant', movement: 'adventure', settings: { selectPlays: hgSelectPlays } },
       presentation: HG_PRESENTATION,
       rewards:  {},                       // none yet (placeholder build)
       scriptHook: 'hanging-gardens'

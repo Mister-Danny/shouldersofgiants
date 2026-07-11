@@ -210,9 +210,45 @@ SOG.DevMenu = (function () {
     },
     {
       section: '🧪 AI Tier Testing',
+      label: 'Sargon — Giant tier',
+      description: 'Sargon at GIANT AI (Serf + upgrades + centre signature; skip intro). Logs result.',
+      run: function () { _startBattleTier('SargonBattle', 'giant', { 'sog_sargon_opening_seen': 'true' }); }
+    },
+    {
+      section: '🧪 AI Tier Testing',
+      label: 'Sargon — Serf tier',
+      description: 'Sargon at Serf AI (skip intro). Logs result to SOG.aiLog.',
+      run: function () { _startBattleSerf('SargonBattle', { 'sog_sargon_opening_seen': 'true' }); }
+    },
+    {
+      section: '🧪 AI Tier Testing',
+      label: 'Hammurabi — Giant tier',
+      description: 'Hammurabi at GIANT AI (destruction targeting + sacrifice bait; skip intro). Logs result.',
+      run: function () { _startBattleTier('HammurabiBattle', 'giant', { 'sog_hammurabi_opening_seen': 'true' }); }
+    },
+    {
+      section: '🧪 AI Tier Testing',
       label: 'Hammurabi — Serf tier',
       description: 'Hammurabi at Serf AI (skip intro). Logs result to SOG.aiLog.',
       run: function () { _startBattleSerf('HammurabiBattle', { 'sog_hammurabi_opening_seen': 'true' }); }
+    },
+    {
+      section: '🧪 AI Tier Testing',
+      label: 'Nebuchadnezzar — Giant tier',
+      description: 'Hanging Gardens at GIANT AI (Neb discount-flood; skip intro). Logs result.',
+      run: function () { _startBattleTier('HangingGardensBattle', 'giant', { 'sog_hanging_gardens_battle_opening_seen': 'true' }); }
+    },
+    {
+      section: '🧪 AI Tier Testing',
+      label: 'Nebuchadnezzar — Serf tier',
+      description: 'Hanging Gardens at Serf AI (skip intro). Logs result to SOG.aiLog.',
+      run: function () { _startBattleSerf('HangingGardensBattle', { 'sog_hanging_gardens_battle_opening_seen': 'true' }); }
+    },
+    {
+      section: '🧪 AI Tier Testing',
+      label: 'Narmer — Giant tier',
+      description: 'Narmer advance battle at GIANT AI (Pyramid/Papyrus combo; skip intro). Logs result.',
+      run: function () { _startBattleTier('NarmerBattle', 'giant', { 'sog_narmer_battle_opening_seen': 'true' }); }
     },
     {
       section: '🧪 AI Tier Testing',

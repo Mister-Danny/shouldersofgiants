@@ -864,7 +864,10 @@ SOG.SargonBattle = (function () {
       },
       locationAbilities: { select: { mode: 'explicit', locations: _sargonLocations() } },
       scoring:  { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
-      ai:       { profile: 'heuristic', movement: 'adventure', settings: { selectPlays: sargonSelectPlays } },
+      // Giant AI tier by default (Serf + shared upgrades + the 'sargon' signature:
+      // Sargon → centre, reinforce flanks). Bespoke sargonSelectPlays stays as the
+      // untiered fallback; window.__forceTier lets the dev menu A/B serf vs giant.
+      ai:       { profile: 'heuristic', tier: 'giant', movement: 'adventure', settings: { selectPlays: sargonSelectPlays } },
       presentation: SARGON_PRESENTATION,
       rewards:  {},                 // none yet — win/loss/reward flow comes with the script later
       scriptHook: 'sargon'          // scripted battle (presentation + opening tutorial + scoreboard)

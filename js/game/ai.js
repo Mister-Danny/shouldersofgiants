@@ -1334,6 +1334,92 @@
     return aip - pip;
   }
 
+  /* ── Shared Giant tactical helpers, used by the per-boss signatures below ────
+     All read the LIVE board (revealed cards + stubs staged this turn), so a
+     signature sees the plays the Giant has already committed this turn. Defined in
+     module scope so every boss's signature reuses them (no per-boss duplication). */
+
+  // Middle location of a flat board — Sargon's +3 hits BOTH flanks from here; the
+  // flood-safe Babylon sits here in Neb's battle.
+  function _giantCenterLoc() {
+    var n = G.locations.length;
+    return n ? G.locations[Math.floor(n / 2)].id : null;
+  }
+  function _giantHasOpen(lid) {
+    var arr = G.aiSlots[lid] || [];
+    for (var i = 0; i < arr.length; i++) if (!arr[i]) return true;
+    return false;
+  }
+  function _giantCenterOpen() { var c = _giantCenterLoc(); return c != null && _giantHasOpen(c); }
+
+  // River locations (LABOR_PLUS_2_HERE / MILITARY_PLUS_1_HERE) can FLOOD on turns
+  // 3-5 in Neb's battle — risky to over-commit to late.
+  function _giantIsRiverLoc(lid) {
+    var loc = G.locations.find(function (l) { return l.id === lid; });
+    return !!(loc && (loc.abilityKey === 'LABOR_PLUS_2_HERE' || loc.abilityKey === 'MILITARY_PLUS_1_HERE'));
+  }
+
+  // Location of an AI card (revealed OR staged this turn), or null.
+  function _giantFindAiCardLoc(cardId) {
+    for (var i = 0; i < G.locations.length; i++) {
+      var lid = G.locations[i].id, arr = G.aiSlots[lid] || [];
+      for (var j = 0; j < arr.length; j++) if (arr[j] && arr[j].cardId === cardId) return lid;
+    }
+    return null;
+  }
+
+  // Among `locs`, the one the AI is LEAST ahead at (spread to secure locations).
+  function _giantLeastAheadLoc(locs) {
+    var best = null;
+    locs.forEach(function (l) { var m = _giantLocMargin(l); if (!best || m < best.m) best = { l: l, m: m }; });
+    return best ? best.l : (locs.length ? locs[0] : null);
+  }
+
+  // Among `locs`, the one holding the AI's single biggest card — Pyramid/Papyrus
+  // want to land BEHIND a big card so they grab a large IP.
+  function _giantLocWithBiggestAiCard(locs) {
+    var best = null;
+    locs.forEach(function (l) {
+      var top = (G.aiSlots[l] || []).reduce(function (t, s) { return Math.max(t, s ? _serfEffIP(s) : 0); }, 0);
+      if (!best || top > best.top) best = { l: l, top: top };
+    });
+    return best && best.top > 0 ? best.l : null;
+  }
+
+  // Hammurabi (47) resolves at HIS location, destroying the opponent's lowest-CC
+  // revealed card AND the AI's own lowest-CC non-Hammurabi card. His ability does
+  // NOTHING unless the AI already has an own card there to sacrifice (his cc is the
+  // whole turn's capital, so the sacrifice must be a prior-turn card, not a same-turn
+  // bait). NET value of striking here = victim IP − own sacrifice IP, so the Giant
+  // targets a loc where it holds a CHEAP throwaway and the player holds a fat victim.
+  // -Infinity when there's no victim, no own sacrifice, or Kente 17 shields the loc.
+  function _giantHamNetAt(lid) {
+    var pc = (G.playerSlots[lid] || []).filter(function (s) { return s && s.revealed; });
+    var ai = (G.aiSlots[lid] || []).filter(Boolean);
+    if (!pc.length) return -Infinity;
+    if (_serfHasKente(ai) || _serfHasKente(pc)) return -Infinity;
+    var sacs = ai.filter(function (s) { return s.cardId !== 47; });
+    if (!sacs.length) return -Infinity;                                     // no sacrifice → ability whiffs
+    var sac = sacs.reduce(function (a, b) { return _serfCC(b) < _serfCC(a) ? b : a; });
+    var vic = pc.reduce(function (a, b) { return _serfCC(b) < _serfCC(a) ? b : a; });
+    return _serfEffIP(vic) - _serfEffIP(sac);
+  }
+  function _giantBestHamLoc() {
+    var best = { loc: null, net: -Infinity };
+    G.locations.forEach(function (l) { var n = _giantHamNetAt(l.id); if (n > best.net) best = { loc: l.id, net: n }; });
+    return best;
+  }
+  var _GIANT_HAM_MIN_NET = 2;   // below this: no worthwhile trade (player low-value / no cheap sacrifice) → hold
+
+  // AI is "lopsided" when it holds a real lead at one location but is winning fewer
+  // than two — Narmer's averaging then spreads that surplus into a 2-location win.
+  function _giantAiLopsided() {
+    var margins = G.locations.map(function (l) { return _giantLocMargin(l.id); });
+    var winning = margins.filter(function (m) { return m > 0; }).length;
+    var maxM = margins.reduce(function (a, b) { return Math.max(a, b); }, -Infinity);
+    return winning < 2 && maxM >= 4;
+  }
+
   /* Signature tiebreak: a small nudge toward the boss's preferred TYPE. Kept
      epsilon-sized so it only decides genuine ties, never overrides real value. */
   function _giantTypeBias(cardId, preferType) {
@@ -1349,16 +1435,120 @@
   function _giantRevealOrder(cardId) {
     if (cardId === 65) return 0;                                // Imhotep discount — earliest
     if (cardId === 62 || cardId === 41 || cardId === 45 || cardId === 40) return 1;  // type auras
-    if (cardId === 54 || cardId === 57) return 8;               // Papyrus / Pyramid — grab last-played → latest
+    if (cardId === 47) return 7;                                // Hammurabi — AFTER the bait body, so his destruction sacrifices it
+    if (cardId === 57) return 8;                                // Pyramid — grabs the built board → late
+    if (cardId === 54) return 9;                                // Papyrus — AFTER Pyramid, so it copies the buffed Pyramid
     return 4;
   }
 
-  /* Per-boss signatures. GILGAMESH = the gentlest Giant (the on-ramp): just hold
-     Gilgamesh-the-card (43) for the endgame push + a light Cultural tiebreak. The
-     other four bosses will add their own entry here (same shape) — that is the
-     whole per-boss surface; the deep behaviour lives in the shared layer above. */
+  /* Per-boss signatures — the ONLY per-boss surface. Each is a thin object of
+     optional hooks the shared brain calls; the deep behaviour (Serf tactics + the
+     five Giant upgrades) lives entirely in the shared layer above and is NOT
+     re-implemented here. Hook shapes:
+       holdForEndgame : [cardId]                      static hold until turns 4-5
+       preferType     : 'Cultural'|...                epsilon tiebreak toward a type
+       cardBias(id, ctx) → number                     nudge WHICH card is picked
+       holdCard(id, ctx) → bool                       dynamic hold (skip non-final turns)
+       choosePlacement(id, legalLocs, ctx) → locId    override WHERE it lands (null = default)
+     Placement/hold hooks call the shared _giant* helpers above — no duplication. */
   var _GIANT_SIGNATURES = {
-    gilgamesh: { holdForEndgame: [43], preferType: 'Cultural' }
+
+    // GILGAMESH — gentlest Giant: hold Gilgamesh-the-card for the endgame + a light
+    // Cultural tiebreak.
+    gilgamesh: { holdForEndgame: [43], preferType: 'Cultural' },
+
+    // SARGON — land Sargon (37) in the CENTRE (his +3 then hits BOTH flanks), then
+    // reinforce the flanks he is boosting.
+    sargon: {
+      cardBias: function (cardId) { return (cardId === 37 && _giantCenterOpen()) ? 3 : 0; },  // grab centre while open
+      choosePlacement: function (cardId, legalLocs) {
+        var center = _giantCenterLoc();
+        if (cardId === 37 && center != null && legalLocs.indexOf(center) !== -1) return center;
+        var sLoc = _giantFindAiCardLoc(37);                                                     // Sargon already down → feed his flanks
+        if (sLoc != null) {
+          var adj = _serfAdj(sLoc).filter(function (l) { return legalLocs.indexOf(l) !== -1; });
+          if (adj.length) return _giantLeastAheadLoc(adj);
+        }
+        return null;
+      }
+    },
+
+    // HAMMURABI — play him where his destruction takes the most (opp lowest-CC victim
+    // IP − own lowest-CC sacrifice IP); hold when no location pays off; and drop a
+    // cheap low-IP card at his location as the intended (forced) sacrifice.
+    hammurabi: {
+      // Play Hammurabi at the location with the best net trade (fat player victim −
+      // own cheap sacrifice already sitting there); hold on non-final turns when no
+      // location pays off (player all low-value, or no cheap sacrifice yet in place).
+      holdCard: function (cardId) { return cardId === 47 && _giantBestHamLoc().net < _GIANT_HAM_MIN_NET; },
+      choosePlacement: function (cardId, legalLocs) {
+        if (cardId === 47) {
+          var b = _giantBestHamLoc();
+          return (b.loc != null && legalLocs.indexOf(b.loc) !== -1) ? b.loc : null;
+        }
+        // Self-sacrifice setup: seed a cheap low-IP card at the location Hammurabi
+        // WILL strike (its net-best loc) so a throwaway is waiting there next turn.
+        var c = _serfCardOf(cardId);
+        if (c && c.cc <= 2 && c.ip <= 2) {
+          var target = _giantBestHamLoc().loc;
+          if (target == null) target = _giantFindAiCardLoc(47);   // or beside a Hammurabi already down
+          if (target != null && legalLocs.indexOf(target) !== -1) return target;
+        }
+        return null;
+      }
+    },
+
+    // NEBUCHADNEZZAR — play Neb (50) ASAP to switch on the −1 CC discount, then let
+    // the shared always-spend-capital upgrade flood the cheapened hand; dodge the
+    // flood-risky rivers on turns 3+.
+    'hanging-gardens': {
+      cardBias: function (cardId, ctx) {
+        if (cardId !== 50) return 0;
+        var t = (typeof ctx.turn === 'number') ? ctx.turn : G.turn;
+        return t <= 2 ? 5 : 2;
+      },
+      choosePlacement: function (cardId, legalLocs, ctx) {
+        var t = (typeof ctx.turn === 'number') ? ctx.turn : G.turn;
+        if (t < 3) return null;                              // no flood risk turns 1-2
+        // Flood only BLOCKS new plays (cards already down are safe) and alternates
+        // rivers each turn, so rivers stay winnable — just cap EXPOSURE: once the AI
+        // holds 2+ cards on rivers, steer further cards to a flood-safe loc rather
+        // than over-committing to a basket a flood could lock next turn.
+        var riverCards = 0;
+        G.locations.forEach(function (l) { if (_giantIsRiverLoc(l.id)) riverCards += (G.aiSlots[l.id] || []).filter(Boolean).length; });
+        if (riverCards >= 2) {
+          var safe = legalLocs.filter(function (l) { return !_giantIsRiverLoc(l); });
+          if (safe.length) return _giantLeastAheadLoc(safe);
+        }
+        return null;                                         // else let the shared positional spread choose
+      }
+    },
+
+    // NARMER — Imhotep early (discount); Pyramid/Papyrus land BEHIND big cards (grab
+    // large IP → Papyrus copies the buffed Pyramid, reveal-ordered after it); Narmer
+    // → Memphis (contested) when the AI is lopsided (averaging spreads the lead);
+    // cheap cards fill home, premiums push forward (the advance-board insight).
+    narmer: {
+      cardBias: function (cardId, ctx) {
+        var t = (typeof ctx.turn === 'number') ? ctx.turn : G.turn;
+        return (cardId === 65 && t <= 2) ? 3 : 0;
+      },
+      choosePlacement: function (cardId, legalLocs) {
+        var gate = (G.config && G.config.rules && G.config.rules.advanceGate) || {};
+        var contested = gate.contested, aiHome = gate.aiHome;
+        if (cardId === 51 && contested != null && legalLocs.indexOf(contested) !== -1 && _giantAiLopsided()) return contested;
+        if (cardId === 57 || cardId === 54) {
+          var big = _giantLocWithBiggestAiCard(legalLocs);
+          if (big != null) return big;
+        }
+        var c = _serfCardOf(cardId);
+        if (c) {
+          if (c.ip <= 2 && aiHome != null && legalLocs.indexOf(aiHome) !== -1) return aiHome;             // cheap → fill home
+          if (c.ip >= 4 && contested != null && legalLocs.indexOf(contested) !== -1) return contested;    // premium → forward
+        }
+        return null;
+      }
+    }
   };
 
   /* The shared Giant brain. Mirrors serfSelectPlays' loop but applies the five
@@ -1382,11 +1572,20 @@
     var hand    = (ctx.hand || G.aiHand).slice();
     var capital = (typeof ctx.capital === 'number') ? ctx.capital : 0;
 
-    // SIGNATURE: hold designated cards until the positional window — but never stall
-    // a whole turn on it (if the ONLY cards are held ones, release them this turn).
-    var holdSet = sig.holdForEndgame || [];
-    if (!positional && holdSet.length) {
-      var _filtered = hand.filter(function (id) { return holdSet.indexOf(id) === -1; });
+    // SIGNATURE: hold cards out of this turn's pool —
+    //   • holdForEndgame (static): held until the positional window (turns 4-5).
+    //   • holdCard(id,ctx)  (dynamic): held on any NON-final turn (e.g. Hammurabi
+    //     waits for a worthwhile victim); the final turn always plays (use it or
+    //     lose it). Never stall a whole turn on holds — if the ONLY cards are held,
+    //     release them this turn.
+    var lastTurn = _turn >= turns;
+    var holdSet  = sig.holdForEndgame || [];
+    if (holdSet.length || typeof sig.holdCard === 'function') {
+      var _filtered = hand.filter(function (id) {
+        if (!positional && holdSet.indexOf(id) !== -1) return false;
+        if (!lastTurn && typeof sig.holdCard === 'function' && sig.holdCard(id, ctx)) return false;
+        return true;
+      });
       if (_filtered.length > 0) hand = _filtered;
     }
 
@@ -1427,29 +1626,38 @@
 
       var legalLocs = opts.filter(function (o) { return o.cardId === pick.cardId; }).map(function (o) { return o.locId; });
       var isSoldier = (pick.cardId === 42 || pick.cardId === 70);
-      var chosen;
-      if (positional) {
-        // Concentrate on the two most-winnable locations — but SPREAD across them to
-        // actually SECURE two locations for the most-locations win, rather than
-        // over-stacking one (which the Serf's pure IP-sum placement tends to do).
-        // Prefer the target loc the AI is LEAST ahead at (counting cards already
-        // staged this turn); tiebreak by this card's marginal board value there.
-        var inTargets = legalLocs.filter(function (l) { return targetLocs.indexOf(l) !== -1; });
-        var pool = inTargets.length ? inTargets : legalLocs;
-        var best = null;
-        pool.forEach(function (l) {
-          var m = _giantLocMargin(l);
-          var ix = _serfStage(pick.cardId, l); var v = _serfValue(); _serfUnstage(l, ix);
-          if (!best || m < best.m - 1e-6 || (Math.abs(m - best.m) <= 1e-6 && v > best.v)) best = { l: l, m: m, v: v };
-        });
-        chosen = best ? best.l : pool[rng(pool.length)];
-      } else if (isSoldier) {
-        var withTarget = legalLocs.filter(function (l) {
-          return (G.playerSlots[l] || []).some(function (s) { return s && s.revealed; });
-        });
-        chosen = (withTarget.length ? withTarget : legalLocs)[rng(withTarget.length || legalLocs.length)];
-      } else {
-        chosen = legalLocs[rng(legalLocs.length)];   // early turns: random placement
+      var chosen = null;
+      // SIGNATURE placement override (Sargon centre, Hammurabi target, Neb river-dodge,
+      // Narmer combo/home-fill). Must return a loc in legalLocs; null → shared default.
+      if (typeof sig.choosePlacement === 'function') {
+        var _sc = sig.choosePlacement(pick.cardId, legalLocs, ctx);
+        if (_sc != null && legalLocs.indexOf(_sc) !== -1) chosen = _sc;
+      }
+      // Shared default placement — ONLY when the signature didn't already choose.
+      if (chosen == null) {
+        if (positional) {
+          // Concentrate on the two most-winnable locations — but SPREAD across them to
+          // actually SECURE two locations for the most-locations win, rather than
+          // over-stacking one (which the Serf's pure IP-sum placement tends to do).
+          // Prefer the target loc the AI is LEAST ahead at (counting cards already
+          // staged this turn); tiebreak by this card's marginal board value there.
+          var inTargets = legalLocs.filter(function (l) { return targetLocs.indexOf(l) !== -1; });
+          var pool = inTargets.length ? inTargets : legalLocs;
+          var best = null;
+          pool.forEach(function (l) {
+            var m = _giantLocMargin(l);
+            var ix = _serfStage(pick.cardId, l); var v = _serfValue(); _serfUnstage(l, ix);
+            if (!best || m < best.m - 1e-6 || (Math.abs(m - best.m) <= 1e-6 && v > best.v)) best = { l: l, m: m, v: v };
+          });
+          chosen = best ? best.l : pool[rng(pool.length)];
+        } else if (isSoldier) {
+          var withTarget = legalLocs.filter(function (l) {
+            return (G.playerSlots[l] || []).some(function (s) { return s && s.revealed; });
+          });
+          chosen = (withTarget.length ? withTarget : legalLocs)[rng(withTarget.length || legalLocs.length)];
+        } else {
+          chosen = legalLocs[rng(legalLocs.length)];   // early turns: random placement
+        }
       }
 
       var sidx = _serfStage(pick.cardId, chosen);
