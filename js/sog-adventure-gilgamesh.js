@@ -499,7 +499,7 @@ SOG.GilgameshBattle = (function () {
                     function (id) { return _gAiCardsAt(id).length; });
       case 43: // Gilgamesh card → contest the location we're most behind at
         return best(function () { return true; }, function (id) { return -_gLocGap(id); });
-      case 44: // Enkidu → the AI's biggest stack (his +1 hits adjacent slots)
+      case 44: // Enkidu → the AI's biggest stack (his +2 hits adjacent slots)
         return best(function (l) { return _gAiCardsAt(l.id).length > 0; },
                     function (id) { return _gAiCardsAt(id).length; });
       default:

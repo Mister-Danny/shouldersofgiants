@@ -1084,8 +1084,9 @@
           if (pyr) pyr.ip += topO.base;
         }
       }
-      [44, 32].forEach(function (bid) {                                                                                // Enkidu / Domesticated Animal (idx-adjacent ~ up to 2 others)
-        if (has(bid)) { var o = arr.filter(function (e) { return e.cardId !== bid; }); for (var i = 0; i < Math.min(2, o.length); i++) o[i].ip += 1; }
+      [[44, 2], [32, 1]].forEach(function (pair) {                                                                     // Enkidu +2 / Domesticated Animal +1 (idx-adjacent ~ up to 2 others)
+        var bid = pair[0], amt = pair[1];
+        if (has(bid)) { var o = arr.filter(function (e) { return e.cardId !== bid; }); for (var i = 0; i < Math.min(2, o.length); i++) o[i].ip += amt; }
       });
       if (has(43)) { var g = arr.find(function (e) { return e.cardId === 43; }); if (g) g.ip += Math.max(0, (G.culturalCount && G.culturalCount.opp) || 0); } // Gilgamesh
       arr.forEach(function (e) { if (e.cardId === 31 || e.cardId === 59) e.ip += 1; });                                // Megalith / Obelisk (EoT +1)
@@ -1311,7 +1312,7 @@
     40: 1.5,  // Scribe        — +1 IP to the owner's other cards here
     41: 1,    // Canals        — +1 to Labor here
     45: 1,    // Ziggurat      — +1 to Religious here
-    44: 1.5,  // Enkidu        — +1 to up to two others here
+    44: 3,    // Enkidu        — +2 to up to two adjacent others here
     62: 2,    // Hieroglyphics — +2 to Religious/Political here
     31: 1,    // Megalith      — End of Turn +1
     59: 1,    // Obelisk       — End of Turn +1

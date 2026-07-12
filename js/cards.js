@@ -344,10 +344,10 @@ const CARDS = [
     image: "images/cards/mesopotamiacards/gilgamesh@0.5x.jpg", locked: true
   },
   {
-    id: 44, name: "Enkidu", cc: 3, ip: 4,
+    id: 44, name: "Enkidu", cc: 4, ip: 3,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Wild Ally",
-    ability: "Continuous:\nCards next to Enkidu gain +1 IP.",
+    ability: "Continuous:\nCards next to Enkidu gain +2 IP.",
     image: "images/cards/mesopotamiacards/enkidu@0.5x.jpg", locked: true
   },
   {
@@ -359,7 +359,7 @@ const CARDS = [
   },
   {
     /* Filename on disk is misspelled "cunieform" — to be renamed in a later pass */
-    id: 46, name: "Cuneiform", cc: 1, ip: 0,
+    id: 46, name: "Cuneiform", cc: 1, ip: 1,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Writing",
     ability: "At Once:\n+1 IP to all of your Prehistory cards in play.",

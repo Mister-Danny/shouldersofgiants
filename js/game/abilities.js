@@ -464,8 +464,8 @@
 
       // ── Mesopotamia continuous abilities ────────────────────────
 
-      // Enkidu (id 44): +1 IP to the slots adjacent (index ±1) here
-      // (same owner, revealed). Mirror of Domesticated Animal (id 32).
+      // Enkidu (id 44): +2 IP to the slots adjacent (index ±1) here
+      // (same owner, revealed). Stronger cousin of Domesticated Animal (id 32, +1).
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (enkidu, enkiduIdx) {
@@ -473,9 +473,9 @@
           [enkiduIdx - 1, enkiduIdx + 1].forEach(function (adjIdx) {
             var s = sl[loc.id][adjIdx];
             if (s && s.revealed) {
-              s.contMod = (s.contMod || 0) + 1;
-              s.contModSources.push({ source: 'Enkidu', delta: 1 });
-              addBonus(s, 1, 'card', 44, nextEventId(), 'A', true);
+              s.contMod = (s.contMod || 0) + 2;
+              s.contModSources.push({ source: 'Enkidu', delta: 2 });
+              addBonus(s, 2, 'card', 44, nextEventId(), 'A', true);
             }
           });
         });
