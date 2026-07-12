@@ -1627,6 +1627,20 @@
       }
     } catch (e) {}
 
+    /* Flag/stamp node progression: on a WIN, record which TIER of this boss node was
+       beaten (serf/giant tracked independently — a Giant win via the picker can stamp
+       the Giant flag while Serf stays unstamped, and vice-versa), and stash a one-shot
+       pending-stamp signal the overworld consumes on the return-to-map to animate the
+       new stamp landing. Tier = cfg.ai.tier (the same signal the win-log records). */
+    try {
+      var _wtier = (G.config && G.config.ai && G.config.ai.tier) || null;
+      if (result.outcome === 'player' && G.config && G.config.scriptHook &&
+          (_wtier === 'serf' || _wtier === 'giant')) {
+        localStorage.setItem('sog_node_' + G.config.scriptHook + '_' + _wtier + '_beaten', 'true');
+        window.__pendingStamp = { hook: G.config.scriptHook, tier: _wtier };   // consumed by overworld render
+      }
+    } catch (e) {}
+
     showResult(result);
 
     /* Progression: track wins for card unlocking (single-player only).

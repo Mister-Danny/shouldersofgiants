@@ -8547,6 +8547,96 @@ body.tut-locked #battle-reset-turn {
 }
 .overworld-node:hover > img { transform: scale(1.08); }
 [data-id="egypt-signpost"] > img { width: 126px; }
+
+/* ── Boss-node tier flags + victory stamps (flag/stamp progression) ──────────
+   Two flags per boss node (Serf + Giant) are planted BEHIND the node and fan out
+   from behind it — pole bases occluded by the node (z-index below it), banners
+   sticking out; beating a tier stamps that tier's flag (tracked independently).
+   The cluster is a 0-size anchor at the node's centre (JS positions it at the map
+   %-coords; per-node nudges live in FLAG_LAYOUT in overworld.js). All the by-eye
+   knobs are the CSS custom properties below — tweak freely.
+   Art: images/ui_images/{serfflag,giantflag,victorystamp}.png (lowercase). */
+.node-flags {
+  /* ── EDITABLE KNOBS (tune by eye) ─────────────────────────────── */
+  --flag-size:      105px;   /* GIANT flag's width ≈ node size */
+  --flag-serf-size:  91px;   /* SERF flag ~13% smaller than the Giant, so the two read apart at a glance */
+  --flag-spread: 30px;    /* how far left/right each flag's base sits from node centre */
+  --flag-rise:   16px;    /* push the flag bases DOWN into/behind the node (+ = lower) */
+  --flag-tilt:   13deg;   /* outward fan angle of the two flags */
+  --stamp-size:      31px;   /* GIANT victory-stamp size */
+  --stamp-serf-size: 27px;   /* SERF stamp ~13% smaller, to match the smaller serf flag */
+  --stamp-tilt:  30deg;   /* stamp lean, mirrored per tier (serf +, giant −); follows the banner */
+  /* Per-tier stamp anchor WITHIN its flag: cx = horizontal % (←smaller = left),
+     cy = vertical % from the top (↑bigger = lower). Serf/Giant fully independent. */
+  --stamp-serf-cx:  45%;
+  --stamp-serf-cy:  47%;
+  --stamp-giant-cx: 55%;
+  --stamp-giant-cy: 48%;
+  /* Per-flag nudges — defaults 0, overridden PER NODE below. dx = horizontal (% of
+     flag width; − = left, + = right); rot = extra rotation (− = CCW, + = CW). */
+  --serf-dx:  0px;  --serf-rot:  0deg;
+  --giant-dx: 0px;  --giant-rot: 0deg;
+  /* ─────────────────────────────────────────────────────────────── */
+
+  position: absolute;
+  width: 0;
+  height: 0;                       /* 0-size anchor point at the node centre */
+  z-index: -1;                     /* BEHIND the node — the node occludes the pole bases */
+  pointer-events: none;            /* flags never intercept node clicks */
+}
+.node-flag {
+  position: absolute;
+  left: 50%;
+  top: 50%;                        /* both anchored at the node centre */
+  width: var(--flag-size);
+  transform-origin: 50% 100%;      /* fan around the pole base */
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+}
+/* Bottom-centre of each flag lands at the node centre (translate -50%,-100%), sunk
+   by --flag-rise, then fanned outward by --flag-tilt (serf left, giant right). */
+.node-flag-serf {
+  width: var(--flag-serf-size);    /* serf flag smaller than the giant (distinct at a glance) */
+  transform: translate(calc(-50% - var(--flag-spread) + var(--serf-dx)), calc(-100% + var(--flag-rise))) rotate(calc(-1 * var(--flag-tilt) + var(--serf-rot)));
+}
+.node-flag-giant {
+  transform: translate(calc(-50% + var(--flag-spread) + var(--giant-dx)), calc(-100% + var(--flag-rise))) rotate(calc(var(--flag-tilt) + var(--giant-rot)));
+}
+
+/* ── Per-node flag nudges (set the --*-dx / --*-rot vars above) ─────────────── */
+.node-flags[data-hook="narmer"]    { --serf-dx: -1%; --serf-rot: -5deg; }  /* serf left 1%, 5° CCW */
+.node-flags[data-hook="sargon"]    { --serf-dx: -8%; }                      /* serf left 8% */
+.node-flags[data-hook="hammurabi"] { --serf-dx: -1%; --giant-dx: 1%; }      /* serf left 1%, giant right 1% */
+.node-flag-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;      /* crisp pixel art, matches the map */
+}
+/* Common stamp props; per-tier anchor + lean set in the two rules below. The stamp
+   already inherits the flag's fan-tilt as a child; --stamp-tilt is the extra lean.
+   GSAP drives the thunk, settling to this same per-tier tilt (see _animatePendingStamp). */
+.node-flag-stamp {
+  position: absolute;
+  width: var(--stamp-size);
+  height: auto;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+.node-flag-serf .node-flag-stamp {
+  width: var(--stamp-serf-size);   /* smaller serf stamp to match the smaller serf flag */
+  left: var(--stamp-serf-cx);
+  top:  var(--stamp-serf-cy);
+  transform: translate(-50%, -50%) rotate(var(--stamp-tilt));
+}
+.node-flag-giant .node-flag-stamp {
+  left: var(--stamp-giant-cx);
+  top:  var(--stamp-giant-cy);
+  transform: translate(-50%, -50%) rotate(calc(-1 * var(--stamp-tilt)));   /* mirror lean for the giant flag */
+}
+/* Egypt topography buildings sit BEHIND the flags (flags are -1, buildings -2) so
+   the banners read in front of the settlement art. Still above the map (both inside
+   the #overworld-overlay stacking context). */
+.egypt-topo-prop { z-index: -2; }
 .overworld-node-label {
   font-family: 'CT Galbite', monospace;
   font-size: 16px;
@@ -8598,14 +8688,15 @@ body.tut-locked #battle-reset-turn {
   letter-spacing: 0.06em;
 }
 @keyframes overworld-node-pulse {
+  /* Gold glow alphas reduced ~33% (× 0.67) from 0.35/0.9/0.45. Dark base shadow kept. */
   0%, 100% {
     filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6))
-            drop-shadow(0 0 4px rgba(255, 215, 0, 0.35));
+            drop-shadow(0 0 4px rgba(255, 215, 0, 0.23));
   }
   50% {
     filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6))
-            drop-shadow(0 0 14px rgba(255, 215, 0, 0.9))
-            drop-shadow(0 0 22px rgba(255, 215, 0, 0.45));
+            drop-shadow(0 0 14px rgba(255, 215, 0, 0.60))
+            drop-shadow(0 0 22px rgba(255, 215, 0, 0.30));
   }
 }
 

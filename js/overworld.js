@@ -627,7 +627,7 @@ var Overworld = (function () {
           id:    'market',
           name:  'Mesopotamian Marketplace',
           image: NODE_PATH + 'mesomarketnode@0.5x.png',
-          x: 80, y: 66,
+          x: 82, y: 65,   // nudged right 2 / up 1
           scale: 2,   // node sprite rendered too small at natural size — double it
           flipX: true, // mirror the stall sprite horizontally to face the other way
           showIf: function () {
@@ -641,7 +641,7 @@ var Overworld = (function () {
           id:    'sargon',
           name:  'Akkad',
           image: NODE_PATH + 'sargonshadow.png',
-          x: 61, y: 55,
+          x: 60, y: 52,  // flags anchor to these coords, so they move with the node
           scale: 1.25,   // 704×384 art rendered at 84px base — scale up a touch (knob)
           showIf: function () {
             try { return localStorage.getItem(KEY_SARGON_NODE_REVEALED) === 'true'; } catch (e) { return false; }
@@ -1042,7 +1042,11 @@ var Overworld = (function () {
         } catch (e) {}
       }
       overlayEl.appendChild(nodeEl);
+      _renderNodeFlags(n);   // boss nodes: two tier flags (+ earned stamps)
     });
+
+    // Land any freshly-earned victory stamp (post-win return) with a thunk.
+    _animatePendingStamp();
 
     // Place exit zones
     data.exits.forEach(function (e) {
@@ -1205,6 +1209,127 @@ var Overworld = (function () {
   function _launchAtTier(tier, launchFn) {
     window.__forceTier = tier;
     launchFn();
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     FLAG / STAMP NODE PROGRESSION
+     ────────────────────────────────────────────────────────────────────────
+     Every boss node shows two flags — Serf and Giant — so the player sees both
+     tiers exist. Beating a tier stamps THAT tier's flag with a victory stamp;
+     the two tiers are tracked INDEPENDENTLY (a Giant win via the picker stamps the
+     Giant flag even if Serf is still unbeaten). game.js endGame sets
+     sog_node_<hook>_<tier>_beaten on a win (keyed by scriptHook, same space as the
+     encounter stamp) and stashes window.__pendingStamp for the return-to-map thunk.
+  ═════════════════════════════════════════════════════════════════════════════ */
+
+  function _tierBeaten(hook, tier) {
+    try { return localStorage.getItem('sog_node_' + hook + '_' + tier + '_beaten') === 'true'; } catch (e) { return false; }
+  }
+
+  /* Serf-track forward unlock: a boss's next node opens once its SERF is beaten —
+     EXCEPT Gilgamesh, whose first encounter is Giant, so his Giant win ALSO counts
+     (otherwise the very first boss could soft-lock the whole track). The Giant tier
+     never gates forward progress for any other boss. */
+  function _bossClearedForUnlock(hook) {
+    if (hook === 'gilgamesh') return _tierBeaten('gilgamesh', 'serf') || _tierBeaten('gilgamesh', 'giant');
+    return _tierBeaten(hook, 'serf');
+  }
+
+  // Per-boss flag-cluster anchor nudge, in map-% units, relative to the node CENTRE
+  // (the flags plant behind the node and fan out from it — see the CSS knobs on
+  // .node-flags for size/spread/tilt/rise/stamp). Default 0/0 = dead-centre on the
+  // node; tune per node by eye if a particular node's art wants the flags shifted.
+  var FLAG_LAYOUT = {
+    'walls-of-uruk':   { dx: 0, dy: -2 },   // Gilgamesh — raise both flags up 2
+    'sargon':          { dx: 0, dy: 0 },
+    'hammurabi':       { dx: 0, dy: 0 },
+    'hanging-gardens': { dx: 0, dy: -2 },   // Nebuchadnezzar — raise both flags up 2
+    'double-crown':    { dx: 0, dy: 0 }
+  };
+
+  /* Render the two flags (+ any earned stamps) for a boss node, as a cluster
+     positioned at the node's map %-coords. Appended to overlayEl (NOT the node
+     element) so flag sizing is independent of each node's own scale. Reuses lowercase
+     GitHub-Pages-safe art paths: images/ui_images/serfflag.png, giantflag.png, victorystamp.png. */
+  function _renderNodeFlags(node) {
+    var hook = BOSS_NODE_KEY[node.id];
+    if (!hook || !overlayEl) return;
+    var lay = FLAG_LAYOUT[node.id] || { dx: 0, dy: 8 };
+
+    var cluster = document.createElement('div');
+    cluster.className = 'node-flags';
+    cluster.dataset.hook = hook;
+    cluster.style.left = (node.x + lay.dx) + '%';
+    cluster.style.top  = (node.y + lay.dy) + '%';
+
+    [['serf', 'serfflag.png'], ['giant', 'giantflag.png']].forEach(function (pair) {
+      var tier = pair[0], art = pair[1];
+      var flag = document.createElement('div');
+      flag.className = 'node-flag node-flag-' + tier;
+      flag.dataset.tier = tier;
+
+      var img = document.createElement('img');
+      img.className = 'node-flag-img';
+      img.src = 'images/ui_images/' + art;      // lowercase — case-sensitive on GitHub Pages
+      img.alt = tier + ' flag';
+      img.draggable = false;
+      flag.appendChild(img);
+
+      if (_tierBeaten(hook, tier)) {
+        var stamp = document.createElement('img');
+        stamp.className = 'node-flag-stamp';
+        stamp.src = 'images/ui_images/victorystamp.png';
+        stamp.alt = 'victory';
+        stamp.draggable = false;
+        flag.appendChild(stamp);
+      }
+      cluster.appendChild(flag);
+    });
+    overlayEl.appendChild(cluster);
+  }
+
+  /* Consume window.__pendingStamp (set by game.js on the winning tier) once, after a
+     return-to-map render: land the freshly-earned stamp with a "thunk" — over-scale +
+     slight rotation settling in — plus the stamp sfx. Subsequent renders show it
+     already-stamped (no animation). Reuses GSAP + SOG.sfx. */
+  function _animatePendingStamp() {
+    var p = window.__pendingStamp;
+    if (!p) return;
+    window.__pendingStamp = null;   // one-shot
+    if (!overlayEl) return;
+    var cluster = overlayEl.querySelector('.node-flags[data-hook="' + p.hook + '"]');
+    var stamp   = cluster && cluster.querySelector('.node-flag-' + p.tier + ' .node-flag-stamp');
+    if (!stamp) return;
+    if (window.SOG && SOG.sfx && typeof SOG.sfx.play === 'function') SOG.sfx.play('sfx/cuneiformstamp.mp3');
+    if (typeof gsap !== 'undefined') {
+      // Settle to the SAME per-tier rest tilt the static CSS uses (--stamp-tilt,
+      // mirrored: serf +, giant −), read from the element so the CSS knob stays the
+      // single source of truth. Same scale-in "thunk" + 18° over-rotation as before —
+      // xPercent/yPercent keep it centred on its anchor through the scale/rotation.
+      var _tilt = parseFloat(getComputedStyle(stamp).getPropertyValue('--stamp-tilt')) || 0;
+      var _rest = (p.tier === 'giant') ? -_tilt : _tilt;
+      gsap.fromTo(stamp,
+        { xPercent: -50, yPercent: -50, scale: 2.4, rotation: _rest - 18, opacity: 0 },
+        { xPercent: -50, yPercent: -50, scale: 1, rotation: _rest, opacity: 1,
+          duration: 0.34, ease: 'back.out(2.4)', transformOrigin: '50% 50%' });
+    }
+  }
+
+  /* Re-render every visible boss node's flag cluster (and animate any pending stamp).
+     Post-win returns re-enter the overworld WITHOUT a full loadMap (the map DOM
+     persists across a battle), so the flags rendered pre-battle are stale — this
+     rebuilds them so a freshly-beaten tier shows its stamp + thunk, and any node that
+     just unlocked gets its flags. Idempotent: clears then rebuilds; pending is one-shot. */
+  function _refreshNodeFlags() {
+    if (!overlayEl) return;
+    overlayEl.querySelectorAll('.node-flags').forEach(function (el) { if (el.parentNode) el.parentNode.removeChild(el); });
+    var data = MAPS[currentMapId];
+    if (!data) return;
+    data.nodes.forEach(function (n) {
+      if (typeof n.showIf === 'function' && !n.showIf()) return;
+      _renderNodeFlags(n);
+    });
+    _animatePendingStamp();
   }
 
   /* Serf/Giant rematch picker. Reuses the parchment BattleRulesPopup (no rebuild) —
@@ -1852,12 +1977,12 @@ var Overworld = (function () {
   var EGYPT_TOPO_PROPS = [
     // Umm el-Qaab necropolis — the original prop, now part of the gated group.
     { src: 'ummelqaab@0.25x.png', leftPct: 28, topPct: 87, scale: 0.35,  rotation:  0 },
-    // River hut — ONE, in the delta (northern fan).
-    { src: 'riverhut.png',        leftPct: 27, topPct: 22, scale: 0.21,  rotation:  -3 },
+    // River hut — ONE, in the delta (northern fan). Nudged up 2 / right 2 (matches ADV).
+    { src: 'riverhut.png',        leftPct: 29, topPct: 18, scale: 0.21,  rotation:  -3 },
     // Granary — ONE, just south of where the delta starts.
     { src: 'granary.png',         leftPct: 27, topPct: 46, scale: 0.29,  rotation:   0 },
     // Mud huts — settlements dotted along the Nile, spread apart (not adjacent).
-    { src: 'mudhut.png',          leftPct: 17, topPct: 26, scale: 0.20,  rotation: 20 },  // north (delta)
+    { src: 'mudhut.png',          leftPct: 16, topPct: 24, scale: 0.20,  rotation: 20 },  // north (delta) — up 2 / left 2 (matches ADV)
     { src: 'mudhut.png',          leftPct: 21, topPct: 57, scale: 0.20,  rotation: 20 },  // west bank
     { src: 'mudhut.png',          leftPct: 29, topPct: 66, scale: 0.20,  rotation: 40 }   // east bank
   ];
@@ -1867,12 +1992,12 @@ var Overworld = (function () {
      scale / rotation as the pre-Neb props, but the advanced (adv*) art and NO
      Umm el-Qaab. Same editable knobs. */
   var EGYPT_TOPO_PROPS_ADV = [
-    // River hut (advanced) — in the delta (northern fan).
-    { src: 'advriverhut.png',     leftPct: 27, topPct: 22, scale: 0.26,  rotation:  -3 },
+    // River hut (advanced) — in the delta (northern fan). Nudged up 2 / right 2.
+    { src: 'advriverhut.png',     leftPct: 29, topPct: 18, scale: 0.26,  rotation:  -3 },
     // Granary (advanced) — just south of where the delta starts.
     { src: 'advgranary.png',      leftPct: 27, topPct: 46, scale: 0.26,  rotation:   0 },
     // Mud huts (advanced) — settlements dotted along the Nile.
-    { src: 'advmudhouse3@0.25x.png', leftPct: 18, topPct: 26, scale: 0.30,  rotation: 20 },   // north (delta)
+    { src: 'advmudhouse3@0.25x.png', leftPct: 17, topPct: 24, scale: 0.30,  rotation: 20 },   // north (delta) — up 2 / left 2
     { src: 'advmudhouse3@0.25x.png', leftPct: 22, topPct: 57, scale: 0.30,  rotation: 20 },   // west bank
     { src: 'advmudhouse3@0.25x.png', leftPct: 27, topPct: 66, scale: 0.30,  rotation: -15, flipX: true }   // east bank — mirrored H
   ];
@@ -2380,6 +2505,7 @@ var Overworld = (function () {
         _playMapMusic();   // reveal done → fade the map music back in
         runDialogue(D4_SARGON_REVEAL_OUTRO, function () {
           try { localStorage.setItem(KEY_SARGON_NODE_REVEALED, 'true'); } catch (e) {}
+          _refreshNodeFlags();   // give the freshly-revealed Sargon node its flags
           isDialogueLocked = false;
           if (done) done();
         });
@@ -2506,6 +2632,7 @@ var Overworld = (function () {
     if (already || currentMapId !== 'mesopotamia') { if (done) done(); return; }
     _earthRiseRevealHammurabi(function () {
       try { localStorage.setItem(KEY_HAMMURABI_NODE_REVEALED, 'true'); } catch (e) {}
+      _refreshNodeFlags();   // give the freshly-revealed Hammurabi node its flags
       if (done) done();
     });
   }
@@ -2603,6 +2730,7 @@ var Overworld = (function () {
       _shimmerRevealHangingGardens(function () {
         runDialogue(D5_HANGING_GARDENS_REACTION, function () {
           try { localStorage.setItem(KEY_HANGING_GARDENS_REVEALED, 'true'); } catch (e) {}
+          _refreshNodeFlags();   // give the freshly-revealed Hanging Gardens node its flags
           if (done) done();
         });
       });
@@ -2885,6 +3013,7 @@ var Overworld = (function () {
     // battle screen; make sure it's the current map (defensive).
     if (currentMapId !== 'mesopotamia') loadMap('mesopotamia', {});
     _playMapMusic();   // resume the overworld track (covers the path that skips loadMap)
+    _refreshNodeFlags();   // stamp the just-won Gilgamesh flag (thunk) on the persisted map
 
     // Land at the Uruk node.
     var uruk = _findMesoNode('walls-of-uruk');
@@ -3388,6 +3517,7 @@ var Overworld = (function () {
       }
       overlayEl.appendChild(nodeEl);
     });
+    _refreshNodeFlags();   // keep boss flags/stamps in sync with the re-rendered nodes
   }
 
   /* ── Otzi encounter ─────────────────────────────────────────────
@@ -3710,6 +3840,7 @@ var Overworld = (function () {
       _clearWipe();
       var hud = window.SOG && window.SOG.HUD;
       if (hud && typeof hud.show === 'function') hud.show();
+      _refreshNodeFlags();   // stamp the just-won Sargon flag (thunk) before the Hammurabi reveal
       // Hold the music: fade out whatever is playing (the Sargon battle track) so
       // the Hammurabi earth-rise plays against silence (its own earthspell.mp3),
       // then fade the map music back in once the reveal has fully finished.
@@ -3717,6 +3848,14 @@ var Overworld = (function () {
         SOG.music.fadeOutAndStop(600);
       }
       setTimeout(function () {
+        // Serf-track gate: a Giant win (e.g. the player lost the Serf first, then won
+        // the Giant rematch) must NOT open Hammurabi — only a Sargon SERF clear does.
+        if (!_bossClearedForUnlock('sargon')) {
+          _playMapMusic();
+          isDialogueLocked = false;
+          scheduleIdle();
+          return;
+        }
         _maybeRevealHammurabiNode(function () {
           _playMapMusic();   // node has risen — fade the overworld track back in
           // The node has risen — Explorer chimes in, then control is restored so
@@ -3752,6 +3891,7 @@ var Overworld = (function () {
       var hud = window.SOG && window.SOG.HUD;
       if (hud) { hud.show(); }
       _playMapMusic();   // resume the overworld track (battle music was stopped at endGame)
+      _refreshNodeFlags();   // stamp a freshly-beaten tier's flag (thunk) on the persisted map
 
       // Catch-up Hammurabi node reveal. The node normally rises via
       // returnFromSargonWin (the FIRST Sargon win). But a save that beat Sargon
@@ -3760,7 +3900,7 @@ var Overworld = (function () {
       // if Sargon is beaten, the node hasn't risen yet, and we're on the
       // Mesopotamia map, rise it now (+ the Explorer line), then resume.
       var _sargonDone = false, _hammRevealed = false;
-      try { _sargonDone   = localStorage.getItem('sog_battle_sargon_complete') === 'true'; } catch (e) {}
+      _sargonDone = _bossClearedForUnlock('sargon');   // Serf-track: only a Sargon SERF win reveals Hammurabi
       try { _hammRevealed = localStorage.getItem(KEY_HAMMURABI_NODE_REVEALED) === 'true'; } catch (e) {}
       if (_sargonDone && !_hammRevealed && currentMapId === 'mesopotamia') {
         isDialogueLocked = true;
@@ -3782,7 +3922,7 @@ var Overworld = (function () {
       // the time Hammurabi is beaten his own node is already revealed, so this runs
       // after the Hammurabi catch-up above has been satisfied.)
       var _hammDone = false, _hgRevealed = false;
-      try { _hammDone   = localStorage.getItem('sog_battle_hammurabi_complete') === 'true'; } catch (e) {}
+      _hammDone = _bossClearedForUnlock('hammurabi');   // Serf-track: only a Hammurabi SERF win reveals the Hanging Gardens
       try { _hgRevealed = localStorage.getItem(KEY_HANGING_GARDENS_REVEALED) === 'true'; } catch (e) {}
       if (_hammDone && !_hgRevealed && currentMapId === 'mesopotamia') {
         isDialogueLocked = true;
@@ -3804,7 +3944,7 @@ var Overworld = (function () {
       // "abracadabra" lines → set sog_egypt_node_live (Double Crown goes live) →
       // flash the To Egypt exit for 3s → restore control (normal travel takes over).
       var _nebDone = false, _egyptLive = false;
-      try { _nebDone   = localStorage.getItem(KEY_NEB_COMPLETE)   === 'true'; } catch (e) {}
+      _nebDone = _bossClearedForUnlock('hanging-gardens');   // Serf-track: only a Neb SERF win opens the Egypt on-ramp
       try { _egyptLive = localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) {}
       if (_nebDone && !_egyptLive && currentMapId === 'mesopotamia') {
         isDialogueLocked = true;          // clicks/travel locked for the whole beat
