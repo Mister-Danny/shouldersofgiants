@@ -35,6 +35,7 @@ var Overworld = (function () {
   var KEY_MET_GILGAMESH             = 'sog_met_gilgamesh';              // set after the "You will be." line
   var KEY_MESO_STARTER_GRANTED      = 'sog_mesopotamia_starter_granted'; // set after all 5 card grants complete
   // Phase D4 — Sargon encounter
+  var KEY_FIRST_MARKET_INTERSTITIAL = 'sog_first_market_interstitial_seen'; // one-time "building a collection" beat on the first market return
   var KEY_SARGON_NODE_REVEALED      = 'sog_sargon_node_revealed';       // dust-storm reveal played → node persists, no replay
   var KEY_HAMMURABI_NODE_REVEALED   = 'sog_hammurabi_node_revealed';    // earth-rise reveal played (after beating Sargon) → node persists, no replay
   var KEY_HANGING_GARDENS_REVEALED  = 'sog_hanging_gardens_revealed';   // sparkle reveal played (after beating Hammurabi) → node persists, no replay
@@ -57,11 +58,8 @@ var Overworld = (function () {
     { who: 'explorer', text: "Jumpin' jackrabbits..." },
     { who: 'explorer', text: "I don't think that was a normal doorway." },
     { who: 'explorer', text: 'Where am I?' },
-    { who: 'explorer', text: 'Something about this place does seem oddly familiar.' },
-    { who: 'explorer', text: "But it's definitely not home." },
-    { who: 'explorer', text: "And I'm definitely going to be late to soccer practice." },
     { who: 'explorer', text: 'What do I do?' },
-    { who: 'explorer', text: 'And where are all the people?' }
+    { who: 'explorer', text: "I think I'm gonna be late to soccer practice." }
   ];
 
   /* Post-Neanderthal-victory overworld dialogue \u2014 8 lines, click-to-advance.
@@ -224,6 +222,13 @@ var Overworld = (function () {
      ('sargon' already exists with sargonportrait.jpg). The reveal plays once on
      the first marketplace return (after the deck-builder unlock); the node-click
      branches on the active deck size (see onNodeClick 'sargon').                */
+  // First-market interstitial — plays once on the FIRST market return (post-Serf-win
+  // shopping). Sargon does NOT appear yet; the only forward path is back to Gilgamesh
+  // for the Giant rematch. [source: overworld.js → D4_FIRST_MARKET_INTERSTITIAL]
+  var D4_FIRST_MARKET_INTERSTITIAL = [
+    { who: 'explorer', text: "Wow, I'm really starting to build a collection." },
+    { who: 'explorer', text: "Let's go show Gilgamesh what I've got." }
+  ];
   // (a) Reveal — bookend Explorer lines around the dust-storm node reveal.
   var D4_SARGON_REVEAL_INTRO = [
     { who: 'explorer', text: "Wow, I can't wait to try out these new cards!" }
@@ -242,7 +247,9 @@ var Overworld = (function () {
   ];
   var D4_SARGON_TURNED_AWAY_B = [
     { who: 'explorer', text: '15 cards...' },
-    { who: 'explorer', text: "I'd better earn more gold and grow my collection." }
+    { who: 'explorer', text: "I only have a handful. I need to grow my collection." },
+    { who: 'explorer', text: "Gilgamesh — if I can best his Giant, he'll grant me his card and enough gold to stock up at the Marketplace." },
+    { who: 'explorer', text: "Back to Uruk, then." }
   ];
   // (c) Deck ready (exactly 15 cards): the full Emperor encounter, then battle.
   var D4_SARGON_ENCOUNTER = [
@@ -266,9 +273,15 @@ var Overworld = (function () {
   var D4_SARGON_LOSS_REFLECT = [
     { who: 'explorer', text: 'Okay. Maybe I build up my deck before I take on an entire EMPIRE.' }
   ];
-  // After beating Sargon, once the Hammurabi node has risen from the dirt.
+  // SARGON INTERSTITIAL — plays during the Serf-win return choreography (as the Serf
+  // flag stamps, the Giant flag pops in, and the Hammurabi node rises), then hands the
+  // player a free choice: advance to Hammurabi, or return for Sargon's Giant.
+  // [source: overworld.js → D4_SARGON_WIN_REFLECT]
   var D4_SARGON_WIN_REFLECT = [
-    { who: 'explorer', text: 'I guess when one empire falls, another one rises.' }
+    { who: 'explorer', text: 'Oh wow…' },
+    { who: 'explorer', text: "I'm at a crossroads." },
+    { who: 'explorer', text: 'Do I take on the next Empire or return to the old?' },
+    { who: 'explorer', text: 'Either way, I still have no idea how to get home.' }
   ];
   // After beating Hammurabi — bookend Explorer lines around the Hanging Gardens
   // sparkle reveal. REFLECT plays before the shimmer; REACTION after the node
@@ -393,27 +406,21 @@ var Overworld = (function () {
     { who: 'lucy',     text: "It means I'm one of your earliest bipedal human ancestors to stand on two legs." },
     { who: 'explorer', text: "My ancestor? Are you saying we're related?" },
     { who: 'lucy',     text: "I'm like your great aunt a million times over." },
-    { who: 'explorer', text: "That's cool." },
-    { who: 'explorer', text: 'But wait.' },
-    { who: 'explorer', text: 'How are you TALKING?' },
+    { who: 'explorer', text: 'Right. But how are you talking?' },
     { who: 'explorer', text: 'How am I even HERE?' },
-    { who: 'explorer', text: 'Did I time travel?' },
-    { who: 'explorer', text: 'Is this—' },
+    { who: 'explorer', text: 'Did I time travel? Is this...' },
     { who: 'lucy',     text: 'Relax.' },
     { who: 'lucy',     text: "I might be millions of years old, but I don't have all the answers." },
     { who: 'explorer', text: "That doesn't help my nerves." },
-    { who: 'explorer', text: 'I have to get home.' },
-    { who: 'explorer', text: 'I have soccer practice.' },
-    { who: 'lucy',     text: 'Soccer practice?' },
+    { who: 'explorer', text: 'I have to get home for soccer practice.' },
+    { who: 'lucy',     text: 'Huh?' },
     { who: 'explorer', text: "It's very important." },
     { who: 'lucy',     text: 'If you say so.' },
     { who: 'lucy',     text: 'All I know is that by standing upright on my own two feet...' },
     { who: 'lucy',     text: 'I always get to where I want to go.' },
-    { who: 'explorer', text: "That's actually very inspiring." },
-    { who: 'explorer', text: 'Perhaps, I will find my way home.' },
+    { who: 'explorer', text: 'Maybe I will find my way home.' },
     { who: 'lucy',     text: 'You do that.' },
-    { who: 'lucy',     text: "Now, I'm going to use my bipedal powers to get myself a drink." },
-    { who: 'lucy',     text: 'Let me know if you need me.' }
+    { who: 'lucy',     text: "Now, I'm going to use my bipedal powers to get myself a drink." }
   ];
 
   var PHASE1_WAIT_MS = 3000;    // 3s arrival pause before Phase 1 fires
@@ -1172,9 +1179,11 @@ var Overworld = (function () {
   };
 
   // First-encounter AI tier per boss — DATA-DRIVEN (not hardcoded branch logic).
-  // Default 'serf'; Gilgamesh is the carve-out ('giant' — the ~90%-loss beat).
+  // Every boss (Gilgamesh included) starts at 'serf' — tier and flag ALIGN, no
+  // decoupling. Gilgamesh's narrative (Farmer/Cuneiform on a loss) layers on top
+  // without touching tier/flag.
   var FIRST_ENCOUNTER_TIER = {
-    'gilgamesh':       'giant',
+    'gilgamesh':       'serf',
     'sargon':          'serf',
     'hammurabi':       'serf',
     'hanging-gardens': 'serf',
@@ -1206,6 +1215,8 @@ var Overworld = (function () {
 
   // Bake the AI tier for the NEXT battle (initGame reads + clears window.__forceTier)
   // then fire the node's launch. Used by both the first-encounter and picker paths.
+  // Tier and flag ALIGN for every boss now — game.js defaults flagTier to ai.tier, so
+  // there is no separate flag override (the old Gilgamesh decoupling is gone).
   function _launchAtTier(tier, launchFn) {
     window.__forceTier = tier;
     launchFn();
@@ -1264,6 +1275,18 @@ var Overworld = (function () {
 
     [['serf', 'serfflag.png'], ['giant', 'giantflag.png']].forEach(function (pair) {
       var tier = pair[0], art = pair[1];
+      // GENERAL two-tier template: a boss's GIANT flag is hidden until the player has
+      // engaged its tiers — it "appears" (pops in) on the SERF-win return, its own
+      // narrative beat. Hidden only while NEITHER tier is beaten; once either is
+      // stamped the Giant flag stays (covers the edge case of a Giant win reached via
+      // the picker after a Serf loss — the Giant flag then shows already-stamped).
+      if (tier === 'giant' && !_tierBeaten(hook, 'serf') && !_tierBeaten(hook, 'giant')) return;
+      // Gilgamesh's SERF flag is gated on ENGAGEMENT: his node is visible on Mesopotamia
+      // arrival (unlike other bosses, whose nodes are revealed by beating the prior
+      // boss), so his Serf flag would otherwise pre-show on arrival. Hold it until the
+      // player has actually encountered him (started the walk-up conversation → sets
+      // sog_node_encountered_gilgamesh). Every other boss shows its Serf flag with its node.
+      if (hook === 'gilgamesh' && tier === 'serf' && !_nodeEncountered('gilgamesh')) return;
       var flag = document.createElement('div');
       flag.className = 'node-flag node-flag-' + tier;
       flag.dataset.tier = tier;
@@ -1292,14 +1315,14 @@ var Overworld = (function () {
      return-to-map render: land the freshly-earned stamp with a "thunk" — over-scale +
      slight rotation settling in — plus the stamp sfx. Subsequent renders show it
      already-stamped (no animation). Reuses GSAP + SOG.sfx. */
-  function _animatePendingStamp() {
+  function _animatePendingStamp(onComplete) {
     var p = window.__pendingStamp;
-    if (!p) return;
+    if (!p) { if (onComplete) onComplete(); return; }
     window.__pendingStamp = null;   // one-shot
-    if (!overlayEl) return;
+    if (!overlayEl) { if (onComplete) onComplete(); return; }
     var cluster = overlayEl.querySelector('.node-flags[data-hook="' + p.hook + '"]');
     var stamp   = cluster && cluster.querySelector('.node-flag-' + p.tier + ' .node-flag-stamp');
-    if (!stamp) return;
+    if (!stamp) { if (onComplete) onComplete(); return; }
     if (window.SOG && SOG.sfx && typeof SOG.sfx.play === 'function') SOG.sfx.play('sfx/cuneiformstamp.mp3');
     if (typeof gsap !== 'undefined') {
       // Settle to the SAME per-tier rest tilt the static CSS uses (--stamp-tilt,
@@ -1311,8 +1334,9 @@ var Overworld = (function () {
       gsap.fromTo(stamp,
         { xPercent: -50, yPercent: -50, scale: 2.4, rotation: _rest - 18, opacity: 0 },
         { xPercent: -50, yPercent: -50, scale: 1, rotation: _rest, opacity: 1,
-          duration: 0.34, ease: 'back.out(2.4)', transformOrigin: '50% 50%' });
-    }
+          duration: 0.34, ease: 'back.out(2.4)', transformOrigin: '50% 50%',
+          onComplete: onComplete });
+    } else { stamp.style.opacity = '1'; if (onComplete) onComplete(); }
   }
 
   /* Re-render every visible boss node's flag cluster (and animate any pending stamp).
@@ -1320,7 +1344,7 @@ var Overworld = (function () {
      persists across a battle), so the flags rendered pre-battle are stale — this
      rebuilds them so a freshly-beaten tier shows its stamp + thunk, and any node that
      just unlocked gets its flags. Idempotent: clears then rebuilds; pending is one-shot. */
-  function _refreshNodeFlags() {
+  function _refreshNodeFlags(deferStamp) {
     if (!overlayEl) return;
     overlayEl.querySelectorAll('.node-flags').forEach(function (el) { if (el.parentNode) el.parentNode.removeChild(el); });
     var data = MAPS[currentMapId];
@@ -1329,7 +1353,17 @@ var Overworld = (function () {
       if (typeof n.showIf === 'function' && !n.showIf()) return;
       _renderNodeFlags(n);
     });
-    _animatePendingStamp();
+    if (deferStamp) {
+      // The caller drives the stamp thunk on its own timed cue (return choreography).
+      // Hide the freshly-won stamp so it doesn't flash static before that thunk.
+      var p = window.__pendingStamp;
+      if (p) {
+        var st = overlayEl.querySelector('.node-flags[data-hook="' + p.hook + '"] .node-flag-' + p.tier + ' .node-flag-stamp');
+        if (st) st.style.opacity = '0';
+      }
+    } else {
+      _animatePendingStamp();
+    }
   }
 
   /* Serf/Giant rematch picker. Reuses the parchment BattleRulesPopup (no rebuild) —
@@ -1389,17 +1423,21 @@ var Overworld = (function () {
       isDialogueLocked = true;
       cancelIdle();
       walkPath([{ x: node.x, y: node.y }], function () {
-        if (_nodeEncountered('gilgamesh')) {
-          // Rematch → Serf/Giant picker → battle at the chosen tier (no dialogue).
-          // ── NARRATIVE-ARC HOOK ────────────────────────────────────────────
-          // The full Gilgamesh arc (Farmer/Cuneiform gift-on-loss, the "challenge
-          // again" framing, and the flag/stamp visual system) reattaches HERE
-          // later — wrapping or branching this picker path. For THIS build the only
-          // Gilgamesh carve-out is his first-encounter tier (Giant, below).
-          _showDifficultyPicker(_launchGilgameshBattle);
+        if (_tierBeaten('gilgamesh', 'serf')) {
+          // FORCED GIANT REMATCH (after the Serf win → shop → return): a NORMAL Giant
+          // battle — Giant AI on the Giant flag, tier=flag aligned like every other
+          // boss. NO picker, NO overworld intro (the dominance intro plays IN-BATTLE
+          // via onBattleStart). Win → Gilgamesh card + gold, stamps the Giant flag.
+          _launchAtTier('giant', _launchGilgameshBattle);
+        } else if (_nodeEncountered('gilgamesh')) {
+          // Encountered but the Serf flag isn't beaten yet (lost the first Serf battle,
+          // got Cuneiform, came back): retry the SAME normal Serf battle — no replay of
+          // the one-time first-encounter intro dialogue.
+          _launchAtTier('serf', _launchGilgameshBattle);
         } else {
-          // First encounter: "Welcome to my city" → Battle 1 at Gilgamesh's
-          // first-encounter tier (Giant — the ~90%-loss beat).
+          // First encounter: "Welcome to my city" → a NORMAL Serf battle (Serf AI on
+          // the Serf flag), exactly like every other boss's Serf. Winnable; a loss
+          // triggers the Farmer/Cuneiform front-half beat, then a Serf retry.
           _runGilgameshEncounter(D2B_GILGAMESH_DIALOGUE, function () {
             _launchAtTier(_firstEncounterTier('gilgamesh'), _launchGilgameshBattle);
           });
@@ -2458,6 +2496,14 @@ var Overworld = (function () {
   function _runGilgameshEncounter(lines, onDone) {
     var hud = window.SOG && window.SOG.HUD;
     if (!hud || typeof hud.enterDialogueMode !== 'function') { if (onDone) onDone(); return; }
+    // Mark Gilgamesh ENGAGED at the encounter start (not just at battle end) and reveal
+    // his Serf flag now — it's held off the map until this beat (see _renderNodeFlags's
+    // gilgamesh serf gate), so it appears as the walk-up conversation begins.
+    try { localStorage.setItem('sog_node_encountered_gilgamesh', 'true'); } catch (e) {}
+    _refreshNodeFlags();
+    // Erect the just-rendered Serf flag (planted-pole reveal) as the conversation begins.
+    var gSerf = overlayEl && overlayEl.querySelector('.node-flags[data-hook="gilgamesh"] .node-flag-serf');
+    if (gSerf) { gSerf.style.opacity = '0'; _erectFlagIn(gSerf); }
     hud.enterDialogueMode(null, function () {
       _runLinesKeepOpen(lines, function () {
         try { localStorage.setItem(KEY_MET_GILGAMESH, 'true'); } catch (e) {}
@@ -2481,12 +2527,29 @@ var Overworld = (function () {
     });
   }
 
+  /* First-market interstitial — one-time, fired from _exitMarket on the FIRST market
+     return (post-Serf-win shopping). Sargon does NOT appear here; the only forward path
+     is back to Gilgamesh for the Giant rematch. Gated so it plays exactly once. */
+  function _maybePlayFirstMarketInterstitial(done) {
+    var already = false;
+    try { already = localStorage.getItem(KEY_FIRST_MARKET_INTERSTITIAL) === 'true'; } catch (e) {}
+    if (already) { if (done) done(); return; }
+    try { localStorage.setItem(KEY_FIRST_MARKET_INTERSTITIAL, 'true'); } catch (e) {}
+    isDialogueLocked = true;
+    cancelIdle();
+    runDialogue(D4_FIRST_MARKET_INTERSTITIAL, function () {
+      isDialogueLocked = false;
+      if (done) done();
+    });
+  }
+
   /* ── Phase D4 — Sargon node reveal (dust storm) ──────────────────────────
-     One-time, fired from _exitMarket on the first marketplace return (after the
-     deck-builder unlock). Sequence: Explorer "can't wait" → sargonintro.mp3 +
-     a swirling dust storm at the Sargon node's spot that dissipates to uncover
-     the node (fades in) → Explorer "mysterious / go check it out" → set the flag
-     so the node persists and the reveal never replays.                        */
+     One-time, fired from returnFromGilgameshWin AFTER the Gilgamesh GIANT rematch win
+     (moved here from the first-market return — the player can't enter Sargon until they
+     have 15 cards, so the node shouldn't tease before the Giant is even beaten).
+     Sequence: Explorer "can't wait" → sargonintro.mp3 + a swirling dust storm at the
+     Sargon node's spot that dissipates to uncover the node (fades in) → Explorer
+     "mysterious / go check it out" → set the flag so the node persists / never replays. */
   function _maybeRevealSargonNode(done) {
     var already = false;
     try { already = localStorage.getItem(KEY_SARGON_NODE_REVEALED) === 'true'; } catch (e) {}
@@ -3013,7 +3076,12 @@ var Overworld = (function () {
     // battle screen; make sure it's the current map (defensive).
     if (currentMapId !== 'mesopotamia') loadMap('mesopotamia', {});
     _playMapMusic();   // resume the overworld track (covers the path that skips loadMap)
-    _refreshNodeFlags();   // stamp the just-won Gilgamesh flag (thunk) on the persisted map
+    _refreshNodeFlags(true);   // render flags with the just-won stamp DEFERRED (the timed choreo thunks it)
+
+    // First-win only: _refreshNodeFlags just rendered Gilgamesh's GIANT flag for the
+    // first time (his Serf flag is now beaten). Hide it so it can ERECT as its own beat,
+    // after the Serf stamp lands (shared with every boss's Serf-win return).
+    var giantFlagEl = _consumePendingFlagReveal();
 
     // Land at the Uruk node.
     var uruk = _findMesoNode('walls-of-uruk');
@@ -3032,19 +3100,118 @@ var Overworld = (function () {
     // Reveal the map + Uruk (battle module fades its black cover out).
     if (onMapShown) onMapShown();
 
-    // Beat 2: fade the market node in (~after the map fade-from-black), then
-    // hand control back. The node is now revealed but the player walks into it
-    // on their own — clicking it opens the market (trader intro still plays on
-    // their first actual entry, gated separately on KEY_MARKET_INTRO_SEEN).
-    setTimeout(function () {
+    // Fade the market node in, then hand control back. The node is revealed but the
+    // player walks into it on their own — clicking opens the market (trader intro
+    // still plays on their first actual entry, gated on KEY_MARKET_INTRO_SEEN).
+    var revealMarket = function () {
       if (marketEl) {
         if (typeof gsap !== 'undefined') gsap.to(marketEl, { opacity: 1, duration: 0.6, ease: 'power1.out' });
         else marketEl.style.opacity = '1';
       }
       try { localStorage.setItem(KEY_MARKET_FIRST_VISIT, 'true'); } catch (e) {}
-      isDialogueLocked = false;
-      scheduleIdle();
-    }, 650);
+      // GIANT rematch win → NOW dust-reveal the Sargon node (moved here from the first
+      // market return). The Serf/fluke win (Giant not beaten yet) just hands control
+      // back — Sargon stays hidden until the Giant is beaten.
+      if (_tierBeaten('gilgamesh', 'giant')) {
+        _maybeRevealSargonNode(function () { isDialogueLocked = false; scheduleIdle(); });
+      } else {
+        isDialogueLocked = false;
+        scheduleIdle();
+      }
+    };
+
+    // Flag choreography (AFTER the map is shown): 300ms → thunk the just-won stamp
+    // (Serf on the first win / Giant on the rematch) → on a Serf win, 200ms → erect the
+    // Giant flag → then reveal the market. See _playReturnFlagAnim.
+    _playReturnFlagAnim(giantFlagEl, revealMarket);
+  }
+
+  /* Shared two-tier helper: consume the one-shot window.__pendingFlagReveal a boss's
+     Serf-win sequence set ({ hook, tier:'giant' }). _refreshNodeFlags has just rendered
+     the newly-visible Giant flag; hide it immediately and return the element so the
+     caller can _erectFlagIn() it as its own beat. Returns null when nothing is pending. */
+  function _consumePendingFlagReveal() {
+    var fr = window.__pendingFlagReveal;
+    window.__pendingFlagReveal = null;
+    if (!fr || !overlayEl) return null;
+    var cluster = overlayEl.querySelector('.node-flags[data-hook="' + fr.hook + '"]');
+    var el = cluster && cluster.querySelector('.node-flag-' + fr.tier);
+    if (el) el.style.opacity = '0';
+    return el;
+  }
+
+  /* ── Flag "erected" reveal — editable knobs (tune by eye) ────────────────────
+     The reveal reads as PLANTED: a pole rises straight up from its base, then
+     pivots over to its resting tilt with a settling overshoot ("up, then over,
+     settle"). Two phases, both anchored at the pole base (bottom-centre, sunk
+     behind the node). The stamp "thunk" is separate/unchanged. */
+  var FLAG_ERECT = {
+    riseDur:        0.55,   // s  — PHASE 1: vertical rise duration
+    riseEase:       'back.out(1.4)', // rise ease; back.out(1.x) adds a tiny peak overshoot ('power3.out' = none)
+    pivotDur:       0.75,   // s  — PHASE 2: tilt-to-angle duration
+    pivotOvershoot: 2.4,    // GSAP back.out strength on the pivot settle (higher = tilts further PAST, then back)
+    overlap:        0.10,   // s  — pivot starts this long BEFORE the rise ends (keep small so phases stay legible)
+    origin:         '50% 100%',   // pole base — both the rise (scaleY) and the pivot (rotation) hinge here
+    sfx:            null     // no sfx for now (set to a path later to add the "planted" sound back)
+  };
+
+  /* The flag's resting rotation (deg) — read from its computed CSS matrix so the
+     pivot lands EXACTLY on whatever --flag-tilt / per-node --*-rot resolves to. */
+  function _flagRestAngle(flagEl) {
+    try {
+      var t = getComputedStyle(flagEl).transform;
+      var m = t && t.match(/matrix\(([^)]+)\)/);
+      if (!m) return 0;
+      var p = m[1].split(',').map(parseFloat);   // a,b,c,d,e,f
+      return Math.atan2(p[1], p[0]) * 180 / Math.PI;
+    } catch (e) { return 0; }
+  }
+
+  /* Erect a freshly-revealed flag (Serf at encounter-start, Giant after the Serf win).
+     Animates the flag IMAGE — the .node-flag container keeps its positioning+tilt CSS,
+     so the img COUNTER-rotates by -restAngle to read vertical during the rise, then
+     rotates back to 0 (net = the resting tilt) with overshoot. Origin = pole base. */
+  function _erectFlagIn(flagEl, onComplete) {
+    if (!flagEl) { if (onComplete) onComplete(); return; }
+    flagEl.style.opacity = '1';                 // container was hidden by the caller
+    var img = flagEl.querySelector('.node-flag-img');
+    if (!img || typeof gsap === 'undefined') { if (onComplete) onComplete(); return; }
+    if (FLAG_ERECT.sfx && window.SOG && SOG.sfx && typeof SOG.sfx.play === 'function') SOG.sfx.play(FLAG_ERECT.sfx);
+
+    var rest = _flagRestAngle(flagEl);          // resting tilt in the flag's own frame
+    // Start collapsed at the base + counter-rotated to VERTICAL (net angle 0), transparent.
+    gsap.set(img, { scaleY: 0, rotation: -rest, opacity: 0, transformOrigin: FLAG_ERECT.origin });
+    // On finish, WIPE all GSAP inline props so the img returns to its EXACT pristine CSS
+    // state (size/position/rotation) — guarantees the rest pose matches what's established.
+    var tl = gsap.timeline({ onComplete: function () { gsap.set(img, { clearProps: 'all' }); if (onComplete) onComplete(); } });
+    // PHASE 1 — ERECT: rise straight up (scaleY 0→1) + fade in; rotation held vertical.
+    tl.to(img, { scaleY: 1, opacity: 1, duration: FLAG_ERECT.riseDur, ease: FLAG_ERECT.riseEase });
+    // PHASE 2 — PIVOT: tilt over to the resting angle (rotation −rest → 0 = net rest) with
+    // a settling overshoot, starting slightly before the rise finishes.
+    tl.to(img, { rotation: 0, duration: FLAG_ERECT.pivotDur, ease: 'back.out(' + FLAG_ERECT.pivotOvershoot + ')' },
+          Math.max(0, FLAG_ERECT.riseDur - FLAG_ERECT.overlap));
+  }
+
+  /* Shared return-to-map flag ANIMATION (ALL non-Prehistory boss wins). The caller must
+     have already rendered the flags with a DEFERRED stamp (_refreshNodeFlags(true)) and
+     consumed the pending Giant-flag reveal (_consumePendingFlagReveal → giantFlagEl) BEFORE
+     the map fades in, so nothing flickers. This runs AFTER the map is shown:
+       wait STAMP_DELAY_MS → thunk the freshly-won stamp (serf OR giant) → when it fully
+       lands: if a Giant flag is pending (a SERF win), wait ERECT_GAP_MS → erect it → then
+       onProceed; a GIANT win has no pending erect → onProceed right after the stamp.
+     onProceed continues whatever is next (market fade / Hammurabi reveal / interstitial). */
+  var STAMP_DELAY_MS = 650;   // pause after arrival before the stamp thunk (editable)
+  var ERECT_GAP_MS   = 200;   // pause after the stamp fully finishes before the Giant erect (editable)
+  function _playReturnFlagAnim(giantFlagEl, onProceed) {
+    setTimeout(function () {
+      _animatePendingStamp(function () {            // stamp thunk (serf/giant), then:
+        if (giantFlagEl) {
+          setTimeout(function () {
+            _erectFlagIn(giantFlagEl, function () { if (onProceed) onProceed(); });
+          }, ERECT_GAP_MS);
+        } else if (onProceed) { onProceed(); }
+      });
+    }, STAMP_DELAY_MS);
   }
 
   /* ════════════════════════════════════════════════════════════
@@ -3103,21 +3270,21 @@ var Overworld = (function () {
         { id: 38, price: 10 }    // Priest
     ] },
     { topPct: 40, xs: [26, 37.5, 49, 60], cards: [
-        { id: 45, price: 20 },   // Ziggurat
-        { id: 48, price: 20 },   // Chariot
-        { id: 49, price: 20 },   // Phoenicians
-        { id: 44, price: 30 }    // Enkidu (last on shelf 2, stays 30 gold)
+        { id: 45, price: 15 },   // Ziggurat
+        { id: 48, price: 15 },   // Chariot
+        { id: 49, price: 15 },   // Phoenicians
+        { id: 44, price: 25 }    // Enkidu (last on shelf 2)
     ] }
   ];
   var MARKET_CARD_W = 86;   // px (stage space); height follows the card aspect
   var MARKET_CARD_H = 126;
 
-  function _buildMarketCard(cardId, leftPct, topPct, price) {
+  function _buildMarketCard(cardId, leftPct, topPct, price, locked) {
     var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return null;
 
     var wrap = document.createElement('div');
-    wrap.className = 'market-card';
+    wrap.className = 'market-card' + (locked ? ' market-card-locked' : '');
     wrap.style.cssText = 'position:absolute;left:' + leftPct + '%;top:' + topPct + '%;' +
       'width:' + MARKET_CARD_W + 'px;height:' + MARKET_CARD_H + 'px;transform:translateX(-50%);' +
       'container-type:inline-size;cursor:pointer;border:2px solid #1a0a04;border-radius:4px;' +
@@ -3130,13 +3297,27 @@ var Overworld = (function () {
       wrap.appendChild(window.buildCardImg(card));
     }
 
+    // Locked (Enkidu pre-Sargon): grey the card and stamp a padlock over it. The
+    // badge is appended AFTER buildCardFace (which clears the wrap) so it survives.
+    if (locked) {
+      wrap.style.filter = 'grayscale(0.9) brightness(0.55)';
+      var lockBadge = document.createElement('div');
+      lockBadge.className = 'market-card-lock';
+      lockBadge.textContent = '🔒';   // 🔒
+      lockBadge.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
+        'font-size:40px;pointer-events:none;z-index:2;text-shadow:0 2px 5px rgba(0,0,0,0.85);';
+      wrap.appendChild(lockBadge);
+    }
+
     wrap.dataset.marketCardId = String(cardId);
 
-    // Click → the market-specific BUY popup (NOT the shared battle popup).
-    // Suppressed until the trader intro (first visit) has finished.
+    // Click → the market-specific BUY popup (NOT the shared battle popup). A locked
+    // card still opens the popup (so the player can read what they're working toward)
+    // but the Buy button is replaced by an "unlock" hint. Suppressed until the trader
+    // intro (first visit) has finished.
     wrap.addEventListener('click', function () {
       if (!_marketReady) return;
-      _openMarketBuyPopup(card, price);
+      _openMarketBuyPopup(card, price, locked);
     });
 
     // Price tag — built as a SIBLING of the card (positioned in screen space),
@@ -3190,12 +3371,19 @@ var Overworld = (function () {
     // Lay out the cards on their two shelves (card + its price tag). Cards the
     // player already OWNS are skipped — only unowned cards are for sale, so a
     // bought card stays gone (the empty slot is the "you own it" feedback).
+    // Enkidu (44) is purchase-locked until Sargon is beaten at EITHER tier — a
+    // softlock safeguard. The economy is tight: a 25-gold Enkidu splurge before
+    // Sargon could leave the player unable to afford the cheap (10–15 gold) cards
+    // needed to reach Sargon's 15-card minimum. Locking it pre-Sargon keeps early
+    // gold flowing to affordable cards, guaranteeing the deck can reach 15.
+    var _enkiduUnlocked = _tierBeaten('sargon', 'serf') || _tierBeaten('sargon', 'giant');
     MARKET_SHELVES.forEach(function (shelf) {
       shelf.cards.forEach(function (c, i) {
         if (window.SOG && SOG.collection && typeof SOG.collection.isUnlocked === 'function'
             && SOG.collection.isUnlocked(c.id)) return;   // owned → not for sale
         var leftPct = (shelf.xs[i] != null) ? shelf.xs[i] : (20 + i * 12);
-        var built   = _buildMarketCard(c.id, leftPct, shelf.topPct, c.price);
+        var locked  = (c.id === 44) && !_enkiduUnlocked;   // Enkidu gated on a Sargon win
+        var built   = _buildMarketCard(c.id, leftPct, shelf.topPct, c.price, locked);
         if (built) { screen.appendChild(built.cardEl); screen.appendChild(built.tagEl); }
       });
     });
@@ -3273,12 +3461,12 @@ var Overworld = (function () {
     if (screen && screen.parentNode) screen.parentNode.removeChild(screen);
     isDialogueLocked = false;
     _playMapMusic();   // back on the map — resume the overworld track
-    // First time back from the marketplace, the explorer notes the growing
-    // collection and the deck builder un-greys. One-time; gated below. THEN, on
-    // the same first return, the Sargon node dust-reveals (also one-time, gated),
-    // sequenced AFTER the deck-builder beat so the two don't collide.
+    // First time back from the marketplace: the deck builder un-greys, then the
+    // Explorer notes the growing collection and resolves to return to Gilgamesh.
+    // Sargon does NOT reveal here anymore — that moves to AFTER the Giant rematch win
+    // (see returnFromGilgameshWin), since the player can't enter Sargon until 15 cards.
     _maybePlayDeckBuilderUnlock(function () {
-      _maybeRevealSargonNode(function () { scheduleIdle(); });
+      _maybePlayFirstMarketInterstitial(function () { scheduleIdle(); });
     });
   }
 
@@ -3293,15 +3481,13 @@ var Overworld = (function () {
       already = localStorage.getItem(KEY_DECKBUILDER_UNLOCKED) === 'true';
     } catch (e) {}
     if (!won || already) { if (done) done(); return; }
-    isDialogueLocked = true;
-    cancelIdle();
-    runDialogue(DECKBUILDER_UNLOCK_DIALOGUE, function () {
-      try { localStorage.setItem(KEY_DECKBUILDER_UNLOCKED, 'true'); } catch (e) {}
-      isDialogueLocked = false;
-      var hud = window.SOG && window.SOG.HUD;
-      if (hud && typeof hud.refreshDecks === 'function') hud.refreshDecks();  // un-grey
-      if (done) done();
-    });
+    // SILENT unlock — no dialogue. The first-market beat is now ONLY the Explorer
+    // interstitial (_maybePlayFirstMarketInterstitial); the old DECKBUILDER_UNLOCK_DIALOGUE
+    // is retired. Just set the flag + un-grey the deck button, then continue.
+    try { localStorage.setItem(KEY_DECKBUILDER_UNLOCKED, 'true'); } catch (e) {}
+    var hud = window.SOG && window.SOG.HUD;
+    if (hud && typeof hud.refreshDecks === 'function') hud.refreshDecks();  // un-grey
+    if (done) done();
   }
 
   /* ── Market buy popup (market-specific; NOT the shared battle popup) ─────
@@ -3322,7 +3508,7 @@ var Overworld = (function () {
     Prehistory: 'prehistory'
   };
 
-  function _openMarketBuyPopup(card, price) {
+  function _openMarketBuyPopup(card, price, locked) {
     _closeMarketBuyPopup();
     var gold = (window.SOG && SOG.gold) ? SOG.gold.get() : 0;
     var affordable = gold >= price;
@@ -3380,24 +3566,35 @@ var Overworld = (function () {
     abTx.style.cssText = 'font-size:15px;line-height:1.45;' + (card.ability ? '' : 'font-style:italic;opacity:0.7;');
     content.appendChild(abTx);
 
-    var buy = document.createElement('button');
-    buy.className = 'btn-primary';
-    buy.style.cssText = 'margin:0 14px 14px;padding:12px;font-size:18px;font-weight:bold;display:flex;' +
-      'align-items:center;justify-content:center;gap:8px;cursor:' + (affordable ? 'pointer' : 'not-allowed') + ';' +
-      (affordable ? '' : 'opacity:0.45;filter:grayscale(0.7);');
-    buy.disabled = !affordable;
-    buy.innerHTML = 'Buy For ' + price +
-      ' <img src="images/ui_images/coin.png" alt="gold" style="width:24px;height:24px;object-fit:contain;">';
-    if (affordable) {
-      buy.addEventListener('click', function () {
-        _openBuyConfirm(card, function () {
-          _closeMarketBuyPopup();
-          _doMarketPurchase(card, price);
+    // Locked (Enkidu pre-Sargon): the Buy button is replaced by a non-interactive
+    // unlock hint so the player learns WHY it's unavailable and what unlocks it.
+    var action;
+    if (locked) {
+      action = document.createElement('div');
+      action.style.cssText = 'margin:0 14px 14px;padding:11px;font-size:16px;font-weight:bold;text-align:center;' +
+        'color:#7a3010;border:2px dashed #7a3010;border-radius:6px;background:rgba(122,48,16,0.08);line-height:1.35;';
+      action.innerHTML = '🔒 Locked' +
+        '<div style="font-weight:normal;font-size:14px;margin-top:3px;">Defeat Sargon to unlock Enkidu.</div>';
+    } else {
+      action = document.createElement('button');
+      action.className = 'btn-primary';
+      action.style.cssText = 'margin:0 14px 14px;padding:12px;font-size:18px;font-weight:bold;display:flex;' +
+        'align-items:center;justify-content:center;gap:8px;cursor:' + (affordable ? 'pointer' : 'not-allowed') + ';' +
+        (affordable ? '' : 'opacity:0.45;filter:grayscale(0.7);');
+      action.disabled = !affordable;
+      action.innerHTML = 'Buy For ' + price +
+        ' <img src="images/ui_images/coin.png" alt="gold" style="width:24px;height:24px;object-fit:contain;">';
+      if (affordable) {
+        action.addEventListener('click', function () {
+          _openBuyConfirm(card, function () {
+            _closeMarketBuyPopup();
+            _doMarketPurchase(card, price);
+          });
         });
-      });
+      }
     }
 
-    box.appendChild(content); box.appendChild(buy);
+    box.appendChild(content); box.appendChild(action);
     unit.appendChild(big); unit.appendChild(box);
     overlay.appendChild(unit);
     (document.getElementById('sog-stage') || document.body).appendChild(overlay);
@@ -3840,16 +4037,22 @@ var Overworld = (function () {
       _clearWipe();
       var hud = window.SOG && window.SOG.HUD;
       if (hud && typeof hud.show === 'function') hud.show();
-      _refreshNodeFlags();   // stamp the just-won Sargon flag (thunk) before the Hammurabi reveal
+      _refreshNodeFlags(true);   // render flags with the just-won stamp DEFERRED (timed choreo thunks it)
+      // Serf-win beat (general template): _refreshNodeFlags just rendered the GIANT flag
+      // for the first time (Serf now beaten). Hide it so it can ERECT as its own beat,
+      // after the Serf stamp lands — shared _playReturnFlagAnim choreography with Gilgamesh.
+      var giantFlagEl = _consumePendingFlagReveal();
       // Hold the music: fade out whatever is playing (the Sargon battle track) so
       // the Hammurabi earth-rise plays against silence (its own earthspell.mp3),
       // then fade the map music back in once the reveal has fully finished.
       if (window.SOG && SOG.music && typeof SOG.music.fadeOutAndStop === 'function') {
         SOG.music.fadeOutAndStop(600);
       }
-      setTimeout(function () {
-        // Serf-track gate: a Giant win (e.g. the player lost the Serf first, then won
-        // the Giant rematch) must NOT open Hammurabi — only a Sargon SERF clear does.
+      // After the flags animate (300ms → Serf stamp → 200ms → Giant erect): Hammurabi
+      // rises (serf-track gate) + the interstitial reflection, then control is restored.
+      var proceed = function () {
+        // Serf-track gate: a Giant win (e.g. lost the Serf first, then won the Giant)
+        // must NOT open Hammurabi — only a Sargon SERF clear does.
         if (!_bossClearedForUnlock('sargon')) {
           _playMapMusic();
           isDialogueLocked = false;
@@ -3858,14 +4061,13 @@ var Overworld = (function () {
         }
         _maybeRevealHammurabiNode(function () {
           _playMapMusic();   // node has risen — fade the overworld track back in
-          // The node has risen — Explorer chimes in, then control is restored so
-          // the player can choose to click the node.
           runDialogue(D4_SARGON_WIN_REFLECT, function () {
             isDialogueLocked = false;
             scheduleIdle();
           });
         });
-      }, 350);
+      };
+      _playReturnFlagAnim(giantFlagEl, proceed);
     },
     // Reusable candle visual for the Gilgamesh post-loss intervention (the
     // battle module fades to black itself, then drives these): bloom the flame
@@ -3885,13 +4087,21 @@ var Overworld = (function () {
     // Called by battle stubs / battle modules when returning to the overworld.
     // Re-engages idle walk and refreshes the HUD without a full map reload.
     resumeAfterBattle: function () {
+      // Guard: a battle launched on a FRESH page load (dev-menu scene jump) never
+      // initialized the overworld — DOM refs unbound, currentMapId at its boot
+      // default. Run the full init (binds DOM, restores the saved map + position),
+      // or the battle exit strands the player on the wrong map.
+      if (!mapImgEl) init();
       isTransitioning  = false;
       _clearWipe();
       _removeCandleBackdrop();   // defensive: clear any lingering candlelit backdrop
       var hud = window.SOG && window.SOG.HUD;
       if (hud) { hud.show(); }
       _playMapMusic();   // resume the overworld track (battle music was stopped at endGame)
-      _refreshNodeFlags();   // stamp a freshly-beaten tier's flag (thunk) on the persisted map
+      // Stamp a freshly-beaten tier's flag with a 300ms pause first (mainly the GIANT
+      // rematch win, which returns through here). No pending stamp (a loss) → no-op.
+      _refreshNodeFlags(true);   // render, DEFER the stamp
+      _playReturnFlagAnim(null, null);   // 300ms → stamp thunk (no erect, control not gated)
 
       // Catch-up Hammurabi node reveal. The node normally rises via
       // returnFromSargonWin (the FIRST Sargon win). But a save that beat Sargon

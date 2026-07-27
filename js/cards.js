@@ -344,14 +344,14 @@ const CARDS = [
     image: "images/cards/mesopotamiacards/gilgamesh@0.5x.jpg", locked: true
   },
   {
-    id: 44, name: "Enkidu", cc: 4, ip: 3,
+    id: 44, name: "Enkidu", cc: 3, ip: 2,
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Wild Ally",
     ability: "Continuous:\nCards next to Enkidu gain +2 IP.",
     image: "images/cards/mesopotamiacards/enkidu@0.5x.jpg", locked: true
   },
   {
-    id: 45, name: "Ziggurat", cc: 3, ip: 4,
+    id: 45, name: "Ziggurat", cc: 3, ip: 3,
     type: "Religious", type2: null, era: "Mesopotamia",
     abilityName: "Sacred Space",
     ability: "Continuous:\nProvides +1 IP to other Religious cards at this location.",

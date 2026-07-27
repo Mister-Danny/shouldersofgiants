@@ -298,8 +298,8 @@ SOG.NarmerBattle = (function () {
   var KEY_NARMER_COMPLETE     = 'sog_battle_narmer_complete';       // set on first win
   var KEY_NARMER_OPENING_SEEN = 'sog_narmer_battle_opening_seen';   // in-battle intro: first-time only
   var NARMER_CARD_ID  = 51;    // first-win reward (the Narmer card)
-  var GOLD_FIRST_WIN  = 25;    // gold on first win
-  var GOLD_REPEAT_WIN = 10;    // gold on a repeat win
+  var GOLD_FIRST_WIN  = 15;    // two-tier economy: 15 gold on the FIRST win of a tier (serf OR giant)
+  var GOLD_REPEAT_WIN = 0;     // replays of an already-beaten tier pay nothing (anti-farming)
   var RESULT_ID       = 'adv-narmer-result';
   var SHOW_RESULTS_ID = 'adv-narmer-show-results';
   var OPP_NAME        = 'Narmer';   // scoreboard opponent score label
@@ -694,15 +694,26 @@ SOG.NarmerBattle = (function () {
   /* Outcome routing — the module OWNS the screen (never proceed()). */
   function _onWin(locResults) {
     _stopLockSync();
-    var firstWin = !_has(KEY_NARMER_COMPLETE);   // capture BEFORE setting the flag
-    _set(KEY_NARMER_COMPLETE);
-    if (firstWin) {
+    // Two-tier reward gate (SOG.rewards): 15 gold on the FIRST win of a tier, the
+    // Narmer card on the FIRST GIANT win, zero on any replay.
+    var r = (window.SOG && SOG.rewards)
+          ? SOG.rewards.consume('narmer')
+          : { firstTierWin: !_has(KEY_NARMER_COMPLETE), gold: GOLD_FIRST_WIN, grantCard: !_has(KEY_NARMER_COMPLETE) };
+    _set(KEY_NARMER_COMPLETE);   // any-tier "beaten" — kept for narrative gates
+    if (r.grantCard) {
+      // FIRST GIANT win → win dialogue → card 51 + 15 gold → scoreboard.
       _runFirstWinSequence(locResults);
-    } else {
+    } else if (r.firstTierWin) {
+      // FIRST SERF win → flourish → +15 gold, NO card (it waits on the Giant).
       _victoryFlourish(function () {
-        _grantGold(GOLD_REPEAT_WIN, function () {
+        _grantGold(GOLD_FIRST_WIN, function () {
           _showResultScoreboard(true, false, locResults, {});
         });
+      });
+    } else {
+      // Replay of an already-beaten tier → flourish only, ZERO gold (anti-farming).
+      _victoryFlourish(function () {
+        _showResultScoreboard(true, false, locResults, {});
       });
     }
   }

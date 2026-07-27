@@ -100,30 +100,96 @@ SOG.SargonBattle = (function () {
 
   // ── Post-game dialogue (editable). Battle-screen speech bubbles. ────
   var SARGON_CARD_ID = 37;
-  var GOLD_FIRST_WIN = 25;
-  var GOLD_REPEAT_WIN = 10;
-  // First-win victory dialogue — runs on the win, before the Sargon card grant.
-  var WIN_DIALOGUE = [
-    { who: 'sargon',   text: "You've bested me." },
-    { who: 'sargon',   text: 'But how?' },
-    { who: 'explorer', text: "I've learned from the past..." },
-    { who: 'explorer', text: 'And the future.' },
-    { who: 'sargon',   text: "I don't understand." },
-    { who: 'explorer', text: 'A very wise old friend told me you can see further if you stand on two feet.' },
-    { who: 'sargon',   text: 'You are wise.' },
-    { who: 'sargon',   text: 'And so am I.' },
-    { who: 'sargon',   text: 'Take this as a symbol of our budding alliance.' }
-  ];
-  // First-win closing line — runs after the Sargon card + gold, before the scoreboard.
-  var WIN_DIALOGUE_CLOSER = [
-    { who: 'explorer', text: 'I see why they call you The Great.' }
-  ];
+  var GOLD_FIRST_WIN = 15;   // two-tier economy: 15 gold on the FIRST win of a tier (serf OR giant)
+  var GOLD_REPEAT_WIN = 0;   // replays of an already-beaten tier pay nothing (anti-farming)
   // Pre-win loss smack-talk — runs on the battle screen when the player chooses
-  // BACK TO MAP after losing (the Explorer's reflection line then plays on the map).
+  // BACK TO MAP after losing the FIRST (Serf) encounter (UNCHANGED front-half beat;
+  // the Explorer's reflection line then plays on the map).
   var LOSS_SMACK = [
     { who: 'sargon', text: "You're no match for Empire." },
     { who: 'sargon', text: 'Be gone with you.' }
   ];
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     SARGON TWO-TIER TEMPLATE — the GENERAL pattern (Hammurabi/Neb/Narmer follow):
+       existing intro (untouched) → SERF WIN → interstitial (overworld) →
+       GIANT rematch intro (in-battle) → GIANT win / loss / draw.
+     who: 'sargon' = Sargon's portrait; 'explorer' = the player. Acquisition
+     animations fire INLINE at the marked beats (see the sequences below).
+  ══════════════════════════════════════════════════════════════════════════ */
+
+  // SERF WIN — grants 15 gold at the "Here." beat, NO card. Split around the gold.
+  var SARGON_SERF_WIN_A = [
+    { who: 'sargon',   text: 'Those who face the Akkadian line do not walk away.' },
+    { who: 'explorer', text: 'I stand my ground.' },
+    { who: 'explorer', text: 'With a smile.' },
+    { who: 'sargon',   text: 'I do not.' },
+    { who: 'sargon',   text: 'Here.' }
+    // → [GOLD — 15]
+  ];
+  var SARGON_SERF_WIN_B = [
+    { who: 'sargon',   text: 'Your reward.' },
+    { who: 'explorer', text: 'Much thanks.' },
+    { who: 'sargon',   text: 'I built empire from nothing.' },
+    { who: 'sargon',   text: 'When you return, you will feel the full might of Akkad.' }
+  ];
+
+  // GIANT REMATCH INTRO — in-battle, before the Giant rematch (onBattleStart).
+  var SARGON_GIANT_INTRO = [
+    { who: 'sargon',   text: 'So you return for the true contest?' },
+    { who: 'explorer', text: "It's the right thing to do…" },
+    { who: 'explorer', text: 'Right?' },
+    { who: 'sargon',   text: 'No mercy.' },
+    { who: 'sargon',   text: 'You face the man who made the world kneel.' }
+  ];
+
+  // GIANT WIN — grants the Sargon card THEN 15 gold at the "Take this…" beat.
+  var SARGON_GIANT_WIN_A = [
+    { who: 'sargon',   text: 'I have conquered a thousand cities.' },
+    { who: 'sargon',   text: 'Yet, today, the wanderer conquers me.' },
+    { who: 'explorer', text: 'For what it’s worth, you were very intimidating.' },
+    { who: 'sargon',   text: 'Take this, the mark of Akkad.' }
+    // → [CARD — Sargon] THEN [GOLD — 15]
+  ];
+  var SARGON_GIANT_WIN_B = [
+    { who: 'sargon',   text: "Few earn the Emperor's respect." },
+    { who: 'sargon',   text: 'You have earned mine.' }
+  ];
+
+  // GIANT LOSS — dismissive, replayable (no grant).
+  var SARGON_GIANT_LOSS = [
+    { who: 'sargon',   text: 'As it must be.' },
+    { who: 'sargon',   text: 'Empire endures.' },
+    { who: 'sargon',   text: 'Return when you are ready to lose again.' }
+  ];
+
+  // GIANT DRAW — a stalemate is not a win, replayable (no grant).
+  var SARGON_GIANT_DRAW = [
+    { who: 'sargon',   text: "A stalemate? Against Akkad's finest?" },
+    { who: 'sargon',   text: 'You are… stubborn.' },
+    { who: 'sargon',   text: 'We settle this…' },
+    { who: 'sargon',   text: 'Again.' }
+  ];
+
+  /* Read a persisted tier-beaten flag (game.js stamps sog_node_<hook>_<tier>_beaten
+     on a win). Distinguishes the Giant REMATCH from a later Giant replay. */
+  function _tierBeatenLocal(hook, tier) {
+    try { return localStorage.getItem('sog_node_' + hook + '_' + tier + '_beaten') === 'true'; }
+    catch (e) { return false; }
+  }
+  /* The flag slot of the current battle (Sargon: aligned with AI tier — no decoupling).
+     The game state lives at SOG.state.G — there is no window.G global, so a window.G
+     read is always undefined and would silently default to 'serf'. */
+  function _flagTier() {
+    var _G = (window.SOG && SOG.state && SOG.state.G) || null;
+    return (_G && _G.config && (_G.config.flagTier
+        || (_G.config.ai && _G.config.ai.tier))) || 'serf';
+  }
+  /* This battle is the Giant REMATCH (Giant flag, not yet beaten) → the in-battle
+     dominance intro (SARGON_GIANT_INTRO) plays instead of the Serf opening tutorial. */
+  function _isSargonGiantRematch() {
+    return _flagTier() === 'giant' && !_tierBeatenLocal('sargon', 'giant');
+  }
 
   /* ══════════════════════════════════════════════════════════════
      Opening dialogue runner — SHARED battle speech bubbles.
@@ -454,11 +520,13 @@ SOG.SargonBattle = (function () {
     }, 100);
   }
 
-  /* First-win exit: tear down, then hand off to the overworld's Sargon-win return,
-     which rises the Hammurabi node out of the dirt. Falls back to the plain exit. */
-  function _exitToOverworldAfterFirstWin() {
+  /* SERF-win exit: tear down, then hand off to the overworld's Sargon-win return,
+     which pops the Giant flag in + rises the Hammurabi node + plays the interstitial.
+     Sets the one-shot __pendingFlagReveal the return consumes. Plain exit fallback. */
+  function _exitToOverworldAfterSerfWin() {
     _removeResultPopup();
     _sargonTeardown();
+    window.__pendingFlagReveal = { hook: 'sargon', tier: 'giant' };   // Giant flag pops on the return
     if (window.Overworld && typeof window.Overworld.returnFromSargonWin === 'function') {
       window.Overworld.returnFromSargonWin();
     } else {
@@ -525,16 +593,30 @@ SOG.SargonBattle = (function () {
     }, 1900);
   }
 
-  /* First win: victory dialogue → Sargon card grant → +25 gold → closing line →
-     THEN the end-game scoreboard (its Back To Map exits, Game Board reviews). The
-     whole sequence runs on the battle screen, BEFORE the scoreboard. */
-  function _runFirstWinSequence(locResults) {
+  /* SERF WIN — [source: SARGON_SERF_WIN_A/_B]. Block A → 15 gold at the "Here." beat
+     (NO card) → block B → scoreboard. CONTINUE runs the SERF-win return (Giant flag
+     pop + Hammurabi reveal + interstitial). Runs on the battle screen before the board. */
+  function _runSerfWinSequence(locResults) {
     _removeResultPopup();
-    runLines(WIN_DIALOGUE, function () {
-      _grantSargonCard(function () {
-        _grantGold(GOLD_FIRST_WIN, function () {
-          runLines(WIN_DIALOGUE_CLOSER, function () {
-            _showResultScoreboard(true, false, locResults, { firstWin: true });
+    runLines(SARGON_SERF_WIN_A, function () {
+      _grantGold(GOLD_FIRST_WIN, function () {                 // 15 gold, NO card
+        runLines(SARGON_SERF_WIN_B, function () {
+          _showResultScoreboard(true, false, locResults, { firstWin: true, onContinue: _exitToOverworldAfterSerfWin });
+        });
+      });
+    });
+  }
+
+  /* GIANT WIN — [source: SARGON_GIANT_WIN_A/_B]. Block A → Sargon card THEN 15 gold at
+     the "Take this…" beat → block B → scoreboard. CONTINUE = plain exit (the Giant flag
+     stamps via resumeAfterBattle; Hammurabi was already revealed on the Serf win). */
+  function _runGiantWinSequence(locResults) {
+    _removeResultPopup();
+    runLines(SARGON_GIANT_WIN_A, function () {
+      _grantSargonCard(function () {                           // card first
+        _grantGold(GOLD_FIRST_WIN, function () {               // then 15 gold
+          runLines(SARGON_GIANT_WIN_B, function () {
+            _showResultScoreboard(true, false, locResults, { firstWin: true, onContinue: _exitToOverworld });
           });
         });
       });
@@ -585,9 +667,12 @@ SOG.SargonBattle = (function () {
       return b;
     }
     if (opts.firstWin) {
-      // Shown AFTER the first-win victory sequence (dialogue + card + gold + closer).
-      // CONTINUE exits to the map (win scoreboards say CONTINUE, not BACK TO MAP).
-      actions.appendChild(mkBtn('CONTINUE', function () { _exitToOverworldAfterFirstWin(); }));
+      // Shown AFTER a tier-win sequence (dialogue + gold [+ card]). CONTINUE runs the
+      // stage's exit: opts.onContinue = _exitToOverworldAfterSerfWin on the Serf win
+      // (Giant flag pop + Hammurabi reveal + interstitial), _exitToOverworld on the
+      // Giant win (plain — Giant flag stamps via resumeAfterBattle).
+      var _cont = opts.onContinue || _exitToOverworld;
+      actions.appendChild(mkBtn('CONTINUE', function () { _cont(); }));
       actions.appendChild(mkBtn('GAME BOARD',  function () { _hideResultForReview(); }));
     } else {
       actions.appendChild(mkBtn('PLAY AGAIN',  function () { _restartBattle(); }));
@@ -637,18 +722,24 @@ SOG.SargonBattle = (function () {
   }
 
   function _onWin(locResults) {
-    var firstWin = !_has(KEY_SARGON_COMPLETE);
-    _set(KEY_SARGON_COMPLETE);
-    if (firstWin) {
-      // Victory dialogue → Sargon card → +25 gold → closing line → THEN the
-      // scoreboard. The sequence plays BEFORE the board (not behind a Continue button).
-      _runFirstWinSequence(locResults);
+    // Two-tier reward gate (SOG.rewards): first SERF win → 15 gold, NO card; first
+    // GIANT win → 15 gold + the Sargon card; replay of a beaten flag → 0 gold.
+    var r = (window.SOG && SOG.rewards)
+          ? SOG.rewards.consume('sargon')
+          : { firstTierWin: !_has(KEY_SARGON_COMPLETE), gold: GOLD_FIRST_WIN,
+              grantCard: (_flagTier() === 'giant' && !_tierBeatenLocal('sargon', 'giant')) };
+    _set(KEY_SARGON_COMPLETE);   // any-tier "beaten" — kept for node-reveal / narrative gates
+    if (r.grantCard) {
+      // FIRST GIANT win → dominance-respect dialogue + Sargon card + 15 gold.
+      _runGiantWinSequence(locResults);
+    } else if (r.firstTierWin) {
+      // FIRST SERF win → serf-win dialogue + 15 gold (NO card) → serf-win return
+      // (Giant flag pop + Hammurabi reveal + interstitial).
+      _runSerfWinSequence(locResults);
     } else {
-      // Repeat win: VICTORY chime + pop-up (2.5s) → +10 gold acquisition → scoreboard.
+      // Replay of an already-beaten flag → flourish only, ZERO gold (anti-farming).
       _victoryFlourish(function () {
-        _grantGold(GOLD_REPEAT_WIN, function () {
-          _showResultScoreboard(true, false, locResults, {});
-        });
+        _showResultScoreboard(true, false, locResults, {});
       });
     }
   }
@@ -661,6 +752,16 @@ SOG.SargonBattle = (function () {
      returns to the map with the Explorer's reflection. Once Sargon has been
      beaten, a later loss/tie goes straight to the scoreboard with no dialogue. */
   function _onDefeatOrTie(isTie, locResults) {
+    // GIANT REMATCH loss/draw (Giant flag, not yet beaten) → dedicated dialogue, then a
+    // replayable scoreboard. No grant (the gold rules already pay nothing on a loss).
+    if (_flagTier() === 'giant' && !_tierBeatenLocal('sargon', 'giant')) {
+      runLines(isTie ? SARGON_GIANT_DRAW : SARGON_GIANT_LOSS, function () {
+        _showResultScoreboard(false, isTie, locResults, {});
+      });
+      return;
+    }
+    // SERF loss/tie (FRONT-HALF, UNCHANGED): before any win Sargon dismisses the
+    // challenger on the board first, then the scoreboard; afterwards straight to it.
     var beforeWin = !_has(KEY_SARGON_COMPLETE);
     if (beforeWin) {
       runLines(LOSS_SMACK, function () {
@@ -695,13 +796,18 @@ SOG.SargonBattle = (function () {
       _swapOpponentBubblePortrait();
       _disableButtons();
       fadeOutCover(function () {
-        _dialogueActive = true;
-        _runOpeningDialogue(function () {
+        var finish = function () {
           _dialogueActive = false;
           _enableButtons();
           _wireOpponentPortraitClick();
           done();
-        });
+        };
+        _dialogueActive = true;
+        // GIANT rematch → in-battle dominance intro (SARGON_GIANT_INTRO), straight to
+        // play (no rules popup — the player learned the rules in the Serf battle). The
+        // EXISTING Serf opening tutorial (_runOpeningDialogue) is left untouched.
+        if (_isSargonGiantRematch()) { runLines(SARGON_GIANT_INTRO, finish); }
+        else { _runOpeningDialogue(finish); }
       });
     },
 

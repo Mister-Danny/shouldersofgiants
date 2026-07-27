@@ -1230,6 +1230,11 @@
       var cards = Object.keys(byCard).map(function (k) { return byCard[k]; });
       cards.sort(function (a, b) { return b.marginal - a.marginal; });
       var pick = cards[0];
+      // Serf carelessness knob: 15% of the time, ignore the greedy best and pick a
+      // RANDOM affordable card instead. Injects suboptimal plays so the Serf reads as a
+      // little dumber / less predictable. (Placement is already random on turns 1..N-1;
+      // this adds randomness to WHICH card is played.) Bump the 0.15 to tune.
+      if (cards.length > 1 && Math.random() < 0.15) pick = cards[rng(cards.length)];
       // 33% path: stop once the best play no longer improves net IP (may leave capital).
       if (!spendAll && pick.marginal <= 0) break;
 

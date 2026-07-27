@@ -192,6 +192,7 @@
        battle's config and self-clears, so the chosen brain is used for one battle
        only (no leakage into the next). Set by the dev-menu tier launchers.
        window.__forceSerfTier stays as a back-compat alias for the Serf launchers. */
+    var __traceForceTier = window.__forceTier;   // TEMP TRACE: capture before clear
     if (window.__forceTier && cfg.ai) {
       cfg.ai.tier = window.__forceTier;
       window.__forceTier = null;
@@ -200,6 +201,13 @@
       if (cfg.ai) cfg.ai.tier = 'serf';
       window.__forceSerfTier = false;
     }
+
+    /* flagTier — the "flag slot" a win stamps + the tier SOG.rewards gates gold/card on.
+       Tier and flag now ALIGN for every boss (the old Gilgamesh decoupling is removed),
+       so this just tracks ai.tier. window.__forceFlagTier is retained as a general
+       override hook but nothing sets it today → flagTier === ai.tier. Self-clears. */
+    cfg.flagTier = window.__forceFlagTier || (cfg.ai && cfg.ai.tier) || null;
+    window.__forceFlagTier = null;
 
     /* AI profile bridge (Step 5): populate the global the AI read sites (ai.js,
        game.js) already use FROM the config. This is the deliberate minimal
@@ -1633,11 +1641,23 @@
        pending-stamp signal the overworld consumes on the return-to-map to animate the
        new stamp landing. Tier = cfg.ai.tier (the same signal the win-log records). */
     try {
-      var _wtier = (G.config && G.config.ai && G.config.ai.tier) || null;
+      // Flag SLOT (not AI tier) drives the stamp + the SOG.rewards gold/card gate.
+      // Normally flagTier === ai.tier; Gilgamesh's first battle sets flagTier='serf'
+      // while ai.tier='giant' (decoupled — see initGame). Falls back to ai.tier.
+      var _wtier = (G.config && G.config.flagTier)
+                || (G.config && G.config.ai && G.config.ai.tier) || null;
       if (result.outcome === 'player' && G.config && G.config.scriptHook &&
           (_wtier === 'serf' || _wtier === 'giant')) {
-        localStorage.setItem('sog_node_' + G.config.scriptHook + '_' + _wtier + '_beaten', 'true');
-        window.__pendingStamp = { hook: G.config.scriptHook, tier: _wtier };   // consumed by overworld render
+        var _bkey = 'sog_node_' + G.config.scriptHook + '_' + _wtier + '_beaten';
+        // Snapshot the PRIOR beaten state BEFORE stamping it — this is the win-reward
+        // gate (SOG.rewards.consume): first-tier-win pays gold, a replay pays zero.
+        // Once stamped below, the flag reads true for every later read, so the boss's
+        // onWin (which fires after this) can't recover "was this the first time".
+        var _wasBeaten = false;
+        try { _wasBeaten = localStorage.getItem(_bkey) === 'true'; } catch (e) {}
+        localStorage.setItem(_bkey, 'true');
+        window.__pendingStamp  = { hook: G.config.scriptHook, tier: _wtier };   // consumed by overworld render
+        window.__pendingReward = { hook: G.config.scriptHook, tier: _wtier, firstTierWin: !_wasBeaten };  // consumed by boss onWin
       }
     } catch (e) {}
 

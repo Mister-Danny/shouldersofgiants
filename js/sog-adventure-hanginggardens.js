@@ -33,8 +33,8 @@ SOG.HangingGardensBattle = (function () {
 
   // ── Stage 5 reward knobs (mirror Hammurabi/Sargon). Editable. ──
   var NEB_CARD_ID     = 50;    // first-win reward (the Nebuchadnezzar card)
-  var GOLD_FIRST_WIN  = 25;    // gold on first win
-  var GOLD_REPEAT_WIN = 10;    // gold on a repeat win
+  var GOLD_FIRST_WIN  = 15;    // two-tier economy: 15 gold on the FIRST win of a tier (serf OR giant)
+  var GOLD_REPEAT_WIN = 0;     // replays of an already-beaten tier pay nothing (anti-farming)
   var RESULT_ID       = 'adv-nebuchadnezzar-result';
   var SHOW_RESULTS_ID = 'adv-nebuchadnezzar-show-results';
   var OPP_NAME        = 'Nebuchadnezzar';   // scoreboard opponent score label
@@ -379,18 +379,27 @@ SOG.HangingGardensBattle = (function () {
        • Repeat win → VICTORY flourish → +10 gold → 3-button scoreboard.
        • Loss / tie → 3-button scoreboard (standard retry; no intervention). */
   function _onWin(locResults) {
-    var firstWin = !_has(KEY_HG_COMPLETE);   // capture BEFORE setting the flag
-    _set(KEY_HG_COMPLETE);
-    if (firstWin) {
-      // First win: victory dialogue + card acquisition + gold play FIRST, then the
-      // VICTORY scoreboard appears (CONTINUE → exit to map).
+    // Two-tier reward gate (SOG.rewards): 15 gold on the FIRST win of a tier, the
+    // Nebuchadnezzar card on the FIRST GIANT win, zero on any replay.
+    var r = (window.SOG && SOG.rewards)
+          ? SOG.rewards.consume('hanging-gardens')
+          : { firstTierWin: !_has(KEY_HG_COMPLETE), gold: GOLD_FIRST_WIN, grantCard: !_has(KEY_HG_COMPLETE) };
+    _set(KEY_HG_COMPLETE);   // any-tier "beaten" — kept for node-reveal / narrative gates
+    if (r.grantCard) {
+      // FIRST GIANT win: victory dialogue + card 50 acquisition + 15 gold FIRST,
+      // then the VICTORY scoreboard (CONTINUE → exit to map).
       _runFirstWinSequence(locResults);
-    } else {
-      // Repeat win: skip the full story beat → flourish → +10 gold → scoreboard.
+    } else if (r.firstTierWin) {
+      // FIRST SERF win → flourish → +15 gold, NO card (it waits on the Giant).
       _victoryFlourish(function () {
-        _grantGold(GOLD_REPEAT_WIN, function () {
+        _grantGold(GOLD_FIRST_WIN, function () {
           _showResultScoreboard(true, false, locResults, {});
         });
+      });
+    } else {
+      // Replay of an already-beaten tier → flourish only, ZERO gold (anti-farming).
+      _victoryFlourish(function () {
+        _showResultScoreboard(true, false, locResults, {});
       });
     }
   }

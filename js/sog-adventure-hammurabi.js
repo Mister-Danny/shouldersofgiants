@@ -156,8 +156,8 @@ SOG.HammurabiBattle = (function () {
      animations and the in-battle dialogue runner — no new mechanisms.
      Gold: 25 first win / 10 repeat. Card 47 is the first-win reward. */
   var HAMMURABI_CARD_ID = 47;
-  var GOLD_FIRST_WIN    = 25;
-  var GOLD_REPEAT_WIN   = 10;
+  var GOLD_FIRST_WIN    = 15;   // two-tier economy: 15 gold on the FIRST win of a tier (serf OR giant)
+  var GOLD_REPEAT_WIN   = 0;    // replays of an already-beaten tier pay nothing (anti-farming)
 
   /* Post-game dialogue (Hammurabi speaks through the shared opponent bubble, its
      portrait swapped to Hammurabi; same runner/bubbles as the opening). Editable. */
@@ -412,15 +412,26 @@ SOG.HammurabiBattle = (function () {
        • Repeat win → VICTORY flourish → +10 gold → 3-button scoreboard.
        • Loss / tie → 3-button scoreboard (standard retry; no intervention). */
   function _onWin(locResults) {
-    var firstWin = !_has(KEY_HAMMURABI_COMPLETE);   // capture BEFORE setting the flag
-    _set(KEY_HAMMURABI_COMPLETE);
-    if (firstWin) {
+    // Two-tier reward gate (SOG.rewards): 15 gold on the FIRST win of a tier, the
+    // Hammurabi card on the FIRST GIANT win, zero on any replay.
+    var r = (window.SOG && SOG.rewards)
+          ? SOG.rewards.consume('hammurabi')
+          : { firstTierWin: !_has(KEY_HAMMURABI_COMPLETE), gold: GOLD_FIRST_WIN, grantCard: !_has(KEY_HAMMURABI_COMPLETE) };
+    _set(KEY_HAMMURABI_COMPLETE);   // any-tier "beaten" — kept for node-reveal / narrative gates
+    if (r.grantCard) {
+      // FIRST GIANT win → first-win scoreboard (CONTINUE → card 47 + 15 gold → exit).
       _showResultScoreboard(true, false, locResults, { firstWin: true });
-    } else {
+    } else if (r.firstTierWin) {
+      // FIRST SERF win → flourish → +15 gold, NO card (it waits on the Giant).
       _victoryFlourish(function () {
-        _grantGold(GOLD_REPEAT_WIN, function () {
+        _grantGold(GOLD_FIRST_WIN, function () {
           _showResultScoreboard(true, false, locResults, {});
         });
+      });
+    } else {
+      // Replay of an already-beaten tier → flourish only, ZERO gold (anti-farming).
+      _victoryFlourish(function () {
+        _showResultScoreboard(true, false, locResults, {});
       });
     }
   }

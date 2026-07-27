@@ -327,7 +327,11 @@ SOG.DevMenu = (function () {
           'sog_deckbuilder_unlocked',
           'sog_market_first_visit_done',
           'sog_market_intro_seen',
-          'sog_node_encountered_gilgamesh'   // difficulty-picker stamp → re-runs the FIRST encounter (not the picker)
+          'sog_node_encountered_gilgamesh',   // difficulty-picker stamp → re-runs the FIRST encounter (not the picker)
+          'sog_node_gilgamesh_serf_beaten',   // flag/stamp: unstamp the Serf flag
+          'sog_node_gilgamesh_giant_beaten',  // flag/stamp: unstamp + re-hide the Giant flag (shows Serf-only again)
+          'sog_first_market_interstitial_seen', // re-play the first-market "building a collection" beat
+          'sog_sargon_node_revealed'          // re-hide Sargon (reveal now fires on the Gilgamesh Giant win)
         ]);
         // Relock the Gilgamesh card (43) too — the acquisition animation only plays
         // on a NEW unlock, so leaving 43 owned would silently skip it on the re-win.

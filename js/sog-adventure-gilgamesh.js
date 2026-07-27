@@ -606,45 +606,145 @@ SOG.GilgameshBattle = (function () {
   var GILGAMESH_LOSS_SMACK = [
     { who: 'otzi',     text: 'Muahaha...' },
     { who: 'explorer', text: 'I never had a chance.' },
-    { who: 'otzi',     text: 'What did you expect in my city-state?' },
-    { who: 'explorer', text: "Your cards were too strong. Everything I've learned so far... it wasn't enough." }
+    { who: 'otzi',     text: 'What did you expect in my city-state?' }
   ];
 
-  // True if THIS win is the player's first-ever Gilgamesh win. Captured in
-  // _routePostBattle BEFORE the completion flag is set, then read by the gold
-  // reward in _runPostVictorySequence (first win = 25 gold, repeat win = 10).
-  var _gWinWasFirstTime = false;
+  /* ══════════════════════════════════════════════════════════════════════════
+     GILGAMESH ARC — BACK HALF (post-first-win). All dialogue is editable here.
+     who: 'otzi' = Gilgamesh's in-battle portrait; 'explorer' = the player.
+     Acquisition animations fire INLINE at the marked beats (see the sequences
+     below), NOT before/after the whole block.
+  ══════════════════════════════════════════════════════════════════════════ */
+
+  // BLOCK 1 — post-first-win "fluke" (fires after the FIRST Gilgamesh win, whether
+  // won outright or via the Cuneiform comeback). Grants 15 gold at the "Here." beat,
+  // NO card. Split around the gold-acquisition animation.
+  var GILGAMESH_FLUKE_A = [
+    { who: 'otzi',     text: 'What?! A wanderer in a silly hat bested me?' },
+    { who: 'explorer', text: 'Hey! I like my hat.' },
+    { who: 'otzi',     text: 'Suppose underestimating you was my downfall.' },
+    { who: 'otzi',     text: 'Here.' }
+    // → [GOLD ACQUISITION — 15]
+  ];
+  var GILGAMESH_FLUKE_B = [
+    { who: 'otzi',     text: 'Take it to the market and buy yourself a real deck.' },
+    { who: 'otzi',     text: "You'll need it for your return." },
+    { who: 'otzi',     text: 'To face a true Giant.' }
+  ];
+
+  // BLOCK 2 — rematch intro (IN-BATTLE, before the Giant rematch; onBattleStart).
+  var GILGAMESH_REMATCH_INTRO = [
+    { who: 'otzi',     text: 'So. You came back.' },
+    { who: 'explorer', text: 'I thought it the polite thing to do.' },
+    { who: 'otzi',     text: 'No flukes now, wanderer.' },
+    { who: 'otzi',     text: 'Witness the strength that built this city.' }
+  ];
+
+  // BLOCK 3 — rematch WIN. Grants the Gilgamesh card THEN 15 gold at the "Take this."
+  // beat. Split around the card→gold acquisition animations.
+  var GILGAMESH_REMATCH_WIN_A = [
+    { who: 'otzi',     text: 'You have done it again.' },
+    { who: 'otzi',     text: 'You fought as an equal.' },
+    { who: 'explorer', text: 'My teacher says I exceed standards.' },
+    { who: 'otzi',     text: 'You earned this.' }
+    // → [CARD ACQUISITION — Gilgamesh] THEN [GOLD ACQUISITION — 15]
+  ];
+  var GILGAMESH_REMATCH_WIN_B = [
+    { who: 'otzi',     text: 'Carry it. Along with my respect.' }
+  ];
+
+  // BLOCK 4 — rematch LOSS (dismissive → back to map, retry; no grant).
+  var GILGAMESH_REMATCH_LOSS = [
+    { who: 'otzi',     text: 'There.' },
+    { who: 'otzi',     text: 'I knew you were a fluke of history.' },
+    { who: 'otzi',     text: 'Come back when you can truly fight…' },
+    { who: 'otzi',     text: 'If you dare.' }
+  ];
+
+  // BLOCK 5 — rematch DRAW (surprised, but a draw is not a win → play again; no grant).
+  var GILGAMESH_REMATCH_DRAW = [
+    { who: 'otzi',     text: 'A draw? You held against me?' },
+    { who: 'otzi',     text: '…Impressive. But a draw is not a victory, wanderer.' },
+    { who: 'otzi',     text: 'We fight again.' }
+  ];
+
+  /* Read a persisted tier-beaten flag (game.js stamps sog_node_<hook>_<tier>_beaten
+     on a win). Used to tell the Giant REMATCH stage apart from a later Giant replay. */
+  function _tierBeatenLocal(hook, tier) {
+    try { return localStorage.getItem('sog_node_' + hook + '_' + tier + '_beaten') === 'true'; }
+    catch (e) { return false; }
+  }
+  /* The current battle is the Giant REMATCH: the first win is banked
+     (KEY_BATTLE_GILGAMESH_COMPLETE) but the Giant flag isn't beaten yet. Drives the
+     in-battle dominance intro (BLOCK 2) in onBattleStart. */
+  function _isGilgameshRematch() {
+    return _has(KEY_BATTLE_GILGAMESH_COMPLETE) && !_tierBeatenLocal('gilgamesh', 'giant');
+  }
+
+  // Stashed for the CONTINUE-driven post-win sequence (which runs AFTER
+  // _routePostBattle returns): the reward SOG.rewards.consume() decided (gold amount,
+  // grantCard) and the flag slot this battle occupied (serf = first "fluke" battle,
+  // giant = rematch). SOG.rewards.consume is one-shot, so the values must be captured
+  // here at outcome time and read later by the sequence the scoreboard's CONTINUE runs.
+  var _gWinReward   = null;
+  var _gWinFlagTier = 'giant';
+  var _gLastLocResults = null;   // locResults for the post-dialogue scoreboard (dialogue-first flow)
 
   function _routePostBattle(won, isTie, locResults) {
-    // The FIRST win/loss keep their full narrative; once Gilgamesh has been
-    // beaten, every later battle is streamlined (no post-game dialogue):
-    //   • repeat win  → +10 gold animation → Play Again / Gameboard / Back To Map.
-    //   • repeat loss → straight to that same scoreboard.
-    var alreadyBeaten = _has(KEY_BATTLE_GILGAMESH_COMPLETE);
+    // Flag slot of THIS battle. Tier and flag ALIGN now (no decoupling) — flagTier
+    // defaults to ai.tier — so:
+    //   serf  → the first / Cuneiform-comeback battle — the "fluke" win (gold, NO card).
+    //   giant → the Giant rematch — the card win.
+    // The game state lives at SOG.state.G — there is no window.G global, so a
+    // window.G read is always undefined and would silently default to 'serf'.
+    var _G = (window.SOG && SOG.state && SOG.state.G) || null;
+    var flagTier = (_G && _G.config && (_G.config.flagTier
+                || (_G.config.ai && _G.config.ai.tier))) || 'serf';
+    var giantBeatenB4 = _tierBeatenLocal('gilgamesh', 'giant');     // rematch already cleared?
+
     if (won) {
-      _gWinWasFirstTime = !alreadyBeaten;   // capture BEFORE setting the flag
+      // Reward gate keys off the FLAG slot (SOG.rewards): first SERF win → 15 gold,
+      // NO card (fluke); first GIANT win → 15 gold + the Gilgamesh card (rematch);
+      // a replay of an already-beaten flag → 0 gold.
+      var r = (window.SOG && SOG.rewards)
+            ? SOG.rewards.consume('gilgamesh')
+            : { firstTierWin: !giantBeatenB4, gold: 15, grantCard: (flagTier === 'giant' && !giantBeatenB4) };
+      // The endGame reward snapshot carries the flag slot it stamped — authoritative
+      // over any config read (belt-and-suspenders against future state teardown).
+      if (r && r.tier) flagTier = r.tier;
+      _gWinReward   = r;
+      _gWinFlagTier = flagTier;
       try { localStorage.setItem(KEY_PHASE1_COMPLETE, 'true'); } catch (e) {}
       try { localStorage.setItem(KEY_BATTLE_GILGAMESH_COMPLETE, 'true'); } catch (e) {}
-      if (_gWinWasFirstTime) {
-        _showResultPopup(true, locResults);   // CONTINUE → _runPostVictorySequence
+      if (r.firstTierWin) {
+        // DIALOGUE-FIRST: the battle music has faded (endGame) — go straight into the win
+        // sequence (dialogue + inline acquisitions), THEN the 2-button scoreboard
+        // (Continue / Game Board) pops; Continue exits to the overworld.
+        _gLastLocResults = locResults;   // stashed for the scoreboard shown after the dialogue
+        _runPostVictorySequence();       // dispatcher → fluke (Serf) / rematch-win (Giant)
       } else {
-        // Repeat win: VICTORY chime + pop-up (2.5s) → +10 gold acquisition →
-        // the streamlined scoreboard.
+        // Replay of an already-beaten flag → flourish, ZERO gold (anti-farming).
         _victoryFlourish(function () {
-          _grantRepeatWinGold(function () {
-            _showResultPopup(true, locResults, { repeat: true });
-          });
+          _showResultPopup(true, locResults, { repeat: true });
         });
       }
-    } else if (alreadyBeaten) {
-      // Loss after the initial victory: straight to the scoreboard (no smack-talk).
-      _showResultPopup(false, locResults, { repeat: true });
-    } else {
-      // First-encounter loss: Gilgamesh smack-talk on the board, THEN the DEFEAT
-      // scoreboard (PLAY AGAIN → Cuneiform intervention).
+    } else if (flagTier === 'giant' && !giantBeatenB4) {
+      // GIANT REMATCH loss/draw (fluke won, Giant not yet beaten): the dominance dialogue
+      // plays, then back to the map to retry (BLOCK 4/5 use the 3-button scoreboard). No
+      // grant — losses pay nothing; the first Giant WIN grants the gold + card.
+      if (isTie) _runRematchDrawSequence(locResults);   // BLOCK 5 — a draw is not a win
+      else       _runRematchLossSequence(locResults);   // BLOCK 4 — dismissive, retry
+    } else if (!_tierBeatenLocal('gilgamesh', 'serf')) {
+      // PRE-FLUKE-WIN loss (Serf battle, FRONT HALF): Gilgamesh smack-talk, THEN the
+      // 2-button DEFEAT scoreboard (PLAY AGAIN → Cuneiform intervention). NO Back To Map
+      // — the player must retry, not wander off. Keyed on the SERF flag (not the legacy
+      // completion flag) so a stale save can't leak a Back To Map button here.
       runLines(GILGAMESH_LOSS_SMACK, function () {
         _showResultPopup(false, locResults);
       });
+    } else {
+      // Post-arc loss/tie (fluke won; not the Giant rematch) → plain 3-button scoreboard.
+      _showResultPopup(false, locResults, { repeat: true });
     }
   }
 
@@ -674,11 +774,15 @@ SOG.GilgameshBattle = (function () {
     }, 2500);
   }
 
-  /* Repeat-win gold: bank +10, refresh the HUD number, play the coin animation. */
-  function _grantRepeatWinGold(done) {
-    if (window.SOG && SOG.gold && typeof SOG.gold.add === 'function') SOG.gold.add(10);
-    if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshGold === 'function') SOG.HUD.refreshGold();
-    _runGoldRewardAnimation(10, function () { if (done) done(); });
+  /* Win gold: bank `amount`, refresh the HUD number, play the coin animation. A
+     zero amount (replay of an already-beaten tier) skips straight to `done` with no
+     coin drop. */
+  function _grantWinGold(amount, done) {
+    if (amount > 0) {
+      if (window.SOG && SOG.gold && typeof SOG.gold.add === 'function') SOG.gold.add(amount);
+      if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshGold === 'function') SOG.HUD.refreshGold();
+      _runGoldRewardAnimation(amount, function () { if (done) done(); });
+    } else if (done) { done(); }
   }
 
   /* Grant Cuneiform: idempotent flag + unlock + acquisition reveal. */
@@ -765,56 +869,74 @@ SOG.GilgameshBattle = (function () {
     }, 1900);
   }
 
-  /* ── Post-victory reward sequence (one-and-done win) ──────────────
-     CONTINUE on the victory scoreboard runs this on the battle screen:
-       win dialogue → Gilgamesh-card acquisition (43) → [gold reward, part 4]
-       → closing dialogue → [Mesopotamian Marketplace transition, part 4].
-     The old rematch machinery (5-card grant, Enkidu reveal, deck-builder
-     hand-off) is retired — Enkidu now just lives in Gilgamesh's deck. */
+  /* ── Post-WIN dispatcher (CONTINUE on the victory scoreboard) ─────────────
+     Routes by the flag slot this battle occupied:
+       serf  → BLOCK 1 fluke sequence (15 gold, NO card).
+       giant → BLOCK 3 rematch-win sequence (Gilgamesh card + 15 gold). */
   function _runPostVictorySequence() {
-    runLines([
-      { who: 'explorer', text: 'I DID IT!' },
-      { who: 'otzi',     text: 'How is that possible?' },
-      { who: 'explorer', text: 'I learned from history.' },
-      { who: 'otzi',     text: "By doing so, you've earned this." }
-    ], function () {
-      // (a) Win reward: grant the Gilgamesh card (43) with the acquisition animation.
-      _grantGilgameshCard(function () {
-        // (b) Gold reward — first win = 25, repeat = 10 (per _gWinWasFirstTime,
-        // captured before the win flag was set). Bank it, refresh the HUD gold
-        // number, play the coin animation, then continue. Gold lives only on the
-        // Gilgamesh win path; Prehistory/Otzi/Arcadium award none.
-        var grantGoldThenFinish = function () {
-          var goldAmount = _gWinWasFirstTime ? 25 : 10;
-          if (window.SOG && SOG.gold) SOG.gold.add(goldAmount);
-          if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshGold === 'function') SOG.HUD.refreshGold();
-          _runGoldRewardAnimation(goldAmount, function () {
-          runLines([
-            { who: 'explorer', text: 'Wow!' },
-            { who: 'otzi',     text: 'See what you can get yourself at the Mesopotamian Marketplace.' },
-            { who: 'explorer', text: "Thank you! You're such a gracious king." },
-            { who: 'otzi',     text: "Until the next time..." }
-          ], function () {
-            // The win dialogue (above) teases the Marketplace; now fade to the
-            // Mesopotamia map at Uruk and reveal the market node. The player
-            // walks into it on their own when ready — no auto-walk. (The market
-            // SCREEN itself is a placeholder until next session — see overworld
-            // _enterMarket's TODO.)
-            _returnToMesopotamiaMarket();
+    if (_gWinFlagTier === 'serf') _runFirstWinFlukeSequence();
+    else                          _runRematchWinSequence();
+  }
+
+  /* Post-win scoreboard shown AFTER the dialogue + acquisitions (dialogue-first flow):
+     VICTORY headline, only CONTINUE + GAME BOARD; CONTINUE exits to the overworld. */
+  function _showPostWinScoreboard() {
+    _showResultPopup(true, _gLastLocResults, { onContinue: _returnToMesopotamiaMarket });
+  }
+
+  /* FIRST WIN — the "fluke". [source: BLOCK 1 → GILGAMESH_FLUKE_A / _B]
+       BLOCK 1 part A → [Cuneiform fluke-guard] → GOLD (15) at the "Here." beat →
+       BLOCK 1 part B → return to map (Serf stamp, Giant flag pops, Market appears).
+     NO card here — the card is the REMATCH reward. */
+  function _runFirstWinFlukeSequence() {
+    runLines(GILGAMESH_FLUKE_A, function () {
+      // After BLOCK 1 part A ("…Here."), grant the 15 gold, then part B, then return.
+      var goldThenClose = function () {
+        _grantWinGold(_gWinReward ? _gWinReward.gold : 15, function () {   // 15 gold, NO card
+          runLines(GILGAMESH_FLUKE_B, function () {
+            // Signal returnFromGilgameshWin to ERECT the Giant flag on this return
+            // (the Serf flag was just beaten → the Giant flag now exists to reveal).
+            window.__pendingFlagReveal = { hook: 'gilgamesh', tier: 'giant' };
+            _showPostWinScoreboard();   // scoreboard AFTER the dialogue; CONTINUE → return to map
           });
-          });   // _runGoldRewardAnimation callback
-        };
-        // (a.5) FLUKE-WIN guard: a player who beat Gilgamesh on the first try
-        // (never lost) never received the candle-intervention Cuneiform. If they
-        // still don't own Cuneiform (46) at win time, grant it HERE — between the
-        // Gilgamesh-card and gold grants — using the SAME acquisition animation
-        // (_grantCuneiform). Normal-path players already own it, so this is a no-op
-        // and they get Gilgamesh + gold exactly as before.
-        var ownsCuneiform = !!(window.SOG && SOG.Cards &&
-          typeof SOG.Cards.isUnlocked === 'function' && SOG.Cards.isUnlocked(46));
-        if (ownsCuneiform) { grantGoldThenFinish(); }
-        else { _grantCuneiform(grantGoldThenFinish); }
+        });
+      };
+      // FLUKE-WIN guard: a player who beat Gilgamesh on the first try (never lost)
+      // never received the candle-intervention Cuneiform. Grant it now (idempotent
+      // no-op for normal-path players who already own it), THEN the gold.
+      var ownsCuneiform = !!(window.SOG && SOG.Cards &&
+        typeof SOG.Cards.isUnlocked === 'function' && SOG.Cards.isUnlocked(46));
+      if (ownsCuneiform) goldThenClose();
+      else _grantCuneiform(goldThenClose);
+    });
+  }
+
+  /* REMATCH WIN — deferential respect + the card. [source: BLOCK 3 → GILGAMESH_REMATCH_WIN_A / _B]
+       BLOCK 3 part A → CARD acquisition THEN GOLD (15) at the "Take this." beat →
+       BLOCK 3 part B → return to map (Giant flag stamps). */
+  function _runRematchWinSequence() {
+    runLines(GILGAMESH_REMATCH_WIN_A, function () {
+      _grantGilgameshCard(function () {                                    // card first
+        _grantWinGold(_gWinReward ? _gWinReward.gold : 15, function () {   // then 15 gold
+          runLines(GILGAMESH_REMATCH_WIN_B, function () {
+            _showPostWinScoreboard();   // scoreboard AFTER the dialogue; CONTINUE → return to map
+          });
+        });
       });
+    });
+  }
+
+  /* REMATCH LOSS — dismissive, back to map to retry. [source: BLOCK 4 → GILGAMESH_REMATCH_LOSS] */
+  function _runRematchLossSequence(locResults) {
+    runLines(GILGAMESH_REMATCH_LOSS, function () {
+      _showResultPopup(false, locResults, { repeat: true });   // PLAY AGAIN / GAMEBOARD / BACK TO MAP
+    });
+  }
+
+  /* REMATCH DRAW — "a draw is not a victory", must play again. [source: BLOCK 5 → GILGAMESH_REMATCH_DRAW] */
+  function _runRematchDrawSequence(locResults) {
+    runLines(GILGAMESH_REMATCH_DRAW, function () {
+      _showResultPopup(false, locResults, { repeat: true });
     });
   }
 
@@ -906,9 +1028,10 @@ SOG.GilgameshBattle = (function () {
       actions.appendChild(mkBtn('GAMEBOARD',   function () { _hideResultForReview(); }));
       actions.appendChild(mkBtn(won ? 'CONTINUE' : 'BACK TO MAP', function () { _removeResultPopup(); _exitToOverworld(); }));
     } else if (won) {
-      // First victory → the post-victory reward sequence (Gilgamesh-card grant +
-      // closing dialogue; gold + market in part 4).
-      actions.appendChild(mkBtn('CONTINUE', function () { _removeResultPopup(); _runPostVictorySequence(); }));
+      // Post-win scoreboard. Dialogue-first flow passes opts.onContinue = exit-to-map
+      // (the dialogue + acquisitions already ran). CONTINUE runs it; GAME BOARD reviews.
+      var _cont = opts.onContinue || _runPostVictorySequence;
+      actions.appendChild(mkBtn('CONTINUE', function () { _removeResultPopup(); _cont(); }));
       // Game Board: hide the scoreboard to review the final board; a floating
       // "Show Results" button brings it back so Continue stays reachable.
       actions.appendChild(mkBtn('GAME BOARD', function () { _hideResultForReview(); }));
@@ -949,7 +1072,7 @@ SOG.GilgameshBattle = (function () {
     { who: 'explorer', text: 'Oh, how does it work?' },
     { who: 'farmer',   text: 'You should read it, obviously.' },
     { who: 'explorer', text: 'Oh, right.' },
-    { who: 'farmer',   text: 'But in effect, it will empower those old prehistoric cards you have.' },
+    { who: 'farmer',   text: 'In effect, it will empower those old prehistoric cards you have.' },
     { who: 'explorer', text: 'Thank you.' },
     { who: 'farmer',   text: "Don't mention it." },
     { who: 'farmer',   text: "Seriously, he'll kill me." }
@@ -1066,6 +1189,9 @@ SOG.GilgameshBattle = (function () {
 
   function _restartBattle() {
     window._sogSuppressMapMusic = false;   // safety: never leave map music suppressed
+    // No tier-baking needed: start() → buildGilgameshConfig() derives the tier from
+    // state (Serf until the Serf flag is beaten, then Giant), so the retry always
+    // rebuilds the correct tier + flag. (Tier/flag decoupling is gone.)
     teardown();   // engine owns the End Turn / Reset buttons now
     if (typeof SOG !== 'undefined' && SOG.GilgameshBattle) SOG.GilgameshBattle.start();
   }
@@ -1245,6 +1371,12 @@ SOG.GilgameshBattle = (function () {
       playerDeck = { source: 'explicit', ids: pIds, shuffle: true };
     }
     var aiDeck     = { source: 'explicit', ids: GILGAMESH_AI_IDS.concat([ENKIDU_ID]), shuffle: true };
+    // Tier = flag slot, derived from STATE (no decoupling): Serf until the Serf flag is
+    // beaten (first battle + the Cuneiform comeback all run Serf), then Giant for the
+    // rematch. Deriving here — rather than defaulting to 'giant' — means every entry
+    // path is correct WITHOUT tier-baking hacks: the node-click sets __forceTier to the
+    // same value, and _restartBattle (which just calls start()) rebuilds the right tier.
+    var _aiTier = _tierBeatenLocal('gilgamesh', 'serf') ? 'giant' : 'serf';
     return {
       structure: { turns: 4, locationsCount: 3, slotsPerLocation: 4, handStart: 4, maxHandSize: 4, cardsPerTurn: 2 },
       resource:  { model: 'none', capital: 0 },               // cost-free
@@ -1252,11 +1384,11 @@ SOG.GilgameshBattle = (function () {
       decks:     { player: playerDeck, ai: aiDeck },
       locationAbilities: { select: { mode: 'explicit', locations: _gilgameshLocations() } },
       scoring:   { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },  // exact-IP tie → onTie (tie-as-loss)
-      // Two-tier AI: default to the GIANT brain (Serf + shared upgrades + the
-      // 'gilgamesh' signature, looked up by scriptHook in ai.js). The bespoke
-      // gilgameshSelectPlays stays as the untiered fallback; a dev-menu launcher
-      // can force 'serf' or 'giant' for A/B playtesting (window.__forceTier).
-      ai:        { profile: 'heuristic', tier: 'giant', movement: 'adventure', settings: { selectPlays: gilgameshSelectPlays } },
+      // Two-tier AI, tier derived from state (_aiTier above): SERF for the first battle
+      // + Cuneiform comeback, GIANT for the rematch. Looked up by scriptHook in ai.js;
+      // gilgameshSelectPlays stays as the untiered fallback. A dev-menu launcher can
+      // still force a tier via window.__forceTier (which initGame applies over this).
+      ai:        { profile: 'heuristic', tier: _aiTier, movement: 'adventure', settings: { selectPlays: gilgameshSelectPlays } },
       presentation: {
         bodyClass:        'gilgamesh-battle',                  // Mesopotamia location art
         bodyClassExtra:   'otzi-battle',                       // shared adventure-battle styling
@@ -1321,6 +1453,17 @@ SOG.GilgameshBattle = (function () {
       fadeOutCover(function () {
         dealCards(function () {
           var finishStart = function () { _wireOpponentPortraitClick(); done(); };
+          // GIANT REMATCH → in-battle dominance intro (BLOCK 2), then straight to
+          // play. No portrait pause / rules popup (the player learned the rules in
+          // battle 1). Takes precedence over the opening-skip check below.
+          if (_isGilgameshRematch()) {
+            _gScriptDialogueActive = true;
+            runLines(GILGAMESH_REMATCH_INTRO, function () {
+              _gScriptDialogueActive = false;
+              finishStart();
+            });
+            return;
+          }
           if (_gBattleSkippedOpening) { finishStart(); return; }
           _gScriptDialogueActive = true;
           _runOpeningDialogue(function () {   // 5 lines → portrait pause → rules popup → "Thank you"
