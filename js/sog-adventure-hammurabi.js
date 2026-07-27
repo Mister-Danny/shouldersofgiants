@@ -160,22 +160,9 @@ SOG.HammurabiBattle = (function () {
   var GOLD_REPEAT_WIN   = 0;    // replays of an already-beaten tier pay nothing (anti-farming)
 
   /* Post-game dialogue (Hammurabi speaks through the shared opponent bubble, its
-     portrait swapped to Hammurabi; same runner/bubbles as the opening). Editable. */
-  // First-win victory exchange — his reaction to losing the "trial"; the last line
-  // ("…entered into the record") pairs with granting card 47 right after.
-  var WIN_DIALOGUE = [
-    { who: 'hammurabi', text: 'Impossible.' },
-    { who: 'hammurabi', text: 'The law was clearly on my side.' },
-    { who: 'explorer',  text: 'I read every rule on the board. Twice.' },
-    { who: 'hammurabi', text: 'If you have won, then the law must recognize it.' },
-    { who: 'hammurabi', text: 'Take this.' },
-    { who: 'hammurabi', text: 'Let it be entered into the record.' }
-  ];
-  // First-win sendoff — plays after the card + gold are granted.
-  var WIN_DIALOGUE_CLOSER = [
-    { who: 'hammurabi', text: 'You have been found innocent.' },
-    { who: 'hammurabi', text: 'For now.' }
-  ];
+     portrait swapped to Hammurabi; same runner/bubbles as the opening). Editable.
+     The WIN beats live in the two-tier block below (HAMMURABI_SERF_WIN_* /
+     HAMMURABI_GIANT_WIN_*); only the pre-win loss/tie exchanges are here. */
   // Pre-victory loss exchange — plays before the defeat scoreboard.
   var LOSS_DIALOGUE = [
     { who: 'hammurabi', text: 'The verdict stands.' },
@@ -191,6 +178,81 @@ SOG.HammurabiBattle = (function () {
     { who: 'hammurabi', text: 'We will try this again' },
     { who: 'hammurabi', text: 'Until judgment is clear.' }
   ];
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     HAMMURABI TWO-TIER TEMPLATE — follows the SARGON pattern exactly:
+       existing intro (untouched) → SERF WIN → interstitial (overworld) →
+       GIANT rematch intro (in-battle) → GIANT win / loss / draw.
+     who: 'hammurabi' = his portrait through the shared opponent bubble;
+     'explorer' = the player. Acquisition animations fire INLINE at the marked
+     beats (see the sequences below), not before/after the whole block.
+     [source: sog-adventure-hammurabi.js → the constants in this block]
+  ══════════════════════════════════════════════════════════════════════════ */
+
+  // SERF WIN — grants 15 gold at the "restitution" beat, NO card. Split around the gold.
+  var HAMMURABI_SERF_WIN_A = [
+    { who: 'hammurabi', text: 'The verdict was in. And yet you overturned it.' },
+    { who: 'explorer',  text: 'Is that a good thing?' },
+    { who: 'hammurabi', text: 'You have been found innocent.' },
+    { who: 'explorer',  text: 'That sounds good.' },
+    { who: 'hammurabi', text: 'For now.' },
+    { who: 'hammurabi', text: 'Here is your restitution.' }
+    // → [GOLD — 15]
+  ];
+  var HAMMURABI_SERF_WIN_B = [
+    { who: 'hammurabi', text: 'But one ruling does not settle the case.' },
+    { who: 'hammurabi', text: 'Return, and I will try you by the full weight of the law.' }
+  ];
+
+  // GIANT REMATCH INTRO — in-battle, before the Giant rematch (onBattleStart).
+  var HAMMURABI_GIANT_INTRO = [
+    { who: 'hammurabi', text: 'The defendant returns.' },
+    { who: 'explorer',  text: 'I brought my winning smile.' },
+    { who: 'hammurabi', text: 'This does not please the court.' },
+    { who: 'hammurabi', text: 'Prepare for judgment to be rendered.' }
+  ];
+
+  // GIANT WIN — grants the Hammurabi card THEN 15 gold at the "set in stone" beat.
+  var HAMMURABI_GIANT_WIN_A = [
+    { who: 'hammurabi', text: 'The law has spoken. And it speaks in your favor.' },
+    { who: 'explorer',  text: 'And…' },
+    { who: 'hammurabi', text: 'And it speaks in your favor.' },
+    { who: 'explorer',  text: 'Yay! I love favors! What do I get?' },
+    { who: 'hammurabi', text: 'The Code, set in stone.' }
+    // → [CARD — Hammurabi 47] THEN [GOLD — 15]
+  ];
+  var HAMMURABI_GIANT_WIN_B = [
+    { who: 'explorer',  text: "I was hoping for a ticket home, but I'll take it." },
+    { who: 'hammurabi', text: 'Carry the law, wanderer. Few are fit to.' }
+  ];
+
+  // GIANT LOSS — dismissive, replayable (no grant).
+  var HAMMURABI_GIANT_LOSS = [
+    { who: 'hammurabi', text: 'The verdict stands. You are found wanting.' },
+    { who: 'explorer',  text: 'But my only want is to get home.' },
+    { who: 'hammurabi', text: 'The law does not bend for the unworthy.' },
+    { who: 'hammurabi', text: 'Appeal when you are ready to be judged again.' }
+  ];
+
+  // GIANT DRAW — a stalemate is not a win, replayable (no grant).
+  var HAMMURABI_GIANT_DRAW = [
+    { who: 'hammurabi', text: 'A hung verdict. Neither guilty nor acquitted.' },
+    { who: 'hammurabi', text: 'We will reconvene.' }
+  ];
+
+  /* The flag slot of the current battle (aligned with AI tier — no decoupling).
+     The game state lives at SOG.state.G — there is no window.G global, so a
+     window.G read is always undefined and would silently default to 'serf'. */
+  function _flagTier() {
+    var _G = (window.SOG && SOG.state && SOG.state.G) || null;
+    return (_G && _G.config && (_G.config.flagTier
+        || (_G.config.ai && _G.config.ai.tier))) || 'serf';
+  }
+  /* This battle is the Giant REMATCH (Giant flag, not yet beaten) → the in-battle
+     intro (HAMMURABI_GIANT_INTRO) plays instead of the Serf opening tutorial. */
+  function _isHammurabiGiantRematch() {
+    return _flagTier() === 'giant' && !_tierBeatenLocal('hammurabi', 'giant');
+  }
 
   var RESULT_ID       = 'adv-hammurabi-result';
   var SHOW_RESULTS_ID = 'adv-hammurabi-show-results';
@@ -257,6 +319,21 @@ SOG.HammurabiBattle = (function () {
         window.Overworld.resumeAfterBattle();
       }
     }, 100);
+  }
+
+  /* SERF-win exit (mirrors Sargon's): tear down, then hand off to the overworld's
+     Hammurabi-win return, which stamps the Serf flag, erects the Giant flag, rises
+     the Hanging Gardens node and plays the interstitial. Sets the one-shot
+     __pendingFlagReveal that return consumes. Plain exit as the fallback. */
+  function _exitToOverworldAfterSerfWin() {
+    _removeResultPopup();
+    _hammurabiTeardown();
+    window.__pendingFlagReveal = { hook: 'hammurabi', tier: 'giant' };   // Giant flag pops on the return
+    if (window.Overworld && typeof window.Overworld.returnFromHammurabiWin === 'function') {
+      window.Overworld.returnFromHammurabiWin();
+    } else {
+      _exitToOverworld();
+    }
   }
 
   /* ── Rewards (SHARED card-acquisition + gold animations) ─────────── */
@@ -341,28 +418,8 @@ SOG.HammurabiBattle = (function () {
     }, 2500);
   }
 
-  /* CONTINUE on the first-win scoreboard: victory dialogue → grant Hammurabi's card
-     (47) → +25 gold → closing line → exit to the map. */
-  function _runFirstWinSequence() {
-    _removeResultPopup();
-    _swapOpponentBubblePortrait();
-    runLines(WIN_DIALOGUE, function () {
-      // The verdict is entered into the record — gavel strikes, then the card reveal.
-      _playSfx('sfx/gavel.m4a');
-      setTimeout(function () {
-      _grantHammurabiCard(function () {
-        _grantGold(GOLD_FIRST_WIN, function () {
-          runLines(WIN_DIALOGUE_CLOSER, function () {
-            _exitToOverworld();
-          });
-        });
-      });
-      }, 600);
-    });
-  }
-
   /* Build + show the end-game scoreboard.
-       opts.firstWin — CONTINUE (→ card + gold) + GAME BOARD.
+       opts.firstWin — CONTINUE (→ opts.onContinue, this stage's exit) + GAME BOARD.
        otherwise     — PLAY AGAIN + GAMEBOARD + BACK TO MAP. */
   function _showResultScoreboard(won, isTie, locResults, opts) {
     opts = opts || {};
@@ -392,7 +449,12 @@ SOG.HammurabiBattle = (function () {
       return b;
     }
     if (opts.firstWin) {
-      actions.appendChild(mkBtn('CONTINUE',   function () { _runFirstWinSequence(); }));
+      // Two-tier flow: the dialogue + acquisitions ALREADY ran on the battle screen,
+      // so CONTINUE is just this stage's exit — opts.onContinue is
+      // _exitToOverworldAfterSerfWin on the Serf win (Giant flag erect + Gardens
+      // reveal + interstitial) and _exitToOverworld on the Giant win.
+      var _cont = opts.onContinue || _exitToOverworld;
+      actions.appendChild(mkBtn('CONTINUE',   function () { _cont(); }));
       actions.appendChild(mkBtn('GAME BOARD', function () { _hideResultForReview(); }));
     } else {
       actions.appendChild(mkBtn('PLAY AGAIN',  function () { _restartBattle(); }));
@@ -411,23 +473,55 @@ SOG.HammurabiBattle = (function () {
        • First win  → scoreboard (CONTINUE → card 47 + 25 gold → exit).
        • Repeat win → VICTORY flourish → +10 gold → 3-button scoreboard.
        • Loss / tie → 3-button scoreboard (standard retry; no intervention). */
-  function _onWin(locResults) {
-    // Two-tier reward gate (SOG.rewards): 15 gold on the FIRST win of a tier, the
-    // Hammurabi card on the FIRST GIANT win, zero on any replay.
-    var r = (window.SOG && SOG.rewards)
-          ? SOG.rewards.consume('hammurabi')
-          : { firstTierWin: !_has(KEY_HAMMURABI_COMPLETE), gold: GOLD_FIRST_WIN, grantCard: !_has(KEY_HAMMURABI_COMPLETE) };
-    _set(KEY_HAMMURABI_COMPLETE);   // any-tier "beaten" — kept for node-reveal / narrative gates
-    if (r.grantCard) {
-      // FIRST GIANT win → first-win scoreboard (CONTINUE → card 47 + 15 gold → exit).
-      _showResultScoreboard(true, false, locResults, { firstWin: true });
-    } else if (r.firstTierWin) {
-      // FIRST SERF win → flourish → +15 gold, NO card (it waits on the Giant).
-      _victoryFlourish(function () {
-        _grantGold(GOLD_FIRST_WIN, function () {
-          _showResultScoreboard(true, false, locResults, {});
+  /* SERF WIN — [source: HAMMURABI_SERF_WIN_A/_B]. Block A → 15 gold at the
+     "restitution" beat (NO card) → block B → scoreboard. CONTINUE runs the SERF-win
+     return (Giant flag erect + Hanging Gardens reveal + interstitial). Dialogue plays
+     on the battle screen BEFORE the scoreboard, matching Sargon. */
+  function _runSerfWinSequence(locResults) {
+    _removeResultPopup();
+    _swapOpponentBubblePortrait();
+    runLines(HAMMURABI_SERF_WIN_A, function () {
+      _grantGold(GOLD_FIRST_WIN, function () {                 // 15 gold, NO card
+        runLines(HAMMURABI_SERF_WIN_B, function () {
+          _showResultScoreboard(true, false, locResults, { firstWin: true, onContinue: _exitToOverworldAfterSerfWin });
         });
       });
+    });
+  }
+
+  /* GIANT WIN — [source: HAMMURABI_GIANT_WIN_A/_B]. Block A → Hammurabi card THEN
+     15 gold at the "set in stone" beat → block B → scoreboard. CONTINUE = plain exit
+     (the Giant flag stamps via resumeAfterBattle; the Gardens were already revealed
+     on the Serf win). */
+  function _runGiantWinSequence(locResults) {
+    _removeResultPopup();
+    _swapOpponentBubblePortrait();
+    runLines(HAMMURABI_GIANT_WIN_A, function () {
+      _grantHammurabiCard(function () {                        // card first
+        _grantGold(GOLD_FIRST_WIN, function () {               // then 15 gold
+          runLines(HAMMURABI_GIANT_WIN_B, function () {
+            _showResultScoreboard(true, false, locResults, { firstWin: true, onContinue: _exitToOverworld });
+          });
+        });
+      });
+    });
+  }
+
+  function _onWin(locResults) {
+    // Two-tier reward gate (SOG.rewards): first SERF win → 15 gold, NO card; first
+    // GIANT win → 15 gold + the Hammurabi card; replay of a beaten flag → 0 gold.
+    var r = (window.SOG && SOG.rewards)
+          ? SOG.rewards.consume('hammurabi')
+          : { firstTierWin: !_has(KEY_HAMMURABI_COMPLETE), gold: GOLD_FIRST_WIN,
+              grantCard: (_flagTier() === 'giant' && !_tierBeatenLocal('hammurabi', 'giant')) };
+    _set(KEY_HAMMURABI_COMPLETE);   // any-tier "beaten" — kept for node-reveal / narrative gates
+    if (r.grantCard) {
+      // FIRST GIANT win → judgment dialogue + card 47 + 15 gold.
+      _runGiantWinSequence(locResults);
+    } else if (r.firstTierWin) {
+      // FIRST SERF win → serf-win dialogue + 15 gold (NO card) → serf-win return
+      // (Giant flag erect + Hanging Gardens reveal + interstitial).
+      _runSerfWinSequence(locResults);
     } else {
       // Replay of an already-beaten tier → flourish only, ZERO gold (anti-farming).
       _victoryFlourish(function () {
@@ -438,8 +532,18 @@ SOG.HammurabiBattle = (function () {
   function _onLoss(locResults) { _onDefeatOrTie(false, locResults); }
   function _onTie(locResults)  { _onDefeatOrTie(true,  locResults); }
   function _onDefeatOrTie(isTie, locResults) {
-    // Before the player has ever beaten Hammurabi, he delivers a verdict line FIRST,
-    // then the scoreboard. Once he's been beaten, losses/ties skip straight to it.
+    // GIANT REMATCH loss/draw (Giant flag, not yet beaten) → dedicated dialogue, then a
+    // replayable scoreboard. No grant (the gold rules already pay nothing on a loss).
+    if (_flagTier() === 'giant' && !_tierBeatenLocal('hammurabi', 'giant')) {
+      _swapOpponentBubblePortrait();
+      runLines(isTie ? HAMMURABI_GIANT_DRAW : HAMMURABI_GIANT_LOSS, function () {
+        _showResultScoreboard(false, isTie, locResults, {});
+      });
+      return;
+    }
+    // SERF loss/tie (FRONT-HALF, UNCHANGED): before the player has ever beaten
+    // Hammurabi he delivers a verdict line FIRST, then the scoreboard. Once he's
+    // been beaten, losses/ties skip straight to it.
     var show = function () { _showResultScoreboard(false, isTie, locResults, {}); };
     if (_has(KEY_HAMMURABI_COMPLETE)) { show(); return; }
     _swapOpponentBubblePortrait();
@@ -778,6 +882,23 @@ SOG.HammurabiBattle = (function () {
         SOG.HUD.applyBattleAvatars(ctx.config && ctx.config.presentation);
       }
       _swapOpponentBubblePortrait();
+
+      // GIANT rematch → in-battle intro (HAMMURABI_GIANT_INTRO), then straight to
+      // play (no rules/ability tutorial — that was the Serf battle). Takes precedence
+      // over the repeat-entry skip below. Mirrors Sargon's onBattleStart.
+      if (_isHammurabiGiantRematch()) {
+        _disableButtons();
+        _dialogueActive = true;
+        fadeOutCover(function () {
+          runLines(HAMMURABI_GIANT_INTRO, function () {
+            _dialogueActive = false;
+            _enableButtons();
+            _wireOpponentPortraitClick();
+            done();
+          });
+        });
+        return;
+      }
 
       if (_has(KEY_HAMMURABI_OPENING_SEEN) || _has(KEY_HAMMURABI_COMPLETE)) {
         // Repeat entry (seen before, or Hammurabi already beaten) — no dialogue;

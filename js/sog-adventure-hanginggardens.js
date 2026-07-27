@@ -230,6 +230,21 @@ SOG.HangingGardensBattle = (function () {
     }, 100);
   }
 
+  /* SERF-win exit: tear down, then hand off to the overworld's Neb-win return, which
+     stamps the Serf flag, plays the first interstitial line, RAISES THE GIANT FLAG
+     (no node reveal — Neb is the last Mesopotamia boss) and closes on the second
+     line. Sets the one-shot __pendingFlagReveal that return consumes. */
+  function _exitToOverworldAfterSerfWin() {
+    _removeResultPopup();
+    _hgTeardown();
+    window.__pendingFlagReveal = { hook: 'hanging-gardens', tier: 'giant' };
+    if (window.Overworld && typeof window.Overworld.returnFromNebWin === 'function') {
+      window.Overworld.returnFromNebWin();
+    } else {
+      _exitToOverworld();
+    }
+  }
+
   /* Grant Nebuchadnezzar's card (50) via the shared card-acquisition reveal — FIRST
      WIN ONLY: SOG.Cards.unlock returns truthy only on a NEW unlock, so a repeat win
      (already owned) skips the acquisition animation entirely. */
@@ -308,19 +323,35 @@ SOG.HangingGardensBattle = (function () {
     }, 2500);
   }
 
-  /* FIRST-WIN victory sequence: VICTORY flourish → Neb's win dialogue → on the final
-     line ("Take this…") fire the card 50 + 25 gold grant → then the scoreboard.
-     First-win only (a repeat win never reaches here — see _onWin's owned guard). */
-  function _runFirstWinSequence(locResults) {
-    // First win plays the STORY FIRST (mirrors Sargon): Neb's win dialogue → grant
-    // card 50 + 25 gold on the "Take this…" line → THEN the VICTORY scoreboard
-    // (whose CONTINUE exits to the overworld).
+  /* SERF WIN — [source: HG_SERF_WIN_A/_B]. Block A → 15 gold at the "something
+     tasteful" beat (NO card) → block B → scoreboard. CONTINUE runs the SERF-win
+     return (Giant flag raises + the two interstitial lines). Dialogue plays on the
+     battle screen BEFORE the scoreboard, matching Sargon/Hammurabi. */
+  function _runSerfWinSequence(locResults) {
     _removeResultPopup();
-    runLines(WIN_DIALOGUE, function () {
-      // "Take this…" is WIN_DIALOGUE's last line, so the grant fires on that beat.
-      _grantNebCard(function () {
-        _grantGold(GOLD_FIRST_WIN, function () {
-          _showResultScoreboard(true, false, locResults, { firstWin: true });
+    _swapOpponentBubblePortrait();
+    runLines(HG_SERF_WIN_A, function () {
+      _grantGold(GOLD_FIRST_WIN, function () {                 // 15 gold, NO card
+        runLines(HG_SERF_WIN_B, function () {
+          _showResultScoreboard(true, false, locResults, { firstWin: true, onContinue: _exitToOverworldAfterSerfWin });
+        });
+      });
+    });
+  }
+
+  /* GIANT WIN — [source: HG_GIANT_WIN_A/_B]. Block A → Neb's card THEN 15 gold at
+     the "spoils" beat → block B (the Egypt hand-off) → scoreboard. CONTINUE exits
+     through the normal return, where the post-Neb Egypt on-ramp fires and sets
+     sog_egypt_node_live (see overworld.js resumeAfterBattle). */
+  function _runGiantWinSequence(locResults) {
+    _removeResultPopup();
+    _swapOpponentBubblePortrait();
+    runLines(HG_GIANT_WIN_A, function () {
+      _grantNebCard(function () {                              // card first
+        _grantGold(GOLD_FIRST_WIN, function () {               // then 15 gold
+          runLines(HG_GIANT_WIN_B, function () {
+            _showResultScoreboard(true, false, locResults, { firstWin: true, onContinue: _exitToOverworld });
+          });
         });
       });
     });
@@ -357,9 +388,11 @@ SOG.HangingGardensBattle = (function () {
       return b;
     }
     if (opts.firstWin) {
-      // Shown AFTER the first-win victory sequence (dialogue + card + gold), so
-      // CONTINUE simply exits to the map.
-      actions.appendChild(mkBtn('CONTINUE',   function () { _exitToOverworld(); }));
+      // Shown AFTER the win sequence (dialogue + acquisitions), so CONTINUE is just
+      // this stage's exit — opts.onContinue is _exitToOverworldAfterSerfWin on the
+      // Serf win (Giant flag raise + interstitial) and _exitToOverworld on the Giant.
+      var _cont = opts.onContinue || _exitToOverworld;
+      actions.appendChild(mkBtn('CONTINUE',   function () { _cont(); }));
       actions.appendChild(mkBtn('GAME BOARD', function () { _hideResultForReview(); }));
     } else {
       actions.appendChild(mkBtn('PLAY AGAIN',  function () { _restartBattle(); }));
@@ -386,16 +419,12 @@ SOG.HangingGardensBattle = (function () {
           : { firstTierWin: !_has(KEY_HG_COMPLETE), gold: GOLD_FIRST_WIN, grantCard: !_has(KEY_HG_COMPLETE) };
     _set(KEY_HG_COMPLETE);   // any-tier "beaten" — kept for node-reveal / narrative gates
     if (r.grantCard) {
-      // FIRST GIANT win: victory dialogue + card 50 acquisition + 15 gold FIRST,
-      // then the VICTORY scoreboard (CONTINUE → exit to map).
-      _runFirstWinSequence(locResults);
+      // FIRST GIANT win → Neb's concession + card + 15 gold + the Egypt hand-off.
+      _runGiantWinSequence(locResults);
     } else if (r.firstTierWin) {
-      // FIRST SERF win → flourish → +15 gold, NO card (it waits on the Giant).
-      _victoryFlourish(function () {
-        _grantGold(GOLD_FIRST_WIN, function () {
-          _showResultScoreboard(true, false, locResults, {});
-        });
-      });
+      // FIRST SERF win → serf-win dialogue + 15 gold (NO card) → serf-win return
+      // (Giant flag raises + the two interstitial lines; NO node reveal).
+      _runSerfWinSequence(locResults);
     } else {
       // Replay of an already-beaten tier → flourish only, ZERO gold (anti-farming).
       _victoryFlourish(function () {
@@ -406,7 +435,16 @@ SOG.HangingGardensBattle = (function () {
   function _onLoss(locResults) { _onDefeatOrTie(false, locResults); }
   function _onTie(locResults)  { _onDefeatOrTie(true,  locResults); }
   function _onDefeatOrTie(isTie, locResults) {
-    // Neb taunts, then the standard retry scoreboard (mirrors Hammurabi).
+    // GIANT REMATCH loss/draw (Giant flag, not yet beaten) → dedicated dialogue, then
+    // a replayable scoreboard. No grant (losses pay nothing).
+    if (_flagTier() === 'giant' && !_tierBeatenLocal('hanging-gardens', 'giant')) {
+      _swapOpponentBubblePortrait();
+      runLines(isTie ? HG_GIANT_DRAW : HG_GIANT_LOSS, function () {
+        _showResultScoreboard(false, isTie, locResults, {});
+      });
+      return;
+    }
+    // SERF loss/tie (UNCHANGED): Neb taunts, then the standard retry scoreboard.
     runLines(isTie ? TIE_DIALOGUE : LOSS_DIALOGUE, function () {
       _showResultScoreboard(false, isTie, locResults, {});
     });
@@ -417,38 +455,94 @@ SOG.HangingGardensBattle = (function () {
      Nebuchadnezzar speaks through the shared opponent bubble (#adv-bubble-otzi,
      portrait swapped to Neb); the Explorer through #adv-bubble-explorer.
   ══════════════════════════════════════════════════════════════ */
+  // [source: sog-adventure-hanginggardens.js → OPENING_DIALOGUE]
   var OPENING_DIALOGUE = [
-    { who: 'nebuchadnezzar', text: 'Welcome, welcome!' },
-    { who: 'nebuchadnezzar', text: 'Foreign traveler in the funny head covering...' },
+    { who: 'nebuchadnezzar', text: 'Welcome, welcome! Little person in the funny head covering…' },
     { who: 'explorer',       text: 'You think my hat is funny?' },
-    { who: 'nebuchadnezzar', text: '...take awe in the splendor of my gardens!' },
-    { who: 'explorer',       text: 'Your gardens?' },
-    { who: 'nebuchadnezzar', text: 'I built them.' },
-    { who: 'nebuchadnezzar', text: 'Every terrace, every bloom, every falling stream.' },
-    { who: 'explorer',       text: 'You must be so proud!' },
-    { who: 'nebuchadnezzar', text: 'I built the greatest city the world has ever seen.' },
-    { who: 'explorer',       text: 'So far...' },
-    { who: 'nebuchadnezzar', text: 'Then tell me, young traveler in the bizarre bonnet...' },
-    { who: 'nebuchadnezzar', text: '...who gave you permission to enter the garden of a king?' },
-    { who: 'explorer',       text: 'Uh. The door was kind of open?' },
-    { who: 'nebuchadnezzar', text: 'No one walks my paradise uninvited.' },
-    { who: 'nebuchadnezzar', text: 'No one.' },
-    { who: 'explorer',       text: "I guess that means I'm a fried ferret." }
+    { who: 'nebuchadnezzar', text: 'What do you think of my gardens?' },
+    { who: 'explorer',       text: "I think they're very nice." },
+    { who: 'nebuchadnezzar', text: 'Nice? An accent pillow is nice.' },
+    { who: 'nebuchadnezzar', text: 'These are the wonderous Hanging Gardens of Babylon.' },
+    { who: 'explorer',       text: "That's what I meant." },
+    { who: 'nebuchadnezzar', text: 'I will not be insulted by an uncultured Philistine.' },
+    { who: 'nebuchadnezzar', text: "It's clear you are unworthy of such spectacular sights." },
+    { who: 'explorer',       text: 'Oh, here we go again…' }
   ];
 
-  /* ── Outcome dialogue (editable) — Nebuchadnezzar via the opponent bubble. ──────
-     WIN is FIRST-WIN-ONLY (a repeat win skips straight to flourish + gold). The LAST
-     WIN line ("Take this…") is the beat the card 50 + 25 gold grant fires on. */
-  var WIN_DIALOGUE = [
-    { who: 'nebuchadnezzar', text: 'Hmm... How unexpected.' },
-    { who: 'explorer',       text: 'I won?' },
-    { who: 'nebuchadnezzar', text: 'Yes, somehow the stranger in the tawdry hat prevailed.' },
-    { who: 'explorer',       text: 'Hey, I like my hat.' },
-    { who: 'nebuchadnezzar', text: 'How unfortunate.' },
-    { who: 'nebuchadnezzar', text: 'But perhaps, the Egyptians will find it more amusing.' },
-    { who: 'explorer',       text: 'Egyptians?' },
-    { who: 'nebuchadnezzar', text: 'Take this and be gone, will you?' }
+  /* ══════════════════════════════════════════════════════════════════════════
+     NEB TWO-TIER TEMPLATE — follows the SARGON / HAMMURABI pattern:
+       intro (above) → SERF WIN → interstitial (overworld) → GIANT rematch intro
+       (in-battle) → GIANT win / loss / draw.
+     Neb is the LAST Mesopotamia boss, so his shape differs in two ways:
+       • the Serf-win interstitial raises the GIANT FLAG ONLY — no node reveal
+         (there is no further Mesopotamia node), so his Giant is the only way on;
+       • the GIANT win is what opens Egypt (see returnFromNebWin in overworld.js).
+     who: 'nebuchadnezzar' = his portrait via the shared opponent bubble.
+     [source: sog-adventure-hanginggardens.js → the constants in this block]
+  ══════════════════════════════════════════════════════════════════════════ */
+
+  // SERF WIN — 15 gold at the "buy yourself something tasteful" beat, NO card.
+  var HG_SERF_WIN_A = [
+    { who: 'nebuchadnezzar', text: "Well, that wasn't a graceful showing." },
+    { who: 'explorer',       text: 'I really appreciate the effort.' },
+    { who: 'nebuchadnezzar', text: "I can't with you…" },
+    { who: 'nebuchadnezzar', text: 'Take some gold and buy yourself something tasteful.' }
+    // → [GOLD — 15]
   ];
+  var HG_SERF_WIN_B = [
+    { who: 'nebuchadnezzar', text: 'When you come back, be ready…' },
+    { who: 'nebuchadnezzar', text: 'To bow to my magnificence.' }
+  ];
+
+  // GIANT REMATCH INTRO — in-battle, before the Giant rematch (onBattleStart).
+  var HG_GIANT_INTRO = [
+    { who: 'nebuchadnezzar', text: 'You return! To witness me at my finest.' },
+    { who: 'explorer',       text: 'Of course, my majestic... majesty.' },
+    { who: 'nebuchadnezzar', text: 'Your flattery is meaningless when delivered in khaki pants.' },
+    { who: 'nebuchadnezzar', text: 'Prepare to be humbled.' }
+  ];
+
+  // GIANT WIN — Neb's card THEN 15 gold at the "bestow upon you your spoils" beat.
+  // Block B closes on the Egypt hand-off (the overworld return then opens Egypt).
+  var HG_GIANT_WIN_A = [
+    { who: 'nebuchadnezzar', text: 'Unbelievable.' },
+    { who: 'explorer',       text: 'My mom always says brains over beauty.' },
+    { who: 'nebuchadnezzar', text: 'She has to tell you that.' },
+    { who: 'nebuchadnezzar', text: 'As it is my obligation to bestow upon you your spoils.' }
+    // → [CARD — Neb] THEN [GOLD — 15]
+  ];
+  var HG_GIANT_WIN_B = [
+    { who: 'nebuchadnezzar', text: "You've bested all of Mesopotamia." },
+    { who: 'nebuchadnezzar', text: 'Perhaps, the Egyptians will find you more amusing.' },
+    { who: 'explorer',       text: 'Egyptians?' },
+    { who: 'nebuchadnezzar', text: 'They love a good tawdry hat.' }
+  ];
+
+  // GIANT LOSS — dismissive, replayable (no grant).
+  var HG_GIANT_LOSS = [
+    { who: 'nebuchadnezzar', text: 'As always, natural beauty triumphs.' },
+    { who: 'nebuchadnezzar', text: 'Go. Reflect on your lack of refinement.' },
+    { who: 'nebuchadnezzar', text: "And return when you're ready to be dazzled again." }
+  ];
+
+  // GIANT DRAW — a stalemate is not a win, replayable (no grant).
+  var HG_GIANT_DRAW = [
+    { who: 'nebuchadnezzar', text: 'A draw? But I am clearly the more magnificent.' },
+    { who: 'nebuchadnezzar', text: 'This settles nothing. We must go again.' }
+  ];
+
+  /* The flag slot of the current battle (aligned with AI tier — no decoupling).
+     State lives at SOG.state.G; there is no window.G global. */
+  function _flagTier() {
+    var _G = (window.SOG && SOG.state && SOG.state.G) || null;
+    return (_G && _G.config && (_G.config.flagTier
+        || (_G.config.ai && _G.config.ai.tier))) || 'serf';
+  }
+  /* This battle is the Giant REMATCH (Giant flag, not yet beaten) → the in-battle
+     intro (HG_GIANT_INTRO) plays instead of the Serf opening. */
+  function _isNebGiantRematch() {
+    return _flagTier() === 'giant' && !_tierBeatenLocal('hanging-gardens', 'giant');
+  }
   var LOSS_DIALOGUE = [
     { who: 'nebuchadnezzar', text: 'Predictable.' },
     { who: 'nebuchadnezzar', text: 'Your play was as putrid as the pileus on your head.' },
@@ -776,6 +870,23 @@ SOG.HangingGardensBattle = (function () {
         SOG.HUD.applyBattleAvatars(ctx.config && ctx.config.presentation);
       }
       _swapOpponentBubblePortrait();
+
+      // GIANT rematch → in-battle intro (HG_GIANT_INTRO), then straight to play.
+      // Takes precedence over the repeat-entry skip below (which would otherwise
+      // swallow it, since the Serf win sets both gate flags). Mirrors Sargon/Hammurabi.
+      if (_isNebGiantRematch()) {
+        _disableButtons();
+        _dialogueActive = true;
+        fadeOutCover(function () {
+          runLines(HG_GIANT_INTRO, function () {
+            _dialogueActive = false;
+            _enableButtons();
+            _wireOpponentPortraitClick();
+            done();
+          });
+        });
+        return;
+      }
 
       if (_has(KEY_HG_OPENING_SEEN) || _has(KEY_HG_COMPLETE)) {
         // Repeat entry (or a victorious rematch) — skip the dialogue, go straight to turn 1.

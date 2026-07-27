@@ -1332,6 +1332,21 @@ window.SOG.Adventure.Prehistory = (function () {
     if (typeof window.showScreen === 'function') {
       window.showScreen('screen-overworld');
     }
+    // Route through the SHARED, init-guarded return every other battle uses
+    // (_exitToOverworld → Overworld.resumeAfterBattle). Showing the screen alone
+    // doesn't build the map: a battle launched on a FRESH page load (dev-panel
+    // launch) never initialized the overworld, so this exit used to strand the
+    // player on a blank/East-Africa map. resumeAfterBattle's `if (!mapImgEl) init()`
+    // guard handles that, and on the normal flow (map already built) it's the
+    // usual idempotent restore — clear the wipe, show the HUD, resume map music,
+    // release the dialogue lock. Its node-reveal catch-ups are all gated on
+    // currentMapId === 'mesopotamia', so none of them can fire on a Prehistory exit.
+    // Runs BEFORE the victory sequence below, so the map (and the Prehistory node
+    // the badge targets) exists by the time that 500 ms beat lands, and
+    // startPostVictorySequence still owns isDialogueLocked / cancelIdle itself.
+    if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') {
+      window.Overworld.resumeAfterBattle();
+    }
     if (markPrehistoryNodeCompleteFlag) {
       markPrehistoryNodeCompleteFlag = false;
       // 500 ms settling beat (spec §1): let the overworld screen finish
@@ -1363,6 +1378,11 @@ window.SOG.Adventure.Prehistory = (function () {
       wipeEl.style.clipPath = '';
     }
     if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
+    // Same init-guarded return as exitBattleToOverworld — this escape hatch is
+    // reachable from a dev launch too, where the overworld was never built.
+    if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') {
+      window.Overworld.resumeAfterBattle();
+    }
   }
 
   /* ── localStorage helpers ──────────────────────────────────── */

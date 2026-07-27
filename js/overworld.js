@@ -286,16 +286,30 @@ var Overworld = (function () {
   // After beating Hammurabi — bookend Explorer lines around the Hanging Gardens
   // sparkle reveal. REFLECT plays before the shimmer; REACTION after the node
   // sparkle-fades in. Editable.
+  /* NEB (Hanging Gardens) SERF-WIN INTERSTITIAL — bookends the GIANT FLAG RAISE.
+     Neb is the last Mesopotamia boss, so there is NO node reveal here: the raised
+     Giant flag on his node IS the "come back and beat me properly" cue, and his
+     Giant is the only remaining action on the map.
+     [source: overworld.js → D5_NEB_WIN_INTERSTITIAL_A/_B] */
+  var D5_NEB_WIN_INTERSTITIAL_A = [
+    { who: 'explorer', text: 'Are all leaders so in love with themselves?' }
+    // → [GIANT FLAG raises]
+  ];
+  var D5_NEB_WIN_INTERSTITIAL_B = [
+    { who: 'explorer', text: "Looks like there's only one way forward." }
+  ];
+
+  /* HAMMURABI INTERSTITIAL — the post-Serf-win beat, bookending the Hanging
+     Gardens node reveal: REFLECT plays before the shimmer, REACTION after the node
+     sparkle-fades in. [source: overworld.js → D5_HANGING_GARDENS_REFLECT/_REACTION] */
   var D5_HANGING_GARDENS_REFLECT = [
-    { who: 'explorer', text: 'That was a close one.' },
-    { who: 'explorer', text: 'I almost lost an eye in there.' },
-    { who: 'explorer', text: "Perhaps, that's why justice is blind?" }
+    { who: 'explorer', text: 'I kind of think he prejudged me there.' },
+    { who: 'explorer', text: "I'm not sure if I really want to go back." }
+    // → [HANGING GARDENS node rise animation]
   ];
   var D5_HANGING_GARDENS_REACTION = [
-    { who: 'explorer', text: 'Whoa!' },
-    { who: 'explorer', text: 'Cool Gardens...' },
-    { who: 'explorer', text: 'How is that even possible?' },
-    { who: 'explorer', text: 'Finally, a safe place to explore.' }
+    { who: 'explorer', text: 'Wow! That was magical.' },
+    { who: 'explorer', text: 'Do I go back on trial or go see what that’s all about?' }
   ];
   // Hanging Gardens node-CLICK sequence (walk-up → dialogue + knock/door sfx → wipe
   // into the battle STUB). The lines come in two groups: group A, then knocking.m4a
@@ -1868,6 +1882,10 @@ var Overworld = (function () {
      To Egypt box (both gated on sog_battle_otzi_complete) — then play the
      one-time return dialogue. The player navigates to Egypt manually.         */
   function returnToEastAfricaAfterOtzi() {
+    // Fresh-page-load guard (see resumeAfterBattle): without the DOM bound, the
+    // loadMap below throws on mapImgEl. init() binds it (and loads East Africa,
+    // which the explicit loadMap then re-applies with the saved position).
+    if (!mapImgEl) init();
     loadMap('eastafrica', { useSaved: true });
     if (!maybePlayEastAfricaReturnDialogue()) scheduleIdle();
   }
@@ -3095,6 +3113,11 @@ var Overworld = (function () {
      the black out via onMapShown, then hand control back. The market node sits
      there clickable — the player walks into it on their own when ready. */
   function returnFromGilgameshWin(onMapShown) {
+    // A battle launched on a FRESH page load (dev-panel launch) never initialized
+    // the overworld — DOM refs unbound, currentMapId at its boot default — so the
+    // loadMap below would throw on mapImgEl. init() binds the DOM and restores the
+    // saved map/position. Same guard as resumeAfterBattle.
+    if (!mapImgEl) init();
     isDialogueLocked = true;
     isTransitioning  = false;
 
@@ -4078,6 +4101,9 @@ var Overworld = (function () {
     // smack-talk has played on the battle screen; this returns to the Mesopotamia
     // map and plays the Explorer's closing reflection line, then resumes control.
     returnFromSargonLoss: function () {
+      // Fresh-page-load guard (see resumeAfterBattle): bind the DOM + restore the
+      // saved map, or a dev-panel-launched battle returns to a blank/East Africa map.
+      if (!mapImgEl) init();
       isDialogueLocked = true;
       isTransitioning  = false;
       if (typeof showScreen === 'function') showScreen('screen-overworld');
@@ -4096,6 +4122,9 @@ var Overworld = (function () {
     // Mesopotamia map, then rise the Hammurabi node out of the dirt (one-time),
     // then restore player control.
     returnFromSargonWin: function () {
+      // Fresh-page-load guard (see resumeAfterBattle): bind the DOM + restore the
+      // saved map, or a dev-panel-launched battle returns to a blank/East Africa map.
+      if (!mapImgEl) init();
       isDialogueLocked = true;
       isTransitioning  = false;
       if (typeof showScreen === 'function') showScreen('screen-overworld');
@@ -4133,6 +4162,80 @@ var Overworld = (function () {
         });
       };
       _playReturnFlagAnim(giantFlagEl, proceed);
+    },
+
+    /* Hammurabi SERF-win return — the same shape as returnFromSargonWin above,
+       one step further along the serf track: stamp the Serf flag, ERECT the Giant
+       flag, then rise the HANGING GARDENS node with the interstitial bookended
+       around it (REFLECT → shimmer → REACTION, owned by
+       _maybeRevealHangingGardensNode). Reuses the shared choreography — no new
+       systems. Called by the Hammurabi module's _exitToOverworldAfterSerfWin. */
+    returnFromHammurabiWin: function () {
+      // Same guard resumeAfterBattle uses: a battle launched on a FRESH page load
+      // (dev-panel launch) never initialized the overworld, so the DOM refs are
+      // unbound and currentMapId is still the boot default — without this the
+      // return strands the player on East Africa.
+      if (!mapImgEl) init();
+      isDialogueLocked = true;
+      isTransitioning  = false;
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+      _clearWipe();
+      var hud = window.SOG && window.SOG.HUD;
+      if (hud && typeof hud.show === 'function') hud.show();
+      _refreshNodeFlags(true);   // render flags with the just-won stamp DEFERRED
+      var giantFlagEl = _consumePendingFlagReveal();
+      // Hold the music so the Gardens shimmer plays against silence (its own
+      // magicshimmer.m4a), then fade the map track back in once it's done.
+      if (window.SOG && SOG.music && typeof SOG.music.fadeOutAndStop === 'function') {
+        SOG.music.fadeOutAndStop(600);
+      }
+      var proceed = function () {
+        // Serf-track gate: only a Hammurabi SERF clear opens the Hanging Gardens
+        // (a Giant-first win must not skip the track).
+        if (!_bossClearedForUnlock('hammurabi')) {
+          _playMapMusic();
+          isDialogueLocked = false;
+          scheduleIdle();
+          return;
+        }
+        _maybeRevealHangingGardensNode(function () {
+          _playMapMusic();   // node has risen — fade the overworld track back in
+          isDialogueLocked = false;
+          scheduleIdle();
+        });
+      };
+      _playReturnFlagAnim(giantFlagEl, proceed);
+    },
+    /* Nebuchadnezzar SERF-win return — the END of the Mesopotamia serf track, so it
+       differs from the Sargon/Hammurabi returns in one way: it raises the GIANT FLAG
+       and nothing else. No node reveal (there is no further Mesopotamia node) and no
+       advance-or-stay choice — Egypt is earned by his GIANT win, not this one.
+       Beat order: 1200ms → Serf stamp → line A → Giant flag ERECTS → line B → control.
+       Reuses _playReturnFlagAnim (stamp) + _erectFlagIn (raise) — no new systems.
+       Called by the Neb module's _exitToOverworldAfterSerfWin. */
+    returnFromNebWin: function () {
+      // Fresh-page-load guard (see resumeAfterBattle): bind the DOM + restore the map.
+      if (!mapImgEl) init();
+      isDialogueLocked = true;
+      isTransitioning  = false;
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+      _clearWipe();
+      var hud = window.SOG && window.SOG.HUD;
+      if (hud && typeof hud.show === 'function') hud.show();
+      _playMapMusic();
+      _refreshNodeFlags(true);                       // render, DEFER the stamp
+      var giantFlagEl = _consumePendingFlagReveal(); // hidden, ready to erect
+      // Stamp the Serf flag first (no erect passed), then the line, then the raise.
+      _playReturnFlagAnim(null, function () {
+        runDialogue(D5_NEB_WIN_INTERSTITIAL_A, function () {
+          _erectFlagIn(giantFlagEl, function () {
+            runDialogue(D5_NEB_WIN_INTERSTITIAL_B, function () {
+              isDialogueLocked = false;
+              scheduleIdle();
+            });
+          });
+        });
+      });
     },
     // Reusable candle visual for the Gilgamesh post-loss intervention (the
     // battle module fades to black itself, then drives these): bloom the flame
@@ -4223,7 +4326,15 @@ var Overworld = (function () {
       // "abracadabra" lines → set sog_egypt_node_live (Double Crown goes live) →
       // flash the To Egypt exit for 3s → restore control (normal travel takes over).
       var _nebDone = false, _egyptLive = false;
-      _nebDone = _bossClearedForUnlock('hanging-gardens');   // Serf-track: only a Neb SERF win opens the Egypt on-ramp
+      // EGYPT IS EARNED BY NEB'S *GIANT* WIN — the one place the serf-track rule does
+      // NOT apply. Neb is the last Mesopotamia boss and Egypt is a whole separate
+      // region, so it must be fully earned: his SERF win only raises his Giant flag
+      // (see returnFromNebWin), and this on-ramp — which SETS sog_egypt_node_live at
+      // the end of its beat — waits for the Giant. That flag stays the SINGLE
+      // Mesopotamia-complete / Egypt-ready signal (no parallel flag): the Double
+      // Crown node's showIf, the Egypt topo-prop swap and the Egypt arrival beat all
+      // already read it, and the future Egypt-advancement build should read it too.
+      _nebDone = _tierBeaten('hanging-gardens', 'giant');
       try { _egyptLive = localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) {}
       if (_nebDone && !_egyptLive && currentMapId === 'mesopotamia') {
         isDialogueLocked = true;          // clicks/travel locked for the whole beat
