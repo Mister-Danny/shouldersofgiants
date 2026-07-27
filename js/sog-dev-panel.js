@@ -14,11 +14,12 @@
  *   2. REAL KEYS ONLY — it writes through the same modules/keys the game reads
  *      (SOG.collection, SOG.gold, sog_node_<hook>_<tier>_beaten, …). There is
  *      no parallel dev state.
- *   3. NON-DESTRUCTIVE TO BROWSE — toggling controls stages changes in memory;
- *      nothing is written until you press an APPLY button. Closing without
- *      applying changes nothing.
+ *   3. ONE APPLY — every edit (cards, gold, progression) stages in memory and
+ *      is written by the single APPLY ALL CHANGES button at the bottom. While
+ *      anything is staged the panel shows an UNAPPLIED banner, so a change can
+ *      never be silently lost. (Launch buttons auto-apply first — see _launch*.)
  *
- * Sections: CARDS · GOLD · PROGRESSION · LAUNCH.
+ * Layout: NUCLEAR (top) · CARDS · GOLD · PROGRESSION · LAUNCH · APPLY (bottom).
  *
  * PRESET SEAM (not built yet — see _readSnapshot / _applySnapshot near the
  * bottom): a preset is just a snapshot object
@@ -41,8 +42,6 @@ SOG.DevPanel = (function () {
      STATE MODEL — every key this panel reads/writes is a REAL game key.
      ══════════════════════════════════════════════════════════════════════ */
 
-  // The five two-tier bosses. `hook` matches scriptHook / the flag namespace
-  // (sog_node_<hook>_<tier>_beaten) and `module` is the SOG.* battle module.
   var BOSSES = [
     { hook: 'gilgamesh',       label: 'Gilgamesh (Uruk)',      module: 'GilgameshBattle',      skipFlag: 'sog_gilgamesh_opening_seen' },
     { hook: 'sargon',          label: 'Sargon (Akkad)',        module: 'SargonBattle',         skipFlag: 'sog_sargon_opening_seen' },
@@ -51,8 +50,6 @@ SOG.DevPanel = (function () {
     { hook: 'narmer',          label: 'Narmer (Egypt)',        module: 'NarmerBattle',         skipFlag: 'sog_narmer_battle_opening_seen' }
   ];
 
-  // Boolean progression flags, grouped for display. Every one is a real key the
-  // game reads (node showIf predicates, dialogue gates, HUD gates).
   var FLAG_GROUPS = [
     { title: 'Milestones', flags: [
       { key: 'sog_adventure_intro_complete',            label: 'Adventure intro done' },
@@ -70,10 +67,10 @@ SOG.DevPanel = (function () {
       { key: 'sog_egypt_node_live',          label: 'Egypt / Double Crown live' }
     ]},
     { title: 'Encounter + misc', flags: [
-      { key: 'sog_met_gilgamesh',                label: 'Met Gilgamesh' },
-      { key: 'sog_met_narmer',                   label: 'Met Narmer' },
+      { key: 'sog_met_gilgamesh',                  label: 'Met Gilgamesh' },
+      { key: 'sog_met_narmer',                     label: 'Met Narmer' },
       { key: 'sog_first_market_interstitial_seen', label: 'First-market beat seen' },
-      { key: 'sog_dev_unlock_all',               label: 'DEV: deck builder shows ALL cards (view-only)' }
+      { key: 'sog_dev_unlock_all',                 label: 'DEV: deck builder shows ALL cards (view-only)' }
     ]}
   ];
 
@@ -83,6 +80,16 @@ SOG.DevPanel = (function () {
     { id: 'egypt',       label: 'Egypt' }
   ];
 
+  /* Card grouping for the collapsible checklist. Cards 1–25 are the original
+     teaching set; everything else groups by era. Tokens get their own group and
+     are never selectable (the deck builder hard-refuses token:true cards). */
+  function _groupOf(card) {
+    if (card.token) return 'Tokens (not deckable)';
+    if (card.id <= 25) return '7th Grade Curriculum';
+    return card.era || 'Other';
+  }
+  var GROUP_ORDER = ['7th Grade Curriculum', 'Prehistory', 'Mesopotamia', 'Egypt', 'Other', 'Tokens (not deckable)'];
+
   /* ── Small storage helpers ─────────────────────────────────────────── */
   function _getFlag(k) { try { return localStorage.getItem(k) === 'true'; } catch (e) { return false; } }
   function _setFlag(k, on) {
@@ -91,12 +98,11 @@ SOG.DevPanel = (function () {
   function _starters() {
     return (window.SOG && SOG.collection && SOG.collection.STARTER_CARD_IDS) || [];
   }
-  function _isToken(c) { return !!c.token; }
+  function _allCards() { return (typeof CARDS !== 'undefined') ? CARDS : []; }
 
   /* ══════════════════════════════════════════════════════════════════════
-     READERS — the panel's single source of truth for what it displays.
+     READERS
      ══════════════════════════════════════════════════════════════════════ */
-
   function _readOwnedCardIds() {
     if (window.SOG && SOG.collection && typeof SOG.collection.getUnlockedCards === 'function') {
       return SOG.collection.getUnlockedCards().slice();
@@ -112,11 +118,10 @@ SOG.DevPanel = (function () {
      ══════════════════════════════════════════════════════════════════════ */
 
   /* Set the collection to EXACTLY `ids` (plus starters, which are config and
-     always owned). Uses the collection's public API only: resetCollection()
-     clears the earned list, then unlockCard() re-adds the wanted non-starters.
-     Ownership (sog_unlocked_cards) is what the deck builder actually gates on
-     (isCardAvailable → SOG.Cards.isUnlocked → SOG.collection.isUnlocked), so
-     this alone makes the builder show exactly this set.
+     always owned), using the collection's public API only. Ownership
+     (sog_unlocked_cards) is what the deck builder gates on
+     (isCardAvailable → SOG.Cards.isUnlocked), so this alone makes the builder
+     show exactly this set.
 
      We deliberately do NOT blanket-write CARDS[].locked: that legacy view field
      is also read by game.js buildAiDeck and progression.js to pick ARCADIUM-lane
@@ -134,23 +139,18 @@ SOG.DevPanel = (function () {
     if (earned.length && typeof col.unlockCard === 'function') col.unlockCard(earned);
 
     if (typeof col.syncDefaultDeck === 'function') col.syncDefaultDeck();
-    _refreshHud();
   }
 
-  /* Set gold to an exact amount via the real store (reset + add). */
   function _applyGold(amount) {
     var g = window.SOG && SOG.gold;
     if (!g) return;
     var n = Math.max(0, Math.floor(Number(amount) || 0));
     if (typeof g.reset === 'function') g.reset();
     if (n > 0 && typeof g.add === 'function') g.add(n);
-    _refreshHud();
   }
 
-  /* Write the boolean progression map: { realKey: true|false }. */
   function _applyFlags(map) {
     Object.keys(map).forEach(function (k) { _setFlag(k, !!map[k]); });
-    _refreshHud();
   }
 
   function _refreshHud() {
@@ -163,10 +163,18 @@ SOG.DevPanel = (function () {
     } catch (e) {}
   }
 
-  /* ══════════════════════════════════════════════════════════════════════
-     LAUNCHERS (migrated from the old menu)
-     ══════════════════════════════════════════════════════════════════════ */
+  /* THE single write path. Everything staged lands here. */
+  function _applyAll() {
+    if (_stagedCards) _applyCards(_stagedCards);
+    if (_stagedGold != null) _applyGold(_stagedGold);
+    if (_stagedFlags) _applyFlags(_stagedFlags);
+    _refreshHud();
+    _dirty = false;
+  }
 
+  /* ══════════════════════════════════════════════════════════════════════
+     LAUNCHERS
+     ══════════════════════════════════════════════════════════════════════ */
   function _ensureAdventurer() {
     try { if (!localStorage.getItem('sog_selected_adventurer')) localStorage.setItem('sog_selected_adventurer', 'female'); } catch (e) {}
   }
@@ -180,11 +188,13 @@ SOG.DevPanel = (function () {
         catch (e) { console.warn('[DevPanel] teardown failed for', name, e); }
       });
   }
+  /* Launching always commits staged edits first — you configure state in order
+     to launch into it, so silently launching into the OLD state would be the
+     same trap the single-apply model exists to remove. */
+  function _commitBeforeLaunch() { if (_dirty) _applyAll(); }
 
-  /* Launch a boss battle at a chosen tier. window.__forceTier is the same
-     one-shot initGame honours for the node-click path, so the launched battle
-     is indistinguishable from a real one at that tier. */
   function _launchBattle(boss, tier, skipIntro) {
+    _commitBeforeLaunch();
     _ensureAdventurer();
     if (skipIntro && boss.skipFlag) _setFlag(boss.skipFlag, true);
     hide();
@@ -193,27 +203,27 @@ SOG.DevPanel = (function () {
     window.__forceTier = tier;
     var mod = window.SOG && SOG[boss.module];
     if (mod && typeof mod.start === 'function') { mod.start(); }
-    else { window.__forceTier = null; console.warn('[DevPanel] ' + boss.module + ' not found'); _flash('MISSING: ' + boss.module); }
+    else { window.__forceTier = null; console.warn('[DevPanel] ' + boss.module + ' not found'); }
   }
 
   function _launchOverworld(mapId) {
+    _commitBeforeLaunch();
     _ensureAdventurer();
     hide();
     _stopHomeMusic();
     _teardownBattles();
     try {
       localStorage.setItem('sog_overworld_map', mapId);
-      localStorage.removeItem('sog_overworld_pos');   // spawn fresh on that map
+      localStorage.removeItem('sog_overworld_pos');
     } catch (e) {}
     if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
     if (window.Overworld && typeof window.Overworld.init === 'function') window.Overworld.init();
   }
 
-  /* Mesopotamia arrival cinematic (D1) — a scripted beat, not reachable by
-     simply landing on a map, so it keeps a dedicated button. */
   function _playD1() {
+    _commitBeforeLaunch();
     _ensureAdventurer();
-    _setFlag('sog_mesopotamia_arrival_complete', false);   // must replay
+    _setFlag('sog_mesopotamia_arrival_complete', false);
     _launchOverworld('eastafrica');
     setTimeout(function () {
       if (window.Overworld && typeof window.Overworld.playD1 === 'function') window.Overworld.playD1();
@@ -224,17 +234,25 @@ SOG.DevPanel = (function () {
      UI
      ══════════════════════════════════════════════════════════════════════ */
 
-  var _panel = null, _statusEl = null, _statusTimer = null, _bodyEl = null;
-  // Staged (unapplied) edits — nothing here touches real state until APPLY.
-  var _stagedCards = null;   // array of ids
-  var _stagedGold  = null;   // number
-  var _stagedFlags = null;   // { key: bool }
+  var _panel = null, _statusEl = null, _statusTimer = null, _bodyEl = null, _applyBtn = null;
+  // Staged (unapplied) edits — written only by _applyAll().
+  var _stagedCards = null, _stagedGold = null, _stagedFlags = null;
+  var _dirty = false;
+  // Collapse state persists across re-renders so applying doesn't fold your groups.
+  var _groupOpen = {};
+
+  function _markDirty() {
+    _dirty = true;
+    if (_applyBtn) _applyBtn.classList.add('dp-pending');
+    var b = document.getElementById('dp-dirty-banner');
+    if (b) b.style.display = 'block';
+  }
 
   function _injectStyles() {
     if (document.getElementById('sog-dev-panel-style')) return;
     var P = '#' + PANEL_ID;
     var css =
-      P + '{position:fixed;top:10px;right:10px;width:430px;max-height:92vh;display:flex;flex-direction:column;' +
+      P + '{position:fixed;top:10px;right:10px;width:440px;max-height:92vh;display:flex;flex-direction:column;' +
         'z-index:99999;background:rgba(8,6,4,0.96);border:2px solid #d4aa50;border-radius:6px;' +
         'box-shadow:0 6px 28px rgba(0,0,0,.7);font-family:"Courier New",monospace;font-size:12px;color:#e8d8a0;' +
         'opacity:0;pointer-events:none;transition:opacity .15s ease;}' +
@@ -252,26 +270,40 @@ SOG.DevPanel = (function () {
       P + ' .dp-btn{padding:5px 9px;background:rgba(212,170,80,.09);border:1px solid rgba(212,170,80,.4);' +
         'border-radius:4px;color:#e8d8a0;font-family:inherit;font-size:11px;cursor:pointer;}' +
       P + ' .dp-btn:hover{background:rgba(212,170,80,.24);border-color:#d4aa50;}' +
-      P + ' .dp-btn.dp-apply{background:rgba(120,200,120,.14);border-color:#6db76d;color:#bdf0bd;font-weight:bold;}' +
-      P + ' .dp-btn.dp-apply:hover{background:rgba(120,200,120,.3);}' +
       P + ' .dp-btn.dp-danger{background:rgba(220,90,70,.12);border-color:#b5563f;color:#f0b9ac;}' +
       P + ' .dp-btn.dp-danger:hover{background:rgba(220,90,70,.28);}' +
-      P + ' .dp-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px 8px;max-height:230px;overflow-y:auto;' +
-        'border:1px solid rgba(212,170,80,.2);border-radius:4px;padding:5px 6px;background:rgba(0,0,0,.25);}' +
+      // group header (checkbox + arrow + title)
+      P + ' .dp-ghead{display:flex;align-items:center;gap:6px;margin:6px 0 2px;padding:3px 5px;cursor:pointer;' +
+        'background:rgba(212,170,80,.07);border:1px solid rgba(212,170,80,.22);border-radius:4px;}' +
+      P + ' .dp-ghead:hover{background:rgba(212,170,80,.15);}' +
+      P + ' .dp-arrow{width:10px;display:inline-block;color:#caa84e;}' +
+      P + ' .dp-gname{flex:1;color:#e8d8a0;font-size:11px;}' +
+      P + ' .dp-gcount{color:#9c8a55;font-size:10px;}' +
+      P + ' .dp-glist{display:grid;grid-template-columns:1fr 1fr;gap:0 8px;padding:3px 6px 5px 22px;}' +
       P + ' label.dp-chk{display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;padding:1px 0;line-height:1.3;}' +
       P + ' label.dp-chk.dp-fixed{opacity:.55;cursor:not-allowed;}' +
       P + ' label.dp-chk input{margin:0;flex:0 0 auto;}' +
-      P + ' .dp-eragrp{grid-column:1 / -1;color:#caa84e;font-size:10px;margin-top:5px;text-transform:uppercase;letter-spacing:.5px;}' +
-      P + ' .dp-eragrp:first-child{margin-top:0;}' +
+      P + ' .dp-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px 8px;' +
+        'border:1px solid rgba(212,170,80,.2);border-radius:4px;padding:5px 6px;background:rgba(0,0,0,.25);}' +
+      P + ' .dp-eragrp{color:#caa84e;font-size:10px;margin:7px 0 2px;text-transform:uppercase;letter-spacing:.5px;}' +
       P + ' input[type=number],select{background:rgba(0,0,0,.4);border:1px solid rgba(212,170,80,.4);color:#e8d8a0;' +
         'font-family:inherit;font-size:11px;padding:4px 6px;border-radius:3px;}' +
       P + ' .dp-cur{color:#8ad08a;font-size:10px;}' +
       P + ' .dp-bosstbl{width:100%;border-collapse:collapse;font-size:11px;}' +
       P + ' .dp-bosstbl td,' + P + ' .dp-bosstbl th{padding:2px 4px;text-align:left;}' +
       P + ' .dp-bosstbl th{color:#caa84e;font-size:10px;font-weight:normal;}' +
-      P + ' .dp-foot{flex:0 0 auto;padding:6px 12px;border-top:1px solid rgba(212,170,80,.3);' +
-        'color:#9c8a55;font-size:10px;display:flex;justify-content:space-between;gap:8px;}' +
-      P + ' .dp-status{color:#8ad08a;text-align:right;flex:1;}';
+      // footer + apply
+      P + ' .dp-foot{flex:0 0 auto;padding:7px 12px;border-top:1px solid rgba(212,170,80,.35);' +
+        'background:rgba(0,0,0,.35);display:flex;flex-direction:column;gap:5px;}' +
+      P + ' .dp-applybtn{width:100%;padding:9px;background:rgba(120,200,120,.15);border:1px solid #6db76d;' +
+        'border-radius:4px;color:#bdf0bd;font-family:inherit;font-size:13px;font-weight:bold;cursor:pointer;' +
+        'letter-spacing:.5px;}' +
+      P + ' .dp-applybtn:hover{background:rgba(120,200,120,.32);}' +
+      P + ' .dp-applybtn.dp-pending{background:rgba(240,190,60,.2);border-color:#e0b93c;color:#ffe9a8;' +
+        'animation:dpPulse 1.4s ease-in-out infinite;}' +
+      '@keyframes dpPulse{0%,100%{opacity:1}50%{opacity:.72}}' +
+      P + ' .dp-dirty{display:none;color:#ffd97a;font-size:10px;text-align:center;}' +
+      P + ' .dp-status{color:#8ad08a;font-size:10px;text-align:center;min-height:12px;}';
     var s = document.createElement('style');
     s.id = 'sog-dev-panel-style';
     s.textContent = css;
@@ -293,78 +325,171 @@ SOG.DevPanel = (function () {
   function _sec(title) { return _el('div', 'dp-sec', title); }
   function _note(text) { return _el('div', 'dp-note', text); }
 
+  /* ── SECTION 0 · NUCLEAR (top, per request) ────────────────────────── */
+  function _buildNuclearSection(frag) {
+    frag.appendChild(_sec('☢ Reset everything'));
+    var row = _el('div', 'dp-row');
+    row.appendChild(_btn('Clear adventure progress + reload', 'dp-danger', function () {
+      if (!window.confirm('Clear ALL adventure progress? (audio settings kept)')) return;
+      var keep = /^(sog_dev_menu_visible|sog_music|sog_sfx|sog_volume|sog_muted|sog_master)/i;
+      var rm = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && /^sog_/.test(k) && !keep.test(k)) rm.push(k);
+      }
+      rm.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+      location.reload();
+    }));
+    row.appendChild(_btn('Wipe everything + reload', 'dp-danger', function () {
+      if (!window.confirm('Wipe ALL localStorage? (full reset)')) return;
+      try { localStorage.clear(); } catch (e) {}
+      location.reload();
+    }));
+    frag.appendChild(row);
+  }
+
   /* ── SECTION 1 · CARDS ─────────────────────────────────────────────── */
   function _buildCardsSection(frag) {
     frag.appendChild(_sec('1 · Cards — collection'));
-    var owned = _readOwnedCardIds();
-    _stagedCards = owned.slice();
+    _stagedCards = _readOwnedCardIds();
     var starters = _starters();
 
-    var count = _el('div', 'dp-note');
-    function _updCount() {
-      count.innerHTML = '';
-      count.appendChild(_el('span', 'dp-cur', 'Owned now: ' + _readOwnedCardIds().length +
-        '  ·  staged: ' + _stagedCards.length + ' cards'));
-    }
+    frag.appendChild(_note('Boxes show what is ACTUALLY owned right now. Starters are dimmed ' +
+      '(always owned). Tokens are not deckable. Click a group name to expand; the box beside ' +
+      'it toggles that whole group. Nothing is saved until APPLY ALL CHANGES.'));
 
-    frag.appendChild(_note('Checkboxes show what is ACTUALLY owned right now. ' +
-      'Starters (always owned, cannot be removed) are dimmed. Tokens are not deckable ' +
-      'and are excluded. Changes apply only on “Apply cards”.'));
-    frag.appendChild(count);
-
-    var grid = _el('div', 'dp-grid');
-    // Group by era so the list is scannable.
-    var groups = {}, order = [];
-    (typeof CARDS !== 'undefined' ? CARDS : []).forEach(function (c) {
-      var g = _isToken(c) ? 'Tokens (not deckable)' : (c.era || 'Other');
-      if (!groups[g]) { groups[g] = []; order.push(g); }
+    // Build the groups
+    var groups = {}, present = [];
+    _allCards().forEach(function (c) {
+      var g = _groupOf(c);
+      if (!groups[g]) { groups[g] = []; present.push(g); }
       groups[g].push(c);
     });
-    order.forEach(function (g) {
-      grid.appendChild(_el('div', 'dp-eragrp', g));
-      groups[g].forEach(function (c) {
-        var fixed = starters.indexOf(c.id) !== -1 || _isToken(c);
+    var ordered = GROUP_ORDER.filter(function (g) { return groups[g]; })
+      .concat(present.filter(function (g) { return GROUP_ORDER.indexOf(g) === -1; }));
+
+    function _selectable(list) {
+      return list.filter(function (c) { return !c.token && starters.indexOf(c.id) === -1; });
+    }
+    function _stagedHas(id) { return _stagedCards.indexOf(id) !== -1; }
+    function _stage(id, on) {
+      var i = _stagedCards.indexOf(id);
+      if (on && i === -1) _stagedCards.push(id);
+      else if (!on && i !== -1) _stagedCards.splice(i, 1);
+    }
+
+    var unlockAllCb;                     // forward ref for sync
+    var groupCbs = {};                   // group name → checkbox
+    var countEl = _el('span', 'dp-cur');
+
+    function _syncHeaders() {
+      var totalSel = 0, totalAll = 0;
+      ordered.forEach(function (g) {
+        var sel = _selectable(groups[g]);
+        var on  = sel.filter(function (c) { return _stagedHas(c.id); }).length;
+        totalSel += on; totalAll += sel.length;
+        var cb = groupCbs[g];
+        if (cb) {
+          cb.checked       = sel.length > 0 && on === sel.length;
+          cb.indeterminate = on > 0 && on < sel.length;
+        }
+        var cnt = document.getElementById('dp-gcount-' + g.replace(/\W/g, ''));
+        if (cnt) cnt.textContent = on + '/' + sel.length;
+      });
+      if (unlockAllCb) {
+        unlockAllCb.checked       = totalAll > 0 && totalSel === totalAll;
+        unlockAllCb.indeterminate = totalSel > 0 && totalSel < totalAll;
+      }
+      countEl.textContent = 'owned now: ' + _readOwnedCardIds().length + '  ·  staged: ' + _stagedCards.length;
+    }
+
+    // ── Unlock All (top of the card section) ──
+    var allRow = _el('div', 'dp-row');
+    var allLab = _el('label', 'dp-chk');
+    unlockAllCb = document.createElement('input');
+    unlockAllCb.type = 'checkbox';
+    unlockAllCb.id = 'dp-unlock-all';
+    unlockAllCb.addEventListener('change', function () {
+      var on = unlockAllCb.checked;
+      ordered.forEach(function (g) {
+        _selectable(groups[g]).forEach(function (c) { _stage(c.id, on); });
+      });
+      // repaint every card box
+      _bodyEl.querySelectorAll('input[data-card-id]').forEach(function (cb) {
+        if (cb.disabled) return;
+        cb.checked = _stagedHas(parseInt(cb.dataset.cardId, 10));
+      });
+      _syncHeaders();
+      _markDirty();
+    });
+    allLab.appendChild(unlockAllCb);
+    allLab.appendChild(_el('span', null, 'UNLOCK ALL'));
+    allRow.appendChild(allLab);
+    allRow.appendChild(countEl);
+    frag.appendChild(allRow);
+
+    // ── Collapsible groups ──
+    ordered.forEach(function (g) {
+      var list = groups[g];
+      var sel  = _selectable(list);
+      var safeId = g.replace(/\W/g, '');
+      if (_groupOpen[g] === undefined) _groupOpen[g] = false;   // collapsed by default
+
+      var head = _el('div', 'dp-ghead');
+      var gcb  = document.createElement('input');
+      gcb.type = 'checkbox';
+      gcb.disabled = sel.length === 0;                 // tokens group has nothing selectable
+      gcb.addEventListener('click', function (e) { e.stopPropagation(); });
+      gcb.addEventListener('change', function () {
+        sel.forEach(function (c) { _stage(c.id, gcb.checked); });
+        listEl.querySelectorAll('input[data-card-id]').forEach(function (cb) {
+          if (cb.disabled) return;
+          cb.checked = _stagedHas(parseInt(cb.dataset.cardId, 10));
+        });
+        _syncHeaders();
+        _markDirty();
+      });
+      groupCbs[g] = gcb;
+
+      var arrow = _el('span', 'dp-arrow', _groupOpen[g] ? '▼' : '▶');
+      var cnt   = _el('span', 'dp-gcount');
+      cnt.id = 'dp-gcount-' + safeId;
+
+      head.appendChild(gcb);
+      head.appendChild(arrow);
+      head.appendChild(_el('span', 'dp-gname', g));
+      head.appendChild(cnt);
+      frag.appendChild(head);
+
+      var listEl = _el('div', 'dp-glist');
+      listEl.style.display = _groupOpen[g] ? 'grid' : 'none';
+      list.forEach(function (c) {
+        var fixed = c.token || starters.indexOf(c.id) !== -1;
         var lab = _el('label', 'dp-chk' + (fixed ? ' dp-fixed' : ''));
         var cb  = document.createElement('input');
         cb.type = 'checkbox';
-        cb.checked  = _stagedCards.indexOf(c.id) !== -1;
+        cb.checked  = _stagedHas(c.id);
         cb.disabled = fixed;
         cb.dataset.cardId = String(c.id);
         cb.addEventListener('change', function () {
-          var i = _stagedCards.indexOf(c.id);
-          if (cb.checked && i === -1) _stagedCards.push(c.id);
-          else if (!cb.checked && i !== -1) _stagedCards.splice(i, 1);
-          _updCount();
+          _stage(c.id, cb.checked);
+          _syncHeaders();
+          _markDirty();
         });
         lab.appendChild(cb);
         lab.appendChild(_el('span', null, c.id + ' ' + c.name));
-        grid.appendChild(lab);
+        listEl.appendChild(lab);
+      });
+      frag.appendChild(listEl);
+
+      head.addEventListener('click', function () {
+        _groupOpen[g] = !_groupOpen[g];
+        listEl.style.display = _groupOpen[g] ? 'grid' : 'none';
+        arrow.textContent = _groupOpen[g] ? '▼' : '▶';
       });
     });
-    frag.appendChild(grid);
 
-    function _setAll(on) {
-      _stagedCards = on
-        ? (typeof CARDS !== 'undefined' ? CARDS : []).filter(function (c) { return !_isToken(c); })
-            .map(function (c) { return c.id; })
-        : starters.slice();
-      grid.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
-        if (cb.disabled) return;
-        cb.checked = _stagedCards.indexOf(parseInt(cb.dataset.cardId, 10)) !== -1;
-      });
-      _updCount();
-    }
-
-    var row = _el('div', 'dp-row');
-    row.appendChild(_btn('Select all', null, function () { _setAll(true); }));
-    row.appendChild(_btn('Clear (starters only)', null, function () { _setAll(false); }));
-    row.appendChild(_btn('APPLY CARDS', 'dp-apply', function () {
-      _applyCards(_stagedCards);
-      _flash('Cards applied: ' + _readOwnedCardIds().length + ' owned');
-      _render();   // re-read real state
-    }));
-    frag.appendChild(row);
-    _updCount();
+    _syncHeaders();
   }
 
   /* ── SECTION 2 · GOLD ──────────────────────────────────────────────── */
@@ -377,28 +502,21 @@ SOG.DevPanel = (function () {
     var inp = document.createElement('input');
     inp.type = 'number'; inp.min = '0'; inp.style.width = '90px';
     inp.value = String(cur);
-    inp.addEventListener('input', function () { _stagedGold = inp.value; });
+    inp.addEventListener('input', function () { _stagedGold = inp.value; _markDirty(); });
     row.appendChild(inp);
-    row.appendChild(_btn('APPLY GOLD', 'dp-apply', function () {
-      _applyGold(_stagedGold);
-      _flash('Gold set to ' + _readGold());
-      _render();
-    }));
     row.appendChild(_el('span', 'dp-cur', 'current: ' + cur));
     frag.appendChild(row);
-    frag.appendChild(_note('Writes the real SOG.gold store (sog_gold).'));
   }
 
   /* ── SECTION 3 · PROGRESSION ───────────────────────────────────────── */
   function _buildProgressionSection(frag) {
     frag.appendChild(_sec('3 · Progression — beaten state & flags'));
-    frag.appendChild(_note('Serf/Giant write sog_node_<boss>_<tier>_beaten; “Met” writes ' +
-      'sog_node_encountered_<boss>. These drive flag stamps, node visibility and the ' +
-      'replay picker (picker shows only when BOTH tiers are beaten).'));
+    frag.appendChild(_note('Serf/Giant write sog_node_<boss>_<tier>_beaten; “Encountered” writes ' +
+      'sog_node_encountered_<boss>. These drive flag stamps, node visibility and the replay ' +
+      'picker (picker shows only when BOTH tiers are beaten).'));
 
     _stagedFlags = {};
 
-    // Boss tier table
     var tbl = _el('table', 'dp-bosstbl');
     var hr = document.createElement('tr');
     ['Boss', 'Serf beaten', 'Giant beaten', 'Encountered'].forEach(function (h) {
@@ -415,9 +533,9 @@ SOG.DevPanel = (function () {
         var td  = document.createElement('td');
         var cb  = document.createElement('input');
         cb.type = 'checkbox';
-        cb.checked = _getFlag(key);              // ← reflects REAL current state
+        cb.checked = _getFlag(key);
         _stagedFlags[key] = cb.checked;
-        cb.addEventListener('change', function () { _stagedFlags[key] = cb.checked; });
+        cb.addEventListener('change', function () { _stagedFlags[key] = cb.checked; _markDirty(); });
         td.appendChild(cb);
         tr.appendChild(td);
       });
@@ -425,18 +543,16 @@ SOG.DevPanel = (function () {
     });
     frag.appendChild(tbl);
 
-    // Grouped boolean flags
     FLAG_GROUPS.forEach(function (grp) {
       frag.appendChild(_el('div', 'dp-eragrp', grp.title));
       var grid = _el('div', 'dp-grid');
-      grid.style.maxHeight = 'none';
       grp.flags.forEach(function (f) {
         var lab = _el('label', 'dp-chk');
         var cb  = document.createElement('input');
         cb.type = 'checkbox';
-        cb.checked = _getFlag(f.key);            // ← reflects REAL current state
+        cb.checked = _getFlag(f.key);
         _stagedFlags[f.key] = cb.checked;
-        cb.addEventListener('change', function () { _stagedFlags[f.key] = cb.checked; });
+        cb.addEventListener('change', function () { _stagedFlags[f.key] = cb.checked; _markDirty(); });
         lab.appendChild(cb);
         lab.appendChild(_el('span', null, f.label));
         grid.appendChild(lab);
@@ -445,18 +561,10 @@ SOG.DevPanel = (function () {
     });
 
     var row = _el('div', 'dp-row');
-    row.appendChild(_btn('APPLY PROGRESSION', 'dp-apply', function () {
-      _applyFlags(_stagedFlags);
-      _flash('Progression applied');
-      _render();
-    }));
-    row.appendChild(_btn('Clear ALL progression', 'dp-danger', function () {
-      if (!window.confirm('Clear every boss tier/encounter flag, node reveal and milestone?')) return;
-      var cleared = {};
-      Object.keys(_stagedFlags).forEach(function (k) { cleared[k] = false; });
-      _applyFlags(cleared);
-      _flash('All progression flags cleared');
-      _render();
+    row.appendChild(_btn('Untick all progression', null, function () {
+      Object.keys(_stagedFlags).forEach(function (k) { _stagedFlags[k] = false; });
+      _bodyEl.querySelectorAll('.dp-bosstbl input, .dp-grid input').forEach(function (cb) { cb.checked = false; });
+      _markDirty();
     }));
     frag.appendChild(row);
   }
@@ -464,10 +572,10 @@ SOG.DevPanel = (function () {
   /* ── SECTION 4 · LAUNCH ────────────────────────────────────────────── */
   function _buildLaunchSection(frag) {
     frag.appendChild(_sec('4 · Launch'));
-    frag.appendChild(_note('Launches use the state above as-is — APPLY your changes first. ' +
-      'Battles bake window.__forceTier, the same one-shot the real node click uses.'));
+    frag.appendChild(_note('Launching APPLIES any staged changes first, then goes — so you always ' +
+      'land in the state shown above. Battles bake window.__forceTier, the same one-shot the real ' +
+      'node click uses.'));
 
-    // Battle launcher: tier + skip-intro + one button per boss
     var ctl = _el('div', 'dp-row');
     ctl.appendChild(_el('span', null, 'Tier:'));
     var tierSel = document.createElement('select');
@@ -498,10 +606,9 @@ SOG.DevPanel = (function () {
     MAPS.forEach(function (m) {
       mrow.appendChild(_btn(m.label, null, function () { _launchOverworld(m.id); }));
     });
-    mrow.appendChild(_btn('Mesopotamia arrival (D1 cinematic)', null, _playD1));
+    mrow.appendChild(_btn('Mesopotamia arrival (D1)', null, _playD1));
     frag.appendChild(mrow);
 
-    // Migrated utilities from the old menu.
     frag.appendChild(_el('div', 'dp-eragrp', 'AI battle log'));
     var lrow = _el('div', 'dp-row');
     lrow.appendChild(_btn('Summary', null, function () {
@@ -514,35 +621,14 @@ SOG.DevPanel = (function () {
       if (window.SOG && SOG.aiLog) SOG.aiLog.clear(); _flash('AI log cleared');
     }));
     frag.appendChild(lrow);
-
-    frag.appendChild(_el('div', 'dp-eragrp', 'Nuclear'));
-    var nrow = _el('div', 'dp-row');
-    nrow.appendChild(_btn('Clear adventure progress + reload', 'dp-danger', function () {
-      if (!window.confirm('Clear ALL adventure progress? (audio settings kept)')) return;
-      var keep = /^(sog_dev_menu_visible|sog_music|sog_sfx|sog_volume|sog_muted|sog_master)/i;
-      var rm = [];
-      for (var i = 0; i < localStorage.length; i++) {
-        var k = localStorage.key(i);
-        if (k && /^sog_/.test(k) && !keep.test(k)) rm.push(k);
-      }
-      rm.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
-      location.reload();
-    }));
-    nrow.appendChild(_btn('Wipe everything + reload', 'dp-danger', function () {
-      if (!window.confirm('Wipe ALL localStorage? (full reset)')) return;
-      try { localStorage.clear(); } catch (e) {}
-      location.reload();
-    }));
-    frag.appendChild(nrow);
   }
 
   /* ══════════════════════════════════════════════════════════════════════
-     PRESET SEAM — nothing built yet, but this is where presets plug in.
-     A preset is exactly the shape _readSnapshot() returns, so:
+     PRESET SEAM — a preset is exactly the shape _readSnapshot() returns:
        • "save current state as preset"  → _readSnapshot()
        • "apply preset P"                → _applySnapshot(P) then _render()
-     Add a PRESETS array + a row of buttons in _buildLaunchSection (or its own
-     section) calling _applySnapshot; every writer it needs already exists.
+     Add a PRESETS array + a row of buttons (its own section) calling
+     _applySnapshot; every writer it needs already exists.
      ══════════════════════════════════════════════════════════════════════ */
   function _readSnapshot() {
     var flags = {};
@@ -561,6 +647,7 @@ SOG.DevPanel = (function () {
     if (snap.cards) _applyCards(snap.cards);
     if (snap.gold != null) _applyGold(snap.gold);
     if (snap.flags) _applyFlags(snap.flags);
+    _refreshHud();
   }
 
   /* ══════════════════════════════════════════════════════════════════════
@@ -586,39 +673,55 @@ SOG.DevPanel = (function () {
     _panel.appendChild(_bodyEl);
 
     var foot = _el('div', 'dp-foot');
-    foot.appendChild(_el('span', null, '` toggles · re-reads state on open'));
-    _statusEl = _el('span', 'dp-status');
+    var dirty = _el('div', 'dp-dirty', '⚠ unapplied changes');
+    dirty.id = 'dp-dirty-banner';
+    foot.appendChild(dirty);
+    _applyBtn = _el('button', 'dp-applybtn', 'APPLY ALL CHANGES');
+    _applyBtn.type = 'button';
+    _applyBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      _applyAll();
+      _flash('Applied — ' + _readOwnedCardIds().length + ' cards, ' + _readGold() + ' gold');
+      _render();                      // re-read real state
+    });
+    foot.appendChild(_applyBtn);
+    _statusEl = _el('div', 'dp-status');
     foot.appendChild(_statusEl);
     _panel.appendChild(foot);
 
     document.body.appendChild(_panel);
   }
 
-  /* Rebuild the whole body from CURRENT REAL STATE. Called on open and after
-     every apply — this is what guarantees the panel never shows stale values. */
+  /* Rebuild the body from CURRENT REAL STATE. Called on open and after apply —
+     this is what guarantees the panel never shows stale values. */
   function _render() {
     if (!_bodyEl) return;
     var scroll = _bodyEl.scrollTop;
     _bodyEl.innerHTML = '';
     var frag = document.createDocumentFragment();
+    _buildNuclearSection(frag);
     _buildCardsSection(frag);
     _buildGoldSection(frag);
     _buildProgressionSection(frag);
     _buildLaunchSection(frag);
     _bodyEl.appendChild(frag);
     _bodyEl.scrollTop = scroll;
+    _dirty = false;
+    if (_applyBtn) _applyBtn.classList.remove('dp-pending');
+    var b = document.getElementById('dp-dirty-banner');
+    if (b) b.style.display = 'none';
   }
 
   function _flash(msg) {
     if (!_statusEl) return;
     _statusEl.textContent = msg;
     if (_statusTimer) clearTimeout(_statusTimer);
-    _statusTimer = setTimeout(function () { if (_statusEl) _statusEl.textContent = ''; }, 2200);
+    _statusTimer = setTimeout(function () { if (_statusEl) _statusEl.textContent = ''; }, 2500);
   }
 
   function show() {
     _build();
-    _render();                       // ALWAYS re-read real state on open
+    _render();
     _panel.classList.add('visible');
     try { localStorage.setItem(VIS_KEY, 'true'); } catch (e) {}
   }
@@ -645,7 +748,6 @@ SOG.DevPanel = (function () {
 
   return {
     show: show, hide: hide, toggle: toggle, isOpen: isOpen,
-    // Preset seam (see above) — exposed for console use / future preset UI.
     readSnapshot: _readSnapshot,
     applySnapshot: function (s) { _applySnapshot(s); _render(); }
   };
