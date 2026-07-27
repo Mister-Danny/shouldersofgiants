@@ -957,8 +957,20 @@ SOG.HammurabiBattle = (function () {
 
   /* The Hammurabi battle config — Arcadium-style capital battle with the three
      ability-carrying locations. Mirrors buildSargonConfig. */
+  /* Read a persisted tier-beaten flag (game.js stamps sog_node_<hook>_<tier>_beaten
+     on a win). Mirrors Gilgamesh/Sargon — drives the config-default tier below. */
+  function _tierBeatenLocal(hook, tier) {
+    try { return localStorage.getItem('sog_node_' + hook + '_' + tier + '_beaten') === 'true'; }
+    catch (e) { return false; }
+  }
+
   function buildHammurabiConfig() {
     var st = (window.SOG && SOG.state) || {};
+    // Tier derived from SAVE STATE (mirrors Gilgamesh): SERF until the Serf flag is
+    // beaten, GIANT for the rematch. Restarts (PLAY AGAIN) rebuild this config with
+    // __forceTier already consumed, so the default MUST be honest — a hardcoded
+    // 'giant' here silently turned Serf retries into Giant battles.
+    var _aiTier = _tierBeatenLocal('hammurabi', 'serf') ? 'giant' : 'serf';
     return {
       // Arcadium-style structure: 4 turns, 3 locations, standard slots/hands.
       structure: {
@@ -976,10 +988,11 @@ SOG.HammurabiBattle = (function () {
       },
       locationAbilities: { select: { mode: 'explicit', locations: _hammurabiLocations() } },
       scoring:  { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
-      // Giant AI tier by default (Serf + shared upgrades + the 'hammurabi' signature:
-      // destruction targeting + self-sacrifice bait + hold-for-target). Bespoke
-      // hammurabiSelectPlays stays as the untiered fallback; __forceTier A/Bs tiers.
-      ai:       { profile: 'heuristic', tier: 'giant', movement: 'adventure', settings: { selectPlays: hammurabiSelectPlays } },
+      // Two-tier AI, tier derived from state (_aiTier above): SERF for the first
+      // battle + retries, GIANT for the rematch ('hammurabi' signature: destruction
+      // targeting + self-sacrifice bait + hold-for-target). Bespoke
+      // hammurabiSelectPlays stays as the untiered fallback; __forceTier overrides.
+      ai:       { profile: 'heuristic', tier: _aiTier, movement: 'adventure', settings: { selectPlays: hammurabiSelectPlays } },
       presentation: HAMMURABI_PRESENTATION,
       rewards:  {},                 // none yet — card-47 grant + gold come in Stage 5
       scriptHook: 'hammurabi'       // scripted battle (presentation now; dialogue/scoreboard in Stage 4/5)

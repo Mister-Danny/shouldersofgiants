@@ -925,8 +925,20 @@ SOG.HangingGardensBattle = (function () {
 
   /* The Hanging Gardens battle config — Arcadium-style capital battle with three
      PLACEHOLDER locations. Mirrors buildHammurabiConfig. */
+  /* Read a persisted tier-beaten flag (game.js stamps sog_node_<hook>_<tier>_beaten
+     on a win). Mirrors Gilgamesh/Sargon — drives the config-default tier below. */
+  function _tierBeatenLocal(hook, tier) {
+    try { return localStorage.getItem('sog_node_' + hook + '_' + tier + '_beaten') === 'true'; }
+    catch (e) { return false; }
+  }
+
   function buildHangingGardensConfig() {
     var st = (window.SOG && SOG.state) || {};
+    // Tier derived from SAVE STATE (mirrors Gilgamesh): SERF until the Serf flag is
+    // beaten, GIANT for the rematch. Restarts (PLAY AGAIN) rebuild this config with
+    // __forceTier already consumed, so the default MUST be honest — a hardcoded
+    // 'giant' here silently turned Serf retries into Giant battles.
+    var _aiTier = _tierBeatenLocal('hanging-gardens', 'serf') ? 'giant' : 'serf';
     return {
       structure: {
         turns:            5,
@@ -943,10 +955,11 @@ SOG.HangingGardensBattle = (function () {
       },
       locationAbilities: { select: { mode: 'explicit', locations: _hgLocations() } },
       scoring:  { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
-      // Giant AI tier by default (Serf + shared upgrades + the 'hanging-gardens'
-      // signature: Neb early → discount-flood, dodge flood-risky rivers late).
-      // Bespoke hgSelectPlays stays as the untiered fallback; __forceTier A/Bs tiers.
-      ai:       { profile: 'heuristic', tier: 'giant', movement: 'adventure', settings: { selectPlays: hgSelectPlays } },
+      // Two-tier AI, tier derived from state (_aiTier above): SERF for the first
+      // battle + retries, GIANT for the rematch ('hanging-gardens' signature: Neb
+      // early → discount-flood, dodge flood-risky rivers late). Bespoke
+      // hgSelectPlays stays as the untiered fallback; __forceTier overrides.
+      ai:       { profile: 'heuristic', tier: _aiTier, movement: 'adventure', settings: { selectPlays: hgSelectPlays } },
       presentation: HG_PRESENTATION,
       rewards:  {},                       // none yet (placeholder build)
       scriptHook: 'hanging-gardens'

@@ -806,7 +806,8 @@ SOG.SargonBattle = (function () {
         // GIANT rematch → in-battle dominance intro (SARGON_GIANT_INTRO), straight to
         // play (no rules popup — the player learned the rules in the Serf battle). The
         // EXISTING Serf opening tutorial (_runOpeningDialogue) is left untouched.
-        if (_isSargonGiantRematch()) { runLines(SARGON_GIANT_INTRO, finish); }
+        var _rematch = _isSargonGiantRematch();
+        if (_rematch) { runLines(SARGON_GIANT_INTRO, finish); }
         else { _runOpeningDialogue(finish); }
       });
     },
@@ -952,6 +953,12 @@ SOG.SargonBattle = (function () {
   /* The Sargon battle config — Arcadium-style capital battle with the Sargon deck. */
   function buildSargonConfig() {
     var st = (window.SOG && SOG.state) || {};
+    // Tier derived from SAVE STATE (mirrors Gilgamesh): SERF until the Serf flag is
+    // beaten, GIANT for the rematch. Restarts (PLAY AGAIN) rebuild this config with
+    // __forceTier already consumed, so the default MUST be honest — a hardcoded
+    // 'giant' here silently turned Serf retries into Giant battles (wrong flag
+    // stamp, wrong card grant, phantom Giant intro).
+    var _aiTier = _tierBeatenLocal('sargon', 'serf') ? 'giant' : 'serf';
     return {
       // Arcadium-style structure: 4 turns, 3 locations, standard slots/hands.
       // NO cardsPerTurn cap (capital governs how many cards you can play).
@@ -970,10 +977,11 @@ SOG.SargonBattle = (function () {
       },
       locationAbilities: { select: { mode: 'explicit', locations: _sargonLocations() } },
       scoring:  { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
-      // Giant AI tier by default (Serf + shared upgrades + the 'sargon' signature:
-      // Sargon → centre, reinforce flanks). Bespoke sargonSelectPlays stays as the
-      // untiered fallback; window.__forceTier lets the dev menu A/B serf vs giant.
-      ai:       { profile: 'heuristic', tier: 'giant', movement: 'adventure', settings: { selectPlays: sargonSelectPlays } },
+      // Two-tier AI, tier derived from state (_aiTier above): SERF for the first
+      // battle + retries, GIANT for the rematch. Bespoke sargonSelectPlays stays as
+      // the untiered fallback; window.__forceTier (node click / dev menu) still
+      // overrides this in initGame.
+      ai:       { profile: 'heuristic', tier: _aiTier, movement: 'adventure', settings: { selectPlays: sargonSelectPlays } },
       presentation: SARGON_PRESENTATION,
       rewards:  {},                 // none yet — win/loss/reward flow comes with the script later
       scriptHook: 'sargon'          // scripted battle (presentation + opening tutorial + scoreboard)

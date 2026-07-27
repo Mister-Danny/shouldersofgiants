@@ -745,8 +745,20 @@ SOG.NarmerBattle = (function () {
   /* ══════════════════════════════════════════════════════════════
      CONFIG + SCRIPT
   ══════════════════════════════════════════════════════════════ */
+  /* Read a persisted tier-beaten flag (game.js stamps sog_node_<hook>_<tier>_beaten
+     on a win). Mirrors Gilgamesh/Sargon — drives the config-default tier below. */
+  function _tierBeatenLocal(hook, tier) {
+    try { return localStorage.getItem('sog_node_' + hook + '_' + tier + '_beaten') === 'true'; }
+    catch (e) { return false; }
+  }
+
   function buildNarmerConfig() {
     var st = (window.SOG && SOG.state) || {};
+    // Tier derived from SAVE STATE (mirrors Gilgamesh): SERF until the Serf flag is
+    // beaten, GIANT for the rematch. Restarts (PLAY AGAIN) rebuild this config with
+    // __forceTier already consumed, so the default MUST be honest — a hardcoded
+    // 'giant' here silently turned Serf retries into Giant battles.
+    var _aiTier = _tierBeatenLocal('narmer', 'serf') ? 'giant' : 'serf';
     return {
       structure: {
         turns:            5,
@@ -766,11 +778,12 @@ SOG.NarmerBattle = (function () {
       // isAdvanceUnlocked) for BOTH sides. No other battle sets this.
       rules: { advanceGate: { playerHome: LOC_LOWER_EGYPT, contested: LOC_MEMPHIS, aiHome: LOC_UPPER_EGYPT } },
       scoring:  { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
-      // Giant AI tier by default (Serf + shared upgrades + the 'narmer' signature:
-      // Pyramid/Papyrus combo, Narmer→Memphis when lopsided, Imhotep early, fill
-      // home cheap / premiums forward). Bespoke narmerSelectPlays stays as the
-      // untiered fallback; window.__forceTier lets the dev menu A/B serf vs giant.
-      ai:       { profile: 'heuristic', tier: 'giant', movement: 'adventure',
+      // Two-tier AI, tier derived from state (_aiTier above): SERF for the first
+      // battle + retries, GIANT for the rematch ('narmer' signature: Pyramid/Papyrus
+      // combo, Narmer→Memphis when lopsided, Imhotep early, fill home cheap /
+      // premiums forward). Bespoke narmerSelectPlays stays as the untiered
+      // fallback; window.__forceTier (node click / dev menu) overrides.
+      ai:       { profile: 'heuristic', tier: _aiTier, movement: 'adventure',
                   settings: { selectPlays: narmerSelectPlays, chariotMoveDecision: narmerChariotMove } },
       presentation: {
         bodyClass:      'narmer-battle',
