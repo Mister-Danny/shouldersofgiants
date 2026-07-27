@@ -1281,12 +1281,13 @@ var Overworld = (function () {
       // stamped the Giant flag stays (covers the edge case of a Giant win reached via
       // the picker after a Serf loss — the Giant flag then shows already-stamped).
       if (tier === 'giant' && !_tierBeaten(hook, 'serf') && !_tierBeaten(hook, 'giant')) return;
-      // Gilgamesh's SERF flag is gated on ENGAGEMENT: his node is visible on Mesopotamia
-      // arrival (unlike other bosses, whose nodes are revealed by beating the prior
-      // boss), so his Serf flag would otherwise pre-show on arrival. Hold it until the
-      // player has actually encountered him (started the walk-up conversation → sets
-      // sog_node_encountered_gilgamesh). Every other boss shows its Serf flag with its node.
-      if (hook === 'gilgamesh' && tier === 'serf' && !_nodeEncountered('gilgamesh')) return;
+      // Gilgamesh's + Narmer's SERF flags are gated on ENGAGEMENT: their nodes are
+      // visible on map arrival (unlike the reveal-animated bosses), so their Serf
+      // flags would otherwise pre-show. Hold each until the player has actually
+      // encountered the boss (encounter start sets sog_node_encountered_<hook>),
+      // where it ERECTS as its own beat. The reveal-animated bosses (Sargon /
+      // Hammurabi / Hanging Gardens) erect their Serf flag with the node reveal.
+      if ((hook === 'gilgamesh' || hook === 'narmer') && tier === 'serf' && !_nodeEncountered(hook)) return;
       var flag = document.createElement('div');
       flag.className = 'node-flag node-flag-' + tier;
       flag.dataset.tier = tier;
@@ -1408,6 +1409,28 @@ var Overworld = (function () {
     }
   }
 
+  /* Shared boss-node tier routing — uniform across ALL five bosses. The picker is
+     purely a REPLAY chooser for fully-cleared bosses, never a progression gate:
+       BOTH tiers beaten  → difficulty picker (the ONLY state that shows it)
+       Serf beaten only   → launch the GIANT directly (no picker; the boss's
+                            in-battle rematch intro plays via its onBattleStart)
+       encountered only   → retry the Serf directly (no first-encounter replay)
+       never encountered  → the boss's scripted first encounter (caller-supplied)
+     Progression therefore flows Serf → Giant automatically; Giant-before-Serf is
+     unreachable (no picker exists before both flags are stamped). A legacy save
+     that beat Giant first via the old picker routes to Serf until it's cleared. */
+  function _routeBossTier(hook, launchFn, firstEncounter) {
+    if (_tierBeaten(hook, 'serf') && _tierBeaten(hook, 'giant')) {
+      _showDifficultyPicker(launchFn);
+    } else if (_tierBeaten(hook, 'serf')) {
+      _launchAtTier('giant', launchFn);
+    } else if (_nodeEncountered(hook)) {
+      _launchAtTier('serf', launchFn);
+    } else {
+      firstEncounter();
+    }
+  }
+
   function onNodeClick(node) {
     if (isMoving || isTransitioning || isDialogueLocked) return;
     // Focus gate: at 0 focus, every node action (battle start, marketplace
@@ -1423,25 +1446,17 @@ var Overworld = (function () {
       isDialogueLocked = true;
       cancelIdle();
       walkPath([{ x: node.x, y: node.y }], function () {
-        if (_tierBeaten('gilgamesh', 'serf')) {
-          // FORCED GIANT REMATCH (after the Serf win → shop → return): a NORMAL Giant
-          // battle — Giant AI on the Giant flag, tier=flag aligned like every other
-          // boss. NO picker, NO overworld intro (the dominance intro plays IN-BATTLE
-          // via onBattleStart). Win → Gilgamesh card + gold, stamps the Giant flag.
-          _launchAtTier('giant', _launchGilgameshBattle);
-        } else if (_nodeEncountered('gilgamesh')) {
-          // Encountered but the Serf flag isn't beaten yet (lost the first Serf battle,
-          // got Cuneiform, came back): retry the SAME normal Serf battle — no replay of
-          // the one-time first-encounter intro dialogue.
-          _launchAtTier('serf', _launchGilgameshBattle);
-        } else {
-          // First encounter: "Welcome to my city" → a NORMAL Serf battle (Serf AI on
-          // the Serf flag), exactly like every other boss's Serf. Winnable; a loss
-          // triggers the Farmer/Cuneiform front-half beat, then a Serf retry.
+        // Shared routing (this WAS the bespoke Gilgamesh ladder — now the rule for
+        // every boss): Serf win forces the Giant rematch (dominance intro plays
+        // IN-BATTLE via onBattleStart), a Serf loss retries the Serf without the
+        // one-time intro, and only a FULLY-cleared boss shows the replay picker.
+        _routeBossTier('gilgamesh', _launchGilgameshBattle, function () {
+          // First encounter: "Welcome to my city" → a NORMAL Serf battle. Winnable;
+          // a loss triggers the Farmer/Cuneiform front-half beat, then a Serf retry.
           _runGilgameshEncounter(D2B_GILGAMESH_DIALOGUE, function () {
             _launchAtTier(_firstEncounterTier('gilgamesh'), _launchGilgameshBattle);
           });
-        }
+        });
       });
       return;
     }
@@ -1464,11 +1479,11 @@ var Overworld = (function () {
       isDialogueLocked = true;
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
-        if (_nodeEncountered('sargon')) {
-          _showDifficultyPicker(_launchSargonBattle);   // rematch → picker (skips deck gate + dialogue)
-        } else {
-          _runSargonEncounter(node);                    // first: deck gate → encounter → battle at first tier
-        }
+        // Serf→Giant flows automatically; picker only once BOTH tiers are cleared.
+        // Rematches skip the deck gate + encounter dialogue (as the picker did).
+        _routeBossTier('sargon', _launchSargonBattle, function () {
+          _runSargonEncounter(node);   // first: deck gate → encounter → battle at first tier
+        });
       });
       return;
     }
@@ -1479,11 +1494,11 @@ var Overworld = (function () {
       isDialogueLocked = true;
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
-        if (_nodeEncountered('hammurabi')) {
-          _showDifficultyPicker(_launchHammurabiBattle);   // rematch → picker (skips deck gate + dialogue)
-        } else {
-          _runHammurabiEncounter(node);                    // first: deck gate → encounter → battle at first tier
-        }
+        // Serf→Giant flows automatically; picker only once BOTH tiers are cleared.
+        // Rematches skip the deck gate + encounter dialogue (as the picker did).
+        _routeBossTier('hammurabi', _launchHammurabiBattle, function () {
+          _runHammurabiEncounter(node);   // first: deck gate → encounter → battle at first tier
+        });
       });
       return;
     }
@@ -1496,29 +1511,27 @@ var Overworld = (function () {
       isDialogueLocked = true;
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
-        // Rematch (already encountered) → difficulty picker → battle at the chosen
-        // tier, skipping the intro dialogue (A lines → knock → B lines → door).
-        if (_nodeEncountered('hanging-gardens')) {
-          _showDifficultyPicker(_launchHangingGardensBattle);
-          return;
-        }
-        // First encounter → the intro dialogue, then the battle at Neb's
-        // first-encounter tier (Serf).
-        var firstLaunch = function () { _launchAtTier(_firstEncounterTier('hanging-gardens'), _launchHangingGardensBattle); };
-        var hud = window.SOG && window.SOG.HUD;
-        if (!hud || typeof hud.enterDialogueMode !== 'function') {
-          firstLaunch();   // no HUD → skip straight to the wipe
-          return;
-        }
-        hud.enterDialogueMode(null, function () {
-          _runLinesKeepOpen(D5_HANGING_GARDENS_CLICK_A, function () {
-            // Knock — WAIT for the sound to fully finish before the next lines.
-            _playSfxThen('sfx/knocking.m4a', function () {
-              _runLinesKeepOpen(D5_HANGING_GARDENS_CLICK_B, function () {
-                if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
-                // Door opening — WAIT for the sound to fully finish before the wipe.
-                _playSfxThen('sfx/opendoor.m4a', function () {
-                  firstLaunch();
+        // Serf→Giant flows automatically; picker only once BOTH tiers are cleared.
+        // Rematches skip the intro (A lines → knock → B lines → door), as before.
+        _routeBossTier('hanging-gardens', _launchHangingGardensBattle, function () {
+          // First encounter → the intro dialogue, then the battle at Neb's
+          // first-encounter tier (Serf).
+          var firstLaunch = function () { _launchAtTier(_firstEncounterTier('hanging-gardens'), _launchHangingGardensBattle); };
+          var hud = window.SOG && window.SOG.HUD;
+          if (!hud || typeof hud.enterDialogueMode !== 'function') {
+            firstLaunch();   // no HUD → skip straight to the wipe
+            return;
+          }
+          hud.enterDialogueMode(null, function () {
+            _runLinesKeepOpen(D5_HANGING_GARDENS_CLICK_A, function () {
+              // Knock — WAIT for the sound to fully finish before the next lines.
+              _playSfxThen('sfx/knocking.m4a', function () {
+                _runLinesKeepOpen(D5_HANGING_GARDENS_CLICK_B, function () {
+                  if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+                  // Door opening — WAIT for the sound to fully finish before the wipe.
+                  _playSfxThen('sfx/opendoor.m4a', function () {
+                    firstLaunch();
+                  });
                 });
               });
             });
@@ -1530,19 +1543,18 @@ var Overworld = (function () {
 
     // ── The Double Crown (Egypt) — walk up to the node, then the Narmer advance
     //    battle. FIRST click plays the encounter dialogue → battle at Narmer's
-    //    first-encounter tier (Serf); once encountered, later clicks show the
-    //    Serf/Giant difficulty picker → battle at the chosen tier. ──
+    //    first-encounter tier (Serf); afterwards the shared _routeBossTier rule
+    //    applies (Serf → Giant automatically, picker only when fully cleared). ──
     if (node.id === 'double-crown' && currentMapId === 'egypt') {
       isDialogueLocked = true;
       cancelIdle();
       walkPath(node.path || [{ x: node.x, y: node.y }], function () {
-        if (_nodeEncountered('narmer')) {
-          _showDifficultyPicker(_launchNarmerBattle);
-        } else {
+        // Serf→Giant flows automatically; picker only once BOTH tiers are cleared.
+        _routeBossTier('narmer', _launchNarmerBattle, function () {
           _runNarmerEncounter(NARMER_ENCOUNTER_DIALOGUE, function () {
             _launchAtTier(_firstEncounterTier('narmer'), _launchNarmerBattle);
           });
-        }
+        });
       });
       return;
     }
@@ -2502,8 +2514,7 @@ var Overworld = (function () {
     try { localStorage.setItem('sog_node_encountered_gilgamesh', 'true'); } catch (e) {}
     _refreshNodeFlags();
     // Erect the just-rendered Serf flag (planted-pole reveal) as the conversation begins.
-    var gSerf = overlayEl && overlayEl.querySelector('.node-flags[data-hook="gilgamesh"] .node-flag-serf');
-    if (gSerf) { gSerf.style.opacity = '0'; _erectFlagIn(gSerf); }
+    _erectSerfFlagFor('gilgamesh');
     hud.enterDialogueMode(null, function () {
       _runLinesKeepOpen(lines, function () {
         try { localStorage.setItem(KEY_MET_GILGAMESH, 'true'); } catch (e) {}
@@ -2518,6 +2529,12 @@ var Overworld = (function () {
   function _runNarmerEncounter(lines, onDone) {
     var hud = window.SOG && window.SOG.HUD;
     if (!hud || typeof hud.enterDialogueMode !== 'function') { if (onDone) onDone(); return; }
+    // Mark Narmer ENGAGED at the encounter start and reveal his Serf flag now — it's
+    // held off the map until this beat (see _renderNodeFlags's engagement gate), so
+    // it ERECTS as the walk-up conversation begins (mirrors Gilgamesh).
+    try { localStorage.setItem('sog_node_encountered_narmer', 'true'); } catch (e) {}
+    _refreshNodeFlags();
+    _erectSerfFlagFor('narmer');
     hud.enterDialogueMode(null, function () {
       _runLinesKeepOpen(lines, function () {
         try { localStorage.setItem(KEY_MET_NARMER, 'true'); } catch (e) {}
@@ -2566,11 +2583,16 @@ var Overworld = (function () {
       }
       _dustStormRevealSargon(function () {
         _playMapMusic();   // reveal done → fade the map music back in
-        runDialogue(D4_SARGON_REVEAL_OUTRO, function () {
-          try { localStorage.setItem(KEY_SARGON_NODE_REVEALED, 'true'); } catch (e) {}
-          _refreshNodeFlags();   // give the freshly-revealed Sargon node its flags
-          isDialogueLocked = false;
-          if (done) done();
+        // Set the revealed flag BEFORE refreshing (the node's showIf reads it —
+        // without it the flag cluster won't render), then plant the Serf flag as
+        // its own beat before the Explorer's outro reaction.
+        try { localStorage.setItem(KEY_SARGON_NODE_REVEALED, 'true'); } catch (e) {}
+        _refreshNodeFlags();   // give the freshly-revealed Sargon node its flags
+        _erectSerfFlagFor('sargon', function () {
+          runDialogue(D4_SARGON_REVEAL_OUTRO, function () {
+            isDialogueLocked = false;
+            if (done) done();
+          });
         });
       });
     });
@@ -2696,7 +2718,7 @@ var Overworld = (function () {
     _earthRiseRevealHammurabi(function () {
       try { localStorage.setItem(KEY_HAMMURABI_NODE_REVEALED, 'true'); } catch (e) {}
       _refreshNodeFlags();   // give the freshly-revealed Hammurabi node its flags
-      if (done) done();
+      _erectSerfFlagFor('hammurabi', done);   // planted-pole reveal, then continue
     });
   }
 
@@ -2791,10 +2813,14 @@ var Overworld = (function () {
     cancelIdle();
     runDialogue(D5_HANGING_GARDENS_REFLECT, function () {
       _shimmerRevealHangingGardens(function () {
-        runDialogue(D5_HANGING_GARDENS_REACTION, function () {
-          try { localStorage.setItem(KEY_HANGING_GARDENS_REVEALED, 'true'); } catch (e) {}
-          _refreshNodeFlags();   // give the freshly-revealed Hanging Gardens node its flags
-          if (done) done();
+        // Plant the Serf flag as its own beat right after the shimmer, BEFORE the
+        // reaction lines (revealed flag must be set first — the node's showIf reads it).
+        try { localStorage.setItem(KEY_HANGING_GARDENS_REVEALED, 'true'); } catch (e) {}
+        _refreshNodeFlags();   // give the freshly-revealed Hanging Gardens node its flags
+        _erectSerfFlagFor('hanging-gardens', function () {
+          runDialogue(D5_HANGING_GARDENS_REACTION, function () {
+            if (done) done();
+          });
         });
       });
     });
@@ -3146,13 +3172,18 @@ var Overworld = (function () {
      settle"). Two phases, both anchored at the pole base (bottom-centre, sunk
      behind the node). The stamp "thunk" is separate/unchanged. */
   var FLAG_ERECT = {
-    riseDur:        0.55,   // s  — PHASE 1: vertical rise duration
+    riseDur:        0.90,   // s  — PHASE 1: vertical rise duration
     riseEase:       'back.out(1.4)', // rise ease; back.out(1.x) adds a tiny peak overshoot ('power3.out' = none)
-    pivotDur:       0.75,   // s  — PHASE 2: tilt-to-angle duration
+    pivotDur:       1.20,   // s  — PHASE 2: tilt-to-angle duration
     pivotOvershoot: 2.4,    // GSAP back.out strength on the pivot settle (higher = tilts further PAST, then back)
-    overlap:        0.10,   // s  — pivot starts this long BEFORE the rise ends (keep small so phases stay legible)
+    overlap:        0.15,   // s  — pivot starts this long BEFORE the rise ends (keep small so phases stay legible)
     origin:         '50% 100%',   // pole base — both the rise (scaleY) and the pivot (rotation) hinge here
-    sfx:            null     // no sfx for now (set to a path later to add the "planted" sound back)
+    // SFX (SOG.sfx named one-shots — obey Master/SFX volume + mute; null = silent):
+    thudSfx:   'flagThud',  // pole PLANTING — fires at thudAtSec into the erect timeline
+    flapSfx:   'flagFlap',  // flag BENDING/settling — fires at flapAtSec into the timeline
+    thudAtSec: 0,           // s — thud trigger time (0 = the instant the rise starts)
+    flapAtSec: null         // s — flap trigger time; null = AUTO-sync to the pivot start
+                            //     (riseDur - overlap = 0.45s). Set a number to nudge by ear.
   };
 
   /* The flag's resting rotation (deg) — read from its computed CSS matrix so the
@@ -3176,7 +3207,6 @@ var Overworld = (function () {
     flagEl.style.opacity = '1';                 // container was hidden by the caller
     var img = flagEl.querySelector('.node-flag-img');
     if (!img || typeof gsap === 'undefined') { if (onComplete) onComplete(); return; }
-    if (FLAG_ERECT.sfx && window.SOG && SOG.sfx && typeof SOG.sfx.play === 'function') SOG.sfx.play(FLAG_ERECT.sfx);
 
     var rest = _flagRestAngle(flagEl);          // resting tilt in the flag's own frame
     // Start collapsed at the base + counter-rotated to VERTICAL (net angle 0), transparent.
@@ -3188,8 +3218,30 @@ var Overworld = (function () {
     tl.to(img, { scaleY: 1, opacity: 1, duration: FLAG_ERECT.riseDur, ease: FLAG_ERECT.riseEase });
     // PHASE 2 — PIVOT: tilt over to the resting angle (rotation −rest → 0 = net rest) with
     // a settling overshoot, starting slightly before the rise finishes.
+    var pivotStart = Math.max(0, FLAG_ERECT.riseDur - FLAG_ERECT.overlap);
     tl.to(img, { rotation: 0, duration: FLAG_ERECT.pivotDur, ease: 'back.out(' + FLAG_ERECT.pivotOvershoot + ')' },
-          Math.max(0, FLAG_ERECT.riseDur - FLAG_ERECT.overlap));
+          pivotStart);
+    // SFX ride the SAME timeline positions as the motion, so sound stays synced to
+    // what's on screen: thud as the pole plants, flap as the bend begins.
+    var _sfxOK = window.SOG && SOG.sfx && typeof SOG.sfx.playNamed === 'function';
+    if (_sfxOK && FLAG_ERECT.thudSfx) {
+      tl.call(function () { SOG.sfx.playNamed(FLAG_ERECT.thudSfx); }, null, FLAG_ERECT.thudAtSec || 0);
+    }
+    if (_sfxOK && FLAG_ERECT.flapSfx) {
+      var flapAt = (FLAG_ERECT.flapAtSec == null) ? pivotStart : FLAG_ERECT.flapAtSec;
+      tl.call(function () { SOG.sfx.playNamed(FLAG_ERECT.flapSfx); }, null, flapAt);
+    }
+  }
+
+  /* Erect a boss's freshly-rendered SERF flag as its own beat (planted-pole reveal
+     + thud/flap SFX). Used wherever a Serf flag first APPEARS: the Gilgamesh/Narmer
+     encounter start, and the Sargon/Hammurabi/Hanging-Gardens node reveals — so no
+     flag ever just pops in statically. Caller must have _refreshNodeFlags()'d first. */
+  function _erectSerfFlagFor(hook, onDone) {
+    var serf = overlayEl && overlayEl.querySelector('.node-flags[data-hook="' + hook + '"] .node-flag-serf');
+    if (!serf) { if (onDone) onDone(); return; }
+    serf.style.opacity = '0';
+    _erectFlagIn(serf, onDone);
   }
 
   /* Shared return-to-map flag ANIMATION (ALL non-Prehistory boss wins). The caller must
@@ -3200,17 +3252,30 @@ var Overworld = (function () {
        lands: if a Giant flag is pending (a SERF win), wait ERECT_GAP_MS → erect it → then
        onProceed; a GIANT win has no pending erect → onProceed right after the stamp.
      onProceed continues whatever is next (market fade / Hammurabi reveal / interstitial). */
-  var STAMP_DELAY_MS = 650;   // pause after arrival before the stamp thunk (editable)
-  var ERECT_GAP_MS   = 200;   // pause after the stamp fully finishes before the Giant erect (editable)
+  var STAMP_DELAY_MS = 1200;  // pause after arrival before the stamp thunk (editable)
+  var ERECT_GAP_MS   = 500;   // pause between the stamp and the Giant erect beats (editable)
   function _playReturnFlagAnim(giantFlagEl, onProceed) {
+    // A GIANT-FIRST win (difficulty-picker bosses) both REVEALS and STAMPS the same
+    // Giant flag — erect it first, THEN land the stamp (a stamp can't thunk onto a
+    // flag that isn't up yet). A Serf win keeps the established order: stamp → erect.
+    var _ps = window.__pendingStamp;   // peek only — _animatePendingStamp consumes it
+    var giantFirst = !!(giantFlagEl && _ps && _ps.tier === 'giant');
     setTimeout(function () {
-      _animatePendingStamp(function () {            // stamp thunk (serf/giant), then:
-        if (giantFlagEl) {
+      if (giantFirst) {
+        _erectFlagIn(giantFlagEl, function () {
           setTimeout(function () {
-            _erectFlagIn(giantFlagEl, function () { if (onProceed) onProceed(); });
+            _animatePendingStamp(function () { if (onProceed) onProceed(); });
           }, ERECT_GAP_MS);
-        } else if (onProceed) { onProceed(); }
-      });
+        });
+      } else {
+        _animatePendingStamp(function () {          // stamp thunk (serf/giant), then:
+          if (giantFlagEl) {
+            setTimeout(function () {
+              _erectFlagIn(giantFlagEl, function () { if (onProceed) onProceed(); });
+            }, ERECT_GAP_MS);
+          } else if (onProceed) { onProceed(); }
+        });
+      }
     }, STAMP_DELAY_MS);
   }
 
@@ -4101,7 +4166,11 @@ var Overworld = (function () {
       // Stamp a freshly-beaten tier's flag with a 300ms pause first (mainly the GIANT
       // rematch win, which returns through here). No pending stamp (a loss) → no-op.
       _refreshNodeFlags(true);   // render, DEFER the stamp
-      _playReturnFlagAnim(null, null);   // 300ms → stamp thunk (no erect, control not gated)
+      // Consume a pending Giant-flag reveal (set centrally by game.js on a boss's
+      // FIRST-ever tier win) so bosses returning through this generic path
+      // (Hammurabi / Narmer / Hanging Gardens) get the same erect choreography
+      // as the dedicated Gilgamesh/Sargon returns. Null when nothing is pending.
+      _playReturnFlagAnim(_consumePendingFlagReveal(), null);
 
       // Catch-up Hammurabi node reveal. The node normally rises via
       // returnFromSargonWin (the FIRST Sargon win). But a save that beat Sargon

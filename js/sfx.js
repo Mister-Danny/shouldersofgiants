@@ -62,6 +62,20 @@ SOG.sfx = (function () {
   function getGain() { _ensure(); return _gain; }
   function _refreshGain() { if (_gain) { try { _gain.gain.value = factor(); } catch (e) {} } }
 
+  /* ── Named one-shots ─────────────────────────────────────────────────────
+     Central registry for sounds referenced from more than one place (or tuned
+     often), so call sites use a stable name instead of a path. Plays through
+     the same play() below → obeys the Master × SFX volume axes / mute. */
+  var NAMED = {
+    flagThud: 'sfx/woodthud.mp3',   // flag reveal — pole planting (erect phase)
+    flagFlap: 'sfx/flagflap.m4a'    // flag reveal — flag bending/settling (pivot phase)
+  };
+  function playNamed(name, opts) {
+    var src = NAMED[name];
+    if (!src) return null;
+    return play(src, opts);
+  }
+
   /* ── HTMLAudio one-shot, scaled to the current SFX volume ────────────────── */
   function play(src, opts) {
     opts = opts || {};
@@ -89,6 +103,7 @@ SOG.sfx = (function () {
 
   return {
     play: play,
+    playNamed: playNamed,
     factor: factor,
     getCtx: getCtx,
     getGain: getGain,

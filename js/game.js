@@ -1658,6 +1658,16 @@
         localStorage.setItem(_bkey, 'true');
         window.__pendingStamp  = { hook: G.config.scriptHook, tier: _wtier };   // consumed by overworld render
         window.__pendingReward = { hook: G.config.scriptHook, tier: _wtier, firstTierWin: !_wasBeaten };  // consumed by boss onWin
+        // FIRST-EVER win on this boss (neither tier beaten before) → the Giant flag
+        // transitions hidden→visible on the return. Stash the one-shot reveal signal
+        // so EVERY boss's return (incl. the generic resumeAfterBattle) plays the
+        // "erected" animation — not just the modules that set it themselves.
+        var _okey = 'sog_node_' + G.config.scriptHook + '_' + (_wtier === 'serf' ? 'giant' : 'serf') + '_beaten';
+        var _otherBeaten = false;
+        try { _otherBeaten = localStorage.getItem(_okey) === 'true'; } catch (e) {}
+        if (!_wasBeaten && !_otherBeaten) {
+          window.__pendingFlagReveal = { hook: G.config.scriptHook, tier: 'giant' };
+        }
       }
     } catch (e) {}
 
