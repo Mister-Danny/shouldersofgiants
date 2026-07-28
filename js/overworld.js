@@ -599,6 +599,28 @@ var Overworld = (function () {
           showIf: function () {
             try { return localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) { return false; }
           }
+        },
+        {
+          // Egypt · River Market. Present from the moment EGYPT ITSELF is
+          // unlocked — gated on the SAME KEY_EGYPT_NODE_LIVE the Double Crown
+          // uses (set when Giant Neb falls), NOT on any Narmer progression. So
+          // the shop is there to browse the instant the player can reach Egypt.
+          // Click → walk up → _enterMarket('egypt') (see onNodeClick).
+          //
+          // POSITION: 29/18 is the DELTA slot the advanced river hut used to
+          // occupy — the market REPLACES that prop (advriverhut.png is removed
+          // from EGYPT_TOPO_PROPS_ADV). Both are gated on KEY_EGYPT_NODE_LIVE, so
+          // pre-Neb the player sees the humble riverhut.png there and post-Neb it
+          // becomes this walkable market. Props use the same map-% space as node
+          // x/y. Position + scale are KNOBS — nudge by eye.
+          id:    'egypt-market',
+          name:  'The River Market',
+          image: NODE_PATH + 'egyptmarket.png',
+          x: 29, y: 18,
+          scale: 1.1,
+          showIf: function () {
+            try { return localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) { return false; }
+          }
         }
       ],
       exits: [
@@ -1486,6 +1508,18 @@ var Overworld = (function () {
       return;
     }
 
+    // ── Egypt · River Market — walk to the node, then open the shop. Mirrors the
+    //    Mesopotamia market click exactly; _enterMarket('egypt') supplies the
+    //    Egypt backdrop + (TBD) inventory + trader greeting. ──
+    if (node.id === 'egypt-market' && currentMapId === 'egypt') {
+      isDialogueLocked = true;
+      cancelIdle();
+      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+        _enterMarket('egypt');
+      });
+      return;
+    }
+
     // ── Sargon (Akkad) — Phase D4: walk to the node, then GATE on active deck
     //    size. Full deck is 15; < 15 → "come back when you're ready" (no battle,
     //    sprite stays); exactly 15 → full encounter → battle STUB. ──
@@ -2060,8 +2094,12 @@ var Overworld = (function () {
      scale / rotation as the pre-Neb props, but the advanced (adv*) art and NO
      Umm el-Qaab. Same editable knobs. */
   var EGYPT_TOPO_PROPS_ADV = [
-    // River hut (advanced) — in the delta (northern fan). Nudged up 2 / right 2.
-    { src: 'advriverhut.png',     leftPct: 29, topPct: 18, scale: 0.26,  rotation:  -3 },
+    // NOTE: the advanced RIVER HUT that used to sit at 29/18 is deliberately gone —
+    // the clickable River Market NODE now occupies that spot (see the 'egypt-market'
+    // node in MAPS.egypt, placed at the same 29/18). Both the ADV prop group and the
+    // market node are gated on KEY_EGYPT_NODE_LIVE, so the swap is exact: pre-Neb the
+    // player sees the humble riverhut.png scenery, post-Neb it becomes the market they
+    // can walk into. Restore the prop here only if the market node moves elsewhere.
     // Granary (advanced) — just south of where the delta starts.
     { src: 'advgranary.png',      leftPct: 27, topPct: 46, scale: 0.26,  rotation:   0 },
     // Mud huts (advanced) — settlements dotted along the Nile.
@@ -3350,37 +3388,312 @@ var Overworld = (function () {
   // `xs` are per-card horizontal CENTERS (%) and `topPct` is the card top (%);
   // per-card `price` drives the tag. Easy to fine-tune.
   var MARKET_SHELVES = [
-    { topPct: 14, xs: [25, 34.5, 44, 53.5, 62.5], cards: [
+    { topPct: 13.75, xs: [25, 34.5, 44, 53.5, 62.5], cards: [
         { id: 39, price: 10 },   // Farmer
         { id: 40, price: 10 },   // Scribe
         { id: 42, price: 10 },   // Soldier
         { id: 41, price: 10 },   // Canals
         { id: 38, price: 10 }    // Priest
     ] },
-    { topPct: 40, xs: [26, 37.5, 49, 60], cards: [
+    { topPct: 39.75, xs: [26, 37.5, 49, 60], cards: [
         { id: 45, price: 15 },   // Ziggurat
         { id: 48, price: 15 },   // Chariot
         { id: 49, price: 15 },   // Phoenicians
         { id: 44, price: 25 }    // Enkidu (last on shelf 2)
     ] }
   ];
+  /* ── EGYPT · River Market ────────────────────────────────────────────────
+     The Egypt market reuses ALL of the Mesopotamia market machinery below
+     (_enterMarket / _buildMarketCard / the buy popup / gold + ownership gating);
+     only the region-specific DATA differs, and that lives in MARKETS.
+
+     The backdrop (images/ui_images/egyptmarket.jpg) is a 3-row × 3-column shelf
+     grid — 9 VISIBLE slots. Unlike Mesopotamia's fixed shelf, Egypt RESTOCKS:
+     each row is a TIER with a 6-card queue behind its 3 visible slots.
+
+     ── THE RESTOCK RULE (the mechanic) ──
+     Buying empties that slot for the REST OF THE VISIT. The next card in that
+     row's own tier queue backfills it only on the NEXT market ENTRY — never
+     mid-visit, and never across tiers. When a tier's 6 are all bought, that row
+     reads sold-out (empty). This makes leaving-and-returning meaningful.
+     [source: overworld.js → EGYPT_TRADER_INTRO / EGYPT_TIERS] */
+  var EGYPT_TRADER_INTRO = [
+    { who: 'trader', text: 'Welcome to the River Market!' },
+    { who: 'trader', text: 'Everything you see came down the Nile.' },
+    { who: 'trader', text: 'When it rises, the black land grows rich.' },
+    { who: 'trader', text: 'And if you want these premium assets, you must find a way to get rich too.' }
+  ];
+
+  /* ── SLOT ALIGNMENT KNOBS — tune by eye against egyptmarket.jpg ────────────
+     Pure geometry, no logic (same spirit as the flag-position knobs). `colXs`
+     are the 3 column CENTRES (% of stage width), `rowTops` the 3 row TOPS (%).
+     Nudge one number to shift a whole column/row; cards + price tags follow.
+     `cardW/H` override the shared Mesopotamia tile size — Egypt's grid is only
+     3 wide, so its tiles can afford to be larger. */
+  var EGYPT_GRID = {
+    /* Derived for egyptmarket1.jpg by measuring the backdrop's mapping into the
+       market screen (art 1280×800 drawn `center/cover`; at the current stage size
+       it lands ~1:1 in stage px, cropped ~25px top/bottom). The painted 3×3 frame
+       occupies roughly image x 225–767, y 63–601 → cells ≈ 181×179 each, giving
+       the centres/tops below. Close, but still EYEBALL AND NUDGE — the shelf is
+       baked into the art, so only a visual pass lands it perfectly. */
+    colXs:   [26, 37.5, 49],   // 3 column centres (%)
+    rowTops: [9.5, 33.25, 57.25],   // 3 row tops (%)
+    /* Tile size in STAGE px. Each recess is ~181×179 stage px and the shared
+       default tile is 86×126 (plus a ~24px price tag below it), so a card
+       currently fills ~70% of its cell height with room to spare. Bump these to
+       fill the recesses more — keep the ~0.68 w:h ratio, and keep
+       cardH + ~24 under ~179 so the price tag doesn't spill into the row below
+       (e.g. 96×140 is a safe step up). null = inherit MARKET_CARD_W/H. */
+    cardW:   null,
+    cardH:   null
+  };
+
+  /* ── TIERS — one per shelf row, top → bottom. Each is a 6-card QUEUE: the
+     first 3 are what the player sees on a fresh market, the last 3 wait behind
+     them and backfill (in order) as the visible ones sell.
+     Ids verified against cards.js (Egypt block 54–71, all 18 distinct);
+     tier subtotals 30 / 65 / 105 = 200 gold. */
+  var EGYPT_TIERS = [
+    { label: 'Tier 1', cards: [        // TOP row — 5g staples
+      { id: 55, price:  5 },   // Farmer
+      { id: 56, price:  5 },   // Scribe
+      { id: 68, price:  5 },   // Trader
+      { id: 70, price:  5 },   // Soldier
+      { id: 71, price:  5 },   // Priest
+      { id: 69, price:  5 }    // Chariots
+    ] },
+    { label: 'Tier 2', cards: [        // MIDDLE row
+      { id: 54, price: 10 },   // Papyrus
+      { id: 57, price: 10 },   // Pyramid
+      { id: 59, price: 10 },   // Obelisk
+      { id: 64, price: 10 },   // Sphinx
+      { id: 61, price: 10 },   // King Tutankhamen
+      { id: 66, price: 15 }    // Book of the Dead
+    ] },
+    { label: 'Tier 3', cards: [        // BOTTOM row — premium
+      { id: 65, price: 15 },   // Imhotep
+      { id: 62, price: 15 },   // Hieroglyphics
+      { id: 63, price: 15 },   // Ra
+      { id: 60, price: 20 },   // Khufu
+      { id: 67, price: 20 },   // Hyksos
+      { id: 58, price: 20 }    // Rosetta Stone
+    ] }
+    /* ── SEAM: future Nubian / Piye expansion ────────────────────────────────
+       Two shapes are supported without touching the engine below:
+         (a) DEEPEN a tier — append Nubian entries to that tier's `cards` queue
+             behind its flag; they simply restock after the Egyptian stock runs
+             out, which matches the "market replenishes" motif.
+         (b) ADD a tier — push a 4th { label, cards } here AND a 4th entry to
+             EGYPT_GRID.rowTops (the renderer is driven by these two arrays, so
+             a bigger grid needs no code change — only the backdrop art).
+       Do it inside _egyptTiers() below so it stays flag-gated and the persisted
+       queue state migrates cleanly (see _egyptMarketState's length guard).
+       NOT wired now. */
+  ];
+  /* Flag-gated tier source — the ONE place a future expansion mutates stock. */
+  function _egyptTiers() {
+    return EGYPT_TIERS;   // e.g. if (_nubianUnlocked()) return EGYPT_TIERS_WITH_NUBIAN;
+  }
+
+  /* ── PERSISTED QUEUE STATE ────────────────────────────────────────────────
+     Shape: { tiers: [ { slots: [id|null ×3], next: <queue index> }, … ] }
+     `slots` is what's on the shelf right now; `next` is how far into that tier's
+     queue we've drawn. Progression state, so it survives reload/sessions. */
+  var KEY_EGYPT_MARKET = 'sog_egypt_market_state';
+
+  function _cardOwned(id) {
+    return !!(window.SOG && SOG.collection && typeof SOG.collection.isUnlocked === 'function'
+              && SOG.collection.isUnlocked(id));
+  }
+
+  function _egyptMarketState() {
+    var tiers = _egyptTiers();
+    var st = null;
+    try { st = JSON.parse(localStorage.getItem(KEY_EGYPT_MARKET) || 'null'); } catch (e) {}
+    if (!st || !Array.isArray(st.tiers)) st = { tiers: [] };
+    // Length guard — also the migration path when a future expansion adds a tier.
+    while (st.tiers.length < tiers.length) st.tiers.push({ slots: [null, null, null], next: 0 });
+    st.tiers.length = tiers.length;
+    st.tiers.forEach(function (t) {
+      if (!Array.isArray(t.slots)) t.slots = [null, null, null];
+      while (t.slots.length < 3) t.slots.push(null);
+      t.slots.length = 3;
+      if (typeof t.next !== 'number') t.next = 0;
+    });
+    return st;
+  }
+  function _saveEgyptMarketState(st) {
+    try { localStorage.setItem(KEY_EGYPT_MARKET, JSON.stringify(st)); } catch (e) {}
+  }
+
+  /* RESTOCK — run ONCE per market entry, before the shelves render.
+     For each tier: clear any slot whose card is now owned (bought last visit, or
+     acquired elsewhere), then refill empty slots from that tier's queue, skipping
+     cards the player already owns. Ownership is the source of truth, so a slot
+     emptied by a purchase mid-visit naturally backfills on the NEXT entry — which
+     is exactly the specified timing. */
+  function _restockEgyptMarket() {
+    var tiers = _egyptTiers();
+    var st = _egyptMarketState();
+    st.tiers.forEach(function (t, ti) {
+      var queue = tiers[ti].cards;
+      for (var s = 0; s < t.slots.length; s++) {
+        if (t.slots[s] != null && _cardOwned(t.slots[s])) t.slots[s] = null;   // sold → clear
+        if (t.slots[s] != null) continue;                                      // still stocked
+        while (t.next < queue.length) {                                        // draw next unowned
+          var cand = queue[t.next++];
+          if (!_cardOwned(cand.id)) { t.slots[s] = cand.id; break; }
+        }
+      }
+    });
+    _saveEgyptMarketState(st);
+    return st;
+  }
+
+  /* Build the display in the { topPct, xs, cards } shape _enterMarket consumes.
+     Reads the RESTOCKED state — empty slots simply contribute no card, which the
+     renderer already treats as a gap (that's the sold/sold-out look). */
+  function _egyptShelves() {
+    var tiers = _egyptTiers();
+    var st = _restockEgyptMarket();
+    return EGYPT_GRID.rowTops.slice(0, tiers.length).map(function (topPct, ti) {
+      var queue = tiers[ti].cards;
+      var row   = st.tiers[ti];
+      var cards = [], xs = [];
+      row.slots.forEach(function (id, s) {
+        if (id == null) return;                       // empty slot → gap on the shelf
+        var entry = null;
+        for (var i = 0; i < queue.length; i++) if (queue[i].id === id) { entry = queue[i]; break; }
+        if (!entry) return;                           // stale id (inventory edited) → skip
+        cards.push(entry);
+        xs.push(EGYPT_GRID.colXs[s]);                 // keep each card at ITS slot's column
+      });
+      return { topPct: topPct, xs: xs, cards: cards };
+    }).filter(function (row) { return row.cards.length; });
+  }
+
+  /* ══ TRADER SPEECH BUBBLE — reusable, MARKET TRADERS ONLY ═══════════════════
+     Each market's trader is painted into its backdrop, so his greeting appears
+     in a bubble anchored to him instead of the detached HUD box. Boss-battle
+     dialogue is untouched (it keeps the #adv-bubble-* HUD presentation).
+
+     Presentation is the GIANTS' in-battle bubble, reused verbatim via the
+     shared .giant-bubble class (factored out of body.<boss>-battle
+     #adv-bubble-otzi in style.css — the Giants' own rules are untouched). The
+     market instance adds .giant-bubble--tail-up, because the bubble sits BELOW
+     the trader's mouth (over his chest) and must point back UP at him, whereas
+     the Giants' tails point sideways at a portrait.
+
+     ── TUNING VALUES (per market — nudge by eye) ──
+       leftPct / topPct — the bubble box's TOP-LEFT corner, as % of the market
+                          screen. Drop it just under the speaker's mouth.
+       widthPx         — bubble width.
+       tailXPct        — the tail's horizontal position along the bubble's own
+                          width (0 = left edge, 100 = right edge). Slide this
+                          until the tail tip sits under his mouth. */
+  var TRADER_BUBBLE = {
+    'mesopotamia': { leftPct: 63, topPct: 53, widthPx: 300, tailXPct: 62 },
+    'egypt':       { leftPct: 67, topPct: 34, widthPx: 290, tailXPct: 45 }
+  };
+
+  /* Run `lines` through a click-to-advance bubble anchored per `cfg`, appended to
+     `host` (the market screen). Calls onDone after the last line. Reusable for any
+     future market/shopkeeper — pass a new TRADER_BUBBLE entry. */
+  function _runTraderBubble(host, lines, cfg, onDone) {
+    if (!host || !lines || !lines.length) { if (onDone) onDone(); return; }
+    var bubble = document.createElement('div');
+    // Same component the Giants use in battle, plus the upward-tail modifier.
+    bubble.className = 'giant-bubble giant-bubble--tail-up market-trader-bubble';
+    bubble.style.left  = cfg.leftPct + '%';
+    bubble.style.top   = cfg.topPct + '%';
+    bubble.style.width = cfg.widthPx + 'px';
+    bubble.style.setProperty('--tail-x', (cfg.tailXPct != null ? cfg.tailXPct : 50) + '%');
+    var textEl = document.createElement('div');
+    var hintEl = document.createElement('div');
+    hintEl.className = 'mtb-hint';
+    hintEl.innerHTML = '&#9654; Click to continue';
+    bubble.appendChild(textEl);
+    bubble.appendChild(hintEl);
+    host.appendChild(bubble);
+    void bubble.offsetHeight;                 // reflow so the fade-in animates
+    bubble.classList.add('is-visible');
+
+    var i = 0;
+    function render() {
+      textEl.textContent = lines[i].text;
+      hintEl.style.display = (i === lines.length - 1) ? 'none' : '';
+    }
+    function advance(e) {
+      if (e) e.stopPropagation();
+      if (++i >= lines.length) {
+        bubble.classList.remove('is-visible');
+        setTimeout(function () {
+          if (bubble.parentNode) bubble.parentNode.removeChild(bubble);
+          if (onDone) onDone();
+        }, 220);
+        return;
+      }
+      render();
+    }
+    bubble.addEventListener('click', advance);
+    render();
+  }
+
+  /* Region → market data. _enterMarket(regionId) reads this; 'mesopotamia' is the
+     default so every existing call site is unchanged. Adding a future region's
+     market is one entry here plus a node + click handler. */
+  var MARKETS = {
+    'mesopotamia': {
+      bg:       'images/ui_images/mesomarket.jpg',
+      hudTitle: 'Marketplace',   // HUD region label while inside; restored on exit
+      shelves:  function () { return MARKET_SHELVES; },
+      intro:    function () { return MARKET_TRADER_INTRO; },
+      introKey: KEY_MARKET_INTRO_SEEN,
+      postExit: true     // deck-builder unlock + first-market interstitial beats
+    },
+    'egypt': {
+      bg:       'images/ui_images/egyptmarket1.jpg',   // v1: same 1280×800 canvas, shelf pulled in from the edges so the grid frames properly
+      hudTitle: 'River Market',   // HUD region label while inside; restored to the map name on exit
+      /* Push the BACKDROP up by this % of the market-screen height (positive =
+         up). Purely a framing knob for the art — the card slots are positioned
+         independently, so this does NOT move them. Any gap it opens at the
+         bottom is fine: the HUD bar covers that strip. */
+      bgShiftUpPct: 3,
+      shelves:  _egyptShelves,
+      intro:    function () { return EGYPT_TRADER_INTRO; },
+      introKey: 'sog_egypt_market_intro_seen',   // its own one-time greeting gate
+      postExit: false,   // those beats are Mesopotamia-specific
+      get cardW() { return EGYPT_GRID.cardW; },  // live-read so the knobs stay editable
+      get cardH() { return EGYPT_GRID.cardH; }
+    }
+  };
+  var _activeMarket = 'mesopotamia';   // set by _enterMarket, read by _exitMarket
+
   var MARKET_CARD_W = 86;   // px (stage space); height follows the card aspect
   var MARKET_CARD_H = 126;
 
-  function _buildMarketCard(cardId, leftPct, topPct, price, locked) {
+  /* sizeW/sizeH are OPTIONAL per-market tile-size overrides (Egypt's 3-wide grid
+     can afford larger tiles than Mesopotamia's 5-wide). Omitted → the shared
+     MARKET_CARD_W/H defaults, so existing call sites are unchanged. */
+  function _buildMarketCard(cardId, leftPct, topPct, price, locked, sizeW, sizeH) {
+    var CW = sizeW || MARKET_CARD_W;
+    var CH = sizeH || MARKET_CARD_H;
     var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return null;
 
     var wrap = document.createElement('div');
     wrap.className = 'market-card' + (locked ? ' market-card-locked' : '');
     wrap.style.cssText = 'position:absolute;left:' + leftPct + '%;top:' + topPct + '%;' +
-      'width:' + MARKET_CARD_W + 'px;height:' + MARKET_CARD_H + 'px;transform:translateX(-50%);' +
+      'width:' + CW + 'px;height:' + CH + 'px;transform:translateX(-50%);' +
       'container-type:inline-size;cursor:pointer;border:2px solid #1a0a04;border-radius:4px;' +
       'box-shadow:0 4px 10px rgba(0,0,0,.55);overflow:hidden;background:#100a02;';
 
     // In-game card face (image + CC/IP corners) — same renderer as battle/deck.
     if (window.SOG && SOG.board && typeof SOG.board.buildCardFace === 'function') {
-      SOG.board.buildCardFace(wrap, card, card.ip);
+      // size:'sm' → the pre-rendered thumbnail (card.imageSm / @sm). Market tiles
+      // are small; without this the full-size export gets downscaled and dithers.
+      SOG.board.buildCardFace(wrap, card, card.ip, { size: 'sm' });
     } else if (window.buildCardImg) {
       wrap.appendChild(window.buildCardImg(card));
     }
@@ -3415,19 +3728,25 @@ var Overworld = (function () {
     tag.className = 'market-pricetag';
     tag.dataset.marketCardId = String(cardId);
     tag.style.cssText = 'position:absolute;left:' + (leftPct + 0.5) + '%;' +
-      'top:calc(' + (topPct - 2) + '% + ' + (MARKET_CARD_H - 8) + 'px);transform:translateX(-50%);' +
+      'top:calc(' + (topPct - 2) + '% + ' + (CH - 8) + 'px);transform:translateX(-50%);' +
       'width:115px;height:77px;background:url("images/ui_images/pricetag@0.5x.png") center/contain no-repeat;' +
       'display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:50;';
     var num = document.createElement('span');
     num.textContent = price;
     num.style.cssText = 'font-family:var(--font, sans-serif);font-size:32px;font-weight:bold;' +
-      'color:#3a2400;text-shadow:0 1px 0 rgba(255,230,150,.6);transform:translate(-10px, 3px);';
+      // Double-digit prices are wider, so they read as sitting too far right at the
+      // single-digit offset — pull them back 2px to keep both optically centred.
+      'color:#3a2400;text-shadow:0 1px 0 rgba(255,230,150,.6);transform:translate(' +
+      (String(price).length > 1 ? -8 : -6) + 'px, 3px);';
     tag.appendChild(num);
 
     return { cardEl: wrap, tagEl: tag };
   }
 
-  function _enterMarket() {
+  /* regionId: 'mesopotamia' (default — every existing call site) | 'egypt'. */
+  function _enterMarket(regionId) {
+    _activeMarket = MARKETS[regionId] ? regionId : 'mesopotamia';
+    var _mk = MARKETS[_activeMarket];
     isDialogueLocked = true;
     cancelIdle();
     stopFootsteps();
@@ -3439,6 +3758,11 @@ var Overworld = (function () {
 
     // Focus drain (Stage 1): each marketplace trip costs 5. _enterMarket runs
     // once per entry (node click, or the first-Gilgamesh-win auto-walk).
+    // HUD region label → this market's name while inside (_exitMarket restores
+    // the map's displayName). Markets without a hudTitle keep the region label.
+    if (_mk.hudTitle && window.SOG && SOG.HUD && typeof SOG.HUD.setRegion === 'function') {
+      SOG.HUD.setRegion(_mk.hudTitle);
+    }
     if (window.SOG && SOG.focus) SOG.focus.spend(5);
     if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshFocus === 'function') SOG.HUD.refreshFocus();
     var prev = document.getElementById('adv-market-screen');
@@ -3448,7 +3772,7 @@ var Overworld = (function () {
     // portrait render on top — same layering trick as the candle intervention.
     var screen = document.createElement('div');
     screen.id = 'adv-market-screen';
-    var MARKET_BG_URL = 'images/ui_images/mesomarket.jpg';
+    var MARKET_BG_URL = _mk.bg;
     // Start HIDDEN: the background is a CSS background-image (no load event of its
     // own), so online the cards would otherwise show over a not-yet-painted bg
     // ("floating cards"). We reveal the whole screen — bg + cards together — only
@@ -3465,13 +3789,14 @@ var Overworld = (function () {
     // needed to reach Sargon's 15-card minimum. Locking it pre-Sargon keeps early
     // gold flowing to affordable cards, guaranteeing the deck can reach 15.
     var _enkiduUnlocked = _tierBeaten('sargon', 'serf') || _tierBeaten('sargon', 'giant');
-    MARKET_SHELVES.forEach(function (shelf) {
+    _mk.shelves().forEach(function (shelf) {
       shelf.cards.forEach(function (c, i) {
         if (window.SOG && SOG.collection && typeof SOG.collection.isUnlocked === 'function'
             && SOG.collection.isUnlocked(c.id)) return;   // owned → not for sale
         var leftPct = (shelf.xs[i] != null) ? shelf.xs[i] : (20 + i * 12);
         var locked  = (c.id === 44) && !_enkiduUnlocked;   // Enkidu gated on a Sargon win
-        var built   = _buildMarketCard(c.id, leftPct, shelf.topPct, c.price, locked);
+        var built   = _buildMarketCard(c.id, leftPct, shelf.topPct, c.price, locked,
+                                       _mk.cardW, _mk.cardH);   // per-market size (falsy → shared default)
         if (built) { screen.appendChild(built.cardEl); screen.appendChild(built.tagEl); }
       });
     });
@@ -3487,6 +3812,17 @@ var Overworld = (function () {
     screen.appendChild(btn);
 
     (document.getElementById('sog-stage') || document.body).appendChild(screen);
+
+    // Optional per-market BACKDROP framing nudge (_mk.bgShiftUpPct — % of the
+    // screen height, positive = push the art UP). Applied after the screen is in
+    // the DOM so clientHeight is real. background-position % resolves against
+    // (container − image), which is a tiny range under `cover`, so the shift is
+    // expressed in px via calc() to be predictable. Card slots are positioned
+    // separately, so this moves ONLY the art.
+    if (_mk.bgShiftUpPct) {
+      var _shiftPx = (_mk.bgShiftUpPct / 100) * screen.clientHeight;
+      screen.style.backgroundPosition = 'center calc(50% - ' + _shiftPx.toFixed(1) + 'px)';
+    }
 
     // Reveal the market only once the background image is loaded. A CSS
     // background-image has no onload, so detect via a parallel new Image() with the
@@ -3513,19 +3849,17 @@ var Overworld = (function () {
     _marketReady = false;
     var hud = window.SOG && window.SOG.HUD;
     var introSeen = false;
-    try { introSeen = localStorage.getItem(KEY_MARKET_INTRO_SEEN) === 'true'; } catch (e) {}
+    try { introSeen = localStorage.getItem(_mk.introKey) === 'true'; } catch (e) {}
 
-    if (hud && !introSeen && typeof hud.enterDialogueMode === 'function'
-        && typeof hud.runLines === 'function' && typeof hud.exitDialogueMode === 'function') {
-      hud.enterDialogueMode(null, function () {
-        hud.runLines(MARKET_TRADER_INTRO, function () {
-          try { localStorage.setItem(KEY_MARKET_INTRO_SEEN, 'true'); } catch (e) {}
-          // Back to the normal HUD — gold balance is now visible while shopping.
-          hud.exitDialogueMode(function () {
-            if (typeof hud.refreshGold === 'function') hud.refreshGold();
-            _marketReady = true;
-          });
-        });
+    if (!introSeen) {
+      // TRADER BUBBLE (both markets): the greeting appears anchored to the trader
+      // in the art, NOT in the HUD box — so the HUD stays in its normal resting
+      // state and the gold balance is visible throughout. Shopping stays blocked
+      // via _marketReady until the last line is dismissed.
+      if (hud && typeof hud.refreshGold === 'function') hud.refreshGold();
+      _runTraderBubble(screen, _mk.intro(), TRADER_BUBBLE[_activeMarket] || TRADER_BUBBLE.mesopotamia, function () {
+        try { localStorage.setItem(_mk.introKey, 'true'); } catch (e) {}
+        _marketReady = true;
       });
     } else {
       // Revisit (or no HUD): normal HUD already showing — just refresh gold + shop.
@@ -3548,11 +3882,18 @@ var Overworld = (function () {
     var screen = document.getElementById('adv-market-screen');
     if (screen && screen.parentNode) screen.parentNode.removeChild(screen);
     isDialogueLocked = false;
+    // Restore the HUD region label (a market may have swapped in its own name).
+    if (window.SOG && SOG.HUD && typeof SOG.HUD.setRegion === 'function' && MAPS[currentMapId]) {
+      SOG.HUD.setRegion(MAPS[currentMapId].displayName || currentMapId);
+    }
     _playMapMusic();   // back on the map — resume the overworld track
     // First time back from the marketplace: the deck builder un-greys, then the
     // Explorer notes the growing collection and resolves to return to Gilgamesh.
     // Sargon does NOT reveal here anymore — that moves to AFTER the Giant rematch win
     // (see returnFromGilgameshWin), since the player can't enter Sargon until 15 cards.
+    // ...but ONLY for the Mesopotamia market — those two beats are that region's
+    // story (deck-builder unlock + "back to Gilgamesh"). Egypt's market skips them.
+    if (!(MARKETS[_activeMarket] && MARKETS[_activeMarket].postExit)) { scheduleIdle(); return; }
     _maybePlayDeckBuilderUnlock(function () {
       _maybePlayFirstMarketInterstitial(function () { scheduleIdle(); });
     });

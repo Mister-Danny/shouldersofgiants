@@ -116,14 +116,19 @@
   }
 
   /** Build card-face HTML inside slotEl (used by flipSlot and placeRevealedCard). */
-  function buildCardFace(slotEl, card, displayIP) {
+  /* opts is passed straight through to buildCardImg — notably { size: 'sm' },
+     which loads the pre-rendered thumbnail (card.imageSm / the @sm variant)
+     instead of full-size art. Callers that render SMALL tiles (the market
+     shelves) should pass it, or the browser downscales the big export and the
+     result dithers. Omitted → unchanged full-size behaviour for the board. */
+  function buildCardFace(slotEl, card, displayIP, opts) {
     slotEl.innerHTML = '';
     var wrap = document.createElement('div');
     wrap.className = 'db-card-img-wrap';
     var ph = document.createElement('div');
     ph.className   = 'db-card-img-placeholder';
     ph.textContent = card.name.charAt(0);
-    var img = window.buildCardImg(card);
+    var img = window.buildCardImg(card, opts);
     wrap.appendChild(ph);
     wrap.appendChild(img);
     var ccEl = document.createElement('div');
