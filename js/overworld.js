@@ -299,6 +299,21 @@ var Overworld = (function () {
     { who: 'explorer', text: "Looks like there's only one way forward." }
   ];
 
+  /* NARMER (Double Crown) SERF-WIN INTERSTITIAL — bookends the GIANT FLAG RAISE.
+     Same shape as Neb's above and for the same reason: Narmer is the last boss
+     BUILT, so there is NO node reveal and no advance-or-stay choice — the raised
+     Giant flag on the Double Crown IS the cue, and the River Market is the only
+     other thing to do before the rematch (hence the Explorer's shopping line).
+     [source: overworld.js → D6_NARMER_WIN_INTERSTITIAL_A/_B] */
+  var D6_NARMER_WIN_INTERSTITIAL_A = [
+    { who: 'explorer', text: 'He was calm.' },
+    { who: 'explorer', text: 'Too calm.' }
+    // → [GIANT FLAG raises]
+  ];
+  var D6_NARMER_WIN_INTERSTITIAL_B = [
+    { who: 'explorer', text: 'I better see what I can add to my collection before I go back.' }
+  ];
+
   /* HAMMURABI INTERSTITIAL — the post-Serf-win beat, bookending the Hanging
      Gardens node reveal: REFLECT plays before the shimmer, REACTION after the node
      sparkle-fades in. [source: overworld.js → D5_HANGING_GARDENS_REFLECT/_REACTION] */
@@ -586,8 +601,9 @@ var Overworld = (function () {
           // First Egypt node — Narmer's Double Crown. Goes live after beating
           // Nebuchadnezzar (sog_egypt_node_live, set at the end of the post-Neb
           // beat). Placed at the base of the Nile Delta (the green fan, top-left).
-          // Click → walk up → Narmer encounter dialogue → "Narmer Battle —
-          // Coming Soon" STUB (battle not built).
+          // Click → walk up → (first time) Narmer encounter dialogue → the Narmer
+          // advance-board battle at the routed tier. Afterwards _routeBossTier
+          // applies: Serf beaten → Giant rematch, both beaten → difficulty picker.
           // ART: doublecrown.png is a PLACEHOLDER — swap when the real art lands.
           // Position (x/y) + scale are KNOBS for fine-tuning.
           id:    'double-crown',
@@ -4571,6 +4587,36 @@ var Overworld = (function () {
         runDialogue(D5_NEB_WIN_INTERSTITIAL_A, function () {
           _erectFlagIn(giantFlagEl, function () {
             runDialogue(D5_NEB_WIN_INTERSTITIAL_B, function () {
+              isDialogueLocked = false;
+              scheduleIdle();
+            });
+          });
+        });
+      });
+    },
+    /* Narmer SERF-win return — IDENTICAL in shape to returnFromNebWin above, and for
+       the same reason: Narmer is the last boss BUILT, so this raises the GIANT FLAG
+       and nothing else. No node reveal (the next Egypt node doesn't exist yet) and no
+       advance-or-stay choice. Beat order: Serf stamp → lines A → Giant flag ERECTS →
+       line B → control. Reuses _playReturnFlagAnim (stamp) + _erectFlagIn (raise) —
+       no new systems. Called by the Narmer module's _exitToOverworldAfterSerfWin. */
+    returnFromNarmerWin: function () {
+      // Fresh-page-load guard (see resumeAfterBattle): bind the DOM + restore the map.
+      if (!mapImgEl) init();
+      isDialogueLocked = true;
+      isTransitioning  = false;
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+      _clearWipe();
+      var hud = window.SOG && window.SOG.HUD;
+      if (hud && typeof hud.show === 'function') hud.show();
+      _playMapMusic();
+      _refreshNodeFlags(true);                       // render, DEFER the stamp
+      var giantFlagEl = _consumePendingFlagReveal(); // hidden, ready to erect
+      // Stamp the Serf flag first (no erect passed), then the lines, then the raise.
+      _playReturnFlagAnim(null, function () {
+        runDialogue(D6_NARMER_WIN_INTERSTITIAL_A, function () {
+          _erectFlagIn(giantFlagEl, function () {
+            runDialogue(D6_NARMER_WIN_INTERSTITIAL_B, function () {
               isDialogueLocked = false;
               scheduleIdle();
             });

@@ -17,18 +17,20 @@
  *     PLACEMENT (Chariot etc.) bypasses the gate — that's its breakthrough
  *     value; only NEW plays are gated.
  *
- * STAGE 2 scope: Narmer's REAL 15-card deck + card-aware advance heuristics
- * (cheap bodies wall the home, premium pieces contest the front, Chariots as
- * a weighed breakthrough via cfg.ai.settings.chariotMoveDecision). Player
- * side still runs the Stage-1 placeholder deck. Still no dialogue/rules-
- * popup/win-loss polish (Stage 3) — engine-default scoreboard. The gate rule
- * lives in the engine's centralized play predicate (board.js
+ * The gate rule lives in the engine's centralized play predicate (board.js
  * isLocationPlayable → isAdvanceUnlocked), activated ONLY by this battle's
  * config (rules.advanceGate) so every other battle is untouched.
  *
- * Entry: dev menu "Narmer Battle — Direct Entry" → SOG.NarmerBattle.start().
- * (The overworld Double Crown node still lands on the "Coming Soon" stub;
- * it switches to this battle in a later stage.)
+ * COMPLETE: real 15-card deck on Narmer's side + the player's own built deck;
+ * the shared rules popup; the full presentation layer (portraits, bubbles,
+ * bleeps, scoreboard, gold/card acquisition); and the TWO-TIER dialogue track
+ * (Serf → interstitial → Giant rematch → Giant win/loss/draw) ported from the
+ * Sargon reference. Egypt's reward scale differs from Mesopotamia's flat 15/15:
+ * Narmer pays 20 gold on the Serf win and 30 gold + his card on the Giant win.
+ *
+ * Entry: the overworld Double Crown node (walk up → encounter dialogue on the
+ * first visit → battle at the routed tier), or the dev panel's direct launch →
+ * SOG.NarmerBattle.start().
  */
 window.SOG = window.SOG || {};
 SOG.NarmerBattle = (function () {
@@ -297,8 +299,14 @@ SOG.NarmerBattle = (function () {
   // Progress + reward knobs (mirror the HG/Hammurabi boss tier). EDITABLE.
   var KEY_NARMER_COMPLETE     = 'sog_battle_narmer_complete';       // set on first win
   var KEY_NARMER_OPENING_SEEN = 'sog_narmer_battle_opening_seen';   // in-battle intro: first-time only
-  var NARMER_CARD_ID  = 51;    // first-win reward (the Narmer card)
-  var GOLD_FIRST_WIN  = 15;    // two-tier economy: 15 gold on the FIRST win of a tier (serf OR giant)
+  var NARMER_CARD_ID  = 51;    // GIANT-win reward (the Narmer card)
+  /* EGYPT REWARD SCALE — deliberately richer than Mesopotamia's flat 15/15. These
+     local constants are what actually get granted; SOG.rewards is consulted only for
+     the GATING decision (is this the first win of this tier? does the card drop?),
+     and its r.gold (15) is intentionally ignored here so the Mesopotamia bosses stay
+     untouched. Editable. */
+  var GOLD_SERF_WIN   = 20;    // first SERF win  — gold only, no card
+  var GOLD_GIANT_WIN  = 30;    // first GIANT win — gold + the Narmer card
   var GOLD_REPEAT_WIN = 0;     // replays of an already-beaten tier pay nothing (anti-farming)
   var RESULT_ID       = 'adv-narmer-result';
   var SHOW_RESULTS_ID = 'adv-narmer-show-results';
@@ -335,18 +343,71 @@ SOG.NarmerBattle = (function () {
     { who: 'explorer', text: "We'll see about that." }
   ];
 
-  /* ── Outcome dialogue (editable). WIN is FIRST-WIN-ONLY; card + gold grant
-     fires after the last line. ── */
-  var WIN_DIALOGUE = [
-    { who: 'narmer',   text: 'Impossible.' },
-    { who: 'narmer',   text: 'The crown… does not fit you.' },
-    { who: 'explorer', text: "I don't want the crown. I just want to get home." },
-    { who: 'narmer',   text: 'Perhaps that is why you could take it.' },
-    { who: 'narmer',   text: 'One who belongs nowhere… can go anywhere.' },
-    { who: 'explorer', text: '…Is that a compliment?' },
-    { who: 'narmer',   text: 'Take it. And go, traveler.' },
-    { who: 'narmer',   text: 'Before I remember that I do not lose.' }
+  /* ══════════════════════════════════════════════════════════════════════════
+     NARMER TWO-TIER DIALOGUE — the GENERAL pattern, ported from the Sargon
+     reference (sog-adventure-sargon.js):
+       existing intro (UNTOUCHED) → SERF WIN → interstitial (overworld) →
+       GIANT rematch intro (in-battle) → GIANT win / loss / draw.
+     who: 'narmer' = Narmer's portrait; 'explorer' = the player. Acquisition
+     animations fire INLINE at the marked beats (see the sequences below).
+     [source: js/sog-adventure-narmer.js — the NARMER_*_DIALOGUE constants]
+  ══════════════════════════════════════════════════════════════════════════ */
+
+  // SERF WIN — grants 20 gold at the "Take this." beat, NO card. Split around the gold.
+  var NARMER_SERF_WIN_A = [
+    { who: 'narmer',   text: 'You upset the balance of power.' },
+    { who: 'explorer', text: 'Are you upset?' },
+    { who: 'narmer',   text: 'Never.' },
+    { who: 'narmer',   text: 'I did not account for you.' },
+    { who: 'narmer',   text: 'Take this.' }
+    // → [GOLD — 20]
   ];
+  var NARMER_SERF_WIN_B = [
+    { who: 'narmer',   text: 'Consider it a measure of my patience.' },
+    { who: 'narmer',   text: 'Return, and I will set things right.' }
+  ];
+
+  // GIANT REMATCH INTRO — in-battle, before the Giant rematch (onBattleStart).
+  var NARMER_GIANT_INTRO = [
+    { who: 'narmer',   text: 'You have returned.' },
+    { who: 'explorer', text: "I'm ready to earn my double hat." },
+    { who: 'narmer',   text: 'Your nonsensical nature is not worthy of rulership.' },
+    { who: 'narmer',   text: 'Order will reassert itself.' }
+  ];
+
+  // GIANT WIN — grants the Narmer card THEN 30 gold at the "Take it." beat.
+  var NARMER_GIANT_WIN_A = [
+    { who: 'narmer',   text: 'You have split the union of my kingdom.' },
+    { who: 'explorer', text: 'I just played the cards I was dealt.' },
+    { who: 'narmer',   text: 'No. It is more than that.' },
+    { who: 'narmer',   text: 'You belong to no land. No people. No crown.' },
+    { who: 'narmer',   text: 'That is why I could not account for you.' },
+    { who: 'narmer',   text: 'One who belongs nowhere… cannot be divided.' },
+    { who: 'narmer',   text: 'Take it.' }
+    // → [CARD — Narmer] THEN [GOLD — 30]
+  ];
+  var NARMER_GIANT_WIN_B = [
+    { who: 'narmer',   text: 'The Double Crown is yours.' },
+    { who: 'narmer',   text: 'Go. Find whatever it is you are looking for.' },
+    { who: 'explorer', text: "Home. I'm looking for home." },
+    { who: 'narmer',   text: 'Then perhaps you are more unifier than I.' }
+  ];
+
+  // GIANT LOSS — dismissive, replayable (no grant).
+  var NARMER_GIANT_LOSS = [
+    { who: 'narmer',   text: 'As it must be. The whole remains unbroken.' },
+    { who: 'narmer',   text: 'You are corrected. The balance holds.' },
+    { who: 'narmer',   text: 'Return when you wish to be corrected again.' }
+  ];
+
+  // GIANT DRAW — a stalemate is not a win, replayable (no grant).
+  var NARMER_GIANT_DRAW = [
+    { who: 'narmer',   text: 'A divided result. Two halves, and neither whole.' },
+    { who: 'narmer',   text: 'This… I cannot abide.' },
+    { who: 'narmer',   text: 'We begin again. And this time, there will be one.' }
+  ];
+
+  /* ── SERF-tier loss / tie (FRONT-HALF, UNCHANGED) ── */
   var LOSS_DIALOGUE = [
     { who: 'narmer',   text: 'As it must be.' },
     { who: 'narmer',   text: 'The whole remains unbroken.' },
@@ -360,6 +421,27 @@ SOG.NarmerBattle = (function () {
     { who: 'narmer',   text: 'This is the one thing I cannot abide.' },
     { who: 'narmer',   text: 'We begin again — and this time, there will be one.' }
   ];
+
+  /* ── Tier helpers (ported verbatim from the Sargon reference) ──────────────
+     Read a persisted tier-beaten flag (game.js stamps sog_node_<hook>_<tier>_beaten
+     on a win). Distinguishes the Giant REMATCH from a later Giant replay. */
+  function _tierBeatenLocal(hook, tier) {
+    try { return localStorage.getItem('sog_node_' + hook + '_' + tier + '_beaten') === 'true'; }
+    catch (e) { return false; }
+  }
+  /* The flag slot of the current battle (Narmer: aligned with AI tier — no decoupling).
+     The game state lives at SOG.state.G — there is no window.G global, so a window.G
+     read is always undefined and would silently default to 'serf'. */
+  function _flagTier() {
+    var _G = (window.SOG && SOG.state && SOG.state.G) || null;
+    return (_G && _G.config && (_G.config.flagTier
+        || (_G.config.ai && _G.config.ai.tier))) || 'serf';
+  }
+  /* This battle is the Giant REMATCH (Giant flag, not yet beaten) → the in-battle
+     dominance intro (NARMER_GIANT_INTRO) plays instead of the Serf opening tutorial. */
+  function _isNarmerGiantRematch() {
+    return _flagTier() === 'giant' && !_tierBeatenLocal('narmer', 'giant');
+  }
 
   /* ── Speech bubbles (Narmer borrows the shared opponent bubble). ── */
   function _bubbleId(who) { return who === 'explorer' ? 'explorer' : 'otzi'; }
@@ -578,6 +660,21 @@ SOG.NarmerBattle = (function () {
       if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') window.Overworld.resumeAfterBattle();
     }, 100);
   }
+
+  /* SERF-win exit: tear down, then hand off to the overworld's Narmer-win return,
+     which stamps the Serf flag → interstitial lines A → ERECTS the Giant flag →
+     line B. NO node reveal (Narmer is the last boss built) — mirrors Neb's return
+     rather than Sargon's, which also rises the next node. Sets the one-shot
+     __pendingFlagReveal the return consumes. Plain exit fallback. */
+  function _exitToOverworldAfterSerfWin() {
+    _removeResultPopup(); _teardown();
+    window.__pendingFlagReveal = { hook: 'narmer', tier: 'giant' };   // Giant flag pops on the return
+    if (window.Overworld && typeof window.Overworld.returnFromNarmerWin === 'function') {
+      window.Overworld.returnFromNarmerWin();
+    } else {
+      _exitToOverworld();
+    }
+  }
   /* Grant Narmer's card (51) via the SHARED acquisition reveal — FIRST WIN ONLY
      (SOG.Cards.unlock returns truthy only on a new unlock). */
   function _grantNarmerCard(done) {
@@ -666,8 +763,12 @@ SOG.NarmerBattle = (function () {
       b.addEventListener('click', cb); return b;
     }
     if (opts.firstWin) {
-      // Shown AFTER the win dialogue + card + gold — CONTINUE simply exits.
-      actions.appendChild(mkBtn('CONTINUE',   function () { _exitToOverworld(); }));
+      // Shown AFTER a tier-win sequence (dialogue + gold [+ card]). CONTINUE runs the
+      // stage's exit: opts.onContinue = _exitToOverworldAfterSerfWin on the Serf win
+      // (Giant flag raise + interstitial), _exitToOverworld on the Giant win (plain —
+      // the Giant stamp lands via resumeAfterBattle).
+      var _cont = opts.onContinue || _exitToOverworld;
+      actions.appendChild(mkBtn('CONTINUE',   function () { _cont(); }));
       actions.appendChild(mkBtn('GAME BOARD', function () { _hideResultForReview(); }));
     } else {
       actions.appendChild(mkBtn('PLAY AGAIN',  function () { _restartBattle(); }));
@@ -679,13 +780,33 @@ SOG.NarmerBattle = (function () {
     document.body.appendChild(overlay);
   }
 
-  /* FIRST-WIN sequence: win dialogue → grant card 51 + 25 gold → VICTORY scoreboard. */
-  function _runFirstWinSequence(locResults) {
+  /* SERF WIN — [source: NARMER_SERF_WIN_A/_B]. Block A → 20 gold at the "Take this."
+     beat → block B → scoreboard. CONTINUE = the Serf-win exit (Giant flag raise +
+     interstitial). NO card — it waits on the Giant. */
+  function _runSerfWinSequence(locResults) {
     _removeResultPopup();
-    runLines(WIN_DIALOGUE, function () {
-      _grantNarmerCard(function () {
-        _grantGold(GOLD_FIRST_WIN, function () {
-          _showResultScoreboard(true, false, locResults, { firstWin: true });
+    runLines(NARMER_SERF_WIN_A, function () {
+      _grantGold(GOLD_SERF_WIN, function () {                    // 20 gold, NO card
+        runLines(NARMER_SERF_WIN_B, function () {
+          _showResultScoreboard(true, false, locResults, { firstWin: true, onContinue: _exitToOverworldAfterSerfWin });
+        });
+      });
+    });
+  }
+
+  /* GIANT WIN — [source: NARMER_GIANT_WIN_A/_B]. Block A → Narmer card THEN 30 gold at
+     the "Take it." beat → block B → scoreboard. CONTINUE = plain exit (the Giant flag
+     stamps via resumeAfterBattle). The handoff is deliberately SOFT — no named next
+     boss, because the next Egypt node isn't built yet; "go find whatever you're
+     looking for / Home" is the intended open door. */
+  function _runGiantWinSequence(locResults) {
+    _removeResultPopup();
+    runLines(NARMER_GIANT_WIN_A, function () {
+      _grantNarmerCard(function () {                             // card first
+        _grantGold(GOLD_GIANT_WIN, function () {                 // then 30 gold
+          runLines(NARMER_GIANT_WIN_B, function () {
+            _showResultScoreboard(true, false, locResults, { firstWin: true, onContinue: _exitToOverworld });
+          });
         });
       });
     });
@@ -698,18 +819,16 @@ SOG.NarmerBattle = (function () {
     // Narmer card on the FIRST GIANT win, zero on any replay.
     var r = (window.SOG && SOG.rewards)
           ? SOG.rewards.consume('narmer')
-          : { firstTierWin: !_has(KEY_NARMER_COMPLETE), gold: GOLD_FIRST_WIN, grantCard: !_has(KEY_NARMER_COMPLETE) };
+          : { firstTierWin: !_has(KEY_NARMER_COMPLETE), gold: GOLD_SERF_WIN,
+              grantCard: (_flagTier() === 'giant' && !_tierBeatenLocal('narmer', 'giant')) };
     _set(KEY_NARMER_COMPLETE);   // any-tier "beaten" — kept for narrative gates
     if (r.grantCard) {
-      // FIRST GIANT win → win dialogue → card 51 + 15 gold → scoreboard.
-      _runFirstWinSequence(locResults);
+      // FIRST GIANT win → unification dialogue + the Narmer card + 30 gold.
+      _runGiantWinSequence(locResults);
     } else if (r.firstTierWin) {
-      // FIRST SERF win → flourish → +15 gold, NO card (it waits on the Giant).
-      _victoryFlourish(function () {
-        _grantGold(GOLD_FIRST_WIN, function () {
-          _showResultScoreboard(true, false, locResults, {});
-        });
-      });
+      // FIRST SERF win → serf-win dialogue + 20 gold (NO card) → serf-win return
+      // (Giant flag raise + interstitial).
+      _runSerfWinSequence(locResults);
     } else {
       // Replay of an already-beaten tier → flourish only, ZERO gold (anti-farming).
       _victoryFlourish(function () {
@@ -719,11 +838,28 @@ SOG.NarmerBattle = (function () {
   }
   function _onLoss(locResults) { _onDefeatOrTie(false, locResults); }
   function _onTie(locResults)  { _onDefeatOrTie(true,  locResults); }
+  /* Loss / tie — tier-aware, mirroring Sargon's router.
+       • GIANT rematch (Giant flag, not yet beaten) → the dedicated Giant loss/draw.
+       • SERF, before any win                       → the existing first-meeting lines.
+       • Anything after Narmer has been beaten      → straight to the scoreboard, no
+         dialogue (the post-win suppression gate: a beaten-Narmer replay must not
+         re-fire "Can I try again?" / "The unworthy always ask"). */
   function _onDefeatOrTie(isTie, locResults) {
     _stopLockSync();
-    runLines(isTie ? TIE_DIALOGUE : LOSS_DIALOGUE, function () {
+    if (_flagTier() === 'giant' && !_tierBeatenLocal('narmer', 'giant')) {
+      runLines(isTie ? NARMER_GIANT_DRAW : NARMER_GIANT_LOSS, function () {
+        _showResultScoreboard(false, isTie, locResults, {});
+      });
+      return;
+    }
+    var beforeWin = !_has(KEY_NARMER_COMPLETE);
+    if (beforeWin) {
+      runLines(isTie ? TIE_DIALOGUE : LOSS_DIALOGUE, function () {
+        _showResultScoreboard(false, isTie, locResults, {});
+      });
+    } else {
       _showResultScoreboard(false, isTie, locResults, {});
-    });
+    }
   }
 
   function _teardown() {
@@ -745,12 +881,8 @@ SOG.NarmerBattle = (function () {
   /* ══════════════════════════════════════════════════════════════
      CONFIG + SCRIPT
   ══════════════════════════════════════════════════════════════ */
-  /* Read a persisted tier-beaten flag (game.js stamps sog_node_<hook>_<tier>_beaten
-     on a win). Mirrors Gilgamesh/Sargon — drives the config-default tier below. */
-  function _tierBeatenLocal(hook, tier) {
-    try { return localStorage.getItem('sog_node_' + hook + '_' + tier + '_beaten') === 'true'; }
-    catch (e) { return false; }
-  }
+  /* (_tierBeatenLocal / _flagTier / _isNarmerGiantRematch live up with the two-tier
+     dialogue constants — same trio, same order, as the Sargon reference.) */
 
   function buildNarmerConfig() {
     var st = (window.SOG && SOG.state) || {};
@@ -791,7 +923,10 @@ SOG.NarmerBattle = (function () {
         opponentAvatar: 'images/portraits/narmerportrait.jpeg',
         popAlly:        true
       },
-      rewards:  {},                       // none yet (Stage 1 mechanic build)
+      // Rewards are NOT declared here: the module owns its own payout flow (_onWin →
+      // SOG.rewards.consume('narmer') for the gating decision, then the local Egypt
+      // amounts GOLD_SERF_WIN / GOLD_GIANT_WIN + the card). Same as every other boss.
+      rewards:  {},
       // Default-scoreboard "Play Again" replays THIS battle (rebuilds a fresh
       // config → reshuffled active/AI decks) instead of falling through to an
       // Arcadium game. Read by game.js's result-play-again handler.
@@ -835,7 +970,28 @@ SOG.NarmerBattle = (function () {
       }
       _swapOpponentBubblePortrait();   // Narmer's face on the shared opponent bubble (both paths)
 
-      // Repeat entry (or an already-won rematch) — skip the intro, straight to play.
+      // GIANT REMATCH → the in-battle dominance intro (NARMER_GIANT_INTRO), straight
+      // to play (no rules popup — the advance gate was taught in the Serf battle). The
+      // EXISTING Serf opening tutorial (_runOpeningDialogue) is left UNTOUCHED.
+      // Checked BEFORE the repeat-entry skip below, which would otherwise swallow it
+      // (KEY_NARMER_COMPLETE is set by the Serf win).
+      if (_isNarmerGiantRematch()) {
+        _disableButtons();
+        _dialogueActive = true;
+        _fadeOutCover(function () {
+          runLines(NARMER_GIANT_INTRO, function () {
+            _dialogueActive = false;
+            _enableButtons();
+            _wireOpponentPortraitClick();
+            _startLockSync();
+            done();
+          });
+        });
+        return;
+      }
+
+      // Repeat entry (Serf retry after the tutorial, or a replay of a beaten tier) —
+      // skip the intro, straight to play.
       if (_has(KEY_NARMER_OPENING_SEEN) || _has(KEY_NARMER_COMPLETE)) {
         _fadeOutCover(function () {
           _wireOpponentPortraitClick();
