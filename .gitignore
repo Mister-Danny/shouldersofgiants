@@ -7,3 +7,6 @@
 .Spotlight-V100
 .Trashes
 Thumbs.db
+
+# map-editor save backup (one generation, local only)
+data/map-data.js.bak

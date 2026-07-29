@@ -1616,6 +1616,10 @@
   <script src="js/ui.js"></script>
   <script src="js/tutorial.js"></script>
   <script src="js/legend.js"></script>
+  <!-- Overworld map layout (node positions, art, walk paths) for every region.
+       MUST load before overworld.js, which reads it synchronously at init.
+       Written by tools/map-editor — see that file's header before hand-editing. -->
+  <script src="data/map-data.js"></script>
   <script src="js/overworld.js"></script>
   <script src="js/home.js"></script>
   <script src="js/game/state.js"></script>

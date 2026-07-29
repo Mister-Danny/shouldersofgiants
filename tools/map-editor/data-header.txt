@@ -1,0 +1,29 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   OVERWORLD MAP DATA — the positional source of truth for every region.
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ THIS FILE IS WRITTEN BY tools/map-editor. Comments you add here WILL BE
+   LOST the next time someone saves from the editor. Put durable prose in the
+   per-node `note` field (it round-trips), or in the behaviour overlay in
+   js/overworld.js (hand-maintained, never regenerated).
+
+   WHY A .js FILE AND NOT .json — the game is opened straight off disk on
+   Chromebooks (file://), and fetch() of a local .json is CORS-blocked there.
+   A plain script tag assigning a global works everywhere and stays synchronous,
+   which matters because overworld.js reads MAPS during init().
+
+   WHAT LIVES HERE — pure data only. Anything function-valued (showIf gates,
+   onBeforeExit hooks) lives in NODE_BEHAVIOUR / EXIT_BEHAVIOUR in
+   js/overworld.js and is merged in by id at load. That split is what lets the
+   editor rewrite this file without being able to break game logic.
+
+   COORDINATES — x/y are percentages of the map container, origin top-left.
+   The container is 1280×600 stage px (the 1280×720 stage minus the 120px HUD),
+   so 1% x ≈ 12.8px and 1% y ≈ 6px. Nodes are centred on their point.
+
+   `kind` is recorded but NOT yet consumed by the game — onNodeClick still
+   dispatches on literal node id. Wiring kind-based dispatch is Phase 2; until
+   then a newly added node renders and animates but has no click behaviour.
+
+   To edit:  node tools/map-editor/serve.js  →  localhost:8750/tools/map-editor/
+   ══════════════════════════════════════════════════════════════════════════ */

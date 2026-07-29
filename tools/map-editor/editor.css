@@ -1,0 +1,374 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Map editor chrome. Deliberately echoes the in-game dev panel (gold on near
+   black, Courier) so it reads as part of the same toolset — but this is a
+   standalone local tool and shares no CSS with css/style.css.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --gold:   #d4aa50;
+  --gold-hi:#f8d000;
+  --bg:     #0d0b08;
+  --panel:  #17130d;
+  --line:   #3a2f1c;
+  --text:   #e8dcc0;
+  --dim:    #8a7c5e;
+  --danger: #c0392b;
+  --exit:   #4a9ed4;
+  --path:   #6fd47a;
+}
+
+* { box-sizing: border-box; }
+
+/* An explicit `display` in author CSS beats the UA stylesheet's [hidden] rule,
+   so anything below that sets display:grid would ignore the hidden attribute
+   and render on load. Restore the attribute's meaning globally. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 "Courier New", ui-monospace, monospace;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Top bar ──────────────────────────────────────────────────────────── */
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+#topbar h1 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.spacer { flex: 1; }
+
+#map-tabs { display: flex; gap: 4px; }
+#map-tabs button {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  padding: 5px 12px;
+  cursor: pointer;
+  font: inherit;
+  border-radius: 3px;
+}
+#map-tabs button:hover { color: var(--text); border-color: var(--gold); }
+#map-tabs button.on {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #191203;
+  font-weight: bold;
+}
+
+button.primary, button.ghost {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 6px 14px;
+}
+button.primary {
+  background: var(--gold);
+  border: 1px solid var(--gold);
+  color: #191203;
+  font-weight: bold;
+}
+button.primary:disabled { opacity: 0.35; cursor: default; }
+button.primary:not(:disabled):hover { background: var(--gold-hi); }
+button.ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+button.ghost:hover { border-color: var(--gold); color: var(--gold); }
+button.sm { padding: 2px 8px; font-size: 11px; }
+
+#dirty { color: var(--gold-hi); font-size: 12px; }
+
+/* ── Layout ───────────────────────────────────────────────────────────── */
+main { flex: 1; display: flex; min-height: 0; }
+
+#stage-wrap {
+  flex: 1;
+  min-width: 0;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The game's map container is 1280×600 stage px. Locking the aspect ratio here
+   is what makes a percentage dragged in this tool land on the same pixel in the
+   game — do not change it without changing the HUD height in css/style.css. */
+#stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1280 / 600;
+  max-height: 100%;
+  margin: 0 auto;
+  background: #000;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Mirrors #overworld-map in css/style.css — object-fit:cover crops the source
+   art the same way the game does, so nothing shifts between here and there. */
+#bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+#overlay { position: absolute; inset: 0; }
+
+#paths {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+#empty-note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--dim);
+}
+
+/* ── Placed things ────────────────────────────────────────────────────── */
+.n {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  text-align: center;
+}
+.n:active { cursor: grabbing; }
+.n img {
+  width: 84px;           /* matches .overworld-node > img */
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6));
+  pointer-events: none;
+}
+/* The game hard-codes this one override in CSS by data-id; replicate it so the
+   signpost previews at its true size. See css/style.css [data-id="egypt-signpost"]. */
+.n[data-id="egypt-signpost"] img { width: 126px; }
+
+.n .tag {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--gold);
+  background: rgba(0,0,0,0.75);
+  padding: 0 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+}
+.n:hover .tag, .n.sel .tag { opacity: 1; }
+.n.sel { outline: 1px dashed var(--gold-hi); outline-offset: 4px; }
+
+/* Crosshair marking the node's true anchor point — the art is decorative and
+   often much larger than the point it is pinned to, so without this you cannot
+   tell what you are actually positioning. */
+.n::after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 9px; height: 9px;
+  margin: -5px 0 0 -5px;
+  border: 1px solid var(--gold-hi);
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  pointer-events: none;
+}
+
+.exit {
+  position: absolute;
+  border: 1px dashed var(--exit);
+  background: rgba(74,158,212,0.10);
+  cursor: grab;
+  font-size: 10px;
+  color: var(--exit);
+  padding: 2px 4px;
+  overflow: hidden;
+}
+.exit.sel { border-style: solid; background: rgba(74,158,212,0.22); }
+
+.wp {
+  position: absolute;
+  width: 11px; height: 11px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--path);
+  border: 1px solid #0d0b08;
+  cursor: grab;
+}
+.wp.sel { background: var(--gold-hi); transform: scale(1.3); }
+
+#readout {
+  display: flex;
+  gap: 18px;
+  color: var(--dim);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+#cursor-pos { color: var(--gold); min-width: 130px; }
+
+/* ── Sidebar ──────────────────────────────────────────────────────────── */
+#sidebar {
+  flex: 0 0 330px;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  padding-bottom: 30px;
+}
+
+.panel { border-bottom: 1px solid var(--line); padding: 10px 12px; }
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--gold);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.panel-head.sub { margin-top: 14px; }
+.note { color: var(--dim); font-size: 11px; margin: 6px 0 0; }
+
+.seg { display: flex; gap: 4px; }
+.seg button {
+  flex: 1;
+  font: inherit;
+  padding: 6px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  border-radius: 3px;
+}
+.seg button.on { background: var(--gold); border-color: var(--gold); color: #191203; font-weight: bold; }
+
+#node-list, #exit-list { list-style: none; margin: 0; padding: 0; }
+#node-list li, #exit-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+#node-list li:hover, #exit-list li:hover { background: rgba(212,170,80,0.10); }
+#node-list li.sel, #exit-list li.sel { background: rgba(212,170,80,0.22); color: var(--gold-hi); }
+#node-list li img { width: 22px; height: 22px; object-fit: contain; }
+#node-list li .k, #exit-list li .k { margin-left: auto; color: var(--dim); font-size: 10px; }
+
+/* ── Inspector fields ─────────────────────────────────────────────────── */
+.f { margin-bottom: 8px; }
+.f label { display: block; color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+.f input, .f select, .f textarea {
+  width: 100%;
+  background: #0a0806;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font: inherit;
+  padding: 4px 6px;
+  border-radius: 2px;
+}
+.f input:focus, .f select:focus, .f textarea:focus { outline: 1px solid var(--gold); border-color: var(--gold); }
+.f textarea { resize: vertical; min-height: 46px; font-size: 11px; }
+.f2 { display: flex; gap: 8px; }
+.f2 > .f { flex: 1; }
+.chk { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.chk input { width: auto; }
+.rowbtns { display: flex; gap: 6px; margin-top: 10px; }
+button.danger {
+  font: inherit; cursor: pointer; border-radius: 3px; padding: 6px 12px;
+  background: transparent; border: 1px solid var(--danger); color: #e88;
+}
+button.danger:hover { background: var(--danger); color: #fff; }
+
+.warn {
+  color: #f0c674;
+  background: rgba(240,198,116,0.10);
+  border-left: 2px solid #f0c674;
+  padding: 6px 8px;
+  font-size: 11px;
+  margin: 8px 0 0;
+}
+
+/* ── Modal ────────────────────────────────────────────────────────────── */
+#modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: grid; place-items: center;
+  z-index: 50;
+}
+.modal-box {
+  width: min(720px, 92vw);
+  max-height: 82vh;
+  display: flex; flex-direction: column;
+  background: var(--panel);
+  border: 2px solid var(--gold);
+  border-radius: 4px;
+}
+.modal-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; border-bottom: 1px solid var(--line);
+  color: var(--gold); text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px;
+}
+.modal-head button { background: none; border: none; color: var(--gold); font-size: 16px; cursor: pointer; }
+#modal-body { padding: 14px; overflow-y: auto; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
+
+.art-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.art {
+  border: 1px solid var(--line);
+  padding: 6px;
+  cursor: pointer;
+  text-align: center;
+  border-radius: 3px;
+  background: #0a0806;
+}
+.art:hover { border-color: var(--gold); }
+.art.on { border-color: var(--gold-hi); background: rgba(248,208,0,0.10); }
+.art img { width: 100%; height: 72px; object-fit: contain; display: block; }
+.art span { font-size: 10px; color: var(--dim); word-break: break-all; display: block; margin-top: 4px; }
+
+/* ── Toast ────────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: 18px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--gold);
+  color: #191203;
+  font-weight: bold;
+  padding: 9px 20px;
+  border-radius: 3px;
+  z-index: 90;
+}
+#toast.bad { background: var(--danger); color: #fff; }

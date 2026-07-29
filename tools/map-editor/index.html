@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SoG · Map Editor</title>
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+
+<header id="topbar">
+  <h1>Map Editor</h1>
+  <nav id="map-tabs"><!-- one button per map, built by JS --></nav>
+  <button id="btn-new-map" class="ghost" title="Create a new region from a background image">+ New Map</button>
+  <div class="spacer"></div>
+  <span id="dirty" hidden>● unsaved</span>
+  <button id="btn-save" class="primary" disabled>Save to map-data.js</button>
+</header>
+
+<main>
+  <!-- ── Stage ────────────────────────────────────────────────────────────
+       #stage is locked to the game's real 1280×600 map container aspect (the
+       1280×720 stage minus the 120px HUD strip). Everything inside is
+       positioned in percentages, exactly like the game, so what you drag here
+       is literally the number that gets written to disk. -->
+  <section id="stage-wrap">
+    <div id="stage">
+      <img id="bg" alt="" draggable="false">
+      <div id="overlay">
+        <svg id="paths" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+        <!-- nodes, exit zones and waypoint handles are injected here -->
+      </div>
+      <div id="empty-note" hidden>No map loaded.</div>
+    </div>
+    <div id="readout">
+      <span id="cursor-pos">—</span>
+      <span id="hint"></span>
+    </div>
+  </section>
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────── -->
+  <aside id="sidebar">
+
+    <div class="panel">
+      <div class="panel-head">Mode</div>
+      <div class="seg">
+        <button data-mode="select" class="on">Select &amp; Drag</button>
+        <button data-mode="path">Draw Path</button>
+      </div>
+      <p class="note" id="mode-note">Drag nodes to reposition. Arrow keys nudge by 0.1%, Shift+arrows by 1%.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        Nodes <button id="btn-add-node" class="ghost sm">+ Add Node</button>
+      </div>
+      <ul id="node-list"></ul>
+      <div class="panel-head sub">Exits</div>
+      <ul id="exit-list"></ul>
+    </div>
+
+    <div class="panel" id="inspector-panel">
+      <div class="panel-head">Inspector</div>
+      <div id="inspector"><p class="note">Nothing selected.</p></div>
+    </div>
+
+  </aside>
+</main>
+
+<!-- ── Art picker (used for both Add Node and New Map) ─────────────────── -->
+<div id="modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head"><span id="modal-title">Choose art</span><button id="modal-x">✕</button></div>
+    <div id="modal-body"></div>
+    <div class="modal-foot">
+      <button id="modal-cancel" class="ghost">Cancel</button>
+      <button id="modal-ok" class="primary" disabled>Add</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="editor.js"></script>
+</body>
+</html>

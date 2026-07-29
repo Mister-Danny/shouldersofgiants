@@ -495,257 +495,157 @@ var Overworld = (function () {
   var EGYPT_WALKOFF = { dx: 48, dy: -48 };
 
   /* ════════════════════════════════════════════════════════════
-     MAP DATA — easy to extend for new regions
+     MAP DATA — positions in data/map-data.js, behaviour here
      ════════════════════════════════════════════════════════════
-     Each map: image, spawn (default entry), startsFogged, nodes, exits.
-     Nodes/exits coords are % of the map div (container). ────── */
+     The map LAYOUT (which nodes exist, where they sit, their art, scale, and
+     walk paths) was lifted out of this file into data/map-data.js so that
+     tools/map-editor can rewrite it without ever touching game logic. See that
+     file's header for the coordinate system and for why it is .js not .json.
+
+     What stayed behind is everything function-valued — the showIf visibility
+     gates and the to-Egypt onBeforeExit hook. Those close over the KEY_*
+     constants, runDialogue, cancelIdle and isDialogueLocked, none of which
+     exist outside this closure, so they can never be serialised out. They are
+     keyed by node id (exits by 'mapId/exitId', because BOTH East Africa and
+     Mesopotamia declare an exit called 'to-egypt') and merged in at load.
+
+     Net effect: the editor owns WHERE things are, this file owns WHEN they
+     appear and WHAT they do. ────── */
   var SPRITE_PATH = 'images/metaworld/character sprites/female/';
   var NODE_PATH   = 'images/metaworld/civilization nodes/';
-  var MAP_PATH    = 'images/metaworld/maps/';
 
-  var MAPS = {
-    'eastafrica': {
-      displayName: 'East Africa',
-      image: MAP_PATH + 'eastafrica.jpeg',
-      // Spawn: at the foot of Kilimanjaro — right of the explorer dialogue box
-      // (box is at left:35% viewport; character at x:65 puts her clearly east of it).
-      spawn: { x: 65, y: 90 },
-      startsFogged: false,
-      nodes: [
-        {
-          id:     'egypt-signpost',
-          name:   'To Egypt',
-          // No label — the separate To Egypt box (visible post-victory) handles navigation.
-          image:  NODE_PATH + 'toegypt.png',
-          x: 20, y: 20,
-          // Hidden until the player completes the Neanderthal battle and the
-          // post-victory overworld sequence plays (_completePostVictorySequence
-          // sets this flag then immediately calls _refreshNodes so the node appears).
-          showIf: function () {
-            try {
-              return localStorage.getItem(KEY_POST_NEANDERTHAL_DIALOGUE) === 'true';
-            } catch (e) { return false; }
-          },
-          // Short northwest walk from the Prehistory node area to the signpost.
-          path: [
-            { x: 28, y: 28 },
-            { x: 20, y: 20 }
-          ]
-        },
-        {
-          id:    'prehistory',
-          name:  'Prehistory',
-          image: NODE_PATH + 'prehistory node.png',
-          x: 38, y: 35,
-          // Waypoints — a C-shape around the west side of Lake Victoria,
-          // staying wide enough to avoid the lakes and mountains NW of it.
-          //   wp1: turn left early, well south of the lake
-          //   wp2: due west of the lake (far enough west to clear the NW lakes)
-          //   wp3: arc east-northeast, staying south of the NW mountain range
-          //   wp4: approach the node from below
-          //   wp5: arrive at the node
-          path: [
-            { x: 45, y: 72 },   // step left and slightly up from Kilimanjaro
-            { x: 28, y: 65 },   // continue northwest
-            { x: 20, y: 50 },   // far west — clear of all western lakes
-            { x: 22, y: 40 },   // northwest corner of the arc
-            { x: 32, y: 38 },   // curve east, south of the mountains
-            { x: 38, y: 35 }    // arrive at the node
-          ]
-        }
-      ],
-      exits: [
-        {
-          // Forward exit to Egypt. Sits at the top of the screen just right of
-          // the egypt-signpost (Otzi) node at x:20,y:20. GATED: only rendered
-          // once the player has beaten Otzi (sog_battle_otzi_complete) \u2014 same
-          // flag the Otzi card grant / signpost checkmark use. Mirrors the
-          // "To Mesopotamia"/"To East Africa" boxes exactly; entryAt matches the
-          // D1 East Africa->Egypt arrival point (Egypt's west spawn).
-          id:      'to-egypt',
-          label:   'To Egypt \u2192',
-          zone:    { x: 29, y: 5, w: 22, h: 24 },
-          walkTo:  { x: 28, y: 16 },   // fallback target if gsap is unavailable
-          walkOff: true,               // dramatic off-screen walk toward Egypt (reuses the D1 walk-off), not a short hop
-          target:  'egypt',
-          entryAt: { x: 10, y: 85 },
-          showIf:  function () {
-            try { return localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true'; }
-            catch (e) { return false; }
-          },
-          // First click only: Hunter's goodbye, then the walk-off + transition.
-          // Subsequent clicks skip straight to the walk-off (flag already set).
-          onBeforeExit: function (proceed) {
-            var seen = false;
-            try { seen = localStorage.getItem(KEY_TOEGYPT_GOODBYE) === 'true'; } catch (e) {}
-            if (seen) { proceed(); return; }
-            isDialogueLocked = true;
-            cancelIdle();
-            runDialogue(TOEGYPT_GOODBYE_DIALOGUE, function () {
-              isDialogueLocked = false;
-              try { localStorage.setItem(KEY_TOEGYPT_GOODBYE, 'true'); } catch (e) {}
-              proceed();
-            });
-          }
-        }
-      ]
+  /* Visibility gates, by node id. A node with no entry here is always shown. */
+  var NODE_BEHAVIOUR = {
+    // Hidden until the player completes the Neanderthal battle and the
+    // post-victory overworld sequence plays (_completePostVictorySequence sets
+    // this flag then immediately calls _refreshNodes so the node appears).
+    'egypt-signpost': {
+      showIf: function () {
+        try { return localStorage.getItem(KEY_POST_NEANDERTHAL_DIALOGUE) === 'true'; }
+        catch (e) { return false; }
+      }
     },
 
-    'egypt': {
-      displayName: 'Egypt',
-      image: MAP_PATH + 'egyptz.jpeg',
-      spawn: { x: 10, y: 85 },
-      startsFogged: true,
-      nodes: [
-        {
-          // First Egypt node — Narmer's Double Crown. Goes live after beating
-          // Nebuchadnezzar (sog_egypt_node_live, set at the end of the post-Neb
-          // beat). Placed at the base of the Nile Delta (the green fan, top-left).
-          // Click → walk up → (first time) Narmer encounter dialogue → the Narmer
-          // advance-board battle at the routed tier. Afterwards _routeBossTier
-          // applies: Serf beaten → Giant rematch, both beaten → difficulty picker.
-          // ART: doublecrown.png is a PLACEHOLDER — swap when the real art lands.
-          // Position (x/y) + scale are KNOBS for fine-tuning.
-          id:    'double-crown',
-          name:  'The Double Crown',
-          image: NODE_PATH + 'doublecrown.png',
-          x: 23, y: 35,
-          scale: 0.95,
-          flipX: true,
-          showIf: function () {
-            try { return localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) { return false; }
-          }
-        },
-        {
-          // Egypt · River Market. Present from the moment EGYPT ITSELF is
-          // unlocked — gated on the SAME KEY_EGYPT_NODE_LIVE the Double Crown
-          // uses (set when Giant Neb falls), NOT on any Narmer progression. So
-          // the shop is there to browse the instant the player can reach Egypt.
-          // Click → walk up → _enterMarket('egypt') (see onNodeClick).
-          //
-          // POSITION: 29/18 is the DELTA slot the advanced river hut used to
-          // occupy — the market REPLACES that prop (advriverhut.png is removed
-          // from EGYPT_TOPO_PROPS_ADV). Both are gated on KEY_EGYPT_NODE_LIVE, so
-          // pre-Neb the player sees the humble riverhut.png there and post-Neb it
-          // becomes this walkable market. Props use the same map-% space as node
-          // x/y. Position + scale are KNOBS — nudge by eye.
-          id:    'egypt-market',
-          name:  'The River Market',
-          image: NODE_PATH + 'egyptmarket.png',
-          x: 29, y: 18,
-          scale: 1.1,
-          showIf: function () {
-            try { return localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) { return false; }
-          }
-        }
-      ],
-      exits: [
-        {
-          id:      'to-mesopotamia',
-          label:   'To Mesopotamia \u2192',
-          zone:    { x: 80, y:  5, w: 20, h: 30 },
-          walkTo:  { x: 88, y: 15 },
-          target:  'mesopotamia',
-          entryAt: { x: 10, y: 85 }
-        },
-        {
-          id:      'to-eastafrica',
-          label:   '\u2190 To East Africa',
-          zone:    { x: 0, y: 70, w: 20, h: 30 },
-          walkTo:  { x: 10, y: 85 },
-          target:  'eastafrica',
-          entryAt: { x: 88, y: 15 }  // top-right of East Africa
-        }
-      ]
+    // Both Egypt nodes go live on the SAME flag (set when Giant Neb falls):
+    // reaching Egypt at all is the unlock, so the River Market is browsable the
+    // instant the player can get there — it is NOT gated on Narmer progression.
+    'double-crown': {
+      showIf: function () {
+        try { return localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; }
+        catch (e) { return false; }
+      }
+    },
+    'egypt-market': {
+      showIf: function () {
+        try { return localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; }
+        catch (e) { return false; }
+      }
     },
 
-    'mesopotamia': {
-      displayName: 'Mesopotamia',
-      image: MAP_PATH + 'mesopotamia.jpeg',
-      spawn: { x: 10, y: 85 },
-      startsFogged: true,
-      nodes: [
-        {
-          // Phase D2a: visible after sog_mesopotamia_arrival_complete is set.
-          // Click handler is a stub \u2014 the Gilgamesh encounter lives in Phase D2b.
-          id:    'walls-of-uruk',
-          name:  'Walls of Uruk',
-          image: NODE_PATH + 'wallsofuruk@0.33x.png',
-          x: 74, y: 85,
-          scale: 1.35,
-          showIf: function () {
-            try { return localStorage.getItem(KEY_MESOPOTAMIA_ARRIVAL) === 'true'; } catch (e) { return false; }
-          }
-        },
-        {
-          // Mesopotamian Marketplace. GATED: appears only after the Gilgamesh win
-          // (KEY_BATTLE_GILGAMESH_COMPLETE) — same completion-flag gating as the
-          // To Egypt box. Placed near the Uruk node; position is provisional and
-          // will be fine-tuned. First win auto-walks here (see returnFromGilgameshWin);
-          // afterwards it's a clickable node that re-enters the market placeholder.
-          id:    'market',
-          name:  'Mesopotamian Marketplace',
-          image: NODE_PATH + 'mesomarketnode@0.5x.png',
-          x: 82, y: 65,   // nudged right 2 / up 1
-          scale: 2,   // node sprite rendered too small at natural size — double it
-          flipX: true, // mirror the stall sprite horizontally to face the other way
-          showIf: function () {
-            try { return localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; } catch (e) { return false; }
-          }
-        },
-        {
-          // Phase D4 — Sargon (Akkad). Dust-storm-revealed on the first marketplace
-          // return; persists via KEY_SARGON_NODE_REVEALED. Position is provisional
-          // (south/near Uruk) — fine-tune later. Click → deck-size gate (onNodeClick).
-          id:    'sargon',
-          name:  'Akkad',
-          image: NODE_PATH + 'sargonshadow.png',
-          x: 60, y: 52,  // flags anchor to these coords, so they move with the node
-          scale: 1.25,   // 704×384 art rendered at 84px base — scale up a touch (knob)
-          showIf: function () {
-            try { return localStorage.getItem(KEY_SARGON_NODE_REVEALED) === 'true'; } catch (e) { return false; }
-          }
-        },
-        {
-          // Phase D4+ — Hammurabi (Babylon). Rises from the dirt on the first
-          // overworld return AFTER defeating Sargon; persists via
-          // KEY_HAMMURABI_NODE_REVEALED. Placed up-and-left of Akkad along the
-          // Euphrates. Click → stub (battle not built yet). Position/scale are knobs.
-          id:    'hammurabi',
-          name:  'Babylon',
-          image: NODE_PATH + 'hammurabinode.png',
-          x: 48, y: 31,
-          scale: 1.25,
-          showIf: function () {
-            try { return localStorage.getItem(KEY_HAMMURABI_NODE_REVEALED) === 'true'; } catch (e) { return false; }
-          }
-        },
-        {
-          // The Hanging Gardens — sparkle-revealed on the first overworld return
-          // AFTER defeating Hammurabi; persists via KEY_HANGING_GARDENS_REVEALED.
-          // Click → STUB (destination not built yet). Position/scale are knobs.
-          id:    'hanging-gardens',
-          name:  'The Hanging Gardens',
-          image: NODE_PATH + 'hanginggardens@0.33x.png',
-          x: 67, y: 69,   // midpoint between Walls of Uruk (73,83) and Akkad (61,55)
-          scale: 1.275,   // 15% smaller than the original 1.5
-          showIf: function () {
-            try { return localStorage.getItem(KEY_HANGING_GARDENS_REVEALED) === 'true'; } catch (e) { return false; }
-          }
-        }
-      ],
-      exits: [
-        {
-          id:      'to-egypt',
-          label:   '\u2190 To Egypt',
-          zone:    { x: 0, y: 70, w: 20, h: 30 },
-          walkTo:  { x: 10, y: 85 },
-          target:  'egypt',
-          entryAt: { x: 88, y: 15 }
-        }
-      ]
+    'walls-of-uruk': {
+      showIf: function () {
+        try { return localStorage.getItem(KEY_MESOPOTAMIA_ARRIVAL) === 'true'; }
+        catch (e) { return false; }
+      }
+    },
+    // Appears only after the Gilgamesh win — the same completion-flag gating
+    // the To Egypt box uses.
+    'market': {
+      showIf: function () {
+        try { return localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; }
+        catch (e) { return false; }
+      }
+    },
+    // Dust-storm-revealed on the first marketplace return.
+    'sargon': {
+      showIf: function () {
+        try { return localStorage.getItem(KEY_SARGON_NODE_REVEALED) === 'true'; }
+        catch (e) { return false; }
+      }
+    },
+    // Rises from the dirt on the first overworld return after Sargon falls.
+    'hammurabi': {
+      showIf: function () {
+        try { return localStorage.getItem(KEY_HAMMURABI_NODE_REVEALED) === 'true'; }
+        catch (e) { return false; }
+      }
+    },
+    // Sparkle-revealed on the first overworld return after Hammurabi falls.
+    'hanging-gardens': {
+      showIf: function () {
+        try { return localStorage.getItem(KEY_HANGING_GARDENS_REVEALED) === 'true'; }
+        catch (e) { return false; }
+      }
     }
   };
+
+  /* Exit gates + pre-exit hooks, keyed 'mapId/exitId' — two maps both declare
+     an exit called 'to-egypt', so a bare id would collide. */
+  var EXIT_BEHAVIOUR = {
+    'eastafrica/to-egypt': {
+      // Gated on beating Otzi — the same flag the Otzi card grant and the
+      // signpost checkmark use.
+      showIf: function () {
+        try { return localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true'; }
+        catch (e) { return false; }
+      },
+      // First click only: Hunter's goodbye, then the walk-off + transition.
+      // Subsequent clicks skip straight to the walk-off (flag already set).
+      onBeforeExit: function (proceed) {
+        var seen = false;
+        try { seen = localStorage.getItem(KEY_TOEGYPT_GOODBYE) === 'true'; } catch (e) {}
+        if (seen) { proceed(); return; }
+        isDialogueLocked = true;
+        cancelIdle();
+        runDialogue(TOEGYPT_GOODBYE_DIALOGUE, function () {
+          isDialogueLocked = false;
+          try { localStorage.setItem(KEY_TOEGYPT_GOODBYE, 'true'); } catch (e) {}
+          proceed();
+        });
+      }
+    }
+  };
+
+  /* Merge layout + behaviour into the runtime MAPS the rest of this file reads.
+     Copies each node/exit so runtime tweaks never write back into SOG_MAP_DATA. */
+  function _buildMaps() {
+    var data = window.SOG_MAP_DATA;
+    if (!data) {
+      // Loud on purpose. Without this the overworld just renders zero nodes,
+      // which reads as an art bug rather than a missing script tag.
+      console.error('[Overworld] data/map-data.js did not load — no maps available. ' +
+                    'Check the script tag order in index.html.');
+      return {};
+    }
+    function merge(src, behaviour) {
+      var out = {}, k;
+      for (k in src) { if (Object.prototype.hasOwnProperty.call(src, k)) out[k] = src[k]; }
+      if (behaviour) {
+        if (behaviour.showIf)       out.showIf       = behaviour.showIf;
+        if (behaviour.onBeforeExit) out.onBeforeExit = behaviour.onBeforeExit;
+      }
+      return out;
+    }
+    var maps = {};
+    Object.keys(data).forEach(function (mapId) {
+      var src = data[mapId];
+      maps[mapId] = {
+        displayName:  src.displayName,
+        image:        src.image,
+        spawn:        src.spawn,
+        startsFogged: src.startsFogged,
+        nodes: (src.nodes || []).map(function (n) {
+          return merge(n, NODE_BEHAVIOUR[n.id]);
+        }),
+        exits: (src.exits || []).map(function (x) {
+          return merge(x, EXIT_BEHAVIOUR[mapId + '/' + x.id]);
+        })
+      };
+    });
+    return maps;
+  }
+
+  var MAPS = _buildMaps();
 
   /* ── Animation timing ──────────────────────────────────────── */
   var WALK_FRAME_MS = 125;    // 8 fps walk
