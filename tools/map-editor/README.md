@@ -3,6 +3,14 @@
 A local tool for laying out the overworld: drag nodes, draw walk paths, add
 nodes, create regions. It writes `data/map-data.js` and nothing else.
 
+**To open it, double-click `Open Map Editor.command` in the project folder.**
+That starts the server and opens the editor in your browser — no terminal, no
+install. Leave the black window it opens alone until you're done; closing it
+shuts the editor down. There's a **? Help** button in the editor's toolbar
+written for non-programmers.
+
+If you'd rather use a terminal, it's the same thing:
+
 ```
 node tools/map-editor/serve.js
 ```

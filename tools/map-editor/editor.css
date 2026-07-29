@@ -359,6 +359,21 @@ button.danger:hover { background: var(--danger); color: #fff; }
 .art img { width: 100%; height: 72px; object-fit: contain; display: block; }
 .art span { font-size: 10px; color: var(--dim); word-break: break-all; display: block; margin-top: 4px; }
 
+/* ── Help text ────────────────────────────────────────────────────────── */
+.help { max-width: 62ch; line-height: 1.65; }
+.help h3 {
+  color: var(--gold);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 20px 0 6px;
+}
+.help h3:first-child { margin-top: 0; }
+.help p, .help li { color: var(--text); font-size: 12.5px; }
+.help ol { padding-left: 20px; margin: 6px 0; }
+.help li { margin-bottom: 3px; }
+.help b { color: var(--gold-hi); }
+
 /* ── Toast ────────────────────────────────────────────────────────────── */
 #toast {
   position: fixed;

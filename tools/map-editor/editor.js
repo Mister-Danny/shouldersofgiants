@@ -357,6 +357,7 @@ function wireGlobalEvents() {
   $('#btn-save').onclick    = save;
   $('#btn-add-node').onclick = addNodeFlow;
   $('#btn-new-map').onclick  = newMapFlow;
+  $('#btn-help').onclick     = showHelp;
 
   document.addEventListener('keydown', onKey);
 
@@ -617,6 +618,78 @@ function newMapFlow() {
     selectMap(id);
     toast(`Created "${id}". Add nodes, then an exit from an existing map to reach it.`);
   });
+}
+
+/* ── Help ─────────────────────────────────────────────────────────────────
+   Written for someone who does not program. This lives in the toolbar rather
+   than in a README because the toolbar is where the question gets asked. */
+function showHelp() {
+  $('#modal-title').textContent = 'How to use the map editor';
+  $('#modal-body').innerHTML = `
+    <div class="help">
+      <h3>The short version</h3>
+      <ol>
+        <li>Drag things where you want them.</li>
+        <li>Click <b>Save to map-data.js</b>.</li>
+        <li>Reload the game tab to see it.</li>
+      </ol>
+      <p>You cannot break the game by dragging. Positions are the only thing
+         this tool can change.</p>
+
+      <h3>Moving things</h3>
+      <p>Click and drag any node. The small gold circle is the spot it is
+         actually pinned to — the artwork around it is usually much bigger, so
+         judge position by the circle, not the picture.</p>
+      <p>For fine adjustment, click a node once and use the <b>arrow keys</b>.
+         Each press moves it a tiny amount; hold <b>Shift</b> for bigger steps.</p>
+
+      <h3>Drawing a walking path</h3>
+      <p>A path is the route the explorer walks to reach a node — that is how
+         you keep her out of lakes and mountains.</p>
+      <ol>
+        <li>Click <b>Draw Path</b> at the top of the right-hand panel.</li>
+        <li>Click the node the path should lead <i>to</i>.</li>
+        <li>Click along the map to drop green dots, in walking order.</li>
+        <li>Finish on the node itself. If you don't, the editor warns you and
+            offers a one-click fix.</li>
+      </ol>
+      <p>Switch back to <b>Select &amp; Drag</b> to move dots around, or click a
+         dot and press Delete to remove it.</p>
+
+      <h3>Adding a node</h3>
+      <p><b>+ Add Node</b> → pick a picture → give it a name. It appears in the
+         middle of the map; drag it where you want.</p>
+      <p class="warn"><b>Important:</b> a node you add will look right and
+         animate, but <b>nothing happens when a player clicks it</b>. Making it
+         open a shop or start a battle still needs a programming change. Adding
+         it here is step one of two — tell Claude what the node should do and it
+         can wire up the rest.</p>
+
+      <h3>Making a new region</h3>
+      <p><b>+ New Map</b> → pick a background → name it. Then add nodes to it.
+         To let players actually reach it, an existing map needs an exit
+         pointing at it — ask Claude for that part.</p>
+
+      <h3>If you make a mess</h3>
+      <p><b>Cmd + Z</b> undoes, as many times as you like, right back to how
+         things were when you opened the editor. Nothing is written to disk
+         until you press Save.</p>
+      <p>If you already saved and want the previous version back, ask Claude —
+         the file before your last save is kept automatically.</p>
+
+      <h3>Publishing your changes</h3>
+      <p>Saving updates the game on <i>this</i> computer only. Getting it onto
+         the real site is a separate step — ask Claude to commit and push when
+         you're happy with how things look.</p>
+    </div>`;
+  $('#modal-ok').hidden = true;
+  const close = () => { $('#modal').hidden = true; $('#modal-ok').hidden = false; };
+  $('#modal-cancel').textContent = 'Close';
+  $('#modal-cancel').onclick = $('#modal-x').onclick = () => {
+    close();
+    $('#modal-cancel').textContent = 'Cancel';
+  };
+  $('#modal').hidden = false;
 }
 
 /* ── Art picker modal ─────────────────────────────────────────────────── */
