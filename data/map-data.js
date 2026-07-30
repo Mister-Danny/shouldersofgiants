@@ -44,7 +44,36 @@ window.SOG_MAP_DATA = {
     { id: 'hatshepsut-beaten', label: 'Hatshepsut defeated', flag: 'sog_node_hatshepsut_serf_beaten' },
     { id: 'ramses-beaten', label: 'Ramses defeated', flag: 'sog_node_ramses_serf_beaten' },
     { id: 'akhenaten-beaten', label: 'Akhenaten defeated', flag: 'sog_node_akhenaten_serf_beaten' },
-    { id: 'egypt-complete', label: 'Egypt complete (Kush Giant) → next region opens', flag: 'sog_node_kush_giant_beaten' }
+    { id: 'egypt-complete', label: 'Egypt complete (Kush Giant) → next region opens', flag: 'sog_node_kush_giant_beaten' },
+    { id: 'cyrus-beaten', label: 'Cyrus the Great defeated', flag: 'sog_node_cyrus_serf_beaten' },
+    { id: 'darius-beaten', label: 'Darius the Great defeated', flag: 'sog_node_darius_serf_beaten' },
+    { id: 'persia-complete', label: 'Persia complete (Darius the Great Giant) → next region opens', flag: 'sog_node_darius_giant_beaten' },
+    { id: 'greatbath-beaten', label: 'The Great Bath defeated', flag: 'sog_node_greatbath_serf_beaten' },
+    { id: 'siddhartha-beaten', label: 'Siddhartha defeated', flag: 'sog_node_siddhartha_serf_beaten' },
+    { id: 'ashoka-beaten', label: 'Ashoka defeated', flag: 'sog_node_ashoka_serf_beaten' },
+    { id: 'india-complete', label: 'India complete (Ashoka Giant) → next region opens', flag: 'sog_node_ashoka_giant_beaten' },
+    { id: 'confucius-beaten', label: 'Confucius defeated', flag: 'sog_node_confucius_serf_beaten' },
+    { id: 'shihuangdi-beaten', label: 'Shi Huangdi defeated', flag: 'sog_node_shihuangdi_serf_beaten' },
+    { id: 'zhangqian-beaten', label: 'Zhang Qian defeated', flag: 'sog_node_zhangqian_serf_beaten' },
+    { id: 'china-complete', label: 'China complete (Zhang Qian Giant) → next region opens', flag: 'sog_node_zhangqian_giant_beaten' },
+    { id: 'abraham-beaten', label: 'Abraham defeated', flag: 'sog_node_abraham_serf_beaten' },
+    { id: 'moses-beaten', label: 'Moses defeated', flag: 'sog_node_moses_serf_beaten' },
+    { id: 'david-beaten', label: 'David defeated', flag: 'sog_node_david_serf_beaten' },
+    { id: 'jesus-beaten', label: 'Jesus defeated', flag: 'sog_node_jesus_serf_beaten' },
+    { id: 'paul-beaten', label: 'Paul defeated', flag: 'sog_node_paul_serf_beaten' },
+    { id: 'levant-complete', label: 'The Levant complete (Paul Giant) → next region opens', flag: 'sog_node_paul_giant_beaten' },
+    { id: 'leonidas-beaten', label: 'Leonidas defeated', flag: 'sog_node_leonidas_serf_beaten' },
+    { id: 'pericles-beaten', label: 'Pericles defeated', flag: 'sog_node_pericles_serf_beaten' },
+    { id: 'socrates-beaten', label: 'Socrates defeated', flag: 'sog_node_socrates_serf_beaten' },
+    { id: 'alexander-beaten', label: 'Alexander the Great defeated', flag: 'sog_node_alexander_serf_beaten' },
+    { id: 'greece-complete', label: 'Greece complete (Alexander the Great Giant) → next region opens', flag: 'sog_node_alexander_giant_beaten' },
+    { id: 'romulus-beaten', label: 'Romulus and Remus defeated', flag: 'sog_node_romulus_serf_beaten' },
+    { id: 'cincinnatus-beaten', label: 'Cincinnatus defeated', flag: 'sog_node_cincinnatus_serf_beaten' },
+    { id: 'hannibal-beaten', label: 'Hannibal defeated', flag: 'sog_node_hannibal_serf_beaten' },
+    { id: 'julius-beaten', label: 'Julius Caesar defeated', flag: 'sog_node_julius_serf_beaten' },
+    { id: 'augustus-beaten', label: 'Augustus defeated', flag: 'sog_node_augustus_serf_beaten' },
+    { id: 'constantine-beaten', label: 'Constantine defeated', flag: 'sog_node_constantine_serf_beaten' },
+    { id: 'rome-complete', label: 'Rome complete (Constantine Giant) → next region opens', flag: 'sog_node_constantine_giant_beaten' }
   ],
 
   maps: {
@@ -142,7 +171,7 @@ window.SOG_MAP_DATA = {
         id:    'kush',
         name:  'Kush',
         kind:  'battle',
-        image: 'images/metaworld/civilization nodes/kush@0.1x.png',
+        image: 'images/metaworld/civilization nodes/kush.png',
         x: 28.29, y: 87.77,
         hook:  'kush',
         tiers: 2,
@@ -168,6 +197,16 @@ window.SOG_MAP_DATA = {
         walkTo:  { x: 10, y: 85 },
         target:  'eastafrica',
         entryAt: { x: 88, y: 15 }
+      },
+      {
+        id:      'to-persia',
+        label:   'To Persia →',
+        zone:    { x: 80, y: 5, w: 20, h: 30 },
+        walkTo:  { x: 88, y: 15 },
+        target:  'persia',
+        entryAt: { x: 10, y: 85 },
+        showFrom: 'egypt-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
       }
     ],
     routes: []
@@ -253,6 +292,570 @@ window.SOG_MAP_DATA = {
         walkTo:  { x: 10, y: 85 },
         target:  'egypt',
         entryAt: { x: 88, y: 15 }
+      }
+    ],
+    routes: []
+  },
+
+  'persia': {
+    displayName: 'Persia',
+    image: 'images/metaworld/maps/persia.jpg',
+    spawn: { x: 10, y: 85 },
+    startsFogged: true,
+    props: [],
+    nodes: [
+      {
+        id:    'cyrus',
+        name:  'Cyrus the Great',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/cyrus.png',
+        x: 18, y: 62,
+        scale: 1,
+        hook:  'cyrus',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'egypt-complete',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'darius',
+        name:  'Darius the Great',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/darius.png',
+        x: 48, y: 36,
+        scale: 1,
+        hook:  'darius',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'cyrus-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'persia-market',
+        name:  'The Persian Bazaar',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/persianmarket.png',
+        x: 78, y: 62,
+        scale: 1,
+        showFrom: 'egypt-complete',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
+      }
+    ],
+    exits: [
+      {
+        id:      'to-egypt',
+        label:   '← Back',
+        zone:    { x: 0, y: 70, w: 20, h: 30 },
+        walkTo:  { x: 10, y: 85 },
+        target:  'egypt',
+        entryAt: { x: 88, y: 15 },
+        note: 'Scaffolded — drag the zone where it belongs.'
+      },
+      {
+        id:      'to-india',
+        label:   'To India →',
+        zone:    { x: 80, y: 5, w: 20, h: 30 },
+        walkTo:  { x: 88, y: 15 },
+        target:  'india',
+        entryAt: { x: 10, y: 85 },
+        showFrom: 'persia-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
+      }
+    ],
+    routes: []
+  },
+
+  'india': {
+    displayName: 'India',
+    image: 'images/metaworld/maps/india.jpg',
+    spawn: { x: 10, y: 85 },
+    startsFogged: true,
+    props: [],
+    nodes: [
+      {
+        id:    'greatbath',
+        name:  'The Great Bath',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/greatbath.png',
+        x: 18, y: 62,
+        scale: 1,
+        hook:  'greatbath',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'persia-complete',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'siddhartha',
+        name:  'Siddhartha',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/siddhartha.png',
+        x: 38, y: 39.5,
+        scale: 1,
+        hook:  'siddhartha',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'greatbath-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'ashoka',
+        name:  'Ashoka',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/ashoka.png',
+        x: 58, y: 39.5,
+        scale: 1,
+        hook:  'ashoka',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'siddhartha-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'india-market',
+        name:  'The Indian Market',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/indiamarket.png',
+        x: 78, y: 62,
+        scale: 1,
+        showFrom: 'persia-complete',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
+      }
+    ],
+    exits: [
+      {
+        id:      'to-persia',
+        label:   '← Back',
+        zone:    { x: 0, y: 70, w: 20, h: 30 },
+        walkTo:  { x: 10, y: 85 },
+        target:  'persia',
+        entryAt: { x: 88, y: 15 },
+        note: 'Scaffolded — drag the zone where it belongs.'
+      },
+      {
+        id:      'to-china',
+        label:   'To China →',
+        zone:    { x: 80, y: 5, w: 20, h: 30 },
+        walkTo:  { x: 88, y: 15 },
+        target:  'china',
+        entryAt: { x: 10, y: 85 },
+        showFrom: 'india-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
+      }
+    ],
+    routes: []
+  },
+
+  'china': {
+    displayName: 'China',
+    image: 'images/metaworld/maps/china.jpg',
+    spawn: { x: 10, y: 85 },
+    startsFogged: true,
+    props: [],
+    nodes: [
+      {
+        id:    'confucius',
+        name:  'Confucius',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/confucious.png',
+        x: 18, y: 62,
+        scale: 1,
+        hook:  'confucius',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'india-complete',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'shihuangdi',
+        name:  'Shi Huangdi',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/shihuangdi.png',
+        x: 38, y: 39.5,
+        scale: 1,
+        hook:  'shihuangdi',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'confucius-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'zhangqian',
+        name:  'Zhang Qian',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/zhangqian.png',
+        x: 58, y: 39.5,
+        scale: 1,
+        hook:  'zhangqian',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'shihuangdi-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'china-market',
+        name:  'The Silk Road Market',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/chinamarket.png',
+        x: 78, y: 62,
+        scale: 1,
+        showFrom: 'india-complete',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
+      }
+    ],
+    exits: [
+      {
+        id:      'to-india',
+        label:   '← Back',
+        zone:    { x: 0, y: 70, w: 20, h: 30 },
+        walkTo:  { x: 10, y: 85 },
+        target:  'india',
+        entryAt: { x: 88, y: 15 },
+        note: 'Scaffolded — drag the zone where it belongs.'
+      },
+      {
+        id:      'to-levant',
+        label:   'To The Levant →',
+        zone:    { x: 80, y: 5, w: 20, h: 30 },
+        walkTo:  { x: 88, y: 15 },
+        target:  'levant',
+        entryAt: { x: 10, y: 85 },
+        showFrom: 'china-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
+      }
+    ],
+    routes: []
+  },
+
+  'levant': {
+    displayName: 'The Levant',
+    image: 'images/metaworld/maps/levant.jpg',
+    spawn: { x: 10, y: 85 },
+    startsFogged: true,
+    props: [],
+    nodes: [
+      {
+        id:    'abraham',
+        name:  'Abraham',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/abraham.png',
+        x: 18, y: 62,
+        scale: 1,
+        hook:  'abraham',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'china-complete',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'moses',
+        name:  'Moses',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/moses.png',
+        x: 30, y: 46.7,
+        scale: 1,
+        hook:  'moses',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'abraham-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'david',
+        name:  'David',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/david.png',
+        x: 42, y: 37.3,
+        scale: 1,
+        hook:  'david',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'moses-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'jesus',
+        name:  'Jesus',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/jesus.png',
+        x: 54, y: 37.3,
+        scale: 1,
+        hook:  'jesus',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'david-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'paul',
+        name:  'Paul',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/paul.png',
+        x: 66, y: 46.7,
+        scale: 1,
+        hook:  'paul',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'jesus-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'levant-market',
+        name:  'The Levantine Market',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/levantmarket.png',
+        x: 78, y: 62,
+        scale: 1,
+        showFrom: 'china-complete',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
+      }
+    ],
+    exits: [
+      {
+        id:      'to-china',
+        label:   '← Back',
+        zone:    { x: 0, y: 70, w: 20, h: 30 },
+        walkTo:  { x: 10, y: 85 },
+        target:  'china',
+        entryAt: { x: 88, y: 15 },
+        note: 'Scaffolded — drag the zone where it belongs.'
+      },
+      {
+        id:      'to-greece',
+        label:   'To Greece →',
+        zone:    { x: 80, y: 5, w: 20, h: 30 },
+        walkTo:  { x: 88, y: 15 },
+        target:  'greece',
+        entryAt: { x: 10, y: 85 },
+        showFrom: 'levant-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
+      }
+    ],
+    routes: []
+  },
+
+  'greece': {
+    displayName: 'Greece',
+    image: 'images/metaworld/maps/greece.jpg',
+    spawn: { x: 10, y: 85 },
+    startsFogged: true,
+    props: [],
+    nodes: [
+      {
+        id:    'leonidas',
+        name:  'Leonidas',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/leonidas.png',
+        x: 18, y: 62,
+        scale: 1,
+        hook:  'leonidas',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'levant-complete',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'pericles',
+        name:  'Pericles',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/pericles.png',
+        x: 33, y: 43.6,
+        scale: 1,
+        hook:  'pericles',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'leonidas-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'socrates',
+        name:  'Socrates',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/socrates.png',
+        x: 48, y: 36,
+        scale: 1,
+        hook:  'socrates',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'pericles-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'alexander',
+        name:  'Alexander the Great',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/alexanderthegreat.png',
+        x: 63, y: 43.6,
+        scale: 1,
+        hook:  'alexander',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'socrates-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'greece-market',
+        name:  'The Agora',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/greecemarket.png',
+        x: 78, y: 62,
+        scale: 1,
+        showFrom: 'levant-complete',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
+      }
+    ],
+    exits: [
+      {
+        id:      'to-levant',
+        label:   '← Back',
+        zone:    { x: 0, y: 70, w: 20, h: 30 },
+        walkTo:  { x: 10, y: 85 },
+        target:  'levant',
+        entryAt: { x: 88, y: 15 },
+        note: 'Scaffolded — drag the zone where it belongs.'
+      },
+      {
+        id:      'to-rome',
+        label:   'To Rome →',
+        zone:    { x: 80, y: 5, w: 20, h: 30 },
+        walkTo:  { x: 88, y: 15 },
+        target:  'rome',
+        entryAt: { x: 10, y: 85 },
+        showFrom: 'greece-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
+      }
+    ],
+    routes: []
+  },
+
+  'rome': {
+    displayName: 'Rome',
+    image: 'images/metaworld/maps/rome.jpg',
+    spawn: { x: 10, y: 85 },
+    startsFogged: true,
+    props: [],
+    nodes: [
+      {
+        id:    'romulus',
+        name:  'Romulus and Remus',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/romulusandremus.png',
+        x: 18, y: 62,
+        scale: 1,
+        hook:  'romulus',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'greece-complete',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'cincinnatus',
+        name:  'Cincinnatus',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/cincinnatus.png',
+        x: 28, y: 49,
+        scale: 1,
+        hook:  'cincinnatus',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'romulus-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'hannibal',
+        name:  'Hannibal',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/hannibal.png',
+        x: 38, y: 39.5,
+        scale: 1,
+        hook:  'hannibal',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'cincinnatus-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'julius',
+        name:  'Julius Caesar',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/julius.png',
+        x: 48, y: 36,
+        scale: 1,
+        hook:  'julius',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'hannibal-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'augustus',
+        name:  'Augustus',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/augustus.png',
+        x: 58, y: 39.5,
+        scale: 1,
+        hook:  'augustus',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'julius-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'constantine',
+        name:  'Constantine',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/constantine.png',
+        x: 68, y: 49,
+        scale: 1,
+        hook:  'constantine',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'augustus-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'rome-market',
+        name:  'The Roman Forum',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/romanmarket.png',
+        x: 78, y: 62,
+        scale: 1,
+        showFrom: 'greece-complete',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
+      }
+    ],
+    exits: [
+      {
+        id:      'to-greece',
+        label:   '← Back',
+        zone:    { x: 0, y: 70, w: 20, h: 30 },
+        walkTo:  { x: 10, y: 85 },
+        target:  'greece',
+        entryAt: { x: 88, y: 15 },
+        note: 'Scaffolded — drag the zone where it belongs.'
       }
     ],
     routes: []
