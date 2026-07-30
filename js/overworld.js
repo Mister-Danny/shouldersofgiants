@@ -495,100 +495,44 @@ var Overworld = (function () {
   var EGYPT_WALKOFF = { dx: 48, dy: -48 };
 
   /* ════════════════════════════════════════════════════════════
-     MAP DATA — positions in data/map-data.js, behaviour here
+     MAP DATA — layout + sequencing in data/map-data.js
      ════════════════════════════════════════════════════════════
-     The map LAYOUT (which nodes exist, where they sit, their art, scale, and
-     walk paths) was lifted out of this file into data/map-data.js so that
-     tools/map-editor can rewrite it without ever touching game logic. See that
-     file's header for the coordinate system and for why it is .js not .json.
+     Everything about WHERE things are and WHEN they appear lives in
+     data/map-data.js, which tools/map-editor writes. See that file's header
+     for the coordinate system and for why it is .js and not .json.
 
-     What stayed behind is everything function-valued — the showIf visibility
-     gates and the to-Egypt onBeforeExit hook. Those close over the KEY_*
-     constants, runDialogue, cancelIdle and isDialogueLocked, none of which
-     exist outside this closure, so they can never be serialised out. They are
-     keyed by node id (exits by 'mapId/exitId', because BOTH East Africa and
-     Mesopotamia declare an exit called 'to-egypt') and merged in at load.
+     SEQUENCING. Each map's nodes, exits and topography props carry:
+         showFrom:  'neb-beaten'    → hidden until that milestone's flag is set
+         showUntil: 'neb-beaten'    → hidden once that milestone's flag is set
+     A milestone is just a named localStorage flag (data.milestones). Every
+     visibility gate that used to be a hand-written showIf predicate here was
+     literally `localStorage.getItem(FLAG) === 'true'`, which is exactly what
+     showFrom means — so they all became data with no change in behaviour.
 
-     Net effect: the editor owns WHERE things are, this file owns WHEN they
-     appear and WHAT they do. ────── */
+     showUntil is what expresses a REPLACEMENT: Egypt's humble mudhuts run
+     until Neb falls, the advanced ones from then on, and the delta river hut
+     gives way to the clickable River Market at the same coordinates.
+
+     IMPORTANT — visibility is decided by the FLAG, never by the milestone's
+     position in the list. The order in data.milestones exists only so the map
+     editor can offer a timeline scrubber. Deciding by index would break any
+     save whose flags were set out of order (dev panel, testing, a player who
+     took an unusual route).
+
+     What is still function-valued, and so still lives here, is behaviour that
+     runs rather than gates: the to-Egypt onBeforeExit hook. It closes over
+     runDialogue, cancelIdle and isDialogueLocked, none of which exist outside
+     this closure. Keyed 'mapId/exitId' because both East Africa and
+     Mesopotamia declare an exit called 'to-egypt'.
+
+     Net effect: the editor owns the world's shape and its unlock sequence;
+     this file owns what actually happens. ────── */
   var SPRITE_PATH = 'images/metaworld/character sprites/female/';
   var NODE_PATH   = 'images/metaworld/civilization nodes/';
 
-  /* Visibility gates, by node id. A node with no entry here is always shown. */
-  var NODE_BEHAVIOUR = {
-    // Hidden until the player completes the Neanderthal battle and the
-    // post-victory overworld sequence plays (_completePostVictorySequence sets
-    // this flag then immediately calls _refreshNodes so the node appears).
-    'egypt-signpost': {
-      showIf: function () {
-        try { return localStorage.getItem(KEY_POST_NEANDERTHAL_DIALOGUE) === 'true'; }
-        catch (e) { return false; }
-      }
-    },
-
-    // Both Egypt nodes go live on the SAME flag (set when Giant Neb falls):
-    // reaching Egypt at all is the unlock, so the River Market is browsable the
-    // instant the player can get there — it is NOT gated on Narmer progression.
-    'double-crown': {
-      showIf: function () {
-        try { return localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; }
-        catch (e) { return false; }
-      }
-    },
-    'egypt-market': {
-      showIf: function () {
-        try { return localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; }
-        catch (e) { return false; }
-      }
-    },
-
-    'walls-of-uruk': {
-      showIf: function () {
-        try { return localStorage.getItem(KEY_MESOPOTAMIA_ARRIVAL) === 'true'; }
-        catch (e) { return false; }
-      }
-    },
-    // Appears only after the Gilgamesh win — the same completion-flag gating
-    // the To Egypt box uses.
-    'market': {
-      showIf: function () {
-        try { return localStorage.getItem(KEY_BATTLE_GILGAMESH_COMPLETE) === 'true'; }
-        catch (e) { return false; }
-      }
-    },
-    // Dust-storm-revealed on the first marketplace return.
-    'sargon': {
-      showIf: function () {
-        try { return localStorage.getItem(KEY_SARGON_NODE_REVEALED) === 'true'; }
-        catch (e) { return false; }
-      }
-    },
-    // Rises from the dirt on the first overworld return after Sargon falls.
-    'hammurabi': {
-      showIf: function () {
-        try { return localStorage.getItem(KEY_HAMMURABI_NODE_REVEALED) === 'true'; }
-        catch (e) { return false; }
-      }
-    },
-    // Sparkle-revealed on the first overworld return after Hammurabi falls.
-    'hanging-gardens': {
-      showIf: function () {
-        try { return localStorage.getItem(KEY_HANGING_GARDENS_REVEALED) === 'true'; }
-        catch (e) { return false; }
-      }
-    }
-  };
-
-  /* Exit gates + pre-exit hooks, keyed 'mapId/exitId' — two maps both declare
-     an exit called 'to-egypt', so a bare id would collide. */
+  /* Pre-exit hooks. Not gates — gates are data now. */
   var EXIT_BEHAVIOUR = {
     'eastafrica/to-egypt': {
-      // Gated on beating Otzi — the same flag the Otzi card grant and the
-      // signpost checkmark use.
-      showIf: function () {
-        try { return localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true'; }
-        catch (e) { return false; }
-      },
       // First click only: Hunter's goodbye, then the walk-off + transition.
       // Subsequent clicks skip straight to the walk-off (flag already set).
       onBeforeExit: function (proceed) {
@@ -606,10 +550,40 @@ var Overworld = (function () {
     }
   };
 
+  /* Optional per-node predicates, for anything a showFrom/showUntil pair can't
+     express. Empty today — every current gate is a plain flag check. Kept as a
+     seam so an exotic condition doesn't force a data-model change. */
+  var NODE_BEHAVIOUR = {};
+
+  /* ── Milestones ─────────────────────────────────────────────── */
+  var MILESTONES = (window.SOG_MAP_DATA && window.SOG_MAP_DATA.milestones) || [];
+  var MILESTONE_FLAG = {};
+  MILESTONES.forEach(function (m) { MILESTONE_FLAG[m.id] = m.flag; });
+
+  /* Has this story beat happened? 'start' (and anything with a null flag) is
+     always true — it is the beginning of the game, not an achievement. */
+  function _milestoneReached(id) {
+    if (!id || id === 'start') return true;
+    var flag = MILESTONE_FLAG[id];
+    if (!flag) return true;
+    try { return localStorage.getItem(flag) === 'true'; } catch (e) { return false; }
+  }
+
+  /* Should this node / exit / prop be on screen right now? */
+  function _isVisible(o) {
+    if (!o) return false;
+    if (o.showFrom  && !_milestoneReached(o.showFrom))  return false;
+    if (o.showUntil &&  _milestoneReached(o.showUntil)) return false;
+    // Legacy escape hatch — see NODE_BEHAVIOUR above.
+    if (typeof o.showIf === 'function' && !o.showIf()) return false;
+    return true;
+  }
+
   /* Merge layout + behaviour into the runtime MAPS the rest of this file reads.
      Copies each node/exit so runtime tweaks never write back into SOG_MAP_DATA. */
   function _buildMaps() {
-    var data = window.SOG_MAP_DATA;
+    var doc = window.SOG_MAP_DATA;
+    var data = doc && doc.maps;
     if (!data) {
       // Loud on purpose. Without this the overworld just renders zero nodes,
       // which reads as an art bug rather than a missing script tag.
@@ -634,6 +608,7 @@ var Overworld = (function () {
         image:        src.image,
         spawn:        src.spawn,
         startsFogged: src.startsFogged,
+        props: (src.props || []).slice(),
         nodes: (src.nodes || []).map(function (n) {
           return merge(n, NODE_BEHAVIOUR[n.id]);
         }),
@@ -960,12 +935,12 @@ var Overworld = (function () {
 
     // Egypt early-settlement topography props (pre-Neb only; self-gates on map +
     // KEY_EGYPT_NODE_LIVE). Placed before the nodes so they sit behind them.
-    _placeEgyptProps();
+    _placeProps();
 
     // Place nodes
     data.nodes.forEach(function (n) {
-      // Gate: skip nodes that have a showIf predicate that returns false.
-      if (typeof n.showIf === 'function' && !n.showIf()) return;
+      // Gate: showFrom / showUntil (see _isVisible).
+      if (!_isVisible(n)) return;
 
       var nodeEl = document.createElement('div');
       nodeEl.className = 'overworld-node';
@@ -1009,8 +984,8 @@ var Overworld = (function () {
 
     // Place exit zones
     data.exits.forEach(function (e) {
-      // Gate: skip exits with a showIf predicate that returns false (mirrors nodes).
-      if (typeof e.showIf === 'function' && !e.showIf()) return;
+      // Gate: showFrom / showUntil (mirrors nodes).
+      if (!_isVisible(e)) return;
       var exitEl = document.createElement('div');
       exitEl.className = 'overworld-exit';
       exitEl.dataset.exitId = e.id;   // for flashExit() targeting
@@ -1303,7 +1278,7 @@ var Overworld = (function () {
     var data = MAPS[currentMapId];
     if (!data) return;
     data.nodes.forEach(function (n) {
-      if (typeof n.showIf === 'function' && !n.showIf()) return;
+      if (!_isVisible(n)) return;
       _renderNodeFlags(n);
     });
     if (deferStamp) {
@@ -1972,90 +1947,43 @@ var Overworld = (function () {
     });
   }
 
-  /* ── Egypt early-settlement topography props (decorative, pre-Neb only) ──────
-     Four non-interactive decorations on the Egypt map showing EARLY Egypt:
-     simple settlements that exist UNTIL Nebuchadnezzar is beaten, then vanish
-     (the dynastic era begins; advanced replacements come later). Placed by
-     _placeEgyptProps() on every Egypt map load, behind the nodes/character.
-     Inverse gating of the Narmer/Double-Crown node (which appears WHEN Neb is
-     beaten) — these disappear when he is.
+  /* ── Topography props (decorative, non-interactive) ──────────────────────────
+     Scenery that dresses a region without being clickable — settlements, a
+     granary, a necropolis. Positions and sequencing live per-map in
+     data/map-data.js (map.props) and are placed by tools/map-editor.
 
-     ░░ FINE-TUNING ░░ Each prop's position is leftPct / topPct (percent of the
-     map, same coordinate system as node x/y) plus a per-prop scale knob.
-     Eyeball egyptz.jpeg (1380×800) and nudge. Reference geography: the Nile
-     DELTA is the green northern fan (top-left of the map); the river runs
-     down/south from it. "sides of the Nile" = west (lower left%) vs east
-     (higher left%) banks; "below the delta starts" = just south of the fan. */
-  var TOPO_PATH = 'images/metaworld/topography/';
-  // Per-prop knobs — all freely editable: leftPct / topPct (map %, anchors the
-  // prop's CENTER), scale, and rotation (degrees, applied around the center via
-  // transform-origin:center, so rotation is predictable). Because rotation is
-  // center-based, a rotated prop's visual footprint may shift slightly from its
-  // left/top anchor — re-nudge leftPct/topPct if needed.
-  var EGYPT_TOPO_PROPS = [
-    // Umm el-Qaab necropolis — the original prop, now part of the gated group.
-    { src: 'ummelqaab@0.25x.png', leftPct: 28, topPct: 87, scale: 0.35,  rotation:  0 },
-    // River hut — ONE, in the delta (northern fan). Nudged up 2 / right 2 (matches ADV).
-    { src: 'riverhut.png',        leftPct: 29, topPct: 18, scale: 0.21,  rotation:  -3 },
-    // Granary — ONE, just south of where the delta starts.
-    { src: 'granary.png',         leftPct: 27, topPct: 46, scale: 0.29,  rotation:   0 },
-    // Mud huts — settlements dotted along the Nile, spread apart (not adjacent).
-    { src: 'mudhut.png',          leftPct: 16, topPct: 24, scale: 0.20,  rotation: 20 },  // north (delta) — up 2 / left 2 (matches ADV)
-    { src: 'mudhut.png',          leftPct: 21, topPct: 57, scale: 0.20,  rotation: 20 },  // west bank
-    { src: 'mudhut.png',          leftPct: 29, topPct: 66, scale: 0.20,  rotation: 40 }   // east bank
-  ];
+     Sequencing is the whole point of them: Egypt's humble mudhuts carry
+     showUntil:'neb-beaten' and the advanced ones showFrom:'neb-beaten', so the
+     settlement visibly grows up when Egypt opens. That swap used to be two
+     hand-maintained arrays here (EGYPT_TOPO_PROPS / _ADV); it is now data, and
+     the same mechanism works for any region without new code.
 
-  /* POST-Neb "advanced" settlement group — shown AFTER Nebuchadnezzar is beaten
-     (KEY_EGYPT_NODE_LIVE set), replacing the early props above. Same positions /
-     scale / rotation as the pre-Neb props, but the advanced (adv*) art and NO
-     Umm el-Qaab. Same editable knobs. */
-  var EGYPT_TOPO_PROPS_ADV = [
-    // NOTE: the advanced RIVER HUT that used to sit at 29/18 is deliberately gone —
-    // the clickable River Market NODE now occupies that spot (see the 'egypt-market'
-    // node in MAPS.egypt, placed at the same 29/18). Both the ADV prop group and the
-    // market node are gated on KEY_EGYPT_NODE_LIVE, so the swap is exact: pre-Neb the
-    // player sees the humble riverhut.png scenery, post-Neb it becomes the market they
-    // can walk into. Restore the prop here only if the market node moves elsewhere.
-    // Granary (advanced) — just south of where the delta starts.
-    { src: 'advgranary.png',      leftPct: 27, topPct: 46, scale: 0.26,  rotation:   0 },
-    // Mud huts (advanced) — settlements dotted along the Nile.
-    { src: 'advmudhouse3@0.25x.png', leftPct: 17, topPct: 24, scale: 0.30,  rotation: 20 },   // north (delta) — up 2 / left 2
-    { src: 'advmudhouse3@0.25x.png', leftPct: 22, topPct: 57, scale: 0.30,  rotation: 20 },   // west bank
-    { src: 'advmudhouse3@0.25x.png', leftPct: 27, topPct: 66, scale: 0.30,  rotation: -15, flipX: true }   // east bank — mirrored H
-  ];
-
-  /* Render the gated Egypt topography group. Decorative + non-interactive
-     (pointer-events:none), sitting BEHIND the nodes/character. Clears any prior
-     props, then renders ONLY on the Egypt map, choosing the set by progress:
-     pre-Neb → early settlements (EGYPT_TOPO_PROPS); post-Neb (KEY_EGYPT_NODE_LIVE
-     set) → the advanced settlements (EGYPT_TOPO_PROPS_ADV). Called from loadMap on
-     every map entry, so the set is re-checked on each Egypt visit — robust for
-     both fresh saves and already-beaten-Neb saves. */
-  function _placeEgyptProps() {
+     Rendered BEHIND the nodes and the character, and pointer-events:none so
+     they never intercept a click meant for a node. */
+  function _placeProps() {
     if (!overlayEl) return;
     // Always clear first (defensive — loadMap also wipes the overlay).
-    overlayEl.querySelectorAll('.egypt-topo-prop').forEach(function (el) {
+    overlayEl.querySelectorAll('.overworld-topo-prop').forEach(function (el) {
       if (el.parentNode) el.parentNode.removeChild(el);
     });
-    if (currentMapId !== 'egypt') return;                 // Egypt map only
-    var nebBeaten = false;
-    try { nebBeaten = localStorage.getItem(KEY_EGYPT_NODE_LIVE) === 'true'; } catch (e) {}
-    // Pre-Neb: early settlements. Post-Neb: the advanced (adv*) settlements.
-    var props = nebBeaten ? EGYPT_TOPO_PROPS_ADV : EGYPT_TOPO_PROPS;
+    var map = MAPS[currentMapId];
+    if (!map || !map.props) return;
 
-    props.forEach(function (p) {
+    map.props.forEach(function (p) {
+      if (!_isVisible(p)) return;
       var el = document.createElement('img');
-      el.className = 'egypt-topo-prop';
-      el.src = TOPO_PATH + p.src;
+      el.className = 'overworld-topo-prop';
+      el.src = p.image;
       el.alt = '';
       el.draggable = false;
       // flipX / flipY mirror the prop via a signed scale on that axis.
-      var sx = p.scale * (p.flipX ? -1 : 1);
-      var sy = p.scale * (p.flipY ? -1 : 1);
+      var scale = (p.scale == null ? 1 : p.scale);
+      var sx = scale * (p.flipX ? -1 : 1);
+      var sy = scale * (p.flipY ? -1 : 1);
       el.style.cssText = [
         'position:absolute',
-        'left:' + p.leftPct + '%',
-        'top:'  + p.topPct  + '%',
+        'left:' + p.x + '%',
+        'top:'  + p.y + '%',
         'transform:translate(-50%,-50%) rotate(' + (p.rotation || 0) + 'deg) scale(' + sx + ',' + sy + ')',
         'transform-origin:center center',
         'pointer-events:none',
@@ -4025,7 +3953,7 @@ var Overworld = (function () {
     var data = MAPS[currentMapId];
     if (!data) return;
     data.nodes.forEach(function (n) {
-      if (typeof n.showIf === 'function' && !n.showIf()) return;
+      if (!_isVisible(n)) return;
       var nodeEl = document.createElement('div');
       nodeEl.className = 'overworld-node';
       nodeEl.dataset.id = n.id;

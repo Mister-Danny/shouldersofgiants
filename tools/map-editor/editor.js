@@ -19,12 +19,14 @@ const $  = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
 /* ── State ────────────────────────────────────────────────────────────── */
-let maps      = null;      // the whole SOG_MAP_DATA object, edited in place
+let doc       = null;      // the whole SOG_MAP_DATA: { milestones, maps }
+let maps      = null;      // alias for doc.maps, edited in place
 let mapId     = null;      // which region is on screen
 let mode      = 'select';  // 'select' | 'path'
-let sel       = null;      // { type:'node'|'exit'|'wp', id, wpIndex? }
+let sel       = null;      // { type:'node'|'exit'|'prop'|'wp', id|index, wpIndex? }
 let dirty     = false;
-let art       = { maps: [], nodes: [] };
+let art       = { maps: [], nodes: [], topo: [] };
+let scrubIdx  = 0;         // which story beat the stage is previewing
 const undoStack = [];
 
 /* Nodes whose art size the game overrides in CSS rather than via `scale`.
@@ -34,12 +36,14 @@ const CSS_SIZED = { 'egypt-signpost': '126px (hard-coded in css/style.css)' };
 /* ── Boot ─────────────────────────────────────────────────────────────── */
 (async function boot() {
   try {
-    maps = await loadMapData();
+    doc  = await loadMapData();
+    maps = doc.maps;
     art  = await fetch('/api/art').then(r => r.json());
   } catch (e) {
     return toast('Could not load map data: ' + e.message, true);
   }
   buildTabs();
+  buildScrubber();
   selectMap(Object.keys(maps)[0]);
   wireGlobalEvents();
 })();
@@ -55,6 +59,7 @@ async function loadMapData() {
   const w = {};
   new Function('window', src)(w);
   if (!w.SOG_MAP_DATA) throw new Error('map-data.js did not assign window.SOG_MAP_DATA');
+  if (!w.SOG_MAP_DATA.maps) throw new Error('map-data.js is in the old format (no `maps` key)');
   return w.SOG_MAP_DATA;
 }
 
@@ -62,15 +67,16 @@ async function loadMapData() {
 /* Snapshot BEFORE a mutation. Drags snapshot once on pointerdown, not per
    pixel, so one undo steps back a whole drag rather than one frame of it. */
 function snapshot() {
-  undoStack.push(JSON.stringify(maps));
+  undoStack.push(JSON.stringify(doc));
   if (undoStack.length > 60) undoStack.shift();
 }
 function undo() {
   if (!undoStack.length) return toast('Nothing to undo');
-  maps = JSON.parse(undoStack.pop());
+  doc  = JSON.parse(undoStack.pop());
+  maps = doc.maps;
   if (!maps[mapId]) mapId = Object.keys(maps)[0];
   sel = null;
-  buildTabs(); render(); markDirty();
+  buildTabs(); buildScrubber(); render(); markDirty();
 }
 
 function markDirty() {
@@ -99,6 +105,48 @@ function selectMap(id) {
   render();
 }
 
+/* ── Timeline ─────────────────────────────────────────────────────────────
+   The scrubber previews the world at a point in the story. Note this uses the
+   milestone's INDEX, unlike the game, which decides visibility from the flag.
+   That difference is deliberate: the editor is asking "what does this look
+   like at story beat N", which is an ordering question. The game is asking
+   "what has this player actually done", which is not — their flags can be set
+   in any order. Same data, two correct readings. */
+function buildScrubber() {
+  const sc = $('#scrub');
+  sc.max = Math.max(0, (doc.milestones || []).length - 1);
+  sc.value = Math.min(scrubIdx, Number(sc.max));
+  scrubIdx = Number(sc.value);
+  sc.oninput = () => { scrubIdx = Number(sc.value); render(); };
+  $('#preview').onchange = render;
+}
+
+const milestoneIndex = id => {
+  if (!id || id === 'start') return 0;
+  const i = (doc.milestones || []).findIndex(m => m.id === id);
+  // An unknown id means the milestone was renamed or deleted out from under
+  // this gate. Treat it as "never", which is visible in the editor and matches
+  // the game (an unknown flag is never set).
+  return i === -1 ? Infinity : i;
+};
+
+/* Is this node / exit / prop on screen at the scrubbed story point? */
+function visibleNow(o) {
+  if (o.showFrom  && milestoneIndex(o.showFrom)  > scrubIdx) return false;
+  if (o.showUntil && milestoneIndex(o.showUntil) <= scrubIdx) return false;
+  return true;
+}
+
+/* Things that aren't visible yet are GHOSTED rather than removed, so you can
+   still select and drag them — you often need to place a node long before the
+   story reveals it. The Preview checkbox hides them properly. */
+function applyVis(el, o) {
+  if (visibleNow(o)) return el;
+  if ($('#preview').checked) el.classList.add('gone');
+  else el.classList.add('ghost');
+  return el;
+}
+
 /* ── Render ───────────────────────────────────────────────────────────── */
 function render() {
   const m = maps[mapId];
@@ -123,11 +171,17 @@ function render() {
     bg.style.objectPosition = bg.style.transformOrigin = bg.style.transform = '';
   }
 
-  // Wipe everything except the persistent <svg> path layer.
-  $$('.n, .exit, .wp', overlay).forEach(el => el.remove());
+  const ms = (doc.milestones || [])[scrubIdx];
+  $('#scrub-label').textContent = ms ? (ms.label || ms.id) : '—';
 
-  (m.nodes || []).forEach(n => overlay.appendChild(nodeEl(n)));
-  (m.exits || []).forEach(x => overlay.appendChild(exitEl(x)));
+  // Wipe everything except the persistent <svg> path layer.
+  $$('.n, .exit, .wp, .prop', overlay).forEach(el => el.remove());
+
+  // Props first — they are scenery and must paint behind the nodes, same as
+  // the game's insertBefore(overlay.firstChild).
+  (m.props || []).forEach((p, i) => overlay.appendChild(applyVis(propEl(p, i), p)));
+  (m.nodes || []).forEach(n => overlay.appendChild(applyVis(nodeEl(n), n)));
+  (m.exits || []).forEach(x => overlay.appendChild(applyVis(exitEl(x), x)));
 
   renderPaths();
   renderWaypoints();
@@ -159,6 +213,30 @@ function nodeEl(n) {
   el.appendChild(tag);
 
   el.addEventListener('pointerdown', e => beginDrag(e, { type: 'node', id: n.id }));
+  return el;
+}
+
+/* Topography. Mirrors the game's _placeProps transform exactly — the signed
+   scale for flips and the rotation both have to match or what you position
+   here is not what renders. */
+function propEl(p, i) {
+  const el = document.createElement('div');
+  el.className = 'prop' + (sel && sel.type === 'prop' && sel.index === i ? ' sel' : '');
+  el.dataset.index = i;
+  el.style.left = p.x + '%';
+  el.style.top  = p.y + '%';
+  const sc = p.scale == null ? 1 : p.scale;
+  const sx = sc * (p.flipX ? -1 : 1);
+  const sy = sc * (p.flipY ? -1 : 1);
+  el.style.transform = `translate(-50%,-50%) rotate(${p.rotation || 0}deg) scale(${sx},${sy})`;
+
+  const img = document.createElement('img');
+  img.src = '/' + p.image;
+  img.draggable = false;
+  img.onerror = () => { img.replaceWith(missingArt(p.image)); };
+  el.appendChild(img);
+
+  el.addEventListener('pointerdown', e => beginDrag(e, { type: 'prop', index: i }));
   return el;
 }
 
@@ -239,6 +317,18 @@ function renderLists() {
   });
   if (!(m.nodes || []).length) nl.innerHTML = '<li class="note">No nodes on this map.</li>';
 
+  const pl = $('#prop-list');
+  pl.innerHTML = '';
+  (m.props || []).forEach((p, i) => {
+    const li = document.createElement('li');
+    li.className = sel && sel.type === 'prop' && sel.index === i ? 'sel' : '';
+    const when = p.showUntil ? 'until ' + p.showUntil : (p.showFrom ? 'from ' + p.showFrom : 'always');
+    li.innerHTML = `<img src="/${p.image}" alt=""><span>${esc(p.image.split('/').pop())}</span><span class="k">${esc(when)}</span>`;
+    li.onclick = () => { sel = { type: 'prop', index: i }; render(); };
+    pl.appendChild(li);
+  });
+  if (!(m.props || []).length) pl.innerHTML = '<li class="note">No scenery on this map.</li>';
+
   const xl = $('#exit-list');
   xl.innerHTML = '';
   (m.exits || []).forEach(x => {
@@ -294,12 +384,14 @@ function onDragEnd() {
 function currentPos(t) {
   if (t.type === 'node') { const n = node(t.id); return { x: n.x, y: n.y }; }
   if (t.type === 'exit') { const x = exit(t.id); return { x: x.zone.x, y: x.zone.y }; }
+  if (t.type === 'prop') { const p = prop(t.index); return { x: p.x, y: p.y }; }
   return node(t.id).path[t.wpIndex];
 }
 
 function setPos(t, x, y) {
   if (t.type === 'node')      { const n = node(t.id); n.x = r2(x); n.y = r2(y); }
   else if (t.type === 'exit') { const e = exit(t.id); e.zone.x = r2(x); e.zone.y = r2(y); }
+  else if (t.type === 'prop') { const p = prop(t.index); p.x = r2(x); p.y = r2(y); }
   else                        { const p = node(t.id).path[t.wpIndex]; p.x = r2(x); p.y = r2(y); }
 }
 
@@ -319,6 +411,9 @@ const fmt   = v => (Math.round(v * 10) / 10).toFixed(1);
 
 const node = id => (maps[mapId].nodes || []).find(n => n.id === id);
 const exit = id => (maps[mapId].exits || []).find(x => x.id === id);
+// Props have no id — several mudhuts share the same art — so they are keyed by
+// position in the array. Anything that reorders props must re-point `sel`.
+const prop = i  => (maps[mapId].props || [])[i];
 
 /* ── Stage-level interactions ─────────────────────────────────────────── */
 function wireGlobalEvents() {
@@ -358,6 +453,7 @@ function wireGlobalEvents() {
   $('#btn-add-node').onclick = addNodeFlow;
   $('#btn-new-map').onclick  = newMapFlow;
   $('#btn-help').onclick     = showHelp;
+  $('#btn-add-prop').onclick = addPropFlow;
 
   document.addEventListener('keydown', onKey);
 
@@ -394,6 +490,11 @@ function onKey(e) {
 
 function deleteSelection() {
   const m = maps[mapId];
+  if (sel.type === 'prop') {
+    snapshot();
+    m.props.splice(sel.index, 1);
+    sel = null; markDirty(); return render();
+  }
   if (sel.type === 'wp' || (sel.type === 'node' && sel.wpIndex != null)) {
     const n = node(sel.id);
     snapshot();
@@ -434,6 +535,7 @@ function renderInspector() {
   const box = $('#inspector');
   if (!sel) { box.innerHTML = '<p class="note">Nothing selected.</p>'; return; }
   if (sel.type === 'exit') return renderExitInspector(box, exit(sel.id));
+  if (sel.type === 'prop') return renderPropInspector(box, prop(sel.index), sel.index);
   const n = node(sel.id);
   if (!n) { box.innerHTML = '<p class="note">Nothing selected.</p>'; return; }
 
@@ -442,10 +544,11 @@ function renderInspector() {
     <div class="f"><label>name</label><input id="i-name" value="${esc(n.name || '')}"></div>
     <div class="f"><label>kind</label>
       <select id="i-kind">
-        ${['battle', 'market', 'signpost', 'landmark'].map(k =>
+        ${['battle', 'market'].map(k =>
           `<option ${k === (n.kind || 'battle') ? 'selected' : ''}>${k}</option>`).join('')}
       </select>
     </div>
+    ${gateFields(n)}
     <div class="f2">
       <div class="f"><label>x %</label><input id="i-x" type="number" step="0.1" value="${n.x}"></div>
       <div class="f"><label>y %</label><input id="i-y" type="number" step="0.1" value="${n.y}"></div>
@@ -459,7 +562,7 @@ function renderInspector() {
     <p class="note">${(n.path || []).length} path waypoint(s).</p>
     ${pathEndWarning(n)}
     ${CSS_SIZED[n.id] ? `<p class="warn">This node's art size is ${CSS_SIZED[n.id]}, not by <code>scale</code>. Changing scale here will not match the game until that CSS rule is removed.</p>` : ''}
-    <p class="warn"><b>kind is not wired up yet.</b> The game still dispatches clicks on literal node id in <code>onNodeClick</code>, so a node added here renders but does nothing when clicked until Phase 2.</p>
+    ${src2(n)}
     <div class="rowbtns">
       <button class="ghost sm" id="i-clearpath">Clear path</button>
       <button class="danger" id="i-del">Delete node</button>
@@ -472,6 +575,7 @@ function renderInspector() {
     markDirty(); render();
   };
 
+  bindGates(n);
   bind('#i-id',    'input', v => { renameNode(n, v); });
   bind('#i-name',  'input', v => { n.name = v; });
   bind('#i-kind',  'change', v => { n.kind = v; });
@@ -483,6 +587,98 @@ function renderInspector() {
   $('#i-flip').onchange = e => { if (e.target.checked) n.flipX = true; else delete n.flipX; markDirty(); render(); };
   $('#i-clearpath').onclick = () => { snapshot(); delete n.path; markDirty(); render(); };
   $('#i-del').onclick = () => deleteSelection();
+}
+
+/* showFrom / showUntil dropdowns. Every node, exit and prop gets these — this
+   is how the locked pass-through version of a region and the fully-unlocked one
+   are authored, without storing two copies of the map. */
+function gateFields(o) {
+  const opts = (sel2, blank) =>
+    `<option value="">${blank}</option>` +
+    (doc.milestones || []).map(m =>
+      `<option value="${esc(m.id)}" ${m.id === sel2 ? 'selected' : ''}>${esc(m.label || m.id)}</option>`
+    ).join('');
+  return `
+    <div class="f"><label>appears from</label>
+      <select class="g-from">${opts(o.showFrom, 'always visible')}</select></div>
+    <div class="f"><label>disappears at</label>
+      <select class="g-until">${opts(o.showUntil, 'never disappears')}</select></div>`;
+}
+
+/* Wire the two dropdowns above for whatever object is selected. */
+function bindGates(o) {
+  const f = $('.g-from'), u = $('.g-until');
+  if (f) f.onchange = () => { snapshot(); if (f.value) o.showFrom = f.value; else delete o.showFrom; markDirty(); render(); };
+  if (u) u.onchange = () => { snapshot(); if (u.value) o.showUntil = u.value; else delete o.showUntil; markDirty(); render(); };
+}
+
+/* Whether the game has a click handler for this node id. The editor cannot make
+   a node DO anything — onNodeClick still dispatches on literal id — so saying so
+   per-node is more useful than a blanket warning. */
+const WIRED_NODES = new Set([
+  'walls-of-uruk', 'market', 'sargon', 'hammurabi', 'hanging-gardens',
+  'double-crown', 'egypt-market', 'prehistory', 'egypt-signpost'
+]);
+function src2(n) {
+  if (WIRED_NODES.has(n.id)) return '';
+  return `<p class="warn"><b>Nothing happens when this node is clicked.</b>
+    The game dispatches clicks on literal node id in <code>onNodeClick</code>, and
+    there is no branch for <code>${esc(n.id)}</code> yet. Position it here, then ask
+    Claude to wire up the ${esc(n.kind || 'battle')}.</p>`;
+}
+
+/* Topography inspector. Props have rotation and a Y flip that nodes do not —
+   scenery gets mirrored and tilted to avoid looking stamped out. */
+function renderPropInspector(box, p, i) {
+  if (!p) { box.innerHTML = '<p class="note">Nothing selected.</p>'; return; }
+  box.innerHTML = `
+    <div class="f"><label>image</label><input id="p-image" value="${esc(p.image)}"></div>
+    <div class="f2">
+      <div class="f"><label>x %</label><input id="p-x" type="number" step="0.1" value="${p.x}"></div>
+      <div class="f"><label>y %</label><input id="p-y" type="number" step="0.1" value="${p.y}"></div>
+    </div>
+    <div class="f2">
+      <div class="f"><label>scale</label><input id="p-scale" type="number" step="0.01" value="${p.scale == null ? 1 : p.scale}"></div>
+      <div class="f"><label>rotation °</label><input id="p-rot" type="number" step="1" value="${p.rotation || 0}"></div>
+    </div>
+    <div class="f2">
+      <div class="f"><label class="chk"><input id="p-fx" type="checkbox" ${p.flipX ? 'checked' : ''}> flip X</label></div>
+      <div class="f"><label class="chk"><input id="p-fy" type="checkbox" ${p.flipY ? 'checked' : ''}> flip Y</label></div>
+    </div>
+    ${gateFields(p)}
+    <div class="f"><label>note</label><textarea id="p-note">${esc(p.note || '')}</textarea></div>
+    <p class="note">Scenery is decorative only — never clickable, always painted behind the nodes.</p>
+    <div class="rowbtns">
+      <button class="ghost sm" id="p-dup">Duplicate</button>
+      <button class="danger" id="p-del">Delete</button>
+    </div>`;
+
+  bind('#p-image', 'input',  v => { p.image = v; render(); });
+  bind('#p-x',     'input',  v => { p.x = Number(v); render(); });
+  bind('#p-y',     'input',  v => { p.y = Number(v); render(); });
+  bind('#p-scale', 'input',  v => { p.scale = Number(v); render(); });
+  bind('#p-rot',   'input',  v => { p.rotation = Number(v); render(); });
+  bind('#p-note',  'input',  v => { if (v) p.note = v; else delete p.note; });
+  $('#p-fx').onchange = e => { snapshot(); if (e.target.checked) p.flipX = true; else delete p.flipX; markDirty(); render(); };
+  $('#p-fy').onchange = e => { snapshot(); if (e.target.checked) p.flipY = true; else delete p.flipY; markDirty(); render(); };
+  bindGates(p);
+
+  // Duplicating is the fastest way to dot a river with huts — offset slightly so
+  // the copy is visible rather than hidden exactly behind the original.
+  $('#p-dup').onclick = () => {
+    snapshot();
+    const copy = JSON.parse(JSON.stringify(p));
+    copy.x = r2(Math.min(100, p.x + 3));
+    copy.y = r2(Math.min(100, p.y + 3));
+    maps[mapId].props.splice(i + 1, 0, copy);
+    sel = { type: 'prop', index: i + 1 };
+    markDirty(); render();
+  };
+  $('#p-del').onclick = () => {
+    snapshot();
+    maps[mapId].props.splice(i, 1);
+    sel = null; markDirty(); render();
+  };
 }
 
 /* A walk path is the route the sprite takes TO the node, so its last waypoint
@@ -526,9 +722,11 @@ function renderExitInspector(box, x) {
       <div class="f"><label>entryAt x</label><input id="e-ex" type="number" step="0.5" value="${x.entryAt.x}"></div>
       <div class="f"><label>entryAt y</label><input id="e-ey" type="number" step="0.5" value="${x.entryAt.y}"></div>
     </div>
+    ${gateFields(x)}
     <p class="note">entryAt is where the player lands on the <b>target</b> map, so it is a coordinate in ${esc(x.target)}'s space, not this one.</p>
     <div class="rowbtns"><button class="danger" id="e-del">Delete exit</button></div>`;
 
+  bindGates(x);
   bind('#e-id',     'input', v => { x.id = v; renderLists(); });
   bind('#e-label',  'input', v => { x.label = v; render(); });
   bind('#e-target', 'change', v => { x.target = v; render(); });
@@ -597,6 +795,20 @@ function uniqueId(base) {
   return base + '-' + i;
 }
 
+/* ── Add Scenery ──────────────────────────────────────────────────────── */
+function addPropFlow() {
+  pickArt('Choose scenery', art.topo, chosen => {
+    snapshot();
+    maps[mapId].props = maps[mapId].props || [];
+    // Default scale 0.25: the topography art is authored large, and dropping a
+    // prop in at 1.0 fills the screen and looks broken.
+    maps[mapId].props.push({ image: chosen.path, x: 50, y: 50, scale: 0.25, rotation: 0 });
+    sel = { type: 'prop', index: maps[mapId].props.length - 1 };
+    markDirty(); render();
+    toast('Scenery added — drag it into place');
+  });
+}
+
 /* ── New Map ──────────────────────────────────────────────────────────── */
 function newMapFlow() {
   pickArt('Choose a background for the new region', art.maps, chosen => {
@@ -610,6 +822,7 @@ function newMapFlow() {
       image: chosen.path,
       spawn: { x: 10, y: 85 },
       startsFogged: true,
+      props: [],
       nodes: [],
       exits: []
     };
@@ -731,7 +944,7 @@ async function save() {
     const res = await fetch('/api/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(maps)
+      body: JSON.stringify(doc)
     });
     const out = await res.json();
     if (!out.ok) { $('#btn-save').disabled = false; return toast(out.error, true); }

@@ -273,8 +273,8 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 .seg button.on { background: var(--gold); border-color: var(--gold); color: #191203; font-weight: bold; }
 
-#node-list, #exit-list { list-style: none; margin: 0; padding: 0; }
-#node-list li, #exit-list li {
+#node-list, #exit-list, #prop-list { list-style: none; margin: 0; padding: 0; }
+#node-list li, #exit-list li, #prop-list li {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -282,10 +282,10 @@ main { flex: 1; display: flex; min-height: 0; }
   cursor: pointer;
   border-radius: 3px;
 }
-#node-list li:hover, #exit-list li:hover { background: rgba(212,170,80,0.10); }
-#node-list li.sel, #exit-list li.sel { background: rgba(212,170,80,0.22); color: var(--gold-hi); }
+#node-list li:hover, #exit-list li:hover, #prop-list li:hover { background: rgba(212,170,80,0.10); }
+#node-list li.sel, #exit-list li.sel, #prop-list li.sel { background: rgba(212,170,80,0.22); color: var(--gold-hi); }
 #node-list li img { width: 22px; height: 22px; object-fit: contain; }
-#node-list li .k, #exit-list li .k { margin-left: auto; color: var(--dim); font-size: 10px; }
+#node-list li .k, #exit-list li .k, #prop-list li .k { margin-left: auto; color: var(--dim); font-size: 10px; }
 
 /* ── Inspector fields ─────────────────────────────────────────────────── */
 .f { margin-bottom: 8px; }
@@ -387,3 +387,32 @@ button.danger:hover { background: var(--danger); color: #fff; }
   z-index: 90;
 }
 #toast.bad { background: var(--danger); color: #fff; }
+
+/* ── Timeline scrubber ────────────────────────────────────────────────── */
+#timeline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+#timeline label { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+#scrub { flex: 1; accent-color: var(--gold); }
+#scrub-label { color: var(--gold-hi); min-width: 230px; font-size: 12px; }
+#timeline .chk { color: var(--dim); font-size: 11px; text-transform: none; letter-spacing: 0; white-space: nowrap; }
+
+/* ── Topography props ─────────────────────────────────────────────────── */
+.prop { position: absolute; cursor: grab; }
+.prop img { display: block; pointer-events: none; }
+.prop.sel { outline: 1px dashed var(--gold-hi); outline-offset: 3px; }
+
+/* Not yet revealed at the scrubbed story point. Ghosted rather than removed so
+   it can still be selected and dragged — you place things long before the
+   story shows them. `.gone` is the true preview. */
+.ghost { opacity: 0.22; filter: grayscale(0.7); }
+.gone  { display: none; }
+
+#prop-list li img { width: 22px; height: 22px; object-fit: contain; }

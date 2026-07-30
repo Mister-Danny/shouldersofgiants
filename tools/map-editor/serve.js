@@ -30,6 +30,7 @@ var DATA_FILE = path.join(ROOT, 'data', 'map-data.js');
 
 var MAPS_DIR  = path.join('images', 'metaworld', 'maps');
 var NODES_DIR = path.join('images', 'metaworld', 'civilization nodes');
+var TOPO_DIR  = path.join('images', 'metaworld', 'topography');
 
 var TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -99,9 +100,22 @@ function listArt(relDir) {
    diffable: one node per block, coordinates on a single line, stable key
    order. A generated file that produces a 400-line diff for a 2px nudge is a
    file nobody will review. */
-function serialise(maps) {
+function serialise(doc) {
   var HEADER = fs.readFileSync(path.join(__dirname, 'data-header.txt'), 'utf8');
+  var maps = doc.maps || {};
   var s = HEADER + '\nwindow.SOG_MAP_DATA = {\n';
+
+  /* ── Milestones ── the ordered story beats. Order matters here only for the
+     editor's scrubber; the game decides visibility from the flag. */
+  s += '\n  milestones: [\n';
+  (doc.milestones || []).forEach(function (ms, i) {
+    s += '    { id: ' + q(ms.id) + ', label: ' + q(ms.label) +
+         ', flag: ' + (ms.flag ? q(ms.flag) : 'null') + ' }' +
+         (i < doc.milestones.length - 1 ? ',' : '') + '\n';
+  });
+  s += '  ],\n';
+
+  s += '\n  maps: {\n';
   var mapIds = Object.keys(maps);
 
   mapIds.forEach(function (mapId, mi) {
@@ -112,17 +126,33 @@ function serialise(maps) {
     s += '    spawn: { x: ' + num(m.spawn.x) + ', y: ' + num(m.spawn.y) + ' },\n';
     s += '    startsFogged: ' + (m.startsFogged ? 'true' : 'false') + ',\n';
 
+    /* ── Topography ── decorative, non-interactive, painted behind everything. */
+    s += '    props: [' + ((m.props || []).length ? '\n' : '');
+    (m.props || []).forEach(function (p, i) {
+      s += '      { image: ' + q(p.image) +
+           ', x: ' + num(p.x) + ', y: ' + num(p.y) +
+           ', scale: ' + scaleNum(p.scale == null ? 1 : p.scale) +
+           ', rotation: ' + num(p.rotation || 0);
+      if (p.flipX)     s += ', flipX: true';
+      if (p.flipY)     s += ', flipY: true';
+      s += gates(p, '');
+      if (p.note)      s += ', note: ' + q(p.note);
+      s += ' }' + (i < m.props.length - 1 ? ',' : '') + '\n';
+    });
+    s += (m.props || []).length ? '    ],\n' : '],\n';
+
     s += '    nodes: [' + ((m.nodes || []).length ? '\n' : '');
     (m.nodes || []).forEach(function (n, i) {
       s += '      {\n';
       s += '        id:    ' + q(n.id) + ',\n';
       s += '        name:  ' + q(n.name) + ',\n';
-      s += '        kind:  ' + q(n.kind || 'battle') + ',\n';
+      s += '        kind:  ' + q(n.kind === 'market' ? 'market' : 'battle') + ',\n';
       s += '        image: ' + q(n.image) + ',\n';
       s += '        x: ' + num(n.x) + ', y: ' + num(n.y);
       if (n.scale != null) s += ',\n        scale: ' + scaleNum(n.scale);
       if (n.flipX)         s += ',\n        flipX: true';
       if (n.label)         s += ',\n        label: ' + q(n.label);
+      s += gates(n, ',\n        ');
       if (n.note)          s += ',\n        note: ' + q(n.note);
       if (n.path && n.path.length) {
         s += ',\n        path: [\n';
@@ -146,6 +176,7 @@ function serialise(maps) {
       if (x.walkOff) s += '        walkOff: true,\n';
       s += '        target:  ' + q(x.target) + ',\n';
       s += '        entryAt: { x: ' + num(x.entryAt.x) + ', y: ' + num(x.entryAt.y) + ' }';
+      s += gates(x, ',\n        ');
       if (x.note) s += ',\n        note: ' + q(x.note);
       s += '\n      }' + (i < m.exits.length - 1 ? ',' : '') + '\n';
     });
@@ -154,7 +185,16 @@ function serialise(maps) {
     s += '  }' + (mi < mapIds.length - 1 ? ',' : '') + '\n';
   });
 
-  return s + '\n};\n';
+  return s + '  }\n};\n';
+}
+
+/* showFrom / showUntil, emitted only when set. `sep` lets the caller pick
+   inline (props, one line each) vs indented block style (nodes and exits). */
+function gates(o, sep) {
+  var out = '';
+  if (o.showFrom)  out += (sep || ', ') + 'showFrom: '  + q(o.showFrom);
+  if (o.showUntil) out += (sep || ', ') + 'showUntil: ' + q(o.showUntil);
+  return out;
 }
 
 /* Single-quoted JS string, matching the codebase's style. Escapes only what
@@ -224,12 +264,12 @@ function handleSave(req, res) {
       return sendJson(res, 500, { ok: false, error: 'write failed: ' + e.message });
     }
 
-    var nodeCount = Object.keys(maps).reduce(function (t, k) {
-      return t + (maps[k].nodes || []).length;
-    }, 0);
-    console.log('[map-editor] saved data/map-data.js — ' +
-                Object.keys(maps).length + ' maps, ' + nodeCount + ' nodes');
-    sendJson(res, 200, { ok: true, maps: Object.keys(maps).length, nodes: nodeCount });
+    var ids = Object.keys(maps.maps || {});
+    var nodeCount = ids.reduce(function (t, k) { return t + (maps.maps[k].nodes || []).length; }, 0);
+    var propCount = ids.reduce(function (t, k) { return t + (maps.maps[k].props || []).length; }, 0);
+    console.log('[map-editor] saved data/map-data.js — ' + ids.length + ' maps, ' +
+                nodeCount + ' nodes, ' + propCount + ' props');
+    sendJson(res, 200, { ok: true, maps: ids.length, nodes: nodeCount, props: propCount });
   });
 }
 
@@ -239,10 +279,29 @@ function makeCheckable(src) {
   return 'var window = {};\n' + src;
 }
 
-function validate(maps) {
-  if (!maps || typeof maps !== 'object' || Array.isArray(maps)) return 'payload must be an object of maps';
+function validate(doc) {
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return 'payload must be an object';
+  var maps = doc.maps;
+  if (!maps || typeof maps !== 'object') return 'payload has no maps';
   var mapIds = Object.keys(maps);
   if (!mapIds.length) return 'refusing to save zero maps';
+
+  /* Milestone ids are the join key for every showFrom/showUntil, so a typo
+     would silently hide a node forever with no error anywhere. Check them
+     first, then check that every gate points at one that exists. */
+  var known = { start: true };
+  var ms = doc.milestones || [];
+  for (var k = 0; k < ms.length; k++) {
+    if (!ms[k].id) return 'a milestone has no id';
+    if (known[ms[k].id] && ms[k].id !== 'start') return 'duplicate milestone id "' + ms[k].id + '"';
+    known[ms[k].id] = true;
+  }
+  var gateErr = null;
+  function checkGates(o, what) {
+    if (gateErr) return;
+    if (o.showFrom && !known[o.showFrom])   gateErr = what + ' has showFrom "'  + o.showFrom  + '", which is not a milestone';
+    if (o.showUntil && !known[o.showUntil]) gateErr = what + ' has showUntil "' + o.showUntil + '", which is not a milestone';
+  }
 
   for (var i = 0; i < mapIds.length; i++) {
     var id = mapIds[i], m = maps[id];
@@ -260,6 +319,7 @@ function validate(maps) {
       seen[n.id] = true;
       if (!n.image) return 'node "' + n.id + '" has no image';
       if (!isNum(n.x) || !isNum(n.y)) return 'node "' + n.id + '" has non-numeric coordinates';
+      checkGates(n, 'node "' + n.id + '"');
       if (n.path) {
         for (var p = 0; p < n.path.length; p++) {
           if (!isNum(n.path[p].x) || !isNum(n.path[p].y)) {
@@ -269,16 +329,27 @@ function validate(maps) {
       }
     }
 
+    // `xi`, not `k` — `k` is the milestone loop counter above and `var` is
+    // function-scoped, so reusing it here would quietly clobber it.
     var exits = m.exits || [];
-    for (var k = 0; k < exits.length; k++) {
-      var x = exits[k];
+    for (var xi = 0; xi < exits.length; xi++) {
+      var x = exits[xi];
       if (!x.id) return 'an exit in "' + id + '" has no id';
       if (!x.target) return 'exit "' + x.id + '" in "' + id + '" has no target map';
       if (!maps[x.target]) return 'exit "' + x.id + '" points at map "' + x.target + '", which does not exist';
       if (!x.zone || !isNum(x.zone.x) || !isNum(x.zone.w)) return 'exit "' + x.id + '" has an invalid zone';
+      checkGates(x, 'exit "' + x.id + '"');
+    }
+
+    var props = m.props || [];
+    for (var pi = 0; pi < props.length; pi++) {
+      var pr = props[pi];
+      if (!pr.image) return 'a prop in "' + id + '" has no image';
+      if (!isNum(pr.x) || !isNum(pr.y)) return 'a prop in "' + id + '" has non-numeric coordinates';
+      checkGates(pr, 'a prop in "' + id + '"');
     }
   }
-  return null;
+  return gateErr;
 }
 
 function isNum(v) { return typeof v === 'number' && isFinite(v); }
@@ -287,7 +358,7 @@ var server = http.createServer(function (req, res) {
   var url = decodeURIComponent(req.url.split('?')[0]);
 
   if (url === '/api/art') {
-    return sendJson(res, 200, { maps: listArt(MAPS_DIR), nodes: listArt(NODES_DIR) });
+    return sendJson(res, 200, { maps: listArt(MAPS_DIR), nodes: listArt(NODES_DIR), topo: listArt(TOPO_DIR) });
   }
   if (url === '/api/save' && req.method === 'POST') {
     return handleSave(req, res);

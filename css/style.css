@@ -8633,10 +8633,11 @@ body.tut-locked #battle-reset-turn {
   top:  var(--stamp-giant-cy);
   transform: translate(-50%, -50%) rotate(calc(-1 * var(--stamp-tilt)));   /* mirror lean for the giant flag */
 }
-/* Egypt topography buildings sit BEHIND the flags (flags are -1, buildings -2) so
-   the banners read in front of the settlement art. Still above the map (both inside
-   the #overworld-overlay stacking context). */
-.egypt-topo-prop { z-index: -2; }
+/* Topography buildings sit BEHIND the flags (flags are -1, buildings -2) so the
+   banners read in front of the settlement art. Still above the map (both inside
+   the #overworld-overlay stacking context).
+   Renamed from .egypt-topo-prop — props are per-map data now, not Egypt-only. */
+.overworld-topo-prop { z-index: -2; }
 .overworld-node-label {
   font-family: 'CT Galbite', monospace;
   font-size: 16px;
