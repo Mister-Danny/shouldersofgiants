@@ -871,17 +871,39 @@ function showHelp() {
 
       <h3>Adding a node</h3>
       <p><b>+ Add Node</b> → pick a picture → give it a name. It appears in the
-         middle of the map; drag it where you want.</p>
+         middle of the map; drag it where you want. A node is either a
+         <b>battle</b> or a <b>market</b> — those are the only two kinds.</p>
       <p class="warn"><b>Important:</b> a node you add will look right and
          animate, but <b>nothing happens when a player clicks it</b>. Making it
-         open a shop or start a battle still needs a programming change. Adding
-         it here is step one of two — tell Claude what the node should do and it
-         can wire up the rest.</p>
+         open a shop or start a battle still needs a programming change. The
+         Inspector tells you which nodes are in that state. Adding it here is
+         step one of two — tell Claude what it should do and it wires up the rest.</p>
 
-      <h3>Making a new region</h3>
-      <p><b>+ New Map</b> → pick a background → name it. Then add nodes to it.
-         To let players actually reach it, an existing map needs an exit
-         pointing at it — ask Claude for that part.</p>
+      <h3>Scenery</h3>
+      <p><b>+ Add Scenery</b> drops in topography — huts, granaries, ruins. It's
+         decorative: never clickable, always painted behind the nodes. You can
+         rotate and mirror each piece so a row of huts doesn't look stamped out,
+         and <b>Duplicate</b> is the quick way to dot a riverbank.</p>
+
+      <h3>The story slider — this is the important one</h3>
+      <p>The slider under the map is <b>when</b>. Drag it and the map rebuilds
+         to show that point in the game.</p>
+      <p>Every node and every piece of scenery can be set to
+         <b>appear from</b> a story moment and <b>disappear at</b> one. That's
+         how a region has a locked version and an unlocked version without you
+         building it twice:</p>
+      <ol>
+        <li>Scenery with no settings shows the whole game long.</li>
+        <li>Egypt's plain mud huts <i>disappear at</i> "Nebuchadnezzar defeated".</li>
+        <li>The grand houses <i>appear from</i> that same moment.</li>
+        <li>So the settlement visibly grows up the moment Egypt opens.</li>
+      </ol>
+      <p>Things that haven't appeared yet are shown faded, so you can still drag
+         them into position long before the player will ever see them. Tick
+         <b>hide what's not visible yet</b> to see the map exactly as a player
+         would at that moment.</p>
+      <p>To add a new story moment — a new boss, say — ask Claude. Each one has
+         to match something the game actually records.</p>
 
       <h3>If you make a mess</h3>
       <p><b>Cmd + Z</b> undoes, as many times as you like, right back to how

@@ -26,11 +26,41 @@ on purpose, so this still boots in a year.
 
 | | |
 |---|---|
-| **Drag** | Nodes, exit zones, path waypoints. Arrow keys nudge 0.1%, Shift+arrows 1%. |
+| **Drag** | Nodes, scenery, exit zones, path waypoints. Arrow keys nudge 0.1%, Shift+arrows 1%. |
 | **Draw Path** mode | Select a node, then click the map to lay waypoints leading to it. Drag to adjust, Delete to remove. |
-| **+ Add Node** | Pick art, name it, drag it into place. |
+| **+ Add Node** | Pick art, name it, drag it into place. `kind` is `battle` or `market` — nothing else. |
+| **+ Add Scenery** | Topography from `images/metaworld/topography/`. Decorative, never clickable, painted behind the nodes. Rotate, mirror, duplicate. |
 | **+ New Map** | Pick a background from `images/metaworld/maps/`, name the region. |
-| **Inspector** | id, name, kind, x/y, scale, flipX, image, note. Exits get zone/walkTo/entryAt. |
+| **Story slider** | Scrub through the game's milestones and watch each map rebuild. |
+| **Inspector** | id, name, kind, x/y, scale, flipX, image, note, and the two gates below. Exits get zone/walkTo/entryAt; scenery gets rotation and a Y flip. |
+
+## Sequencing
+
+Every node, exit and prop can carry:
+
+```js
+showFrom:  'neb-beaten'    // hidden until that milestone's flag is set
+showUntil: 'neb-beaten'    // hidden once that milestone's flag is set
+```
+
+A milestone is a named localStorage flag, listed in order in `data/map-data.js`.
+That ordered list is what the slider walks.
+
+`showUntil` is what expresses **replacement**, and it's how one map holds both a
+locked and an unlocked version of itself. Egypt's humble mudhuts carry
+`showUntil: 'neb-beaten'`; the advanced ones carry `showFrom: 'neb-beaten'`. The
+settlement visibly grows up the moment Egypt opens, from one set of data.
+
+**Runtime visibility is decided by the flag, never by the milestone's index.**
+The order exists only for the editor's slider. Deciding by index would break any
+save whose flags were set out of order — via the dev panel, or a player who took
+an unusual route.
+
+A milestone whose flag nothing ever sets keeps its nodes hidden indefinitely.
+That's deliberate and useful: the Egypt ladder (`narmer-beaten` →
+`hatshepsut-beaten` → `ramses-beaten` → `akhenaten-beaten`) is scaffolded ahead
+of the battles, so Kush can be positioned now and stays invisible until
+Akhenaten is actually built.
 
 Cmd/Ctrl+Z undoes (one step per drag, not per pixel). Cmd/Ctrl+S saves. The
 previous file is kept as `data/map-data.js.bak` (gitignored).
