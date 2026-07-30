@@ -451,3 +451,35 @@ body.route-mode .n { cursor: crosshair; }
 #route-list li.bent .k { color: var(--path); }
 
 .route-pick { color: var(--gold-hi); }
+
+/* ── Milestone editor ─────────────────────────────────────────────────── */
+.ms-list { list-style: none; margin: 0 0 14px; padding: 0; }
+.ms-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  margin-bottom: 5px;
+  background: #0a0806;
+}
+.ms-list li.locked { opacity: 0.55; }
+.ms-num { color: var(--dim); font-size: 10px; min-width: 18px; }
+.ms-main { flex: 1; min-width: 0; }
+.ms-main b { color: var(--text); display: block; }
+.ms-src { color: var(--dim); font-size: 10px; }
+.ms-src.custom { color: #b98b3c; }
+.ms-used { color: var(--dim); font-size: 10px; white-space: nowrap; }
+.ms-btns { display: flex; gap: 3px; }
+.ms-btns button {
+  background: transparent; border: 1px solid var(--line); color: var(--dim);
+  font: inherit; font-size: 11px; cursor: pointer; border-radius: 2px;
+  width: 24px; height: 22px; line-height: 1;
+}
+.ms-btns button:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.ms-btns button:disabled { opacity: 0.25; cursor: default; }
+.ms-btns button.del:hover { border-color: var(--danger); color: #e88; }
+
+.ms-add { border-top: 1px solid var(--line); padding-top: 12px; }
+.ms-add h4 { margin: 0 0 8px; color: var(--gold); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }

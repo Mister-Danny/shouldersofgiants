@@ -32,6 +32,7 @@ on purpose, so this still boots in a year.
 | **+ Add Scenery** | Topography from `images/metaworld/topography/`. Decorative, never clickable, painted behind the nodes. Rotate, mirror, duplicate. |
 | **+ New Map** | Pick a background from `images/metaworld/maps/`, name the region. |
 | **Story slider** | Scrub through the game's milestones and watch each map rebuild. |
+| **Edit story…** | Add, reorder and delete milestones. New ones attach to a battle + tier, which needs no code. |
 | **Inspector** | id, name, kind, x/y, scale, flipX, image, note, and the two gates below. Exits get zone/walkTo/entryAt; scenery gets rotation and a Y flip. |
 
 ## Sequencing
@@ -55,6 +56,23 @@ settlement visibly grows up the moment Egypt opens, from one set of data.
 The order exists only for the editor's slider. Deciding by index would break any
 save whose flags were set out of order — via the dev panel, or a player who took
 an unusual route.
+
+### Adding milestones
+
+**Edit story…** beside the slider. A new milestone attaches to a **battle node
+plus a tier**, producing `sog_node_<hook>_<tier>_beaten` — a flag the battle
+system already writes, so it needs no code at all. Serf means "next node on
+this map"; Giant means "next region". Picking the tier *is* picking which side
+of the two-tier rule you're on.
+
+The older Mesopotamia milestones use bespoke flags set by their reveal
+cinematics (`sog_sargon_node_revealed` and friends). Those are offered under
+"something else (needs code)" and shown in amber, because inventing one there
+that no code ever sets would hide its nodes forever.
+
+Deleting a milestone lists what depends on it and strips those gates on
+confirm — a gate pointing at a deleted milestone is rejected by the save
+validator anyway.
 
 A milestone whose flag nothing ever sets keeps its nodes hidden indefinitely.
 That's deliberate and useful: the Egypt ladder (`narmer-beaten` →

@@ -561,6 +561,7 @@ function wireGlobalEvents() {
   $('#btn-new-map').onclick  = newMapFlow;
   $('#btn-help').onclick     = showHelp;
   $('#btn-add-prop').onclick = addPropFlow;
+  $('#btn-story').onclick    = showMilestones;
 
   document.addEventListener('keydown', onKey);
 
@@ -1038,6 +1039,195 @@ function newMapFlow() {
   });
 }
 
+/* ── Milestone editor ─────────────────────────────────────────────────────
+   Story moments are global, not per-map, so this lives beside the scrubber
+   rather than in the per-map sidebar.
+
+   The important design choice: you pick a BATTLE and a TIER rather than typing
+   a flag. That produces sog_node_<hook>_<tier>_beaten, which the battle system
+   already writes on its own — so a milestone built this way needs no code at
+   all. It also makes the two-tier rule visible at the point of decision: the
+   Serf/Giant choice IS the "next node here" vs "next region" choice. */
+
+const FLAG_RE = /^sog_node_(.+)_(serf|giant)_beaten$/;
+
+/* Every battle node across every map that could satisfy a milestone. */
+function battleNodes() {
+  return Object.entries(doc.maps).flatMap(([mid, m]) =>
+    (m.nodes || []).filter(n => n.kind === 'battle' && n.hook)
+                   .map(n => ({ mapId: mid, id: n.id, name: n.name, hook: n.hook })));
+}
+
+/* Describe where a milestone's flag comes from, in words. */
+function milestoneSource(ms) {
+  if (!ms.flag) return { text: 'always true — the beginning of the game', custom: false };
+  const m = FLAG_RE.exec(ms.flag);
+  if (!m) return { text: 'set by game code · ' + ms.flag, custom: true };
+  const node = battleNodes().find(b => b.hook === m[1]);
+  const who = node ? (node.name || node.id) : m[1];
+  const tier = m[2] === 'giant' ? 'Giant' : 'Serf';
+  return { text: `when ${who}'s ${tier} battle is won`, custom: false };
+}
+
+/* What breaks if this milestone goes away. */
+function milestoneUsage(id) {
+  const out = [];
+  for (const [mid, m] of Object.entries(doc.maps)) {
+    const scan = (arr, label) => (arr || []).forEach((o, i) => {
+      const who = `${mid} · ${label(o, i)}`;
+      if (o.showFrom  === id) out.push({ obj: o, key: 'showFrom',  who });
+      if (o.showUntil === id) out.push({ obj: o, key: 'showUntil', who });
+    });
+    scan(m.nodes, o => o.id);
+    scan(m.exits, o => o.id);
+    scan(m.props, (o, i) => 'scenery ' + (i + 1));
+  }
+  return out;
+}
+
+function showMilestones() {
+  $('#modal-title').textContent = 'Story moments';
+  $('#modal-ok').hidden = true;
+  $('#modal-cancel').textContent = 'Close';
+  const close = () => {
+    $('#modal').hidden = true;
+    $('#modal-ok').hidden = false;
+    $('#modal-cancel').textContent = 'Cancel';
+  };
+  $('#modal-cancel').onclick = $('#modal-x').onclick = close;
+  $('#modal').hidden = false;
+  drawMilestones();
+}
+
+function drawMilestones() {
+  const ms = doc.milestones || [];
+  const battles = battleNodes();
+
+  const rows = ms.map((m, i) => {
+    const src = milestoneSource(m);
+    const used = milestoneUsage(m.id).length;
+    // 'start' is the implicit beginning — reordering or deleting it would be
+    // meaningless, so it is shown but not editable.
+    const locked = m.id === 'start';
+    return `<li class="${locked ? 'locked' : ''}">
+      <span class="ms-num">${i + 1}</span>
+      <span class="ms-main">
+        <b>${esc(m.label || m.id)}</b>
+        <span class="ms-src ${src.custom ? 'custom' : ''}">${esc(src.text)}</span>
+      </span>
+      <span class="ms-used">${used ? used + ' use' + (used > 1 ? 's' : '') : 'unused'}</span>
+      <span class="ms-btns">
+        <button data-up="${i}"   ${i <= 1 ? 'disabled' : ''} title="earlier">↑</button>
+        <button data-down="${i}" ${i === 0 || i === ms.length - 1 ? 'disabled' : ''} title="later">↓</button>
+        <button data-del="${i}" class="del" ${locked ? 'disabled' : ''} title="delete">✕</button>
+      </span></li>`;
+  }).join('');
+
+  $('#modal-body').innerHTML = `
+    <p class="note">These are the moments the story slider walks through, in order.
+      Anything on a map can be set to appear or disappear at one of them.</p>
+    <ul class="ms-list">${rows}</ul>
+    <div class="ms-add">
+      <h4>Add a story moment</h4>
+      <div class="f"><label>name</label>
+        <input id="ms-label" placeholder="e.g. Hatshepsut defeated"></div>
+      <div class="f"><label>what makes it happen</label>
+        <select id="ms-src">
+          <option value="battle">winning a battle</option>
+          <option value="custom">something else (needs code) …</option>
+        </select></div>
+      <div id="ms-battle-fields">
+        <div class="f2">
+          <div class="f"><label>battle</label>
+            <select id="ms-hook">
+              ${battles.map(b => `<option value="${esc(b.hook)}">${esc(b.name || b.id)} (${esc(b.mapId)})</option>`).join('')}
+              ${battles.length ? '' : '<option value="">— no battle nodes with a hook yet —</option>'}
+            </select></div>
+          <div class="f"><label>which win</label>
+            <select id="ms-tier">
+              <option value="serf">Serf — opens the next node here</option>
+              <option value="giant">Giant — opens the next region</option>
+            </select></div>
+        </div>
+      </div>
+      <div id="ms-custom-fields" hidden>
+        <div class="f"><label>flag name</label>
+          <input id="ms-flag" placeholder="sog_something_complete"></div>
+        <p class="warn">A flag nothing sets keeps its nodes hidden forever. Use this
+          only for something game code already writes — otherwise pick a battle above.</p>
+      </div>
+      <div class="rowbtns"><button class="primary" id="ms-add">Add</button></div>
+    </div>`;
+
+  $$('.ms-btns button').forEach(b => {
+    if (b.dataset.up   != null) b.onclick = () => moveMilestone(+b.dataset.up, -1);
+    if (b.dataset.down != null) b.onclick = () => moveMilestone(+b.dataset.down, +1);
+    if (b.dataset.del  != null) b.onclick = () => deleteMilestone(+b.dataset.del);
+  });
+  $('#ms-src').onchange = e => {
+    $('#ms-battle-fields').hidden = e.target.value !== 'battle';
+    $('#ms-custom-fields').hidden = e.target.value !== 'custom';
+  };
+  $('#ms-add').onclick = addMilestone;
+}
+
+function moveMilestone(i, dir) {
+  const ms = doc.milestones;
+  const j = i + dir;
+  if (j < 1 || j >= ms.length) return;      // never move above 'start'
+  snapshot();
+  [ms[i], ms[j]] = [ms[j], ms[i]];
+  markDirty(); buildScrubber(); render(); drawMilestones();
+}
+
+function deleteMilestone(i) {
+  const ms = doc.milestones[i];
+  const used = milestoneUsage(ms.id);
+  if (used.length) {
+    const list = used.slice(0, 8).map(u => '  • ' + u.who + ' (' + u.key + ')').join('\n');
+    const more = used.length > 8 ? `\n  …and ${used.length - 8} more` : '';
+    if (!confirm(`"${ms.label || ms.id}" is used by ${used.length} thing(s):\n\n${list}${more}\n\n` +
+                 `Delete it and clear those settings? Those items will go back to being always visible.`)) return;
+  }
+  snapshot();
+  // Strip the dangling gates too — leaving them would point at a milestone that
+  // no longer exists, which the save validator rejects anyway.
+  used.forEach(u => { delete u.obj[u.key]; });
+  doc.milestones.splice(i, 1);
+  if (scrubIdx >= doc.milestones.length) scrubIdx = doc.milestones.length - 1;
+  markDirty(); buildScrubber(); render(); drawMilestones();
+}
+
+function addMilestone() {
+  const label = $('#ms-label').value.trim();
+  if (!label) return toast('Give it a name first', true);
+  const id = uniqueMilestoneId(slug(label));
+  let flag;
+  if ($('#ms-src').value === 'battle') {
+    const hook = $('#ms-hook').value;
+    if (!hook) return toast('No battle to attach this to — give a battle node a hook first', true);
+    flag = `sog_node_${hook}_${$('#ms-tier').value}_beaten`;
+  } else {
+    flag = $('#ms-flag').value.trim();
+    if (!flag) return toast('Enter a flag name, or attach it to a battle instead', true);
+  }
+  if ((doc.milestones || []).some(m => m.flag === flag)) {
+    return toast('Another story moment already uses that flag', true);
+  }
+  snapshot();
+  doc.milestones.push({ id, label, flag });
+  markDirty(); buildScrubber(); render(); drawMilestones();
+  toast(`Added "${label}" — it's the last moment; use ↑ to move it earlier`);
+}
+
+function uniqueMilestoneId(base) {
+  const taken = new Set((doc.milestones || []).map(m => m.id));
+  if (!taken.has(base)) return base;
+  let i = 2;
+  while (taken.has(base + '-' + i)) i++;
+  return base + '-' + i;
+}
+
 /* ── Help ─────────────────────────────────────────────────────────────────
    Written for someone who does not program. This lives in the toolbar rather
    than in a README because the toolbar is where the question gets asked. */
@@ -1114,8 +1304,25 @@ function showHelp() {
          them into position long before the player will ever see them. Tick
          <b>hide what's not visible yet</b> to see the map exactly as a player
          would at that moment.</p>
-      <p>To add a new story moment — a new boss, say — ask Claude. Each one has
-         to match something the game actually records.</p>
+      <h3>Adding story moments</h3>
+      <p>Click <b>Edit story…</b> next to the slider. You'll see every moment in
+         order, what makes each one happen, and how many things depend on it.</p>
+      <p>To add one, give it a name and pick <b>which battle</b> it follows and
+         <b>which win</b>:</p>
+      <ul>
+        <li><b>Serf</b> — opens the next node <i>on the same map</i>.</li>
+        <li><b>Giant</b> — opens the <i>next region</i>. Use this for the last
+            battle of a map.</li>
+      </ul>
+      <p>That's the whole rule, and picking it here is all it takes — the game
+         already records those wins, so a moment made this way works with no
+         programming.</p>
+      <p>Use ↑ and ↓ to put it in the right place in the story. Deleting one
+         tells you what depends on it first, and clears those settings for you
+         if you go ahead.</p>
+      <p>"Something else (needs code)" is for moments the game marks in its own
+         way — the older ones in Mesopotamia work like that. Don't invent one:
+         a moment nothing sets keeps its nodes hidden forever.</p>
 
       <h3>If you make a mess</h3>
       <p><b>Cmd + Z</b> undoes, as many times as you like, right back to how
