@@ -549,6 +549,7 @@ function renderInspector() {
       </select>
     </div>
     ${gateFields(n)}
+    ${bossFields(n)}
     <div class="f2">
       <div class="f"><label>x %</label><input id="i-x" type="number" step="0.1" value="${n.x}"></div>
       <div class="f"><label>y %</label><input id="i-y" type="number" step="0.1" value="${n.y}"></div>
@@ -576,6 +577,7 @@ function renderInspector() {
   };
 
   bindGates(n);
+  bindBoss(n);
   bind('#i-id',    'input', v => { renameNode(n, v); });
   bind('#i-name',  'input', v => { n.name = v; });
   bind('#i-kind',  'change', v => { n.kind = v; });
@@ -587,6 +589,78 @@ function renderInspector() {
   $('#i-flip').onchange = e => { if (e.target.checked) n.flipX = true; else delete n.flipX; markDirty(); render(); };
   $('#i-clearpath').onclick = () => { snapshot(); delete n.path; markDirty(); render(); };
   $('#i-del').onclick = () => deleteSelection();
+}
+
+/* Boss ladder. `tiers: 2` is what makes a node draw Serf and Giant flags; the
+   game reads these fields directly, so a boss added here gets its flags with no
+   code change. `hook` is the flag key — sog_node_<hook>_serf_beaten etc. */
+function bossFields(n) {
+  if (n.kind !== 'battle') return '';
+  const t = n.tiers == null ? 2 : n.tiers;
+  return `
+    <div class="f2">
+      <div class="f"><label>levels</label>
+        <select id="b-tiers">
+          <option value="2" ${t === 2 ? 'selected' : ''}>Serf + Giant (flags)</option>
+          <option value="1" ${t === 1 ? 'selected' : ''}>single level (no flags)</option>
+        </select></div>
+      <div class="f"><label>hook (flag key)</label>
+        <input id="b-hook" value="${esc(n.hook || '')}" placeholder="e.g. hatshepsut"></div>
+    </div>
+    ${t === 2 ? `
+    <div class="f2">
+      <div class="f"><label>flag nudge x</label>
+        <input id="b-dx" type="number" step="0.5" value="${(n.flagNudge || {}).dx || 0}"></div>
+      <div class="f"><label>flag nudge y</label>
+        <input id="b-dy" type="number" step="0.5" value="${(n.flagNudge || {}).dy || 0}"></div>
+    </div>
+    <div class="f"><label>Serf flag appears</label>
+      <select id="b-sfo">
+        <option value="" ${!n.serfFlagOn ? 'selected' : ''}>with the node (reveal-animated bosses)</option>
+        <option value="encounter" ${n.serfFlagOn === 'encounter' ? 'selected' : ''}>when the player first meets them</option>
+      </select></div>
+    ${t === 2 && !n.hook ? `<p class="warn">Two-level battles need a <b>hook</b> or no flags will render.</p>` : ''}
+    ` : ''}
+    ${regionRuleWarning(n)}`;
+}
+
+function bindBoss(n) {
+  const t = $('#b-tiers'), h = $('#b-hook'), dx = $('#b-dx'), dy = $('#b-dy'), sf = $('#b-sfo');
+  if (t) t.onchange = () => { snapshot(); n.tiers = Number(t.value); markDirty(); render(); };
+  if (h) h.oninput  = () => { snapshotOnce(); if (h.value) n.hook = h.value; else delete n.hook; markDirty(); };
+  const nudge = () => {
+    snapshotOnce();
+    const x = Number(dx.value) || 0, y = Number(dy.value) || 0;
+    if (x || y) n.flagNudge = { dx: x, dy: y }; else delete n.flagNudge;
+    markDirty();
+  };
+  if (dx) dx.oninput = nudge;
+  if (dy) dy.oninput = nudge;
+  if (sf) sf.onchange = () => { snapshot(); if (sf.value) n.serfFlagOn = sf.value; else delete n.serfFlagOn; markDirty(); };
+}
+
+/* The two-tier progression rule, checked rather than trusted to memory:
+   inside a region the next node opens on the previous boss's SERF win, but
+   reaching a NEW region requires the GIANT. A gate that crosses regions on a
+   serf flag would let the player skip a boss's hard tier. */
+function regionRuleWarning(n) {
+  if (!n.showFrom) return '';
+  const ms = (doc.milestones || []).find(m => m.id === n.showFrom);
+  if (!ms || !ms.flag) return '';
+  const m = /^sog_node_(.+)_(serf|giant)_beaten$/.exec(ms.flag);
+  if (!m) return '';                       // a derived flag; the rule can't be read off it
+  const [, hook, tier] = m;
+  // Which map does that boss live on?
+  let srcMap = null;
+  for (const [id, map] of Object.entries(doc.maps))
+    if ((map.nodes || []).some(x => x.hook === hook)) srcMap = id;
+  if (!srcMap || srcMap === mapId) return '';
+  if (tier === 'giant') return '';
+  return `<p class="warn">This node is on <b>${esc(mapId)}</b> but opens on
+    <b>${esc(hook)}'s Serf win</b>, and ${esc(hook)} is on <b>${esc(srcMap)}</b>.
+    Crossing into a new region is supposed to require the <b>Giant</b> win —
+    as written, the player reaches ${esc(mapId)} without beating ${esc(hook)}'s
+    hard tier.</p>`;
 }
 
 /* showFrom / showUntil dropdowns. Every node, exit and prop gets these — this

@@ -1097,13 +1097,14 @@ var Overworld = (function () {
   ═════════════════════════════════════════════════════════════════════════════ */
 
   // Boss node id → the battle's scriptHook (the key the "encountered" stamp uses).
-  var BOSS_NODE_KEY = {
-    'walls-of-uruk':  'gilgamesh',
-    'sargon':         'sargon',
-    'hammurabi':      'hammurabi',
-    'hanging-gardens':'hanging-gardens',
-    'double-crown':   'narmer'
-  };
+  /* Which node is which boss is DATA now — each battle node carries `hook`
+     (the flag key + script hook), `tiers` (2 = Serf/Giant ladder, 1 = a single
+     level and therefore no flags) and an optional `flagNudge`. See
+     data/map-data.js. A node added in the map editor gets its flags from those
+     fields with no code change here. */
+  function _bossHook(node) {
+    return (node && node.tiers === 2 && node.hook) ? node.hook : null;
+  }
 
   // First-encounter AI tier per boss — DATA-DRIVEN (not hardcoded branch logic).
   // Every boss (Gilgamesh included) starts at 'serf' — tier and flag ALIGN, no
@@ -1164,35 +1165,33 @@ var Overworld = (function () {
     try { return localStorage.getItem('sog_node_' + hook + '_' + tier + '_beaten') === 'true'; } catch (e) { return false; }
   }
 
-  /* Serf-track forward unlock: a boss's next node opens once its SERF is beaten —
-     EXCEPT Gilgamesh, whose first encounter is Giant, so his Giant win ALSO counts
-     (otherwise the very first boss could soft-lock the whole track). The Giant tier
-     never gates forward progress for any other boss. */
+  /* Serf-track forward unlock: a boss's next node opens once its SERF is beaten.
+     Within a region that is the whole rule; the Giant tier unlocks cards and gold
+     but never map progress.
+
+     CROSSING REGIONS IS THE EXCEPTION — the last boss of a region requires its
+     GIANT win. Neb is the only one built: sog_egypt_node_live is set behind
+     _tierBeaten('hanging-gardens','giant') in the Egypt on-ramp, not here.
+
+     Gilgamesh accepts EITHER tier as a safety net for saves made before the
+     tier system existed, which recorded only a Giant win. His first encounter
+     is Serf like every other boss (see FIRST_ENCOUNTER_TIER) — an older comment
+     here claimed otherwise and was wrong. */
   function _bossClearedForUnlock(hook) {
     if (hook === 'gilgamesh') return _tierBeaten('gilgamesh', 'serf') || _tierBeaten('gilgamesh', 'giant');
     return _tierBeaten(hook, 'serf');
   }
-
-  // Per-boss flag-cluster anchor nudge, in map-% units, relative to the node CENTRE
-  // (the flags plant behind the node and fan out from it — see the CSS knobs on
-  // .node-flags for size/spread/tilt/rise/stamp). Default 0/0 = dead-centre on the
-  // node; tune per node by eye if a particular node's art wants the flags shifted.
-  var FLAG_LAYOUT = {
-    'walls-of-uruk':   { dx: 0, dy: -2 },   // Gilgamesh — raise both flags up 2
-    'sargon':          { dx: 0, dy: 0 },
-    'hammurabi':       { dx: 0, dy: 0 },
-    'hanging-gardens': { dx: 0, dy: -2 },   // Nebuchadnezzar — raise both flags up 2
-    'double-crown':    { dx: 0, dy: 0 }
-  };
 
   /* Render the two flags (+ any earned stamps) for a boss node, as a cluster
      positioned at the node's map %-coords. Appended to overlayEl (NOT the node
      element) so flag sizing is independent of each node's own scale. Reuses lowercase
      GitHub-Pages-safe art paths: images/ui_images/serfflag.png, giantflag.png, victorystamp.png. */
   function _renderNodeFlags(node) {
-    var hook = BOSS_NODE_KEY[node.id];
+    var hook = _bossHook(node);
     if (!hook || !overlayEl) return;
-    var lay = FLAG_LAYOUT[node.id] || { dx: 0, dy: 8 };
+    // Nudge relative to the node CENTRE, in map-%. Editable per node in the
+    // map editor; 0/0 is dead-centre and right for most art.
+    var lay = node.flagNudge || { dx: 0, dy: 0 };
 
     var cluster = document.createElement('div');
     cluster.className = 'node-flags';
@@ -1208,13 +1207,14 @@ var Overworld = (function () {
       // stamped the Giant flag stays (covers the edge case of a Giant win reached via
       // the picker after a Serf loss — the Giant flag then shows already-stamped).
       if (tier === 'giant' && !_tierBeaten(hook, 'serf') && !_tierBeaten(hook, 'giant')) return;
-      // Gilgamesh's + Narmer's SERF flags are gated on ENGAGEMENT: their nodes are
-      // visible on map arrival (unlike the reveal-animated bosses), so their Serf
-      // flags would otherwise pre-show. Hold each until the player has actually
-      // encountered the boss (encounter start sets sog_node_encountered_<hook>),
-      // where it ERECTS as its own beat. The reveal-animated bosses (Sargon /
-      // Hammurabi / Hanging Gardens) erect their Serf flag with the node reveal.
-      if ((hook === 'gilgamesh' || hook === 'narmer') && tier === 'serf' && !_nodeEncountered(hook)) return;
+      // serfFlagOn:'encounter' — for bosses whose node is simply THERE when the
+      // player arrives (Gilgamesh, Narmer). Their Serf flag would otherwise be
+      // visible before the player has met them, so it is held until the
+      // encounter starts (which sets sog_node_encountered_<hook>) and erects as
+      // its own beat. Reveal-animated bosses (Sargon / Hammurabi / Hanging
+      // Gardens) have no such field — their Serf flag erects with the node
+      // reveal itself. Data per node; see data/map-data.js.
+      if (node.serfFlagOn === 'encounter' && tier === 'serf' && !_nodeEncountered(hook)) return;
       var flag = document.createElement('div');
       flag.className = 'node-flag node-flag-' + tier;
       flag.dataset.tier = tier;

@@ -43,7 +43,8 @@ window.SOG_MAP_DATA = {
     { id: 'narmer-beaten', label: 'Narmer defeated', flag: 'sog_node_narmer_serf_beaten' },
     { id: 'hatshepsut-beaten', label: 'Hatshepsut defeated', flag: 'sog_node_hatshepsut_serf_beaten' },
     { id: 'ramses-beaten', label: 'Ramses defeated', flag: 'sog_node_ramses_serf_beaten' },
-    { id: 'akhenaten-beaten', label: 'Akhenaten defeated', flag: 'sog_node_akhenaten_serf_beaten' }
+    { id: 'akhenaten-beaten', label: 'Akhenaten defeated', flag: 'sog_node_akhenaten_serf_beaten' },
+    { id: 'egypt-complete', label: 'Egypt complete (Kush Giant) → next region opens', flag: 'sog_node_kush_giant_beaten' }
   ],
 
   maps: {
@@ -61,6 +62,7 @@ window.SOG_MAP_DATA = {
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/toegypt.png',
         x: 20.05, y: 20,
+        tiers: 1,
         showFrom: 'neanderthal-beaten',
         note: 'No label — the separate To Egypt exit box (visible post-victory) handles navigation.',
         path: [
@@ -74,6 +76,7 @@ window.SOG_MAP_DATA = {
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/prehistory node.png',
         x: 38.23, y: 33.53,
+        tiers: 1,
         note: 'Walk path is a C-shape around the west side of Lake Victoria, staying wide enough to clear the lakes and the mountain range NW of it.',
         path: [
           { x: 47.54, y: 91.67 },
@@ -126,6 +129,10 @@ window.SOG_MAP_DATA = {
         x: 22.4, y: 37.56,
         scale: 0.85,
         flipX: true,
+        hook:  'narmer',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
         showFrom: 'neb-beaten',
         note: 'Narmer. Placed at the base of the Nile Delta (the green fan, top-left). ART IS A PLACEHOLDER — swap doublecrown.png when the real art lands.'
       },
@@ -145,6 +152,10 @@ window.SOG_MAP_DATA = {
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/kush@0.1x.png',
         x: 28.29, y: 87.77,
+        hook:  'kush',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
         showFrom: 'akhenaten-beaten',
         note: 'Placed and ready; battle not wired. Hidden until Akhenaten falls -- that flag does not exist yet, so it stays hidden until the battle is built.'
       }
@@ -183,6 +194,10 @@ window.SOG_MAP_DATA = {
         image: 'images/metaworld/civilization nodes/wallsofuruk@0.33x.png',
         x: 73.26, y: 86.18,
         scale: 1.35,
+        hook:  'gilgamesh',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: -2 },
+        serfFlagOn: 'encounter',
         showFrom: 'mesopotamia-arrival',
         note: 'Gilgamesh. NOTE: _d2aFadeInUrukNode in overworld.js hardcodes 72%/82% for the arrival cinematic, which disagrees with this position — the node visibly jumps on the next map load. Worth reconciling.'
       },
@@ -204,6 +219,9 @@ window.SOG_MAP_DATA = {
         image: 'images/metaworld/civilization nodes/sargonshadow.png',
         x: 58.52, y: 51.9,
         scale: 1.15,
+        hook:  'sargon',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
         showFrom: 'sargon-revealed',
         note: 'Dust-storm-revealed on the first marketplace return. Boss flags anchor to these coords, so they move with the node. 704x384 art rendered at 84px base — scale is a knob.'
       },
@@ -214,6 +232,9 @@ window.SOG_MAP_DATA = {
         image: 'images/metaworld/civilization nodes/hammurabinode.png',
         x: 47.54, y: 30.02,
         scale: 1.25,
+        hook:  'hammurabi',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
         showFrom: 'hammurabi-revealed',
         note: 'Rises from the dirt on the first overworld return after defeating Sargon. Placed up-and-left of Akkad along the Euphrates.'
       },
@@ -224,6 +245,9 @@ window.SOG_MAP_DATA = {
         image: 'images/metaworld/civilization nodes/hanginggardens@0.33x.png',
         x: 67, y: 69,
         scale: 1.125,
+        hook:  'hanging-gardens',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: -2 },
         showFrom: 'hanging-gardens-revealed',
         note: 'Sparkle-revealed on the first overworld return after defeating Hammurabi. Positioned at the midpoint between Walls of Uruk and Akkad.'
       }

@@ -152,6 +152,13 @@ function serialise(doc) {
       if (n.scale != null) s += ',\n        scale: ' + scaleNum(n.scale);
       if (n.flipX)         s += ',\n        flipX: true';
       if (n.label)         s += ',\n        label: ' + q(n.label);
+      // Boss ladder. `hook` is the flag key + script hook; `tiers` 2 means a
+      // Serf/Giant pair (and therefore flags), 1 means a single-level battle.
+      if (n.hook)          s += ',\n        hook:  ' + q(n.hook);
+      if (n.tiers != null) s += ',\n        tiers: ' + num(n.tiers);
+      if (n.flagNudge)     s += ',\n        flagNudge: { dx: ' + num(n.flagNudge.dx || 0) +
+                                ', dy: ' + num(n.flagNudge.dy || 0) + ' }';
+      if (n.serfFlagOn)    s += ',\n        serfFlagOn: ' + q(n.serfFlagOn);
       s += gates(n, ',\n        ');
       if (n.note)          s += ',\n        note: ' + q(n.note);
       if (n.path && n.path.length) {
@@ -296,6 +303,9 @@ function validate(doc) {
     if (known[ms[k].id] && ms[k].id !== 'start') return 'duplicate milestone id "' + ms[k].id + '"';
     known[ms[k].id] = true;
   }
+  var unknown = unknownFields(doc);
+  if (unknown) return unknown;
+
   var gateErr = null;
   function checkGates(o, what) {
     if (gateErr) return;
@@ -353,6 +363,39 @@ function validate(doc) {
 }
 
 function isNum(v) { return typeof v === 'number' && isFinite(v); }
+
+/* The serialiser writes a fixed set of keys. Anything it does not know about
+   would be silently dropped on the next save -- data loss with no error, which
+   is exactly the kind of failure that costs an afternoon. Refuse the save
+   instead, and name the field. */
+var KNOWN = {
+  map:  ['displayName', 'image', 'spawn', 'startsFogged', 'props', 'nodes', 'exits'],
+  node: ['id', 'name', 'kind', 'image', 'x', 'y', 'scale', 'flipX', 'label', 'note',
+         'showFrom', 'showUntil', 'path', 'hook', 'tiers', 'flagNudge', 'serfFlagOn'],
+  exit: ['id', 'label', 'zone', 'walkTo', 'walkOff', 'target', 'entryAt', 'note',
+         'showFrom', 'showUntil'],
+  prop: ['image', 'x', 'y', 'scale', 'rotation', 'flipX', 'flipY', 'note',
+         'showFrom', 'showUntil']
+};
+
+function unknownFields(doc) {
+  var bad = [];
+  function check(o, kind, where) {
+    Object.keys(o).forEach(function (k) {
+      if (KNOWN[kind].indexOf(k) === -1) bad.push(where + ' has unknown field "' + k + '"');
+    });
+  }
+  Object.keys(doc.maps || {}).forEach(function (id) {
+    var m = doc.maps[id];
+    check(m, 'map', 'map "' + id + '"');
+    (m.nodes || []).forEach(function (n) { check(n, 'node', 'node "' + n.id + '"'); });
+    (m.exits || []).forEach(function (x) { check(x, 'exit', 'exit "' + x.id + '"'); });
+    (m.props || []).forEach(function (p, i) { check(p, 'prop', 'prop ' + i + ' in "' + id + '"'); });
+  });
+  return bad.length
+    ? bad.join('; ') + ' — the serialiser would drop these. Add them to KNOWN and to serialise() in serve.js.'
+    : null;
+}
 
 var server = http.createServer(function (req, res) {
   var url = decodeURIComponent(req.url.split('?')[0]);
