@@ -64,11 +64,7 @@ window.SOG_MAP_DATA = {
         x: 20.05, y: 20,
         tiers: 1,
         showFrom: 'neanderthal-beaten',
-        note: 'No label — the separate To Egypt exit box (visible post-victory) handles navigation.',
-        path: [
-          { x: 33.44, y: 34.49 },
-          { x: 20, y: 20 }
-        ]
+        note: 'No label — the separate To Egypt exit box (visible post-victory) handles navigation.'
       },
       {
         id:    'prehistory',
@@ -77,15 +73,7 @@ window.SOG_MAP_DATA = {
         image: 'images/metaworld/civilization nodes/prehistory node.png',
         x: 38.23, y: 33.53,
         tiers: 1,
-        note: 'Walk path is a C-shape around the west side of Lake Victoria, staying wide enough to clear the lakes and the mountain range NW of it.',
-        path: [
-          { x: 47.54, y: 91.67 },
-          { x: 31.6, y: 88.8 },
-          { x: 30.06, y: 61.61 },
-          { x: 32.05, y: 51.21 },
-          { x: 35.87, y: 44.69 },
-          { x: 38.23, y: 33.53 }
-        ]
+        note: 'Walk path is a C-shape around the west side of Lake Victoria, staying wide enough to clear the lakes and the mountain range NW of it.'
       }
     ],
     exits: [
@@ -100,6 +88,10 @@ window.SOG_MAP_DATA = {
         showFrom: 'otzi-beaten',
         note: 'Sits at the top of the screen just right of the egypt-signpost node. Gated on beating Otzi. entryAt matches the D1 East Africa->Egypt arrival point (Egypt’s west spawn).'
       }
+    ],
+    routes: [
+      { from: 'prehistory', to: 'egypt-signpost', waypoints: [{ x: 33.44, y: 34.49 }] },
+      { from: 'spawn', to: 'prehistory', waypoints: [{ x: 47.54, y: 91.67 }, { x: 31.6, y: 88.8 }, { x: 30.06, y: 61.61 }, { x: 32.05, y: 51.21 }, { x: 35.87, y: 44.69 }] }
     ]
   },
 
@@ -177,7 +169,8 @@ window.SOG_MAP_DATA = {
         target:  'eastafrica',
         entryAt: { x: 88, y: 15 }
       }
-    ]
+    ],
+    routes: []
   },
 
   'mesopotamia': {
@@ -261,7 +254,8 @@ window.SOG_MAP_DATA = {
         target:  'egypt',
         entryAt: { x: 88, y: 15 }
       }
-    ]
+    ],
+    routes: []
   }
   }
 };

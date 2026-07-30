@@ -608,7 +608,8 @@ var Overworld = (function () {
         image:        src.image,
         spawn:        src.spawn,
         startsFogged: src.startsFogged,
-        props: (src.props || []).slice(),
+        props:  (src.props  || []).slice(),
+        routes: (src.routes || []).slice(),
         nodes: (src.nodes || []).map(function (n) {
           return merge(n, NODE_BEHAVIOUR[n.id]);
         }),
@@ -768,6 +769,84 @@ var Overworld = (function () {
       walkToWaypoint(waypoints[i], function () { i++; next(); });
     }
     next();
+  }
+
+
+  /* ── Route graph ─────────────────────────────────────────────────────────
+     Walking between two places follows a stored route when one exists, and a
+     straight line when it doesn't. Routes live per map in data/map-data.js and
+     are drawn in tools/map-editor.
+
+     An ENDPOINT is a node id, an exit id, or 'spawn'. A route's `waypoints`
+     are the intermediate bends ONLY — both endpoints are implied. That is what
+     makes a route reversible (walk it backwards for the return trip) and what
+     makes an absent route mean "straight line" rather than "no path".
+
+     Where the player is coming FROM is worked out by proximity rather than
+     remembered. Stateless on purpose: the player can arrive here from a fresh
+     page load, a battle return, or a map transition, and any remembered
+     "last node" would be wrong or missing in at least one of those. Standing
+     on a node makes that node the nearest endpoint, which is the right answer
+     without having to track anything. */
+
+  function _endpointPos(map, id) {
+    if (!map) return null;
+    if (id === 'spawn') return map.spawn;
+    var i;
+    for (i = 0; i < (map.nodes || []).length; i++) {
+      if (map.nodes[i].id === id) return { x: map.nodes[i].x, y: map.nodes[i].y };
+    }
+    for (i = 0; i < (map.exits || []).length; i++) {
+      if (map.exits[i].id === id) return map.exits[i].walkTo;
+    }
+    return null;
+  }
+
+  /* Only endpoints the player could plausibly be standing at — a hidden node
+     is not somewhere they can have walked from. */
+  function _endpointList(map) {
+    var out = [{ id: 'spawn', pos: map.spawn }];
+    (map.nodes || []).forEach(function (n) {
+      if (_isVisible(n)) out.push({ id: n.id, pos: { x: n.x, y: n.y } });
+    });
+    (map.exits || []).forEach(function (e) {
+      if (_isVisible(e)) out.push({ id: e.id, pos: e.walkTo });
+    });
+    return out;
+  }
+
+  function _nearestEndpoint(map, pos) {
+    var list = _endpointList(map), best = null, bestD = Infinity;
+    list.forEach(function (e) {
+      var dx = e.pos.x - pos.x, dy = e.pos.y - pos.y;
+      var d = dx * dx + dy * dy;                 // squared — no need for sqrt
+      if (d < bestD) { bestD = d; best = e.id; }
+    });
+    return best;
+  }
+
+  /* Routes are undirected: one entry serves both directions. */
+  function _findRoute(map, a, b) {
+    var rs = map.routes || [];
+    for (var i = 0; i < rs.length; i++) {
+      if ((rs[i].from === a && rs[i].to === b) || (rs[i].from === b && rs[i].to === a)) return rs[i];
+    }
+    return null;
+  }
+
+  /* The waypoint list to hand walkPath, ending at the target. */
+  function _routeTo(targetId) {
+    var map = MAPS[currentMapId];
+    var dest = _endpointPos(map, targetId);
+    if (!dest) return [];
+    var from = _nearestEndpoint(map, currentPos);
+    if (!from || from === targetId) return [dest];      // already standing there
+    var route = _findRoute(map, from, targetId);
+    if (!route || !route.waypoints || !route.waypoints.length) return [dest];
+    var wps = route.waypoints.slice();
+    // Stored the other way round — walk the bends in reverse.
+    if (route.to !== targetId) wps.reverse();
+    return wps.concat([dest]);
   }
 
   function walkToWaypoint(wp, onDone) {
@@ -1372,7 +1451,7 @@ var Overworld = (function () {
     if (node.id === 'walls-of-uruk' && currentMapId === 'mesopotamia') {
       isDialogueLocked = true;
       cancelIdle();
-      walkPath([{ x: node.x, y: node.y }], function () {
+      walkPath(_routeTo(node.id), function () {
         // Shared routing (this WAS the bespoke Gilgamesh ladder — now the rule for
         // every boss): Serf win forces the Giant rematch (dominance intro plays
         // IN-BATTLE via onBattleStart), a Serf loss retries the Serf without the
@@ -1393,7 +1472,7 @@ var Overworld = (function () {
     if (node.id === 'market' && currentMapId === 'mesopotamia') {
       isDialogueLocked = true;
       cancelIdle();
-      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+      walkPath(_routeTo(node.id), function () {
         _enterMarket();
       });
       return;
@@ -1405,7 +1484,7 @@ var Overworld = (function () {
     if (node.id === 'egypt-market' && currentMapId === 'egypt') {
       isDialogueLocked = true;
       cancelIdle();
-      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+      walkPath(_routeTo(node.id), function () {
         _enterMarket('egypt');
       });
       return;
@@ -1417,7 +1496,7 @@ var Overworld = (function () {
     if (node.id === 'sargon' && currentMapId === 'mesopotamia') {
       isDialogueLocked = true;
       cancelIdle();
-      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+      walkPath(_routeTo(node.id), function () {
         // Serf→Giant flows automatically; picker only once BOTH tiers are cleared.
         // Rematches skip the deck gate + encounter dialogue (as the picker did).
         _routeBossTier('sargon', _launchSargonBattle, function () {
@@ -1432,7 +1511,7 @@ var Overworld = (function () {
     if (node.id === 'hammurabi' && currentMapId === 'mesopotamia') {
       isDialogueLocked = true;
       cancelIdle();
-      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+      walkPath(_routeTo(node.id), function () {
         // Serf→Giant flows automatically; picker only once BOTH tiers are cleared.
         // Rematches skip the deck gate + encounter dialogue (as the picker did).
         _routeBossTier('hammurabi', _launchHammurabiBattle, function () {
@@ -1449,7 +1528,7 @@ var Overworld = (function () {
     if (node.id === 'hanging-gardens' && currentMapId === 'mesopotamia') {
       isDialogueLocked = true;
       cancelIdle();
-      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+      walkPath(_routeTo(node.id), function () {
         // Serf→Giant flows automatically; picker only once BOTH tiers are cleared.
         // Rematches skip the intro (A lines → knock → B lines → door), as before.
         _routeBossTier('hanging-gardens', _launchHangingGardensBattle, function () {
@@ -1487,7 +1566,7 @@ var Overworld = (function () {
     if (node.id === 'double-crown' && currentMapId === 'egypt') {
       isDialogueLocked = true;
       cancelIdle();
-      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+      walkPath(_routeTo(node.id), function () {
         // Serf→Giant flows automatically; picker only once BOTH tiers are cleared.
         _routeBossTier('narmer', _launchNarmerBattle, function () {
           _runNarmerEncounter(NARMER_ENCOUNTER_DIALOGUE, function () {
@@ -1517,7 +1596,7 @@ var Overworld = (function () {
       var otziBattle = window.SOG && window.SOG.OtziBattle;
       if (otziBattle && otziBattle.isBattleComplete()) {
         // Post-victory: skip pre-battle dialogue, go straight into the battle
-        walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+        walkPath(_routeTo(node.id), function () {
           log('Egypt signpost post-victory — launching Otzi battle directly (skip intro)');
           _fireWipeFromNode('egypt-signpost', function () {
             if (otziBattle && typeof otziBattle.start === 'function') {
@@ -1529,7 +1608,7 @@ var Overworld = (function () {
         });
         return;
       }
-      walkPath(node.path || [{ x: node.x, y: node.y }], function () {
+      walkPath(_routeTo(node.id), function () {
         log('Arrived at Egypt signpost — triggering Otzi encounter');
         startOtziEncounter(node);
       });
@@ -1559,8 +1638,7 @@ var Overworld = (function () {
     };
 
     var doWalk = function () {
-      var path = node.path || [{ x: node.x, y: node.y }];
-      walkPath(path, onArrived);
+      walkPath(_routeTo(node.id), onArrived);
     };
 
     if (needPhase2) {
@@ -1580,10 +1658,13 @@ var Overworld = (function () {
     // The actual departure: walk (off-screen if exit.walkOff, else to walkTo),
     // then fade-transition to the target map.
     var go = function () {
-      var dest = exit.walkOff
-        ? { x: currentPos.x + EGYPT_WALKOFF.dx, y: currentPos.y + EGYPT_WALKOFF.dy }
-        : exit.walkTo;
-      walkPath([dest], function () {
+      // walkOff is a deliberate cinematic (a long diagonal off-screen) and
+      // ignores both walkTo and the route graph — routing it would replace the
+      // drama with a tidy walk to a box edge.
+      var path = exit.walkOff
+        ? [{ x: currentPos.x + EGYPT_WALKOFF.dx, y: currentPos.y + EGYPT_WALKOFF.dy }]
+        : _routeTo(exit.id);
+      walkPath(path, function () {
         transitionToMap(exit.target, exit.entryAt);
       });
     };

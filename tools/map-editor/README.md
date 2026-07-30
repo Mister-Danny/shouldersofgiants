@@ -26,8 +26,8 @@ on purpose, so this still boots in a year.
 
 | | |
 |---|---|
-| **Drag** | Nodes, scenery, exit zones, path waypoints. Arrow keys nudge 0.1%, Shift+arrows 1%. |
-| **Draw Path** mode | Select a node, then click the map to lay waypoints leading to it. Drag to adjust, Delete to remove. |
+| **Drag** | Nodes, scenery, exit zones, spawn, route bends. Arrow keys nudge 0.1%, Shift+arrows 1%. |
+| **Routes** mode | Every pair of endpoints is a straight line until you bend it. Pick two, click the line to insert a bend where you clicked, drag to shape. Undirected — the return trip walks it in reverse. |
 | **+ Add Node** | Pick art, name it, drag it into place. `kind` is `battle` or `market` — nothing else. |
 | **+ Add Scenery** | Topography from `images/metaworld/topography/`. Decorative, never clickable, painted behind the nodes. Rotate, mirror, duplicate. |
 | **+ New Map** | Pick a background from `images/metaworld/maps/`, name the region. |
@@ -68,7 +68,7 @@ previous file is kept as `data/map-data.js.bak` (gitignored).
 ## The one thing to know
 
 **`kind` is not wired up yet.** The game still dispatches node clicks on
-literal node id, in a 212-line `if`-chain in `onNodeClick`
+literal node id, in a long `if`-chain in `onNodeClick`
 ([js/overworld.js](../../js/overworld.js)). So a node you add here will render,
 animate and be clickable — and do *nothing* when clicked, until someone adds a
 branch for it by hand. Collapsing that chain into `kind`-based dispatch, so
@@ -83,10 +83,12 @@ The map data was split in two:
 
 - **`data/map-data.js`** — pure positional data. The editor owns this file and
   rewrites it wholesale.
-- **`NODE_BEHAVIOUR` / `EXIT_BEHAVIOUR` in `js/overworld.js`** — the `showIf`
-  gates and the `onBeforeExit` hook. These are *functions* closing over the
-  `KEY_*` constants and `runDialogue`, so they can never be serialised out.
-  They are merged onto the data by node id at load.
+- **`EXIT_BEHAVIOUR` in `js/overworld.js`** — the `onBeforeExit` hook, which
+  *runs* rather than gates. It closes over `runDialogue` and `cancelIdle`, so it
+  can never be serialised out. Merged on by `mapId/exitId` at load.
+  `NODE_BEHAVIOUR` sits alongside it and is empty: every visibility gate is
+  `showFrom`/`showUntil` data now. It stays as a seam for anything a gate pair
+  can't express.
 
 That split is the safety property: the editor can rewrite layout freely and
 still has no way to break game logic. It also means **node `id` is a join key**
@@ -124,3 +126,28 @@ is converted on save.
 - **`walls-of-uruk` has a pre-existing position conflict**: the arrival
   cinematic hard-codes `72%/82%` while the data says `74/85`, so the node jumps
   a few percent on the next map load. Called out in its `note`.
+
+## Routes
+
+The walking graph. An **endpoint** is a node id, an exit id, or `'spawn'`:
+
+```js
+routes: [
+  { from: 'spawn', to: 'prehistory', waypoints: [ {x,y}, ... ] }
+]
+```
+
+`waypoints` are the **intermediate bends only** — both endpoints are implied.
+That is what makes a route reversible, and what makes an absent route mean
+"straight line" rather than "no path". Only routes you actually shape are
+stored; the other pairs cost nothing.
+
+Where the player is walking *from* is worked out by proximity, not remembered.
+That is deliberate: they can arrive at a map from a fresh page load, a battle
+return, or a transition, and any remembered "last node" would be wrong or
+missing in at least one of those. Standing on a node makes it the nearest
+endpoint, which is the right answer without tracking anything.
+
+Exits with `walkOff: true` (the To Egypt departure) ignore routing — that is a
+deliberate cinematic walk off the screen edge, and routing it would replace the
+drama with a tidy walk to a box.

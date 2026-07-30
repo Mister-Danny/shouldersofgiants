@@ -27,6 +27,8 @@ let sel       = null;      // { type:'node'|'exit'|'prop'|'wp', id|index, wpInde
 let dirty     = false;
 let art       = { maps: [], nodes: [], topo: [] };
 let scrubIdx  = 0;         // which story beat the stage is previewing
+let routeSel  = null;      // { from, to } — the route being edited
+let routePick = null;      // first endpoint clicked, waiting for the second
 const undoStack = [];
 
 /* Nodes whose art size the game overrides in CSS rather than via `scale`.
@@ -175,7 +177,8 @@ function render() {
   $('#scrub-label').textContent = ms ? (ms.label || ms.id) : '—';
 
   // Wipe everything except the persistent <svg> path layer.
-  $$('.n, .exit, .wp, .prop', overlay).forEach(el => el.remove());
+  $$('.n, .exit, .wp, .prop, .spawn', overlay).forEach(el => el.remove());
+  document.body.classList.toggle('route-mode', mode === 'route');
 
   // Props first — they are scenery and must paint behind the nodes, same as
   // the game's insertBefore(overlay.firstChild).
@@ -183,9 +186,11 @@ function render() {
   (m.nodes || []).forEach(n => overlay.appendChild(applyVis(nodeEl(n), n)));
   (m.exits || []).forEach(x => overlay.appendChild(applyVis(exitEl(x), x)));
 
+  overlay.appendChild(spawnEl(m));
   renderPaths();
   renderWaypoints();
   renderLists();
+  renderRouteList();
   renderInspector();
   updateHint();
 }
@@ -240,6 +245,17 @@ function propEl(p, i) {
   return el;
 }
 
+/* Spawn is where the player lands on this map, and the start of their first
+   walk — a real endpoint of the route graph, so it is placeable like any other. */
+function spawnEl(m) {
+  const el = document.createElement('div');
+  el.className = 'spawn' + (sel && sel.type === 'spawn' ? ' sel' : '');
+  el.style.left = m.spawn.x + '%';
+  el.style.top  = m.spawn.y + '%';
+  el.addEventListener('pointerdown', e => beginDrag(e, { type: 'spawn' }));
+  return el;
+}
+
 function missingArt(path) {
   const d = document.createElement('div');
   d.style.cssText = 'width:84px;height:60px;display:grid;place-items:center;' +
@@ -262,45 +278,127 @@ function exitEl(x) {
   return el;
 }
 
-/* Walk paths, drawn in the SVG layer. viewBox is 0 0 100 100 with
-   preserveAspectRatio="none", so SVG units ARE percentages — no conversion.
-   non-scaling-stroke keeps the line from being squashed by that same
-   non-uniform scale. */
+/* ── Routes ───────────────────────────────────────────────────────────────
+   The walking graph. Every pair of endpoints (nodes, exits, spawn) is joined
+   by a straight line unless a route with bends is stored for it — so the file
+   only carries the routes you actually shaped, and everything else is a
+   straight line by omission rather than by storing hundreds of two-point
+   lines.
+
+   Routes are undirected: one entry serves both directions, and the game walks
+   the bends in reverse when travelling the other way. */
+
+const endpointsOf = m => [
+  { id: 'spawn', x: m.spawn.x, y: m.spawn.y, kind: 'spawn' },
+  ...(m.nodes || []).map(n => ({ id: n.id, x: n.x, y: n.y, kind: 'node' })),
+  ...(m.exits || []).map(e => ({ id: e.id, x: e.walkTo.x, y: e.walkTo.y, kind: 'exit' }))
+];
+const endpointPos = (m, id) => endpointsOf(m).find(e => e.id === id);
+
+/* Undirected lookup — A->B and B->A are the same route. */
+function findRoute(m, a, b) {
+  return (m.routes || []).find(r =>
+    (r.from === a && r.to === b) || (r.from === b && r.to === a));
+}
+
+/* The full point list for drawing: start, bends (in travel order), end. */
+function routePoints(m, from, to) {
+  const a = endpointPos(m, from), b = endpointPos(m, to);
+  if (!a || !b) return null;
+  const r = findRoute(m, from, to);
+  let mid = r ? (r.waypoints || []).slice() : [];
+  if (r && r.to !== to) mid.reverse();
+  return [a, ...mid, b];
+}
+
 function renderPaths() {
   const svg = $('#paths');
   svg.innerHTML = '';
-  (maps[mapId].nodes || []).forEach(n => {
-    if (!n.path || n.path.length < 2) return;
-    const active = sel && sel.id === n.id;
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-    line.setAttribute('points', n.path.map(p => `${p.x},${p.y}`).join(' '));
-    line.setAttribute('fill', 'none');
-    line.setAttribute('stroke', active ? '#f8d000' : '#6fd47a');
-    line.setAttribute('stroke-width', active ? 2 : 1.5);
-    line.setAttribute('stroke-opacity', active ? 1 : 0.55);
-    line.setAttribute('stroke-dasharray', '4 3');
-    line.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.appendChild(line);
+  const m = maps[mapId];
+  const line = (pts, colour, width, opacity, dash) => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    el.setAttribute('points', pts.map(p => `${p.x},${p.y}`).join(' '));
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke', colour);
+    el.setAttribute('stroke-width', width);
+    el.setAttribute('stroke-opacity', opacity);
+    if (dash) el.setAttribute('stroke-dasharray', dash);
+    el.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(el);
+  };
+
+  // Every stored (bent) route, faint — so you can see the shape of the map's
+  // walking graph without selecting anything.
+  (m.routes || []).forEach(r => {
+    if (routeSel && sameRoute(r, routeSel)) return;      // drawn highlighted below
+    const pts = routePoints(m, r.from, r.to);
+    if (pts) line(pts, '#6fd47a', 1.5, 0.4, '4 3');
+  });
+
+  if (routeSel) {
+    const pts = routePoints(m, routeSel.from, routeSel.to);
+    if (pts) line(pts, '#f8d000', 2.5, 1, null);
+  }
+}
+
+const sameRoute = (r, sel) =>
+  (r.from === sel.from && r.to === sel.to) || (r.from === sel.to && r.to === sel.from);
+
+/* Handles for the selected route's bends. */
+function renderWaypoints() {
+  if (!routeSel) return;
+  const m = maps[mapId];
+  const r = findRoute(m, routeSel.from, routeSel.to);
+  if (!r) return;
+  let wps = (r.waypoints || []);
+  // Displayed in travel order, which may be the reverse of storage order.
+  const reversed = r.to !== routeSel.to;
+  const view = reversed ? wps.slice().reverse() : wps;
+  view.forEach((p, i) => {
+    const storeIndex = reversed ? wps.length - 1 - i : i;
+    const el = document.createElement('div');
+    el.className = 'wp' + (sel && sel.type === 'wp' && sel.wpIndex === storeIndex ? ' sel' : '');
+    el.style.left = p.x + '%';
+    el.style.top  = p.y + '%';
+    el.title = `bend ${i + 1} of ${view.length}`;
+    el.addEventListener('pointerdown', e => beginDrag(e, { type: 'wp', wpIndex: storeIndex }));
+    $('#overlay').appendChild(el);
   });
 }
 
-/* Waypoint handles only appear for the selected node — showing every waypoint
-   on every node at once turns Mesopotamia into confetti.
-   Note the 'wp' case: selecting a waypoint must KEEP the node's handles on
-   screen, otherwise grabbing one makes the whole path vanish mid-drag. */
-function renderWaypoints() {
-  if (!sel || (sel.type !== 'node' && sel.type !== 'wp')) return;
-  const n = node(sel.id);
-  if (!n || !n.path) return;
-  n.path.forEach((p, i) => {
-    const el = document.createElement('div');
-    el.className = 'wp' + (sel.wpIndex === i ? ' sel' : '');
-    el.style.left = p.x + '%';
-    el.style.top  = p.y + '%';
-    el.title = `waypoint ${i + 1} of ${n.path.length} — ${fmt(p.x)}, ${fmt(p.y)}`;
-    el.addEventListener('pointerdown', e => beginDrag(e, { type: 'wp', id: n.id, wpIndex: i }));
-    $('#overlay').appendChild(el);
-  });
+/* Insert a bend where the user clicked, into the segment they clicked NEAR —
+   appending would put it at the end of the line no matter where you aimed,
+   which is useless for shaping an existing route. */
+function insertBend(pt) {
+  const m = maps[mapId];
+  let r = findRoute(m, routeSel.from, routeSel.to);
+  if (!r) {
+    r = { from: routeSel.from, to: routeSel.to, waypoints: [] };
+    m.routes = m.routes || [];
+    m.routes.push(r);
+  }
+  const pts = routePoints(m, routeSel.from, routeSel.to);
+  // Which segment of the drawn line is closest to the click?
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = distToSegment(pt, pts[i], pts[i + 1]);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  const reversed = r.to !== routeSel.to;
+  const view = reversed ? r.waypoints.slice().reverse() : r.waypoints.slice();
+  view.splice(best, 0, { x: r2(pt.x), y: r2(pt.y) });
+  r.waypoints = reversed ? view.reverse() : view;
+  const shownIndex = reversed ? r.waypoints.length - 1 - best : best;
+  sel = { type: 'wp', wpIndex: shownIndex };
+}
+
+function distToSegment(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = dx * dx + dy * dy;
+  if (!len) return Math.hypot(p.x - a.x, p.y - a.y);
+  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
 function renderLists() {
@@ -309,8 +407,7 @@ function renderLists() {
   nl.innerHTML = '';
   (m.nodes || []).forEach(n => {
     const li = document.createElement('li');
-    // 'wp' counts as the node being selected — you are still editing that node.
-    li.className = sel && (sel.type === 'node' || sel.type === 'wp') && sel.id === n.id ? 'sel' : '';
+    li.className = sel && sel.type === 'node' && sel.id === n.id ? 'sel' : '';
     li.innerHTML = `<img src="/${n.image}" alt=""><span>${n.id}</span><span class="k">${n.kind || '—'}</span>`;
     li.onclick = () => { sel = { type: 'node', id: n.id }; render(); };
     nl.appendChild(li);
@@ -349,7 +446,12 @@ function beginDrag(e, target) {
   e.stopPropagation();          // don't let the stage treat this as a bare click
   sel = target;
   render();
-  if (mode === 'path' && target.type === 'node') return;   // path mode: select only
+  // In route mode a click on an endpoint picks it for the route, rather than
+  // starting a drag.
+  if (mode === 'route' && ['node', 'exit', 'spawn'].includes(target.type)) {
+    pickEndpoint(target.type === 'spawn' ? 'spawn' : target.id);
+    return;
+  }
 
   const p = pct(e);
   const cur = currentPos(target);
@@ -384,15 +486,17 @@ function onDragEnd() {
 function currentPos(t) {
   if (t.type === 'node') { const n = node(t.id); return { x: n.x, y: n.y }; }
   if (t.type === 'exit') { const x = exit(t.id); return { x: x.zone.x, y: x.zone.y }; }
-  if (t.type === 'prop') { const p = prop(t.index); return { x: p.x, y: p.y }; }
-  return node(t.id).path[t.wpIndex];
+  if (t.type === 'prop')  { const p = prop(t.index); return { x: p.x, y: p.y }; }
+  if (t.type === 'spawn') { return { x: maps[mapId].spawn.x, y: maps[mapId].spawn.y }; }
+  return bend(t.wpIndex);
 }
 
 function setPos(t, x, y) {
   if (t.type === 'node')      { const n = node(t.id); n.x = r2(x); n.y = r2(y); }
   else if (t.type === 'exit') { const e = exit(t.id); e.zone.x = r2(x); e.zone.y = r2(y); }
-  else if (t.type === 'prop') { const p = prop(t.index); p.x = r2(x); p.y = r2(y); }
-  else                        { const p = node(t.id).path[t.wpIndex]; p.x = r2(x); p.y = r2(y); }
+  else if (t.type === 'prop')  { const p = prop(t.index); p.x = r2(x); p.y = r2(y); }
+  else if (t.type === 'spawn') { const sp = maps[mapId].spawn; sp.x = r2(x); sp.y = r2(y); }
+  else                         { const p = bend(t.wpIndex); if (p) { p.x = r2(x); p.y = r2(y); } }
 }
 
 /* Cursor position as a percentage of the stage. This is the only place screen
@@ -414,6 +518,13 @@ const exit = id => (maps[mapId].exits || []).find(x => x.id === id);
 // Props have no id — several mudhuts share the same art — so they are keyed by
 // position in the array. Anything that reorders props must re-point `sel`.
 const prop = i  => (maps[mapId].props || [])[i];
+/* A bend belongs to the selected route, addressed by its index in STORAGE
+   order — the display may show it reversed. */
+const bend = i  => {
+  if (!routeSel) return null;
+  const r = findRoute(maps[mapId], routeSel.from, routeSel.to);
+  return r && r.waypoints ? r.waypoints[i] : null;
+};
 
 /* ── Stage-level interactions ─────────────────────────────────────────── */
 function wireGlobalEvents() {
@@ -427,14 +538,10 @@ function wireGlobalEvents() {
 
   // Bare click on the map: in path mode append a waypoint, otherwise deselect.
   stage.addEventListener('pointerdown', e => {
-    if (mode === 'path') {
-      if (!sel || sel.type !== 'node') return toast('Select a node first — the path leads to it');
-      const p = pct(e);
+    if (mode === 'route') {
+      if (!routeSel) return toast('Click two places to pick a route between them');
       snapshot();
-      const n = node(sel.id);
-      n.path = n.path || [];
-      n.path.push({ x: r2(p.x), y: r2(p.y) });
-      sel = { type: 'node', id: n.id, wpIndex: n.path.length - 1 };
+      insertBend(pct(e));
       markDirty(); render();
     } else {
       sel = null; render();
@@ -490,18 +597,19 @@ function onKey(e) {
 
 function deleteSelection() {
   const m = maps[mapId];
+  if (sel.type === 'wp') {
+    const r = findRoute(m, routeSel.from, routeSel.to);
+    if (!r) return;
+    snapshot();
+    r.waypoints.splice(sel.wpIndex, 1);
+    // A route with no bends IS a straight line, so stop storing it.
+    if (!r.waypoints.length) m.routes.splice(m.routes.indexOf(r), 1);
+    sel = null; markDirty(); return render();
+  }
   if (sel.type === 'prop') {
     snapshot();
     m.props.splice(sel.index, 1);
     sel = null; markDirty(); return render();
-  }
-  if (sel.type === 'wp' || (sel.type === 'node' && sel.wpIndex != null)) {
-    const n = node(sel.id);
-    snapshot();
-    n.path.splice(sel.wpIndex, 1);
-    if (!n.path.length) delete n.path;
-    sel = { type: 'node', id: n.id };
-    markDirty(); return render();
   }
   if (sel.type === 'node') {
     const n = node(sel.id);
@@ -521,12 +629,60 @@ function deleteSelection() {
   }
 }
 
+/* Two clicks pick a route: first endpoint, then second. Clicking the same one
+   twice cancels, which is the obvious way out of a mis-click. */
+function pickEndpoint(id) {
+  if (!routePick) {
+    routePick = id;
+    toast(`From ${id} — now click where the route goes`);
+  } else if (routePick === id) {
+    routePick = null;
+    toast('Cancelled');
+  } else {
+    routeSel = { from: routePick, to: id };
+    routePick = null;
+    sel = null;
+  }
+  render();
+}
+
+function renderRouteList() {
+  const ul = $('#route-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  const m = maps[mapId];
+  if (mode !== 'route') {
+    ul.innerHTML = '<li class="note">Switch to Routes mode to edit walking paths.</li>';
+    return;
+  }
+  const eps = endpointsOf(m);
+  const pairs = [];
+  for (let i = 0; i < eps.length; i++)
+    for (let j = i + 1; j < eps.length; j++)
+      pairs.push([eps[i].id, eps[j].id]);
+
+  pairs.forEach(([a, b]) => {
+    const r = findRoute(m, a, b);
+    const bends = r ? (r.waypoints || []).length : 0;
+    const li = document.createElement('li');
+    li.className = (bends ? 'bent ' : '') +
+      (routeSel && sameRoute({ from: a, to: b }, routeSel) ? 'sel' : '');
+    li.innerHTML = `<span>${esc(a)} → ${esc(b)}</span>
+      <span class="k">${bends ? bends + ' bend' + (bends > 1 ? 's' : '') : 'straight'}</span>`;
+    li.onclick = () => { routeSel = { from: a, to: b }; routePick = null; sel = null; render(); };
+    ul.appendChild(li);
+  });
+}
+
 function updateHint() {
-  $('#hint').textContent = mode === 'path'
-    ? 'Path mode — select a node, then click the map to lay waypoints toward it. Drag to adjust, Delete to remove.'
+  $('#hint').textContent = mode === 'route'
+    ? (routeSel
+        ? `Editing ${routeSel.from} → ${routeSel.to}. Click the line to add a bend, drag bends to shape it, Delete to remove one.`
+        : (routePick ? `From ${routePick} — now click the other end.`
+                     : 'Click two places to pick the route between them.'))
     : 'Drag to move. Arrows nudge 0.1%, Shift+arrows 1%. Cmd/Ctrl+Z undo, Cmd/Ctrl+S save.';
-  $('#mode-note').textContent = mode === 'path'
-    ? 'Waypoints are the route the sprite walks TO the node. The last waypoint should sit on the node itself.'
+  $('#mode-note').textContent = mode === 'route'
+    ? 'Every pair of places is a straight line until you bend it. Only the ones you shape get stored.'
     : 'Drag nodes to reposition. Arrow keys nudge by 0.1%, Shift+arrows by 1%.';
 }
 
@@ -560,21 +716,12 @@ function renderInspector() {
     </div>
     <div class="f"><label>image</label><input id="i-image" value="${esc(n.image)}"></div>
     <div class="f"><label>note (survives saving)</label><textarea id="i-note">${esc(n.note || '')}</textarea></div>
-    <p class="note">${(n.path || []).length} path waypoint(s).</p>
-    ${pathEndWarning(n)}
+
     ${CSS_SIZED[n.id] ? `<p class="warn">This node's art size is ${CSS_SIZED[n.id]}, not by <code>scale</code>. Changing scale here will not match the game until that CSS rule is removed.</p>` : ''}
     ${src2(n)}
     <div class="rowbtns">
-      <button class="ghost sm" id="i-clearpath">Clear path</button>
       <button class="danger" id="i-del">Delete node</button>
     </div>`;
-
-  const snapBtn = $('#i-snapend');
-  if (snapBtn) snapBtn.onclick = () => {
-    snapshot();
-    n.path[n.path.length - 1] = { x: n.x, y: n.y };
-    markDirty(); render();
-  };
 
   bindGates(n);
   bindBoss(n);
@@ -587,7 +734,6 @@ function renderInspector() {
   bind('#i-image', 'input', v => { n.image = v; render(); });
   bind('#i-note',  'input', v => { if (v) n.note = v; else delete n.note; });
   $('#i-flip').onchange = e => { if (e.target.checked) n.flipX = true; else delete n.flipX; markDirty(); render(); };
-  $('#i-clearpath').onclick = () => { snapshot(); delete n.path; markDirty(); render(); };
   $('#i-del').onclick = () => deleteSelection();
 }
 
@@ -755,21 +901,6 @@ function renderPropInspector(box, p, i) {
   };
 }
 
-/* A walk path is the route the sprite takes TO the node, so its last waypoint
-   has to land on the node. If it doesn't, the sprite visibly walks past and
-   stops short — and because the game silently falls back to the node's own
-   coords when there is no path at all, this failure only shows up for nodes
-   that HAVE one. Cheap to detect here, maddening to debug in-game. */
-function pathEndWarning(n) {
-  if (!n.path || !n.path.length) return '';
-  const last = n.path[n.path.length - 1];
-  const off = Math.hypot(last.x - n.x, last.y - n.y);
-  if (off <= 1) return '';
-  return `<p class="warn">The path ends ${off.toFixed(1)}% away from the node
-    (${fmt(last.x)},${fmt(last.y)} vs ${fmt(n.x)},${fmt(n.y)}), so the sprite will
-    stop short of it. <button class="ghost sm" id="i-snapend">Snap end to node</button></p>`;
-}
-
 function renderExitInspector(box, x) {
   if (!x) { box.innerHTML = '<p class="note">Nothing selected.</p>'; return; }
   box.innerHTML = `
@@ -930,18 +1061,25 @@ function showHelp() {
       <p>For fine adjustment, click a node once and use the <b>arrow keys</b>.
          Each press moves it a tiny amount; hold <b>Shift</b> for bigger steps.</p>
 
-      <h3>Drawing a walking path</h3>
-      <p>A path is the route the explorer walks to reach a node — that is how
-         you keep her out of lakes and mountains.</p>
+      <h3>Walking routes</h3>
+      <p>A route is the path the explorer walks between two places, so you can
+         keep her out of lakes and off mountains.</p>
+      <p><b>Every pair of places is already joined by a straight line.</b> You
+         don't create routes — you bend the ones that need bending.</p>
       <ol>
-        <li>Click <b>Draw Path</b> at the top of the right-hand panel.</li>
-        <li>Click the node the path should lead <i>to</i>.</li>
-        <li>Click along the map to drop green dots, in walking order.</li>
-        <li>Finish on the node itself. If you don't, the editor warns you and
-            offers a one-click fix.</li>
+        <li>Click <b>Routes</b> at the top of the right-hand panel.</li>
+        <li>Click the two places you want the route between — or pick the pair
+            from the Routes list below.</li>
+        <li>The line lights up yellow. <b>Click the line</b> to add a bend
+            wherever you clicked, then drag bends to shape it.</li>
+        <li>Click a bend and press Delete to remove it. Remove them all and it
+            goes back to a straight line.</li>
       </ol>
-      <p>Switch back to <b>Select &amp; Drag</b> to move dots around, or click a
-         dot and press Delete to remove it.</p>
+      <p>Routes work in both directions — shape it once and the walk back
+         follows the same path in reverse.</p>
+      <p>The gold circle marked <b>spawn</b> is where the player arrives on that
+         map. It counts as a place, so you can route from it, and you can drag
+         it if they're landing somewhere awkward.</p>
 
       <h3>Adding a node</h3>
       <p><b>+ Add Node</b> → pick a picture → give it a name. It appears in the

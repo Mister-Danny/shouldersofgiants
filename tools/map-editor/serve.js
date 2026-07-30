@@ -161,13 +161,6 @@ function serialise(doc) {
       if (n.serfFlagOn)    s += ',\n        serfFlagOn: ' + q(n.serfFlagOn);
       s += gates(n, ',\n        ');
       if (n.note)          s += ',\n        note: ' + q(n.note);
-      if (n.path && n.path.length) {
-        s += ',\n        path: [\n';
-        s += n.path.map(function (p) {
-          return '          { x: ' + num(p.x) + ', y: ' + num(p.y) + ' }';
-        }).join(',\n');
-        s += '\n        ]';
-      }
       s += '\n      }' + (i < m.nodes.length - 1 ? ',' : '') + '\n';
     });
     s += (m.nodes || []).length ? '    ],\n' : '],\n';
@@ -187,7 +180,21 @@ function serialise(doc) {
       if (x.note) s += ',\n        note: ' + q(x.note);
       s += '\n      }' + (i < m.exits.length - 1 ? ',' : '') + '\n';
     });
-    s += (m.exits || []).length ? '    ]\n' : ']\n';
+    s += (m.exits || []).length ? '    ],\n' : '],\n';
+
+    /* ── Routes ── the walking graph. `from`/`to` are endpoint ids: a node id,
+       an exit id, or 'spawn'. `waypoints` are the INTERMEDIATE bends only —
+       the two endpoints are implied, which is what makes a route reversible
+       and makes "no entry here" mean a straight line. Only bent routes are
+       stored; every other pair is a straight line by omission. */
+    s += '    routes: [' + ((m.routes || []).length ? '\n' : '');
+    (m.routes || []).forEach(function (r, i) {
+      s += '      { from: ' + q(r.from) + ', to: ' + q(r.to) + ', waypoints: [' +
+           (r.waypoints || []).map(function (w) {
+             return '{ x: ' + num(w.x) + ', y: ' + num(w.y) + ' }';
+           }).join(', ') + '] }' + (i < m.routes.length - 1 ? ',' : '') + '\n';
+    });
+    s += (m.routes || []).length ? '    ]\n' : ']\n';
 
     s += '  }' + (mi < mapIds.length - 1 ? ',' : '') + '\n';
   });
@@ -351,6 +358,36 @@ function validate(doc) {
       checkGates(x, 'exit "' + x.id + '"');
     }
 
+    /* Endpoint ids must be unique across nodes AND exits, because a route
+       names them in one namespace. A collision would silently route to the
+       wrong thing. */
+    var endpoints = { spawn: true };
+    nodes.forEach(function (n) { endpoints[n.id] = true; });
+    for (var ei = 0; ei < exits.length; ei++) {
+      if (endpoints[exits[ei].id]) return 'exit "' + exits[ei].id + '" in "' + id +
+        '" shares an id with a node — route endpoints must be unique';
+      endpoints[exits[ei].id] = true;
+    }
+
+    var routes = m.routes || [];
+    var seenRoute = {};
+    for (var ri = 0; ri < routes.length; ri++) {
+      var rt = routes[ri];
+      if (!endpoints[rt.from]) return 'route in "' + id + '" starts at "' + rt.from + '", which is not a node, exit or spawn';
+      if (!endpoints[rt.to])   return 'route in "' + id + '" ends at "' + rt.to + '", which is not a node, exit or spawn';
+      if (rt.from === rt.to)   return 'route in "' + id + '" starts and ends at "' + rt.from + '"';
+      // Routes are undirected, so A->B and B->A are the same route. Two entries
+      // would mean one of them silently never gets used.
+      var key = [rt.from, rt.to].sort().join('\u0000');
+      if (seenRoute[key]) return 'map "' + id + '" has two routes between "' + rt.from + '" and "' + rt.to + '"';
+      seenRoute[key] = true;
+      for (var wi = 0; wi < (rt.waypoints || []).length; wi++) {
+        if (!isNum(rt.waypoints[wi].x) || !isNum(rt.waypoints[wi].y)) {
+          return 'route ' + rt.from + '->' + rt.to + ' in "' + id + '" has an invalid waypoint at index ' + wi;
+        }
+      }
+    }
+
     var props = m.props || [];
     for (var pi = 0; pi < props.length; pi++) {
       var pr = props[pi];
@@ -369,9 +406,9 @@ function isNum(v) { return typeof v === 'number' && isFinite(v); }
    is exactly the kind of failure that costs an afternoon. Refuse the save
    instead, and name the field. */
 var KNOWN = {
-  map:  ['displayName', 'image', 'spawn', 'startsFogged', 'props', 'nodes', 'exits'],
+  map:  ['displayName', 'image', 'spawn', 'startsFogged', 'props', 'nodes', 'exits', 'routes'],
   node: ['id', 'name', 'kind', 'image', 'x', 'y', 'scale', 'flipX', 'label', 'note',
-         'showFrom', 'showUntil', 'path', 'hook', 'tiers', 'flagNudge', 'serfFlagOn'],
+         'showFrom', 'showUntil', 'hook', 'tiers', 'flagNudge', 'serfFlagOn'],
   exit: ['id', 'label', 'zone', 'walkTo', 'walkOff', 'target', 'entryAt', 'note',
          'showFrom', 'showUntil'],
   prop: ['image', 'x', 'y', 'scale', 'rotation', 'flipX', 'flipY', 'note',

@@ -416,3 +416,38 @@ button.danger:hover { background: var(--danger); color: #fff; }
 .gone  { display: none; }
 
 #prop-list li img { width: 22px; height: 22px; object-fit: contain; }
+
+/* ── Routes ───────────────────────────────────────────────────────────── */
+/* Spawn is a real endpoint of the walking graph, so it has to be visible and
+   draggable like any other — the player's first walk on a map starts here. */
+.spawn {
+  position: absolute;
+  width: 15px; height: 15px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  border: 2px solid var(--gold-hi);
+  background: rgba(248,208,0,0.28);
+  cursor: grab;
+}
+.spawn.sel { box-shadow: 0 0 0 3px rgba(248,208,0,0.35); }
+.spawn::after {
+  content: "spawn";
+  position: absolute; left: 50%; top: 15px;
+  transform: translateX(-50%);
+  font-size: 9px; color: var(--gold-hi);
+  background: rgba(0,0,0,0.7); padding: 0 3px;
+  white-space: nowrap;
+}
+
+/* In route mode every endpoint gets a ring so it reads as clickable. */
+body.route-mode .n::after,
+body.route-mode .exit { outline: 1px solid rgba(248,208,0,0.5); }
+body.route-mode .n { cursor: crosshair; }
+
+#route-list li { display: flex; gap: 8px; padding: 4px 6px; cursor: pointer; border-radius: 3px; font-size: 11px; }
+#route-list li:hover { background: rgba(212,170,80,0.10); }
+#route-list li.sel { background: rgba(212,170,80,0.22); color: var(--gold-hi); }
+#route-list li .k { margin-left: auto; color: var(--dim); font-size: 10px; }
+#route-list li.bent .k { color: var(--path); }
+
+.route-pick { color: var(--gold-hi); }
