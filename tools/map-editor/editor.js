@@ -160,18 +160,10 @@ function render() {
 
   bg.src = '/' + m.image;
 
-  /* Egypt's background is zoomed in the GAME (overworld.js: translateY(-4%)
-     scale(1.08)) on the IMAGE ONLY — the node overlay is untransformed. We
-     replicate it here so the art you position against is the art the player
-     sees. Any new map gets no transform, matching the game's `if (mapId ===
-     'egypt')` hard-code. */
-  if (mapId === 'egypt') {
-    bg.style.objectPosition  = 'center top';
-    bg.style.transformOrigin = 'center top';
-    bg.style.transform       = 'translateY(-4%) scale(1.08)';
-  } else {
-    bg.style.objectPosition = bg.style.transformOrigin = bg.style.transform = '';
-  }
+  /* Background framing, mirroring overworld.js exactly. The transform applies to
+     the IMAGE ONLY — the node overlay stays untransformed in both places, which
+     is what keeps a dragged coordinate meaning the same thing here and in game. */
+  applyFit(bg, m.imageFit);
 
   const ms = (doc.milestones || [])[scrubIdx];
   $('#scrub-label').textContent = ms ? (ms.label || ms.id) : '—';
@@ -190,9 +182,24 @@ function render() {
   renderPaths();
   renderWaypoints();
   renderLists();
+  renderFitPanel();
   renderRouteList();
   renderInspector();
   updateHint();
+}
+
+/* Shared by the stage background and the framing preview so they can never
+   drift apart. Same property order as the game. */
+function applyFit(el, fit) {
+  fit = fit || {};
+  const anchor = fit.anchor || 'center center';
+  let t = '';
+  if (fit.offsetX) t += ` translateX(${fit.offsetX}%)`;
+  if (fit.offsetY) t += ` translateY(${fit.offsetY}%)`;
+  if (fit.scale && fit.scale !== 1) t += ` scale(${fit.scale})`;
+  el.style.objectPosition  = anchor;
+  el.style.transformOrigin = anchor;
+  el.style.transform       = t.trim();
 }
 
 function nodeEl(n) {
@@ -201,7 +208,11 @@ function nodeEl(n) {
   el.dataset.id = n.id;
   el.style.left = n.x + '%';
   el.style.top  = n.y + '%';
-  if (n.scale) el.style.transform = `translate(-50%,-50%) scale(${n.scale})`;
+  // Same order as the game and the props: centre, rotate, scale.
+  let t = 'translate(-50%,-50%)';
+  if (n.rotation) t += ` rotate(${n.rotation}deg)`;
+  if (n.scale && n.scale !== 1) t += ` scale(${n.scale})`;
+  el.style.transform = t;
 
   const img = document.createElement('img');
   img.src = '/' + n.image;
@@ -399,6 +410,79 @@ function distToSegment(p, a, b) {
   let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len;
   t = Math.max(0, Math.min(1, t));
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/* ── Map framing ──────────────────────────────────────────────────────────
+   The map area is 1280×600 — the 1280×720 stage minus the 120px HUD strip —
+   and every background so far is taller in proportion than that, so
+   object-fit:cover always crops some height. These controls decide WHICH
+   height is lost rather than eliminating the crop, which is not possible
+   without either letterboxing or art at the frame's own proportion. */
+function renderFitPanel() {
+  const box = $('#fit-panel');
+  const m = maps[mapId];
+  if (!m) { box.innerHTML = ''; return; }
+  const fit = m.imageFit || {};
+  const anchors = [['center center','centred — crops top and bottom equally'],
+                   ['center top','keep the top — crops the bottom'],
+                   ['center bottom','keep the bottom — crops the top']];
+
+  box.innerHTML = `
+    <div class="f"><label>framing</label>
+      <select id="fit-anchor">
+        ${anchors.map(([v,l]) => `<option value="${v}" ${v === (fit.anchor || 'center center') ? 'selected' : ''}>${l}</option>`).join('')}
+      </select></div>
+    <div class="f2">
+      <div class="f"><label>zoom</label><input id="fit-scale" type="number" step="0.01" value="${fit.scale ?? 1}"></div>
+      <div class="f"><label>nudge y %</label><input id="fit-oy" type="number" step="0.5" value="${fit.offsetY || 0}"></div>
+    </div>
+    <div class="f"><label>nudge x %</label><input id="fit-ox" type="number" step="0.5" value="${fit.offsetX || 0}"></div>
+    <p class="note" id="fit-report">measuring…</p>
+    <div class="rowbtns"><button class="ghost sm" id="fit-reset">Reset framing</button></div>`;
+
+  const set = (k, v) => {
+    snapshotOnce();
+    m.imageFit = m.imageFit || {};
+    if (v === '' || v === 0 || v === null || (k === 'scale' && Number(v) === 1)) delete m.imageFit[k];
+    else m.imageFit[k] = k === 'anchor' ? v : Number(v);
+    if (m.imageFit.anchor === 'center center') delete m.imageFit.anchor;
+    if (!Object.keys(m.imageFit).length) delete m.imageFit;
+    markDirty(); render();
+  };
+  $('#fit-anchor').onchange = e => set('anchor', e.target.value);
+  $('#fit-scale').oninput   = e => set('scale', e.target.value);
+  $('#fit-oy').oninput      = e => set('offsetY', e.target.value);
+  $('#fit-ox').oninput      = e => set('offsetX', e.target.value);
+  $('#fit-reset').onclick   = () => { snapshot(); delete m.imageFit; markDirty(); render(); };
+
+  reportCrop();
+}
+
+/* Say plainly how much of the source art never reaches the screen. Reads the
+   image's natural size, so it is the real number for this file, not an
+   estimate from the filename. */
+function reportCrop() {
+  const el = $('#fit-report'), bg = $('#bg');
+  if (!el) return;
+  const done = () => {
+    const iw = bg.naturalWidth, ih = bg.naturalHeight;
+    if (!iw || !ih) { el.textContent = 'could not read the image size'; return; }
+    const fit = maps[mapId].imageFit || {};
+    const zoom = fit.scale || 1;
+    // cover: scale so the image covers 1280×600, then apply the zoom on top
+    const s = Math.max(1280 / iw, 600 / ih) * zoom;
+    const rh = ih * s, rw = iw * s;
+    const lostY = Math.max(0, (rh - 600) / rh * 100);
+    const lostX = Math.max(0, (rw - 1280) / rw * 100);
+    const where = (fit.anchor || 'center center') === 'center top'    ? 'all off the bottom'
+                : (fit.anchor || '') === 'center bottom'              ? 'all off the top'
+                : `${(lostY / 2).toFixed(1)}% top and ${(lostY / 2).toFixed(1)}% bottom`;
+    el.innerHTML = `Source is ${iw}×${ih}. The map area is 1280×600, so ` +
+      (lostY > 0.5 ? `<b>${lostY.toFixed(1)}% of the height</b> is cropped — ${where}.`
+                   : 'the full height fits.') +
+      (lostX > 0.5 ? ` ${lostX.toFixed(1)}% of the width is cropped too.` : '');
+  };
+  if (bg.complete && bg.naturalWidth) done(); else bg.onload = done;
 }
 
 function renderLists() {
@@ -713,8 +797,9 @@ function renderInspector() {
     </div>
     <div class="f2">
       <div class="f"><label>scale</label><input id="i-scale" type="number" step="0.05" value="${n.scale ?? ''}" placeholder="1"></div>
-      <div class="f"><label class="chk"><input id="i-flip" type="checkbox" ${n.flipX ? 'checked' : ''}> flipX</label></div>
+      <div class="f"><label>rotation °</label><input id="i-rot" type="number" step="1" value="${n.rotation || 0}"></div>
     </div>
+    <div class="f"><label class="chk"><input id="i-flip" type="checkbox" ${n.flipX ? 'checked' : ''}> flip horizontally</label></div>
     <div class="f"><label>image</label><input id="i-image" value="${esc(n.image)}"></div>
     <div class="f"><label>note (survives saving)</label><textarea id="i-note">${esc(n.note || '')}</textarea></div>
 
@@ -732,6 +817,7 @@ function renderInspector() {
   bind('#i-x',     'input', v => { n.x = Number(v); render(); });
   bind('#i-y',     'input', v => { n.y = Number(v); render(); });
   bind('#i-scale', 'input', v => { if (v === '') delete n.scale; else n.scale = Number(v); render(); });
+  bind('#i-rot',   'input', v => { const r = Number(v); if (r) n.rotation = r; else delete n.rotation; render(); });
   bind('#i-image', 'input', v => { n.image = v; render(); });
   bind('#i-note',  'input', v => { if (v) n.note = v; else delete n.note; });
   $('#i-flip').onchange = e => { if (e.target.checked) n.flipX = true; else delete n.flipX; markDirty(); render(); };

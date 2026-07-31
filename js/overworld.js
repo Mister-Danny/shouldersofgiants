@@ -601,21 +601,21 @@ var Overworld = (function () {
     }
     var maps = {};
     Object.keys(data).forEach(function (mapId) {
-      var src = data[mapId];
-      maps[mapId] = {
-        displayName:  src.displayName,
-        image:        src.image,
-        spawn:        src.spawn,
-        startsFogged: src.startsFogged,
-        props:  (src.props  || []).slice(),
-        routes: (src.routes || []).slice(),
-        nodes: (src.nodes || []).map(function (n) {
-          return merge(n, NODE_BEHAVIOUR[n.id]);
-        }),
-        exits: (src.exits || []).map(function (x) {
-          return merge(x, EXIT_BEHAVIOUR[mapId + '/' + x.id]);
-        })
-      };
+      var src = data[mapId], out = {}, k;
+      // Copy EVERY field, rather than listing the ones we know about. A list
+      // has silently dropped a new field twice now (routes, then imageFit),
+      // each time looking like the feature simply did not work. The three
+      // collections below are then replaced with their own copies.
+      for (k in src) { if (Object.prototype.hasOwnProperty.call(src, k)) out[k] = src[k]; }
+      out.props  = (src.props  || []).slice();
+      out.routes = (src.routes || []).slice();
+      out.nodes  = (src.nodes  || []).map(function (n) {
+        return merge(n, NODE_BEHAVIOUR[n.id]);
+      });
+      out.exits  = (src.exits  || []).map(function (x) {
+        return merge(x, EXIT_BEHAVIOUR[mapId + '/' + x.id]);
+      });
+      maps[mapId] = out;
     });
     return maps;
   }
@@ -787,6 +787,16 @@ var Overworld = (function () {
      "last node" would be wrong or missing in at least one of those. Standing
      on a node makes that node the nearest endpoint, which is the right answer
      without having to track anything. */
+
+  /* The resting transform for a node element. Nodes are centred on their point,
+     then rotated, then scaled — the same order the topography props use, so the
+     two behave identically once you start tilting things. */
+  function _nodeTransform(n) {
+    var t = 'translate(-50%,-50%)';
+    if (n.rotation) t += ' rotate(' + n.rotation + 'deg)';
+    if (n.scale && n.scale !== 1) t += ' scale(' + n.scale + ')';
+    return t;
+  }
 
   function _endpointPos(map, id) {
     if (!map) return null;
@@ -984,21 +994,29 @@ var Overworld = (function () {
         SOG.preload.images(['images/ui_images/mesomarket.jpg', 'images/ui_images/pricetag@0.5x.png']);
       }
     }
-    // The Egypt map (egyptz.jpeg) is slightly taller than the 16:9 viewport, so
-    // object-fit:cover alone would crop the Nile Delta at the top. Pin the image's
-    // TOP edge to the screen top (delta fully visible), then zoom in from that top
-    // anchor so the image grows DOWNWARD to cover the bottom all the way under the
-    // HUD (no gap). The top stays framed; only extra map is cropped at the bottom.
-    // Other maps keep their default centered framing.
-    if (mapId === 'egypt') {
-      mapImgEl.style.objectPosition  = 'center top';
-      mapImgEl.style.transformOrigin = 'center top';
-      mapImgEl.style.transform       = 'translateY(-4%) scale(1.08)';
-    } else {
-      mapImgEl.style.objectPosition  = '';
-      mapImgEl.style.transformOrigin = '';
-      mapImgEl.style.transform       = '';
-    }
+    /* ── Background framing ──────────────────────────────────────────────
+       The map area is 1280×600 (the 1280×720 stage minus the 120px HUD strip),
+       which is wider than any of the source art, so object-fit:cover always
+       crops some height. `imageFit` in data/map-data.js decides WHICH height
+       gets lost, per map, and is editable in tools/map-editor:
+
+         anchor   which edge to pin — 'center top' keeps the top, 'center
+                  bottom' keeps the bottom, default centres and crops both
+         scale    zoom, to cover a gap left by an offset
+         offsetX  nudge, in % of the image
+
+       Egypt used to be a hard-coded special case here (top-pinned and zoomed
+       1.08 so the Nile Delta survived); it is now just the first map to carry
+       an imageFit block. */
+    var fit = data.imageFit || {};
+    var anchor = fit.anchor || 'center center';
+    var tf = '';
+    if (fit.offsetX) tf += ' translateX(' + fit.offsetX + '%)';
+    if (fit.offsetY) tf += ' translateY(' + fit.offsetY + '%)';
+    if (fit.scale && fit.scale !== 1) tf += ' scale(' + fit.scale + ')';
+    mapImgEl.style.objectPosition  = anchor;
+    mapImgEl.style.transformOrigin = anchor;
+    mapImgEl.style.transform       = tf.trim();
 
     // Update the HUD region label to the current map's display name (dynamic —
     // never hardcoded). Guarded: a no-op if the HUD isn't present/ready.
@@ -1025,7 +1043,7 @@ var Overworld = (function () {
       nodeEl.dataset.id = n.id;
       nodeEl.style.left = n.x + '%';
       nodeEl.style.top  = n.y + '%';
-      if (n.scale) nodeEl.style.transform = 'translate(-50%,-50%) scale(' + n.scale + ')';
+      if (n.scale || n.rotation) nodeEl.style.transform = _nodeTransform(n);
       var img = document.createElement('img');
       img.src = n.image;
       img.alt = n.name;
@@ -2209,7 +2227,7 @@ var Overworld = (function () {
     // When GSAP is present the entrance below animates into the resting
     // transform; otherwise set it directly (fallback).
     if (typeof gsap === 'undefined') {
-      nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (nodeData.scale || 1) + ')';
+      nodeEl.style.transform = _nodeTransform(nodeData);
     }
 
     var img = document.createElement('img');
@@ -2651,7 +2669,7 @@ var Overworld = (function () {
       nodeEl.dataset.id = 'sargon';
       nodeEl.style.left = node.x + '%';
       nodeEl.style.top  = node.y + '%';
-      nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
+      nodeEl.style.transform = _nodeTransform(node);
       var img = document.createElement('img');
       img.src = node.image;   // from the map data, never a literal
       img.alt = node.name || 'Akkad';
@@ -2750,7 +2768,7 @@ var Overworld = (function () {
       nodeEl.dataset.id = 'hammurabi';
       nodeEl.style.left = node.x + '%';
       nodeEl.style.top  = node.y + '%';
-      nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
+      nodeEl.style.transform = _nodeTransform(node);
       var img = document.createElement('img');
       img.src = node.image;   // from the map data, never a literal
       img.alt = node.name || 'Babylon';
@@ -2854,7 +2872,7 @@ var Overworld = (function () {
       nodeEl.dataset.id = 'hanging-gardens';
       nodeEl.style.left = node.x + '%';
       nodeEl.style.top  = node.y + '%';
-      nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
+      nodeEl.style.transform = _nodeTransform(node);
       var img = document.createElement('img');
       img.src = node.image;   // from the map data, never a literal
       img.alt = node.name || 'The Hanging Gardens';
@@ -4068,7 +4086,7 @@ var Overworld = (function () {
       nodeEl.dataset.id = n.id;
       nodeEl.style.left = n.x + '%';
       nodeEl.style.top  = n.y + '%';
-      if (n.scale) nodeEl.style.transform = 'translate(-50%,-50%) scale(' + n.scale + ')';
+      if (n.scale || n.rotation) nodeEl.style.transform = _nodeTransform(n);
       var img = document.createElement('img');
       img.src = n.image;
       img.alt = n.name;

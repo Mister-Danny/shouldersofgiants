@@ -123,6 +123,16 @@ function serialise(doc) {
     s += '\n  ' + q(mapId) + ': {\n';
     s += '    displayName: ' + q(m.displayName) + ',\n';
     s += '    image: ' + q(m.image) + ',\n';
+    /* How the background is framed inside the 1280x600 map area. Omitted when
+       it is the plain centred default, so most maps stay uncluttered. */
+    if (m.imageFit && (m.imageFit.anchor || m.imageFit.scale || m.imageFit.offsetX || m.imageFit.offsetY)) {
+      var f = m.imageFit, bits = [];
+      if (f.anchor)  bits.push('anchor: ' + q(f.anchor));
+      if (f.scale)   bits.push('scale: ' + scaleNum(f.scale));
+      if (f.offsetX) bits.push('offsetX: ' + num(f.offsetX));
+      if (f.offsetY) bits.push('offsetY: ' + num(f.offsetY));
+      s += '    imageFit: { ' + bits.join(', ') + ' },\n';
+    }
     s += '    spawn: { x: ' + num(m.spawn.x) + ', y: ' + num(m.spawn.y) + ' },\n';
     s += '    startsFogged: ' + (m.startsFogged ? 'true' : 'false') + ',\n';
 
@@ -151,6 +161,7 @@ function serialise(doc) {
       s += '        x: ' + num(n.x) + ', y: ' + num(n.y);
       if (n.scale != null) s += ',\n        scale: ' + scaleNum(n.scale);
       if (n.flipX)         s += ',\n        flipX: true';
+      if (n.rotation)      s += ',\n        rotation: ' + num(n.rotation);
       if (n.label)         s += ',\n        label: ' + q(n.label);
       // Boss ladder. `hook` is the flag key + script hook; `tiers` 2 means a
       // Serf/Giant pair (and therefore flags), 1 means a single-level battle.
@@ -407,9 +418,9 @@ function isNum(v) { return typeof v === 'number' && isFinite(v); }
    is exactly the kind of failure that costs an afternoon. Refuse the save
    instead, and name the field. */
 var KNOWN = {
-  map:  ['displayName', 'image', 'spawn', 'startsFogged', 'props', 'nodes', 'exits', 'routes'],
+  map:  ['displayName', 'image', 'imageFit', 'spawn', 'startsFogged', 'props', 'nodes', 'exits', 'routes'],
   node: ['id', 'name', 'kind', 'image', 'x', 'y', 'scale', 'flipX', 'label', 'note',
-         'showFrom', 'showUntil', 'hook', 'tiers', 'flagNudge', 'serfFlagOn', 'victoryFlag'],
+         'showFrom', 'showUntil', 'hook', 'tiers', 'flagNudge', 'serfFlagOn', 'victoryFlag', 'rotation'],
   exit: ['id', 'label', 'zone', 'walkTo', 'walkOff', 'target', 'entryAt', 'note',
          'showFrom', 'showUntil'],
   prop: ['image', 'x', 'y', 'scale', 'rotation', 'flipX', 'flipY', 'note',
