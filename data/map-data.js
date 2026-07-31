@@ -513,7 +513,7 @@ window.SOG_MAP_DATA = {
 
   'china': {
     displayName: 'China',
-    image: 'images/metaworld/maps/china.jpg',
+    image: 'images/metaworld/maps/china1.jpg',
     spawn: { x: 10, y: 85 },
     startsFogged: true,
     props: [],
@@ -689,7 +689,7 @@ window.SOG_MAP_DATA = {
 
   'greece': {
     displayName: 'Greece',
-    image: 'images/metaworld/maps/greece.jpg',
+    image: 'images/metaworld/maps/greece1.jpg',
     spawn: { x: 10, y: 85 },
     startsFogged: true,
     props: [],
@@ -787,7 +787,7 @@ window.SOG_MAP_DATA = {
 
   'rome': {
     displayName: 'Rome',
-    image: 'images/metaworld/maps/rome.jpg',
+    image: 'images/metaworld/maps/rome1.jpg',
     spawn: { x: 10, y: 85 },
     startsFogged: true,
     props: [],
