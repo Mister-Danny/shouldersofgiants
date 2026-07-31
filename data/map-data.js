@@ -429,7 +429,7 @@ window.SOG_MAP_DATA = {
 
   'india': {
     displayName: 'India',
-    image: 'images/metaworld/maps/india.jpg',
+    image: 'images/metaworld/maps/india1.jpg',
     spawn: { x: 10, y: 85 },
     startsFogged: true,
     props: [],
