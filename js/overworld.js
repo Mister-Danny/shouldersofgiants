@@ -1071,10 +1071,16 @@ var Overworld = (function () {
       exitEl.style.top    = e.zone.y + '%';
       exitEl.style.width  = e.zone.w + '%';
       exitEl.style.height = e.zone.h + '%';
-      var label = document.createElement('span');
-      label.className = 'overworld-exit-label';
-      label.textContent = e.label;
-      exitEl.appendChild(label);
+      // An exit with no label is a DELIBERATELY hidden one (the Sahara routes):
+      // the zone stays clickable but nothing is drawn, since the label span
+      // carries its own padded background and would otherwise show as a small
+      // dark box exactly where the secret is meant to be.
+      if (e.label) {
+        var label = document.createElement('span');
+        label.className = 'overworld-exit-label';
+        label.textContent = e.label;
+        exitEl.appendChild(label);
+      }
       exitEl.addEventListener('click', function () { onExitClick(e); });
       overlayEl.appendChild(exitEl);
     });
@@ -1181,7 +1187,19 @@ var Overworld = (function () {
      data/map-data.js. A node added in the map editor gets its flags from those
      fields with no code change here. */
   function _bossHook(node) {
-    return (node && node.tiers === 2 && node.hook) ? node.hook : null;
+    if (!node || !node.hook) return null;
+    if (node.tiers === 2) return node.hook;                 // Serf + Giant ladder
+    if (node.tiers === 1 && node.victoryFlag) return node.hook;  // one-off, still flagged
+    return null;
+  }
+
+  /* Which flags a node plants. Two-tier bosses get both. A SINGLE-LEVEL battle
+     that opts into victoryFlag gets one — the Giant — so a one-off still reads
+     as cleared once it is won. Single-level battles without the field (the East
+     Africa tutorial pair) plant nothing, exactly as before. */
+  function _flagTiers(node) {
+    return node.tiers === 2 ? [['serf', 'serfflag.png'], ['giant', 'giantflag.png']]
+                            : [['giant', 'giantflag.png']];
   }
 
   // First-encounter AI tier per boss — DATA-DRIVEN (not hardcoded branch logic).
@@ -1277,14 +1295,17 @@ var Overworld = (function () {
     cluster.style.left = (node.x + lay.dx) + '%';
     cluster.style.top  = (node.y + lay.dy) + '%';
 
-    [['serf', 'serfflag.png'], ['giant', 'giantflag.png']].forEach(function (pair) {
+    _flagTiers(node).forEach(function (pair) {
       var tier = pair[0], art = pair[1];
       // GENERAL two-tier template: a boss's GIANT flag is hidden until the player has
       // engaged its tiers — it "appears" (pops in) on the SERF-win return, its own
       // narrative beat. Hidden only while NEITHER tier is beaten; once either is
       // stamped the Giant flag stays (covers the edge case of a Giant win reached via
       // the picker after a Serf loss — the Giant flag then shows already-stamped).
-      if (tier === 'giant' && !_tierBeaten(hook, 'serf') && !_tierBeaten(hook, 'giant')) return;
+      // A one-off has no Serf beat to pop it, so its single flag is always up and
+      // simply gains its stamp on the win.
+      if (node.tiers === 2 && tier === 'giant' &&
+          !_tierBeaten(hook, 'serf') && !_tierBeaten(hook, 'giant')) return;
       // serfFlagOn:'encounter' — for bosses whose node is simply THERE when the
       // player arrives (Gilgamesh, Narmer). Their Serf flag would otherwise be
       // visible before the player has met them, so it is held until the

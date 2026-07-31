@@ -44,36 +44,37 @@ window.SOG_MAP_DATA = {
     { id: 'hatshepsut-beaten', label: 'Hatshepsut defeated', flag: 'sog_node_hatshepsut_serf_beaten' },
     { id: 'ramses-beaten', label: 'Ramses defeated', flag: 'sog_node_ramses_serf_beaten' },
     { id: 'akhenaten-beaten', label: 'Akhenaten defeated', flag: 'sog_node_akhenaten_serf_beaten' },
-    { id: 'egypt-complete', label: 'Egypt complete (Kush Giant) → next region opens', flag: 'sog_node_kush_giant_beaten' },
-    { id: 'cyrus-beaten', label: 'Cyrus the Great defeated', flag: 'sog_node_cyrus_serf_beaten' },
-    { id: 'darius-beaten', label: 'Darius the Great defeated', flag: 'sog_node_darius_serf_beaten' },
-    { id: 'persia-complete', label: 'Persia complete (Darius the Great Giant) → next region opens', flag: 'sog_node_darius_giant_beaten' },
+    { id: 'kush-beaten', label: 'Kush defeated', flag: 'sog_node_kush_serf_beaten' },
+    { id: 'egypt-complete', label: 'Kush Giant beaten → opens what follows', flag: 'sog_node_kush_giant_beaten' },
     { id: 'greatbath-beaten', label: 'The Great Bath defeated', flag: 'sog_node_greatbath_serf_beaten' },
     { id: 'siddhartha-beaten', label: 'Siddhartha defeated', flag: 'sog_node_siddhartha_serf_beaten' },
     { id: 'ashoka-beaten', label: 'Ashoka defeated', flag: 'sog_node_ashoka_serf_beaten' },
-    { id: 'india-complete', label: 'India complete (Ashoka Giant) → next region opens', flag: 'sog_node_ashoka_giant_beaten' },
+    { id: 'india-complete', label: 'Ashoka Giant beaten → opens what follows', flag: 'sog_node_ashoka_giant_beaten' },
     { id: 'confucius-beaten', label: 'Confucius defeated', flag: 'sog_node_confucius_serf_beaten' },
     { id: 'shihuangdi-beaten', label: 'Shi Huangdi defeated', flag: 'sog_node_shihuangdi_serf_beaten' },
     { id: 'zhangqian-beaten', label: 'Zhang Qian defeated', flag: 'sog_node_zhangqian_serf_beaten' },
-    { id: 'china-complete', label: 'China complete (Zhang Qian Giant) → next region opens', flag: 'sog_node_zhangqian_giant_beaten' },
+    { id: 'china-complete', label: 'Zhang Qian Giant beaten → opens what follows', flag: 'sog_node_zhangqian_giant_beaten' },
+    { id: 'persia-complete', label: 'Darius Giant beaten → opens what follows', flag: 'sog_node_darius_giant_beaten' },
     { id: 'abraham-beaten', label: 'Abraham defeated', flag: 'sog_node_abraham_serf_beaten' },
     { id: 'moses-beaten', label: 'Moses defeated', flag: 'sog_node_moses_serf_beaten' },
     { id: 'david-beaten', label: 'David defeated', flag: 'sog_node_david_serf_beaten' },
-    { id: 'jesus-beaten', label: 'Jesus defeated', flag: 'sog_node_jesus_serf_beaten' },
-    { id: 'paul-beaten', label: 'Paul defeated', flag: 'sog_node_paul_serf_beaten' },
-    { id: 'levant-complete', label: 'The Levant complete (Paul Giant) → next region opens', flag: 'sog_node_paul_giant_beaten' },
+    { id: 'levant-complete', label: 'David Giant beaten → opens what follows', flag: 'sog_node_david_giant_beaten' },
     { id: 'leonidas-beaten', label: 'Leonidas defeated', flag: 'sog_node_leonidas_serf_beaten' },
     { id: 'pericles-beaten', label: 'Pericles defeated', flag: 'sog_node_pericles_serf_beaten' },
     { id: 'socrates-beaten', label: 'Socrates defeated', flag: 'sog_node_socrates_serf_beaten' },
     { id: 'alexander-beaten', label: 'Alexander the Great defeated', flag: 'sog_node_alexander_serf_beaten' },
-    { id: 'greece-complete', label: 'Greece complete (Alexander the Great Giant) → next region opens', flag: 'sog_node_alexander_giant_beaten' },
+    { id: 'greece-complete', label: 'Alexander the Great Giant beaten → opens what follows', flag: 'sog_node_alexander_giant_beaten' },
     { id: 'romulus-beaten', label: 'Romulus and Remus defeated', flag: 'sog_node_romulus_serf_beaten' },
     { id: 'cincinnatus-beaten', label: 'Cincinnatus defeated', flag: 'sog_node_cincinnatus_serf_beaten' },
-    { id: 'hannibal-beaten', label: 'Hannibal defeated', flag: 'sog_node_hannibal_serf_beaten' },
+    { id: 'hannibal-beaten', label: 'Hannibal defeated', flag: 'sog_node_hannibal_giant_beaten' },
     { id: 'julius-beaten', label: 'Julius Caesar defeated', flag: 'sog_node_julius_serf_beaten' },
     { id: 'augustus-beaten', label: 'Augustus defeated', flag: 'sog_node_augustus_serf_beaten' },
+    { id: 'rome-complete', label: 'Augustus Giant beaten → opens what follows', flag: 'sog_node_augustus_giant_beaten' },
+    { id: 'jesus-beaten', label: 'Jesus defeated', flag: 'sog_node_jesus_serf_beaten' },
+    { id: 'paul-beaten', label: 'Paul defeated', flag: 'sog_node_paul_serf_beaten' },
+    { id: 'christianity-complete', label: 'Paul Giant beaten → opens what follows', flag: 'sog_node_paul_giant_beaten' },
     { id: 'constantine-beaten', label: 'Constantine defeated', flag: 'sog_node_constantine_serf_beaten' },
-    { id: 'rome-complete', label: 'Rome complete (Constantine Giant) → next region opens', flag: 'sog_node_constantine_giant_beaten' }
+    { id: 'empire-complete', label: 'Constantine Giant beaten → opens what follows', flag: 'sog_node_constantine_giant_beaten' }
   ],
 
   maps: {
@@ -116,6 +117,16 @@ window.SOG_MAP_DATA = {
         entryAt: { x: 10, y: 85 },
         showFrom: 'otzi-beaten',
         note: 'Sits at the top of the screen just right of the egypt-signpost node. Gated on beating Otzi. entryAt matches the D1 East Africa->Egypt arrival point (Egypt’s west spawn).'
+      },
+      {
+        id:      'to-sahara',
+        label:   '',
+        zone:    { x: 0, y: 38, w: 15, h: 26 },
+        walkTo:  { x: 8, y: 50 },
+        target:  'sahara',
+        entryAt: { x: 92, y: 50 },
+        showFrom: 'china-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
       }
     ],
     routes: [
@@ -143,53 +154,87 @@ window.SOG_MAP_DATA = {
     ],
     nodes: [
       {
-        id:    'double-crown',
-        name:  'The Double Crown',
+        id:    'narmer',
+        name:  'Narmer',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/narmer.png',
-        x: 22.4, y: 37.56,
-        scale: 0.85,
-        flipX: true,
+        x: 18, y: 62,
+        scale: 1,
         hook:  'narmer',
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
         showFrom: 'neb-beaten',
-        note: 'Narmer. Placed at the base of the Nile Delta (the green fan, top-left). ART IS A PLACEHOLDER — swap doublecrown.png when the real art lands.'
+        note: 'Scaffolded position — drag into place. Battle not wired.'
       },
       {
         id:    'egypt-market',
         name:  'The River Market',
         kind:  'market',
         image: 'images/metaworld/civilization nodes/egyptmarket.png',
-        x: 29, y: 18,
-        scale: 1.1,
+        x: 30, y: 46.7,
+        scale: 1,
         showFrom: 'neb-beaten',
-        note: '29/18 is the DELTA slot the advanced river hut used to occupy — the market REPLACES that prop. Pre-unlock the player sees the humble riverhut.png there; post-unlock it becomes this walkable market.'
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
+      },
+      {
+        id:    'hatshepsut',
+        name:  'Hatshepsut',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/hatshepsut.png',
+        x: 42, y: 37.3,
+        scale: 1,
+        hook:  'hatshepsut',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'narmer-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'ramses',
+        name:  'Ramses',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/ramses.png',
+        x: 54, y: 37.3,
+        scale: 1,
+        hook:  'ramses',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'hatshepsut-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'akhenaten',
+        name:  'Akhenaten',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/akhenaten.png',
+        x: 66, y: 46.7,
+        scale: 1,
+        hook:  'akhenaten',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'ramses-beaten',
+        note: 'Scaffolded position — drag into place. Battle not wired.'
       },
       {
         id:    'kush',
         name:  'Kush',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/kush.png',
-        x: 28.29, y: 87.77,
+        x: 78, y: 62,
+        scale: 1,
         hook:  'kush',
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
         showFrom: 'akhenaten-beaten',
-        note: 'Placed and ready; battle not wired. Hidden until Akhenaten falls -- that flag does not exist yet, so it stays hidden until the battle is built.'
+        note: 'Scaffolded position — drag into place. Battle not wired.'
       }
     ],
     exits: [
-      {
-        id:      'to-mesopotamia',
-        label:   'To Mesopotamia →',
-        zone:    { x: 80, y: 5, w: 20, h: 30 },
-        walkTo:  { x: 88, y: 15 },
-        target:  'mesopotamia',
-        entryAt: { x: 10, y: 85 }
-      },
       {
         id:      'to-eastafrica',
         label:   '← To East Africa',
@@ -199,14 +244,12 @@ window.SOG_MAP_DATA = {
         entryAt: { x: 88, y: 15 }
       },
       {
-        id:      'to-persia',
-        label:   'To Persia →',
+        id:      'to-mesopotamia',
+        label:   'To Mesopotamia →',
         zone:    { x: 80, y: 5, w: 20, h: 30 },
         walkTo:  { x: 88, y: 15 },
-        target:  'persia',
-        entryAt: { x: 10, y: 85 },
-        showFrom: 'egypt-complete',
-        note: 'Scaffolded — drag the zone where it belongs.'
+        target:  'mesopotamia',
+        entryAt: { x: 10, y: 85 }
       }
     ],
     routes: []
@@ -292,6 +335,36 @@ window.SOG_MAP_DATA = {
         walkTo:  { x: 10, y: 85 },
         target:  'egypt',
         entryAt: { x: 88, y: 15 }
+      },
+      {
+        id:      'to-levant',
+        label:   'The Levant',
+        zone:    { x: 0, y: 38, w: 15, h: 26 },
+        walkTo:  { x: 8, y: 50 },
+        target:  'levant',
+        entryAt: { x: 92, y: 50 },
+        showFrom: 'persia-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
+      },
+      {
+        id:      'to-persia',
+        label:   'To Persia →',
+        zone:    { x: 85, y: 38, w: 15, h: 26 },
+        walkTo:  { x: 92, y: 50 },
+        target:  'persia',
+        entryAt: { x: 8, y: 50 },
+        showFrom: 'egypt-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
+      },
+      {
+        id:      'to-greece',
+        label:   'To Greece ↑',
+        zone:    { x: 40, y: 0, w: 20, h: 18 },
+        walkTo:  { x: 50, y: 10 },
+        target:  'greece',
+        entryAt: { x: 50, y: 88 },
+        showFrom: 'levant-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
       }
     ],
     routes: []
@@ -305,31 +378,17 @@ window.SOG_MAP_DATA = {
     props: [],
     nodes: [
       {
-        id:    'cyrus',
-        name:  'Cyrus the Great',
-        kind:  'battle',
-        image: 'images/metaworld/civilization nodes/cyrus.png',
-        x: 18, y: 62,
-        scale: 1,
-        hook:  'cyrus',
-        tiers: 2,
-        flagNudge: { dx: 0, dy: 0 },
-        serfFlagOn: 'encounter',
-        showFrom: 'egypt-complete',
-        note: 'Scaffolded position — drag into place. Battle not wired.'
-      },
-      {
         id:    'darius',
-        name:  'Darius the Great',
+        name:  'Darius',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/darius.png',
-        x: 48, y: 36,
+        x: 18, y: 62,
         scale: 1,
         hook:  'darius',
-        tiers: 2,
-        flagNudge: { dx: 0, dy: 0 },
+        tiers: 1,
         serfFlagOn: 'encounter',
-        showFrom: 'cyrus-beaten',
+        victoryFlag: true,
+        showFrom: 'china-complete',
         note: 'Scaffolded position — drag into place. Battle not wired.'
       },
       {
@@ -337,20 +396,20 @@ window.SOG_MAP_DATA = {
         name:  'The Persian Bazaar',
         kind:  'market',
         image: 'images/metaworld/civilization nodes/persianmarket.png',
-        x: 78, y: 62,
+        x: 30, y: 46.7,
         scale: 1,
-        showFrom: 'egypt-complete',
+        showFrom: 'china-complete',
         note: 'Scaffolded position — drag into place. Shop contents not wired.'
       }
     ],
     exits: [
       {
-        id:      'to-egypt',
-        label:   '← Back',
-        zone:    { x: 0, y: 70, w: 20, h: 30 },
-        walkTo:  { x: 10, y: 85 },
-        target:  'egypt',
-        entryAt: { x: 88, y: 15 },
+        id:      'to-mesopotamia',
+        label:   '← To Mesopotamia',
+        zone:    { x: 0, y: 38, w: 15, h: 26 },
+        walkTo:  { x: 8, y: 50 },
+        target:  'mesopotamia',
+        entryAt: { x: 92, y: 50 },
         note: 'Scaffolded — drag the zone where it belongs.'
       },
       {
@@ -360,7 +419,7 @@ window.SOG_MAP_DATA = {
         walkTo:  { x: 88, y: 15 },
         target:  'india',
         entryAt: { x: 10, y: 85 },
-        showFrom: 'persia-complete',
+        showFrom: 'egypt-complete',
         note: 'Scaffolded — drag the zone where it belongs.'
       }
     ],
@@ -385,15 +444,25 @@ window.SOG_MAP_DATA = {
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
-        showFrom: 'persia-complete',
+        showFrom: 'egypt-complete',
         note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'india-market',
+        name:  'The Indian Market',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/indiamarket.png',
+        x: 30, y: 46.7,
+        scale: 1,
+        showFrom: 'greatbath-beaten',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
       },
       {
         id:    'siddhartha',
         name:  'Siddhartha',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/siddhartha.png',
-        x: 38, y: 39.5,
+        x: 42, y: 37.3,
         scale: 1,
         hook:  'siddhartha',
         tiers: 2,
@@ -407,7 +476,7 @@ window.SOG_MAP_DATA = {
         name:  'Ashoka',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/ashoka.png',
-        x: 58, y: 39.5,
+        x: 54, y: 37.3,
         scale: 1,
         hook:  'ashoka',
         tiers: 2,
@@ -415,26 +484,16 @@ window.SOG_MAP_DATA = {
         serfFlagOn: 'encounter',
         showFrom: 'siddhartha-beaten',
         note: 'Scaffolded position — drag into place. Battle not wired.'
-      },
-      {
-        id:    'india-market',
-        name:  'The Indian Market',
-        kind:  'market',
-        image: 'images/metaworld/civilization nodes/indiamarket.png',
-        x: 78, y: 62,
-        scale: 1,
-        showFrom: 'persia-complete',
-        note: 'Scaffolded position — drag into place. Shop contents not wired.'
       }
     ],
     exits: [
       {
         id:      'to-persia',
-        label:   '← Back',
-        zone:    { x: 0, y: 70, w: 20, h: 30 },
-        walkTo:  { x: 10, y: 85 },
+        label:   '← To Persia',
+        zone:    { x: 0, y: 38, w: 15, h: 26 },
+        walkTo:  { x: 8, y: 50 },
         target:  'persia',
-        entryAt: { x: 88, y: 15 },
+        entryAt: { x: 92, y: 50 },
         note: 'Scaffolded — drag the zone where it belongs.'
       },
       {
@@ -473,11 +532,21 @@ window.SOG_MAP_DATA = {
         note: 'Scaffolded position — drag into place. Battle not wired.'
       },
       {
+        id:    'china-market',
+        name:  'The Silk Road Market',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/chinamarket.png',
+        x: 30, y: 46.7,
+        scale: 1,
+        showFrom: 'india-complete',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
+      },
+      {
         id:    'shihuangdi',
         name:  'Shi Huangdi',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/shihuangdi.png',
-        x: 38, y: 39.5,
+        x: 42, y: 37.3,
         scale: 1,
         hook:  'shihuangdi',
         tiers: 2,
@@ -491,7 +560,7 @@ window.SOG_MAP_DATA = {
         name:  'Zhang Qian',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/zhangqian.png',
-        x: 58, y: 39.5,
+        x: 54, y: 37.3,
         scale: 1,
         hook:  'zhangqian',
         tiers: 2,
@@ -499,36 +568,16 @@ window.SOG_MAP_DATA = {
         serfFlagOn: 'encounter',
         showFrom: 'shihuangdi-beaten',
         note: 'Scaffolded position — drag into place. Battle not wired.'
-      },
-      {
-        id:    'china-market',
-        name:  'The Silk Road Market',
-        kind:  'market',
-        image: 'images/metaworld/civilization nodes/chinamarket.png',
-        x: 78, y: 62,
-        scale: 1,
-        showFrom: 'india-complete',
-        note: 'Scaffolded position — drag into place. Shop contents not wired.'
       }
     ],
     exits: [
       {
         id:      'to-india',
-        label:   '← Back',
-        zone:    { x: 0, y: 70, w: 20, h: 30 },
-        walkTo:  { x: 10, y: 85 },
+        label:   '← To India',
+        zone:    { x: 0, y: 38, w: 15, h: 26 },
+        walkTo:  { x: 8, y: 50 },
         target:  'india',
-        entryAt: { x: 88, y: 15 },
-        note: 'Scaffolded — drag the zone where it belongs.'
-      },
-      {
-        id:      'to-levant',
-        label:   'To The Levant →',
-        zone:    { x: 80, y: 5, w: 20, h: 30 },
-        walkTo:  { x: 88, y: 15 },
-        target:  'levant',
-        entryAt: { x: 10, y: 85 },
-        showFrom: 'china-complete',
+        entryAt: { x: 92, y: 50 },
         note: 'Scaffolded — drag the zone where it belongs.'
       }
     ],
@@ -553,15 +602,25 @@ window.SOG_MAP_DATA = {
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
-        showFrom: 'china-complete',
+        showFrom: 'persia-complete',
         note: 'Scaffolded position — drag into place. Battle not wired.'
+      },
+      {
+        id:    'levant-market',
+        name:  'The Levantine Market',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/levantmarket.png',
+        x: 30, y: 46.7,
+        scale: 1,
+        showFrom: 'abraham-beaten',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
       },
       {
         id:    'moses',
         name:  'Moses',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/moses.png',
-        x: 30, y: 46.7,
+        x: 42, y: 37.3,
         scale: 1,
         hook:  'moses',
         tiers: 2,
@@ -575,7 +634,7 @@ window.SOG_MAP_DATA = {
         name:  'David',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/david.png',
-        x: 42, y: 37.3,
+        x: 54, y: 37.3,
         scale: 1,
         hook:  'david',
         tiers: 2,
@@ -589,13 +648,13 @@ window.SOG_MAP_DATA = {
         name:  'Jesus',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/jesus.png',
-        x: 54, y: 37.3,
+        x: 66, y: 46.7,
         scale: 1,
         hook:  'jesus',
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
-        showFrom: 'david-beaten',
+        showFrom: 'rome-complete',
         note: 'Scaffolded position — drag into place. Battle not wired.'
       },
       {
@@ -603,7 +662,7 @@ window.SOG_MAP_DATA = {
         name:  'Paul',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/paul.png',
-        x: 66, y: 46.7,
+        x: 78, y: 62,
         scale: 1,
         hook:  'paul',
         tiers: 2,
@@ -611,36 +670,16 @@ window.SOG_MAP_DATA = {
         serfFlagOn: 'encounter',
         showFrom: 'jesus-beaten',
         note: 'Scaffolded position — drag into place. Battle not wired.'
-      },
-      {
-        id:    'levant-market',
-        name:  'The Levantine Market',
-        kind:  'market',
-        image: 'images/metaworld/civilization nodes/levantmarket.png',
-        x: 78, y: 62,
-        scale: 1,
-        showFrom: 'china-complete',
-        note: 'Scaffolded position — drag into place. Shop contents not wired.'
       }
     ],
     exits: [
       {
-        id:      'to-china',
+        id:      'to-mesopotamia',
         label:   '← Back',
-        zone:    { x: 0, y: 70, w: 20, h: 30 },
-        walkTo:  { x: 10, y: 85 },
-        target:  'china',
-        entryAt: { x: 88, y: 15 },
-        note: 'Scaffolded — drag the zone where it belongs.'
-      },
-      {
-        id:      'to-greece',
-        label:   'To Greece →',
-        zone:    { x: 80, y: 5, w: 20, h: 30 },
-        walkTo:  { x: 88, y: 15 },
-        target:  'greece',
-        entryAt: { x: 10, y: 85 },
-        showFrom: 'levant-complete',
+        zone:    { x: 85, y: 38, w: 15, h: 26 },
+        walkTo:  { x: 92, y: 50 },
+        target:  'mesopotamia',
+        entryAt: { x: 8, y: 50 },
         note: 'Scaffolded — drag the zone where it belongs.'
       }
     ],
@@ -669,11 +708,21 @@ window.SOG_MAP_DATA = {
         note: 'Scaffolded position — drag into place. Battle not wired.'
       },
       {
+        id:    'greece-market',
+        name:  'The Agora',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/greecemarket.png',
+        x: 30, y: 46.7,
+        scale: 1,
+        showFrom: 'levant-complete',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
+      },
+      {
         id:    'pericles',
         name:  'Pericles',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/pericles.png',
-        x: 33, y: 43.6,
+        x: 42, y: 37.3,
         scale: 1,
         hook:  'pericles',
         tiers: 2,
@@ -687,7 +736,7 @@ window.SOG_MAP_DATA = {
         name:  'Socrates',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/socrates.png',
-        x: 48, y: 36,
+        x: 54, y: 37.3,
         scale: 1,
         hook:  'socrates',
         tiers: 2,
@@ -701,7 +750,7 @@ window.SOG_MAP_DATA = {
         name:  'Alexander the Great',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/alexanderthegreat.png',
-        x: 63, y: 43.6,
+        x: 66, y: 46.7,
         scale: 1,
         hook:  'alexander',
         tiers: 2,
@@ -709,26 +758,16 @@ window.SOG_MAP_DATA = {
         serfFlagOn: 'encounter',
         showFrom: 'socrates-beaten',
         note: 'Scaffolded position — drag into place. Battle not wired.'
-      },
-      {
-        id:    'greece-market',
-        name:  'The Agora',
-        kind:  'market',
-        image: 'images/metaworld/civilization nodes/greecemarket.png',
-        x: 78, y: 62,
-        scale: 1,
-        showFrom: 'levant-complete',
-        note: 'Scaffolded position — drag into place. Shop contents not wired.'
       }
     ],
     exits: [
       {
-        id:      'to-levant',
-        label:   '← Back',
-        zone:    { x: 0, y: 70, w: 20, h: 30 },
-        walkTo:  { x: 10, y: 85 },
-        target:  'levant',
-        entryAt: { x: 88, y: 15 },
+        id:      'to-mesopotamia',
+        label:   'To Mesopotamia →',
+        zone:    { x: 85, y: 38, w: 15, h: 26 },
+        walkTo:  { x: 92, y: 50 },
+        target:  'mesopotamia',
+        entryAt: { x: 8, y: 50 },
         note: 'Scaffolded — drag the zone where it belongs.'
       },
       {
@@ -767,11 +806,21 @@ window.SOG_MAP_DATA = {
         note: 'Scaffolded position — drag into place. Battle not wired.'
       },
       {
+        id:    'rome-market',
+        name:  'The Roman Forum',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/romanmarket.png',
+        x: 30, y: 46.7,
+        scale: 1,
+        showFrom: 'romulus-beaten',
+        note: 'Scaffolded position — drag into place. Shop contents not wired.'
+      },
+      {
         id:    'cincinnatus',
         name:  'Cincinnatus',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/cincinnatus.png',
-        x: 28, y: 49,
+        x: 42, y: 37.3,
         scale: 1,
         hook:  'cincinnatus',
         tiers: 2,
@@ -785,12 +834,12 @@ window.SOG_MAP_DATA = {
         name:  'Hannibal',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/hannibal.png',
-        x: 38, y: 39.5,
+        x: 54, y: 37.3,
         scale: 1,
         hook:  'hannibal',
-        tiers: 2,
-        flagNudge: { dx: 0, dy: 0 },
+        tiers: 1,
         serfFlagOn: 'encounter',
+        victoryFlag: true,
         showFrom: 'cincinnatus-beaten',
         note: 'Scaffolded position — drag into place. Battle not wired.'
       },
@@ -799,7 +848,7 @@ window.SOG_MAP_DATA = {
         name:  'Julius Caesar',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/julius.png',
-        x: 48, y: 36,
+        x: 66, y: 46.7,
         scale: 1,
         hook:  'julius',
         tiers: 2,
@@ -813,7 +862,7 @@ window.SOG_MAP_DATA = {
         name:  'Augustus',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/augustus.png',
-        x: 58, y: 39.5,
+        x: 78, y: 62,
         scale: 1,
         hook:  'augustus',
         tiers: 2,
@@ -827,34 +876,76 @@ window.SOG_MAP_DATA = {
         name:  'Constantine',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/constantine.png',
-        x: 68, y: 49,
+        x: 90, y: 77.3,
         scale: 1,
         hook:  'constantine',
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
-        showFrom: 'augustus-beaten',
+        showFrom: 'christianity-complete',
         note: 'Scaffolded position — drag into place. Battle not wired.'
-      },
-      {
-        id:    'rome-market',
-        name:  'The Roman Forum',
-        kind:  'market',
-        image: 'images/metaworld/civilization nodes/romanmarket.png',
-        x: 78, y: 62,
-        scale: 1,
-        showFrom: 'greece-complete',
-        note: 'Scaffolded position — drag into place. Shop contents not wired.'
       }
     ],
     exits: [
       {
         id:      'to-greece',
-        label:   '← Back',
-        zone:    { x: 0, y: 70, w: 20, h: 30 },
-        walkTo:  { x: 10, y: 85 },
+        label:   '← To Greece',
+        zone:    { x: 80, y: 5, w: 20, h: 30 },
+        walkTo:  { x: 88, y: 15 },
         target:  'greece',
-        entryAt: { x: 88, y: 15 },
+        entryAt: { x: 10, y: 85 },
+        note: 'Scaffolded — drag the zone where it belongs.'
+      },
+      {
+        id:      'to-sahara',
+        label:   '',
+        zone:    { x: 40, y: 82, w: 20, h: 18 },
+        walkTo:  { x: 50, y: 88 },
+        target:  'sahara',
+        entryAt: { x: 50, y: 10 },
+        showFrom: 'china-complete',
+        note: 'Scaffolded — drag the zone where it belongs.'
+      }
+    ],
+    routes: []
+  },
+
+  'sahara': {
+    displayName: 'Sahara',
+    image: 'images/metaworld/maps/garamantes.jpg',
+    spawn: { x: 85, y: 60 },
+    startsFogged: true,
+    props: [],
+    nodes: [
+      {
+        id:    'sahara-market',
+        name:  'The Saharan Market',
+        kind:  'market',
+        image: 'images/metaworld/civilization nodes/garamantesmarket.png',
+        x: 50, y: 55,
+        scale: 1,
+        showFrom: 'china-complete',
+        note: 'Hidden region — no battle here yet.'
+      }
+    ],
+    exits: [
+      {
+        id:      'to-eastafrica',
+        label:   'To East Africa →',
+        zone:    { x: 85, y: 38, w: 15, h: 26 },
+        walkTo:  { x: 92, y: 50 },
+        target:  'eastafrica',
+        entryAt: { x: 8, y: 50 },
+        note: 'Scaffolded — drag the zone where it belongs.'
+      },
+      {
+        id:      'to-rome',
+        label:   '',
+        zone:    { x: 40, y: 0, w: 20, h: 18 },
+        walkTo:  { x: 50, y: 10 },
+        target:  'rome',
+        entryAt: { x: 50, y: 88 },
+        showFrom: 'china-complete',
         note: 'Scaffolded — drag the zone where it belongs.'
       }
     ],

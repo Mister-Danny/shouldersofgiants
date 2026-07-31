@@ -159,6 +159,7 @@ function serialise(doc) {
       if (n.flagNudge)     s += ',\n        flagNudge: { dx: ' + num(n.flagNudge.dx || 0) +
                                 ', dy: ' + num(n.flagNudge.dy || 0) + ' }';
       if (n.serfFlagOn)    s += ',\n        serfFlagOn: ' + q(n.serfFlagOn);
+      if (n.victoryFlag)   s += ',\n        victoryFlag: true';
       s += gates(n, ',\n        ');
       if (n.note)          s += ',\n        note: ' + q(n.note);
       s += '\n      }' + (i < m.nodes.length - 1 ? ',' : '') + '\n';
@@ -408,7 +409,7 @@ function isNum(v) { return typeof v === 'number' && isFinite(v); }
 var KNOWN = {
   map:  ['displayName', 'image', 'spawn', 'startsFogged', 'props', 'nodes', 'exits', 'routes'],
   node: ['id', 'name', 'kind', 'image', 'x', 'y', 'scale', 'flipX', 'label', 'note',
-         'showFrom', 'showUntil', 'hook', 'tiers', 'flagNudge', 'serfFlagOn'],
+         'showFrom', 'showUntil', 'hook', 'tiers', 'flagNudge', 'serfFlagOn', 'victoryFlag'],
   exit: ['id', 'label', 'zone', 'walkTo', 'walkOff', 'target', 'entryAt', 'note',
          'showFrom', 'showUntil'],
   prop: ['image', 'x', 'y', 'scale', 'rotation', 'flipX', 'flipY', 'note',
