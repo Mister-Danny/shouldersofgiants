@@ -528,7 +528,6 @@ var Overworld = (function () {
      Net effect: the editor owns the world's shape and its unlock sequence;
      this file owns what actually happens. ────── */
   var SPRITE_PATH = 'images/metaworld/character sprites/female/';
-  var NODE_PATH   = 'images/metaworld/civilization nodes/';
 
   /* Pre-exit hooks. Not gates — gates are data now. */
   var EXIT_BEHAVIOUR = {
@@ -2167,22 +2166,11 @@ var Overworld = (function () {
       return;
     }
 
-    var nodeEl = document.createElement('div');
-    nodeEl.className = 'overworld-node';
-    nodeEl.dataset.id = 'walls-of-uruk';
-    nodeEl.style.left = '72%';
-    nodeEl.style.top  = '82%';
-    // Resting transform is translate(-50%,-50%) scale(1.35). When GSAP is present
-    // the entrance below animates into that; otherwise set it directly (fallback).
-    if (typeof gsap === 'undefined') nodeEl.style.transform = 'translate(-50%,-50%) scale(1.35)';
-
-    var img = document.createElement('img');
-    img.src = NODE_PATH + 'wallsofuruk@0.33x.png';
-    img.alt = 'Walls of Uruk';
-    img.draggable = false;
-    nodeEl.appendChild(img);
-
-    // Wire click to the same node data used by onNodeClick
+    // Everything about this node — where it sits, how big it is, what art it
+    // uses — comes from the map data, so the fade-in matches what loadMap will
+    // render a moment later. This used to hard-code 72%/82%, scale 1.35 and the
+    // art filename, so the node popped in at one spot and jumped to another on
+    // the next map load, and renaming the art silently broke the cinematic.
     var nodeData = null;
     var mesNodes = MAPS.mesopotamia && MAPS.mesopotamia.nodes;
     if (mesNodes) {
@@ -2190,7 +2178,26 @@ var Overworld = (function () {
         if (mesNodes[ni].id === 'walls-of-uruk') { nodeData = mesNodes[ni]; break; }
       }
     }
-    if (nodeData) {
+    if (!nodeData) { if (onDone) onDone(); return; }
+
+    var nodeEl = document.createElement('div');
+    nodeEl.className = 'overworld-node';
+    nodeEl.dataset.id = 'walls-of-uruk';
+    nodeEl.style.left = nodeData.x + '%';
+    nodeEl.style.top  = nodeData.y + '%';
+    // When GSAP is present the entrance below animates into the resting
+    // transform; otherwise set it directly (fallback).
+    if (typeof gsap === 'undefined') {
+      nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (nodeData.scale || 1) + ')';
+    }
+
+    var img = document.createElement('img');
+    img.src = nodeData.image;
+    img.alt = nodeData.name || 'Walls of Uruk';
+    img.draggable = false;
+    nodeEl.appendChild(img);
+
+    {
       nodeEl.addEventListener('click', (function (nd) {
         return function () { onNodeClick(nd); };
       })(nodeData));
@@ -2625,7 +2632,7 @@ var Overworld = (function () {
       nodeEl.style.top  = node.y + '%';
       nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
       var img = document.createElement('img');
-      img.src = NODE_PATH + 'sargonshadow.png';
+      img.src = node.image;   // from the map data, never a literal
       img.alt = node.name || 'Akkad';
       img.draggable = false;
       nodeEl.appendChild(img);
@@ -2724,7 +2731,7 @@ var Overworld = (function () {
       nodeEl.style.top  = node.y + '%';
       nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
       var img = document.createElement('img');
-      img.src = NODE_PATH + 'hammurabinode.png';
+      img.src = node.image;   // from the map data, never a literal
       img.alt = node.name || 'Babylon';
       img.draggable = false;
       nodeEl.appendChild(img);
@@ -2828,7 +2835,7 @@ var Overworld = (function () {
       nodeEl.style.top  = node.y + '%';
       nodeEl.style.transform = 'translate(-50%,-50%) scale(' + (node.scale || 1) + ')';
       var img = document.createElement('img');
-      img.src = NODE_PATH + 'hanginggardens@0.33x.png';
+      img.src = node.image;   // from the map data, never a literal
       img.alt = node.name || 'The Hanging Gardens';
       img.draggable = false;
       nodeEl.appendChild(img);
