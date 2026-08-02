@@ -100,6 +100,9 @@
   ═══════════════════════════════════════════════════════════════ */
 
   function bindHandEvents() {
+    // The hand is rebuilt from scratch on every render, so any panel anchored to
+    // an element that's about to be discarded must go with it.
+    if (SOG.cardHover) SOG.cardHover.hide();
     playerHandEl.querySelectorAll('.battle-hand-card').forEach(function (el) {
       el.draggable = true;
       if (el.tabIndex < 0) el.tabIndex = 0;
@@ -108,7 +111,35 @@
       el.addEventListener('dragstart', onHandCardDragStart);
       el.addEventListener('dragend',   onHandCardDragEnd);
       el.addEventListener('keydown',   onHandCardKeyDown);
+      // Hover info (SOG.cardHover). Inert when the setting is off or the device
+      // can't hover — the module gates both, so no branch is needed here.
+      el.addEventListener('mouseenter', onHandCardMouseEnter);
+      el.addEventListener('mouseleave', onHandCardMouseLeave);
+      // Click-and-hold to play: dismiss on press, before the drag even starts.
+      el.addEventListener('mousedown',  onHandCardMouseDown);
     });
+  }
+
+  /* ── Hover info handlers ─────────────────────────────────────────────────
+     These only ever SHOW/HIDE the panel; SOG.cardHover owns the enable check,
+     the touch-device check and the suppression state. */
+  function onHandCardMouseEnter() {
+    if (!SOG.cardHover) return;
+    var cardId = parseInt(this.dataset.id, 10);
+    if (isNaN(cardId)) return;
+    var card = CARDS.find(function (c) { return c.id === cardId; });
+    if (!card) return;
+    SOG.cardHover.show(card, buildHandPopupSd(card), this);
+  }
+  function onHandCardMouseLeave() {
+    if (!SOG.cardHover) return;
+    SOG.cardHover.unsuppress();   // gesture (if any) is over once the cursor leaves
+    SOG.cardHover.hide();
+  }
+  function onHandCardMouseDown() {
+    // Press = the start of a play gesture (click-and-hold drag). Get out of the way
+    // immediately and stay away until the pointer leaves or the drag ends.
+    if (SOG.cardHover) SOG.cardHover.suppress();
   }
 
   /* Build the synthetic slot used to render a hand card in the info popup. */
@@ -146,9 +177,14 @@
 
   /* Click on a hand card. Schedule the info popup with a 350ms delay
      so a follow-up click within the window can promote to dblclick →
-     select-to-play without first flashing the popup. */
+     select-to-play without first flashing the popup.
+
+     HOVER MODE: the panel is already showing this card's info, so a single click
+     does nothing — and skipping the timer means double-click-to-play fires without
+     the 350ms wait. Switching the setting off restores this path exactly. */
   function onHandCardClick(e) {
     if (e.detail > 1) return;  // dblclick path handled separately
+    if (SOG.cardHover && SOG.cardHover.isEnabled()) return;
     var cardId = parseInt(this.dataset.id, 10);
     if (isNaN(cardId)) return;
     if (pendingPopupTimer) { clearTimeout(pendingPopupTimer); pendingPopupTimer = null; }
@@ -161,6 +197,7 @@
   /* Double-click on a hand card → toggle select-for-play. */
   function onHandCardDblClick(e) {
     if (pendingPopupTimer) { clearTimeout(pendingPopupTimer); pendingPopupTimer = null; }
+    if (SOG.cardHover) SOG.cardHover.suppress();   // committing to play — panel out of the way
     var cardId = parseInt(this.dataset.id, 10);
     if (isNaN(cardId)) return;
     e.preventDefault();
@@ -188,6 +225,7 @@
   }
 
   function onHandCardDragStart(e) {
+    if (SOG.cardHover) SOG.cardHover.suppress();   // dragging to play — panel out of the way
     if (G.phase !== 'select' || _dialogueActive()) { e.preventDefault(); return; }
     var id   = parseInt(this.dataset.id, 10);
     var card = CARDS.find(function (c) { return c.id === id; });
@@ -199,6 +237,7 @@
 
   function onHandCardDragEnd(e) {
     this.classList.remove('dragging');
+    if (SOG.cardHover) SOG.cardHover.unsuppress();   // gesture over — hover may show again
     // If the browser refused the drop (no preventDefault on any dragover),
     // dropEffect ends up 'none'. Flash the last-hovered illegal slot to
     // give the same feedback the click path produces via commitPlay.

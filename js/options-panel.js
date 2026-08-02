@@ -112,6 +112,40 @@ SOG.OptionsPanel = (function () {
     '</div>';
   }
 
+  /* An ON/OFF row — same three-column rhythm as _sliderRow (label · control ·
+     read-out) so the Gameplay section lines up with Sounds. `sub` is an optional
+     second line explaining what the setting does. */
+  function _toggleRow(label, id, sub) {
+    return '<div class="options-toggle-row">' +
+      '<span class="options-slider-label">' + label +
+        (sub ? '<span class="options-toggle-sub">' + sub + '</span>' : '') +
+      '</span>' +
+      '<button class="options-switch" id="' + id + '" role="switch" aria-checked="true">' +
+        '<span class="options-switch-knob"></span>' +
+      '</button>' +
+      '<span class="options-vol-num" id="' + id + '-num">ON</span>' +
+    '</div>';
+  }
+
+  /* Wire an ON/OFF row: reflect state into the switch + read-out, and call
+     `apply(on)` when the player flips it. */
+  function _wireToggle(id, read, apply) {
+    var btn = document.getElementById(id);
+    var num = document.getElementById(id + '-num');
+    if (!btn) return;
+    function paint(on) {
+      btn.classList.toggle('is-on', on);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
+      if (num) num.textContent = on ? 'ON' : 'OFF';
+    }
+    paint(!!read());
+    btn.addEventListener('click', function () {
+      var next = !read();
+      apply(next);
+      paint(next);
+    });
+  }
+
   function _wireSlider(id, onInput) {
     var el = document.getElementById(id);
     if (!el) return;
@@ -242,6 +276,11 @@ SOG.OptionsPanel = (function () {
           _sliderRow('Music',  'opt-vol-music') +
           _sliderRow('SFX',    'opt-vol-sfx') +
         '</div>' +
+        '<div class="options-section">' +
+          '<div class="options-section-title">Gameplay</div>' +
+          _toggleRow('Card info on hover', 'opt-hover-info',
+                     'Off: click a card in your hand to read it') +
+        '</div>' +
       '</div>' +
       // ── MUSIC BAR (Settings tab only) ──────────────────────────────────
       '<div class="options-music-bar" id="opt-music-bar">' +
@@ -301,6 +340,11 @@ SOG.OptionsPanel = (function () {
     _wireSlider('opt-vol-music',  function (v) { if (window.SOG && SOG.music) SOG.music.setVolume(v); });
     _wireSlider('opt-vol-sfx',    function (v) { if (window.SOG && SOG.sfx)   SOG.sfx.setVolume(v); });
 
+    // Gameplay — hover card info (SOG.cardHover owns the flag + its persistence).
+    _wireToggle('opt-hover-info',
+      function ()   { return !window.SOG || !SOG.cardHover || SOG.cardHover.isEnabled(); },
+      function (on) { if (window.SOG && SOG.cardHover) SOG.cardHover.setEnabled(on); });
+
     // Top toggle — one joined button that flips between Settings and How-to-Play.
     panel.querySelector('#opt-view-toggle').addEventListener('click', function () {
       _selectTab(_tab === 'settings' ? 'howto' : 'settings');
@@ -322,6 +366,16 @@ SOG.OptionsPanel = (function () {
     set('opt-vol-master', (window.SOG && SOG.sfx)   ? SOG.sfx.getMaster()   : 100);
     set('opt-vol-music',  (window.SOG && SOG.music) ? SOG.music.getVolume() : 100);
     set('opt-vol-sfx',    (window.SOG && SOG.sfx)   ? SOG.sfx.getVolume()   : 100);
+    // Toggles read their live source on every open, so the panel can't show a
+    // stale state if the flag was changed elsewhere (or on another device/tab).
+    var hov = document.getElementById('opt-hover-info');
+    if (hov) {
+      var on = !window.SOG || !SOG.cardHover || SOG.cardHover.isEnabled();
+      hov.classList.toggle('is-on', on);
+      hov.setAttribute('aria-checked', on ? 'true' : 'false');
+      var hovNum = document.getElementById('opt-hover-info-num');
+      if (hovNum) hovNum.textContent = on ? 'ON' : 'OFF';
+    }
   }
 
   function open() {

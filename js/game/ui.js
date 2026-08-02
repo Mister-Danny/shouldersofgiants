@@ -513,42 +513,49 @@
   };
 
   /**
-   * Open the battle card info popup.
-   * @param {object} card      Card data from CARDS array
-   * @param {object} [sd]      Slot data (for revealed board cards — shows IP breakdown)
-   * @param {string} [owner]   'player' | 'opp' (required when sd is provided)
+   * Fill a card-info panel's elements from card/slot data.
+   *
+   * SURFACE-AGNOSTIC on purpose: the click-to-open MODAL and the hover panel
+   * (SOG.cardHover) both render the same information, so the content rules live
+   * here ONCE and each surface just supplies its own element set. Adding a rule
+   * here (a new ability shape, a new footer state) reaches both automatically.
+   *
+   * @param {object} els        { name, type, abilName, abilText, ipBrk, hint } — any may be null
+   * @param {object} card       Card data from CARDS array
+   * @param {object} [sd]       Slot data (for revealed board cards — shows IP breakdown)
+   * @param {string} [owner]    'player' | 'opp' (required when sd is provided)
    * @param {boolean} [isBoard] True when called from a board slot (changes hint text)
    */
-  function openBattlePopup(card, sd, owner, isBoard) {
-    battlePopupNameEl.textContent = card.name;
+  function fillPopupContent(els, card, sd, owner, isBoard) {
+    if (els.name) els.name.textContent = card.name;
 
     // Header row: type label (shown whenever the card has a type — every type
     // now has a symbol, including Prehistory).
-    if (battlePopupTypeEl) {
+    if (els.type) {
       var showType = !!card.type;
       if (showType) {
         var iconCls = TYPE_ICON_CLASS[card.type];
         var iconHTML = iconCls
           ? '<span class="cat-icon cat-icon--' + iconCls + '" aria-hidden="true"></span>'
           : '';
-        battlePopupTypeEl.innerHTML =
+        els.type.innerHTML =
           iconHTML + '<span class="cat-label">' + card.type.toUpperCase() + '</span>';
-        battlePopupTypeEl.style.display = '';
+        els.type.style.display = '';
       } else {
-        battlePopupTypeEl.style.display = 'none';
+        els.type.style.display = 'none';
       }
     }
 
     // Footer row: board cards get the IP breakdown; hand cards get the hint.
-    if (sd && battlePopupIPBrkEl) {
-      battlePopupIPBrkEl.innerHTML = buildIPBreakdown(sd, owner, card);
-      battlePopupIPBrkEl.style.display = '';
-      if (battlePopupHintEl) battlePopupHintEl.style.display = 'none';
+    if (sd && els.ipBrk) {
+      els.ipBrk.innerHTML = buildIPBreakdown(sd, owner, card);
+      els.ipBrk.style.display = '';
+      if (els.hint) els.hint.style.display = 'none';
     } else {
-      if (battlePopupIPBrkEl) battlePopupIPBrkEl.style.display = 'none';
-      if (battlePopupHintEl) {
-        battlePopupHintEl.style.display = '';
-        battlePopupHintEl.textContent = isBoard
+      if (els.ipBrk) els.ipBrk.style.display = 'none';
+      if (els.hint) {
+        els.hint.style.display = '';
+        els.hint.textContent = isBoard
           ? 'CLICK CARD FOR INFO'
           : 'DRAG CARD TO A SLOT TO PLAY';
       }
@@ -560,26 +567,41 @@
       ? CARDS.find(function (c) { return c.id === sd.transcribedFrom; })
       : null;
     if (transcribed) {
-      battlePopupAbilNmEl.textContent   = 'Deciphered: ' + transcribed.name;
-      battlePopupAbilNmEl.style.display = '';
-      battlePopupAbilTxEl.textContent   = transcribed.ability || 'No special ability.';
-      battlePopupAbilTxEl.className     = 'popup-ability-text';
+      if (els.abilName) { els.abilName.textContent = 'Deciphered: ' + transcribed.name; els.abilName.style.display = ''; }
+      if (els.abilText) { els.abilText.textContent = transcribed.ability || 'No special ability.'; els.abilText.className = 'popup-ability-text'; }
     } else if (card.ability) {
-      battlePopupAbilNmEl.textContent   = card.abilityName;
-      battlePopupAbilNmEl.style.display = '';
-      battlePopupAbilTxEl.textContent   = card.ability;
-      battlePopupAbilTxEl.className     = 'popup-ability-text';
+      if (els.abilName) { els.abilName.textContent = card.abilityName; els.abilName.style.display = ''; }
+      if (els.abilText) { els.abilText.textContent = card.ability; els.abilText.className = 'popup-ability-text'; }
     } else if (card.flavor) {
       // Ability-less token with flavor text (e.g. the Mummy's "Arrghh…").
-      battlePopupAbilNmEl.style.display = 'none';
-      battlePopupAbilTxEl.textContent   = card.flavor;
-      battlePopupAbilTxEl.className     = 'popup-ability-text vanilla';
+      if (els.abilName) els.abilName.style.display = 'none';
+      if (els.abilText) { els.abilText.textContent = card.flavor; els.abilText.className = 'popup-ability-text vanilla'; }
     } else {
-      battlePopupAbilNmEl.style.display = 'none';
-      battlePopupAbilTxEl.textContent   = 'No special ability.';
-      battlePopupAbilTxEl.className     = 'popup-ability-text vanilla';
+      if (els.abilName) els.abilName.style.display = 'none';
+      if (els.abilText) { els.abilText.textContent = 'No special ability.'; els.abilText.className = 'popup-ability-text vanilla'; }
     }
+  }
+
+  /* The modal's own element set (resolved once — these ids live in index.html). */
+  var MODAL_POPUP_ELS = {
+    name:     battlePopupNameEl,
+    type:     battlePopupTypeEl,
+    abilName: battlePopupAbilNmEl,
+    abilText: battlePopupAbilTxEl,
+    ipBrk:    battlePopupIPBrkEl,
+    hint:     battlePopupHintEl
+  };
+
+  /**
+   * Open the battle card info popup (the click-to-open MODAL surface).
+   * Unchanged behaviour — it now just delegates the content rules to
+   * fillPopupContent, which the hover panel shares.
+   */
+  function openBattlePopup(card, sd, owner, isBoard) {
+    fillPopupContent(MODAL_POPUP_ELS, card, sd, owner, isBoard);
     battlePopupEl.classList.add('visible');
+    // A modal open always wins over the hover panel (they must never stack).
+    if (SOG.cardHover && typeof SOG.cardHover.hide === 'function') SOG.cardHover.hide();
   }
 
   function closeBattlePopup() { battlePopupEl.classList.remove('visible'); }
@@ -852,6 +874,7 @@
   ═══════════════════════════════════════════════════════════════ */
   SOG.ui = {
     openBattlePopup:    openBattlePopup,
+    fillPopupContent:   fillPopupContent,   // shared by SOG.cardHover (js/game/card-hover.js)
     openLocationPopup:  openLocationPopup,
     closeLocationPopup: closeLocationPopup,
     updateOppHand:      updateOppHand,
