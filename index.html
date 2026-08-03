@@ -1634,6 +1634,26 @@
     </div>
   </div>
 
+  <!-- ── Student account flow (AUTH_SPEC.md Phase 3) — see js/account-ui.js.
+       One flexible modal whose body/actions get replaced per step (chooser →
+       class code → confirm → creating → credential card, or → login form).
+       Entry points: the home screen account button (js/home.js) and the
+       post-Otzi CREATE ACCOUNT modal's YES button (js/overworld.js). -->
+  <div id="account-flow-backdrop" class="guest-modal-backdrop">
+    <div class="card-popup guest-modal account-flow-modal">
+      <div class="popup-card-name" id="account-flow-title">ACCOUNT</div>
+      <div class="popup-divider"></div>
+      <div class="welcome-body" id="account-flow-body"></div>
+      <div class="popup-actions" id="account-flow-actions"></div>
+      <!-- Quick white flash covering the whole card — the "payoff" beat
+           js/account-ui.js plays as the conjuring animation hands off to the
+           name-options reveal. Persists across _render() calls (which only
+           touch title/body/actions above), so it survives the DOM swap
+           underneath it. -->
+      <div class="account-flow-flash" id="account-flow-flash"></div>
+    </div>
+  </div>
+
   </div><!-- /#sog-stage -->
 
   <!-- Stage scaling — must be first so SOG.Stage exists before any module -->
@@ -1713,6 +1733,13 @@
   <!-- Local save-state aggregator (AUTH_SPEC.md Phase 1) — must load after every
        module above it that owns a getSnapshot()/applySnapshot() pair. -->
   <script src="js/save-state.js"></script>
+  <!-- Student accounts (AUTH_SPEC.md Phase 3) — account.js needs SaveState +
+       SogAuth already defined; account-ui.js drives the modal via account.js.
+       username-words.js is pure data (figures/epithets baked from the CSVs
+       in the repo root) and must load before account.js. -->
+  <script src="js/data/username-words.js"></script>
+  <script src="js/account.js"></script>
+  <script src="js/account-ui.js"></script>
 
   <!-- Initial screen tag for CSS selectors (showScreen overwrites on navigation) -->
   <script>document.body.dataset.screen = 'home';</script>

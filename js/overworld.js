@@ -1931,8 +1931,12 @@ var Overworld = (function () {
     function onYes() {
       if (yesBtn) yesBtn.removeEventListener('click', onYes);
       if (noBtn)  noBtn.removeEventListener('click', onNo);
-      // Placeholder — Phase 3 wires up real account creation here.
       close();
+      // AUTH_SPEC.md Phase 3 — jump straight to class-code entry, skipping
+      // the chooser: the player already said yes to creating an account.
+      if (window.SogAccountUI && typeof window.SogAccountUI.openFlow === 'function') {
+        window.SogAccountUI.openFlow('classcode');
+      }
     }
     function onNo() {
       if (yesBtn) yesBtn.removeEventListener('click', onYes);

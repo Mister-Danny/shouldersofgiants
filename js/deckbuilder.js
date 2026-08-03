@@ -653,6 +653,9 @@
     }
     stopDeckMusic();
     showScreen('screen-home');
+    if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') {
+      window.HomeFlow.reset();   // re-sync home-state (btn-account opacity/display, etc.)
+    }
     if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
       window.HomeFlow.playMusic();
     }
@@ -680,6 +683,9 @@
   if (btnAboutBack) {
     btnAboutBack.addEventListener('click', function () {
       showScreen('screen-home');
+      if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') {
+        window.HomeFlow.reset();   // re-sync home-state (btn-account opacity/display, etc.)
+      }
       if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
         window.HomeFlow.playMusic();
       }

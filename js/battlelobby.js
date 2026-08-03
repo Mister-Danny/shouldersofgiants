@@ -613,6 +613,9 @@
     _s.slotKey   = null;
     _s.slotRole  = null;
     if (typeof showScreen === 'function') showScreen('screen-home');
+    if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') {
+      window.HomeFlow.reset();   // re-sync home-state (btn-account opacity/display, etc.)
+    }
   }
 
   /* ══════════════════════════════════════════════════════════════

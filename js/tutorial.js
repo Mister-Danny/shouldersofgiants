@@ -1425,6 +1425,9 @@
     if (_musicCtrl) _musicCtrl.style.display = '';
 
     showScreen('screen-home');
+    if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') {
+      window.HomeFlow.reset();   // re-sync home-state (btn-account opacity/display, etc.)
+    }
     // Restart home music — was faded out when the tutorial began.
     if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
       window.HomeFlow.playMusic();

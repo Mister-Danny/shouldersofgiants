@@ -1604,6 +1604,15 @@
     var result = tallyResult();
     if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);
 
+    // Checkpoint save (AUTH_SPEC.md Phase 3) — one of exactly three call
+    // sites in the whole app (the others: account creation, logout). Fires
+    // only on a WIN. No-ops silently for guests and on any Firestore error —
+    // gameplay never blocks on this.
+    if (result.outcome === 'player' && window.SogAccount &&
+        typeof window.SogAccount.checkpointSave === 'function') {
+      window.SogAccount.checkpointSave();
+    }
+
     /* AI win-rate instrumentation (Stage A): log every completed ADVENTURE battle
        (scriptHook set) — boss, tier (serf/giant), result, turn count, per-loc +
        total scores. Guarded to adventure battles so Arcadium/2P aren't logged.
@@ -1990,6 +1999,9 @@
     SOG.ui.stopBgMusic();
     _playPendingCelebrations(function () {
       showScreen('screen-home');
+      if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') {
+        window.HomeFlow.reset();   // re-sync home-state (btn-account opacity/display, etc.)
+      }
       if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
         window.HomeFlow.playMusic();
       }

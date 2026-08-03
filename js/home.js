@@ -252,13 +252,21 @@ var HomeFlow = (function () {
     if (btnAccount)      btnAccount.addEventListener('click', onAccountClick);
 
     _updateAccountButtonLabel();
+    // Keep the label live for the rest of the session — signup/login/logout
+    // all change auth state without necessarily reloading this exact button
+    // back into view first (e.g. mid-battle, or before any home-screen path
+    // re-runs resetHomeState()'s own refresh below).
+    if (window.SogAuth && typeof window.SogAuth.onChange === 'function') {
+      window.SogAuth.onChange(_updateAccountButtonLabel);
+    }
   }
 
-  /* ── Guest/account status button (AUTH_SPEC.md Phase 2 placeholder) ──────
+  /* ── Guest/account status button (AUTH_SPEC.md Phase 3) ──────────────────
      Label reflects window.SogAuth's current user: anonymous (or none) →
      guest, "Create Account / Login"; a real (non-anonymous) user → "Logout".
-     Every player is currently anonymous (student/teacher signup is Phase 3),
-     so this always reads "Create Account / Login" for now. */
+     Called on init, on every SogAuth.onChange tick (signup/login/logout, even
+     mid-session with no reload), and from resetHomeState() on every path back
+     to the home screen — so it's never stale regardless of how it got here. */
   function _updateAccountButtonLabel() {
     if (!btnAccount) return;
     var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
@@ -268,25 +276,34 @@ var HomeFlow = (function () {
   }
 
   function onAccountClick() {
-    // Placeholder — Phase 3 wires up real account creation/login/logout.
-    if (btnAccount.disabled) return;
-    btnAccount.disabled = true;
-    btnAccount.textContent = 'Coming soon!';
-    setTimeout(function () {
-      _updateAccountButtonLabel();
-      btnAccount.disabled = false;
-    }, 1600);
+    if (!window.SogAccountUI) return;
+    var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
+      ? window.SogAuth.getUser() : null;
+    var loggedIn = !!(user && user.isAnonymous === false);
+    if (loggedIn) {
+      if (window.confirm('Log out? Your progress has been saved to your account. ' +
+        'This device will return to guest mode.')) {
+        window.SogAccountUI.logout();
+      }
+    } else {
+      window.SogAccountUI.openFlow('chooser');
+    }
   }
 
   function applyVisitState() {
     if (!introSeen()) {
-      // FIRST-EVER VISIT — funnel: show ONLY the "I'm Ready" button. The rest of
-      // the menu stays hidden so a brand-new player isn't distracted.
+      // FIRST-EVER VISIT — funnel: show only "I'm Ready" plus the account
+      // button. The rest of the menu stays hidden so a brand-new player
+      // isn't distracted, but the account button ALSO doubles as "log back
+      // in" for a returning student: logout wipes sog_intro_seen (see
+      // js/account.js _clearLocalProgressForNextStudent's keep-list, which
+      // doesn't preserve it), which otherwise strands a logged-out student
+      // on this exact first-visit state with no way back into their account.
       btnReady.style.display = '';
       btnLearn.style.display = 'none';
       btnAbout.style.display = 'none';
       if (btnFeedback) btnFeedback.style.display = 'none';
-      if (btnAccount)  btnAccount.style.display = 'none';
+      if (btnAccount)  btnAccount.style.display = '';
     } else {
       // Returning visitor — normal home menu. (Feedback button is threshold-gated
       // separately by feedback.js, so we don't force it here.)
@@ -339,12 +356,13 @@ var HomeFlow = (function () {
      normal Adventure button uses, minus the State-2 menu hop. */
   function launchReadyFunnel() {
     if (typeof gsap === 'undefined') { enterAdventureStage(); return; }
-    gsap.to([subtitleIntroEl, btnReady, btnAbout, btnFeedback], {
+    gsap.to([subtitleIntroEl, btnReady, btnAbout, btnFeedback, btnAccount], {
       opacity: 0, duration: 0.3, ease: 'power2.out',
       onComplete: function () {
         btnReady.style.display = 'none';
         btnAbout.style.display = 'none';
         if (btnFeedback) btnFeedback.style.display = 'none';
+        if (btnAccount)  btnAccount.style.display = 'none';
         subtitleIntroEl.classList.remove('is-visible');
         gsap.set(subtitleIntroEl, { opacity: '' });
         enterAdventureStage();
@@ -905,7 +923,9 @@ var HomeFlow = (function () {
     gsap.set(btnReady, { opacity: 1 });
     gsap.set(btnAbout, { opacity: 1 });
     gsap.set(btnLearn, { opacity: 1 });   // Learn faded to 0 in onReadyClick but never restored — un-stick it
+    if (btnAccount) gsap.set(btnAccount, { opacity: 1 });  // same fade-out in onReadyClick, same fix
     applyVisitState();
+    _updateAccountButtonLabel();   // auth state may have changed since this button was last shown
     // Re-evaluate Feedback button (threshold-gated by feedback.js)
     if (window.Feedback && typeof window.Feedback.refreshHomeButton === 'function') {
       window.Feedback.refreshHomeButton();

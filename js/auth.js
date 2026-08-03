@@ -1,27 +1,39 @@
 /**
- * auth.js — Firebase Anonymous Auth (AUTH_SPEC.md Phase 2 — Guest route)
+ * auth.js — Firebase Auth bootstrap (AUTH_SPEC.md Phase 2 guest route +
+ * Phase 3 returning-student session restore)
  *
- * On load, signs in anonymously against the DEFAULT Firebase app — the same
- * app js/analytics.js uses for Firestore — NOT the named 'rtdb' app that
+ * On load, restores whoever Firebase has persisted for this browser — a
+ * guest's anonymous session, or (once AUTH_SPEC.md Phase 3 has linked an
+ * account) a real student session — and ONLY bootstraps a fresh anonymous
+ * sign-in if nothing was persisted at all (first-ever visit, or a device
+ * that just logged out). Targets the DEFAULT Firebase app — the same app
+ * js/analytics.js uses for Firestore — NOT the named 'rtdb' app that
  * js/multiplayer.js/battlelobby.js/match.js use for Realtime Database.
  *
- * Guest-only for this phase: no student/teacher signup, no Firestore writes
- * of its own (see AUTH_SPEC.md §4 "Guest"). If sign-in fails for any reason
- * (offline, blocked, SDK missing, quota), the game continues exactly as it
- * does today — every failure path below is caught and silently degrades to
- * local-only play. The guest UI (js/guest-status.js) does not depend on this
- * succeeding.
+ * If sign-in fails for any reason (offline, blocked, SDK missing, quota),
+ * the game continues exactly as it does today — every failure path below is
+ * caught and silently degrades to local-only play. The guest UI
+ * (js/guest-status.js) does not depend on this succeeding.
  *
  * Must load AFTER js/analytics.js, which already calls
  * firebase.initializeApp(firebaseConfig) for the default app — this file
  * reuses that instance rather than re-initializing it (a second
  * initializeApp() call for the same default app throws).
  *
- * Exposes window.SogAuth = { getUser(), isSignedIn(), ready(cb) }.
- * ready(cb) is the readiness gate other modules (analytics.js) wait on
- * before their first Firestore write — see the "ready" doc below for why
- * this is tied to signInAnonymously() settling rather than the first
- * onAuthStateChanged tick.
+ * Exposes window.SogAuth = { getUser(), isSignedIn(), ready(cb), onChange(cb),
+ * refresh() }.
+ * ready(cb) is the readiness gate other modules (analytics.js, account.js)
+ * wait on before their first Firestore write — see the "ready" doc below.
+ * onChange(cb) fires on every auth state change reported by Firebase's own
+ * onAuthStateChanged (sign-in, sign-out) — but NOT on linkWithCredential:
+ * Firebase does not re-fire onAuthStateChanged for that, since the uid
+ * doesn't change (confirmed empirically — 0 events on a live linkWithCredential
+ * call). js/account.js's signUpStudent therefore calls refresh() explicitly
+ * right after a successful link, which re-reads firebase.auth().currentUser
+ * and notifies onChange listeners itself. Any UI that needs to stay live
+ * through signup — the guest corner strip (js/guest-status.js), the home
+ * screen's account button label (js/home.js) — must not assume
+ * onAuthStateChanged alone covers linking.
  */
 (function () {
   'use strict';
@@ -38,6 +50,7 @@
   var _user = null;
   var _ready = false;
   var _readyCallbacks = [];
+  var _changeListeners = [];
 
   function _resolveReady() {
     if (_ready) return;
@@ -45,6 +58,12 @@
     var cbs = _readyCallbacks;
     _readyCallbacks = [];
     cbs.forEach(function (cb) {
+      try { cb(_user); } catch (e) {}
+    });
+  }
+
+  function _notifyChange() {
+    _changeListeners.forEach(function (cb) {
       try { cb(_user); } catch (e) {}
     });
   }
@@ -73,29 +92,52 @@
       return;
     }
     try {
-      // Kept live for the whole session (token refresh, future account
-      // upgrades) — but NOT what readiness is gated on. onAuthStateChanged
-      // fires immediately with whatever the cached/current state is (often
-      // null on a fresh load), a tick before signInAnonymously() actually
-      // resolves — gating readiness on that first tick would let callers
-      // read a premature "no user" state and race ahead exactly like the
-      // bug this file fixes. Readiness is gated on signInAnonymously()
-      // itself settling, below.
+      // Firebase persists whoever was last signed in (LOCAL persistence, via
+      // IndexedDB) and restores them across reloads — anonymous guest OR a
+      // linked student account (AUTH_SPEC.md Phase 3). That restoration is
+      // itself async: onAuthStateChanged's FIRST callback is what reports
+      // it, once it's actually done. Calling signInAnonymously() eagerly,
+      // before waiting for that first callback, races the restoration — for
+      // a returning student this was clobbering their real linked session
+      // with a brand-new throwaway anonymous one on every reload. So:
+      // bootstrap anonymously ONLY if that first, authoritative callback
+      // reports no persisted user at all. Every callback after the first
+      // just keeps _user live (token refresh, sign-in/out/link during this
+      // session) without touching sign-in state.
+      var sawFirstState = false;
       firebase.auth().onAuthStateChanged(function (user) {
         _user = user;
-      });
-      firebase.auth().signInAnonymously()
-        .then(function (cred) {
-          _user = (cred && cred.user) ? cred.user : firebase.auth().currentUser;
-        })
-        .catch(function (e) {
-          console.warn('[Auth] Anonymous sign-in failed — continuing in local-only mode.', e);
-        })
-        .then(function () {
+        if (sawFirstState) {
+          // Every tick after the first is a real change during this session
+          // (sign-in, sign-out, or a linkWithCredential upgrade) — live UI
+          // (the guest corner strip) reacts to this via onChange() below.
+          _notifyChange();
+          return;
+        }
+        sawFirstState = true;
+
+        if (user) {
           _resolveReady();
-        });
+          _notifyChange();
+          return;
+        }
+        firebase.auth().signInAnonymously()
+          .then(function (cred) {
+            _user = (cred && cred.user) ? cred.user : firebase.auth().currentUser;
+          })
+          .catch(function (e) {
+            console.warn('[Auth] Anonymous sign-in failed — continuing in local-only mode.', e);
+          })
+          .then(function () {
+            _resolveReady();
+            _notifyChange();
+          });
+      }, function (e) {
+        console.warn('[Auth] onAuthStateChanged error — continuing in local-only mode.', e);
+        _resolveReady();
+      });
     } catch (e) {
-      console.warn('[Auth] Anonymous sign-in threw — continuing in local-only mode.', e);
+      console.warn('[Auth] Auth setup threw — continuing in local-only mode.', e);
       _resolveReady();
     }
   }
@@ -117,6 +159,33 @@
       if (typeof cb !== 'function') return;
       if (_ready) { cb(_user); return; }
       _readyCallbacks.push(cb);
+    },
+
+    /**
+     * Registers cb to run on every auth state change from here on (sign-in,
+     * sign-out, a linkWithCredential upgrade) — unlike ready(), this doesn't
+     * fire immediately for the current state and never stops firing. For
+     * live UI (the guest corner strip) that needs to react the moment a
+     * student finishes signing up, without a page reload.
+     * @param {function(user)} cb
+     */
+    onChange: function (cb) {
+      if (typeof cb !== 'function') return;
+      _changeListeners.push(cb);
+    },
+
+    /**
+     * Re-reads firebase.auth().currentUser and notifies onChange listeners
+     * immediately. Firebase does NOT fire onAuthStateChanged after
+     * linkWithCredential (same uid, no state transition it considers
+     * notable) — js/account.js calls this right after a successful link so
+     * live UI (corner strip, home-screen account button) updates without
+     * waiting on an event that will never come.
+     */
+    refresh: function () {
+      if (typeof firebase === 'undefined' || typeof firebase.auth !== 'function') return;
+      _user = firebase.auth().currentUser;
+      _notifyChange();
     }
   };
 })();

@@ -4161,11 +4161,13 @@ body:not([data-screen="battle"]) #music-track-name {
 }
 
 /* ── Guest status corner strip (AUTH_SPEC.md Phase 2) ────────────────────────
- * Small, quiet, informational-only badge — persistent across every screen
- * (deliberately does NOT follow the .music-ctrl display:none/flex per-screen
- * opt-in pattern above). Top-left, staying clear of #adv-hud's top-right
- * utility icons and .music-ctrl's bottom-right anchor. Not interactive —
- * the account-creation affordance lives on the home screen instead. */
+ * Small, quiet, informational-only badge. Top-left, staying clear of
+ * #adv-hud's top-right utility icons and .music-ctrl's bottom-right anchor.
+ * Not interactive — the account-creation affordance lives on the home
+ * screen instead. Screen-gated (follows .music-ctrl's per-screen opt-in
+ * pattern after all): only relevant on the overworld map, hidden everywhere
+ * else (battle, home, deckbuilder, etc.) so it doesn't compete with in-battle
+ * UI or other screens' own chrome. */
 .guest-status-strip {
   position: fixed;
   top: 10px;
@@ -4175,6 +4177,10 @@ body:not([data-screen="battle"]) #music-track-name {
   border-radius: 4px;
   padding: 3px 8px;
   pointer-events: none;
+  display: none;
+}
+body[data-screen="overworld"] .guest-status-strip {
+  display: block;
 }
 
 .guest-status-text {
@@ -4207,6 +4213,192 @@ body:not([data-screen="battle"]) #music-track-name {
 .guest-modal-backdrop.visible {
   opacity: 1;
   pointer-events: all;
+}
+
+/* ── Student account flow (AUTH_SPEC.md Phase 3) ─────────────────────────
+ * Reuses .guest-modal-backdrop/.card-popup for the shell; these rules only
+ * cover the bits that modal didn't need before: text inputs (the game had
+ * none until this flow — "no student typing" everywhere else), the
+ * credential card, and inline warning/error text. */
+.account-flow-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 10px 0;
+  padding: 10px 14px;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  background: var(--bg-btn);
+  border: 2px solid var(--border-bright);
+  border-radius: 4px;
+  color: var(--text-white);
+  outline: none;
+}
+.account-flow-input:focus {
+  border-color: var(--snes-yellow);
+}
+.account-flow-input::placeholder {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.account-flow-error {
+  margin-top: 8px;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 13px;
+  color: var(--snes-red);
+}
+
+.account-flow-warning {
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 13px;
+  color: var(--snes-red);
+  border-left: 3px solid var(--snes-red);
+  padding-left: 10px;
+}
+
+.account-flow-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 13px;
+  color: var(--text-white);
+  cursor: pointer;
+  margin-top: 12px;
+}
+.account-flow-checkbox-row input {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.account-credential-card {
+  margin: 14px 0;
+  padding: 14px 18px;
+  background: var(--bg-btn);
+  border: 2px solid var(--snes-yellow);
+  border-radius: 4px;
+}
+.account-credential-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 6px 0;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+}
+.account-credential-row + .account-credential-row {
+  border-top: 1px solid var(--border-mid);
+}
+.account-credential-row span {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.account-credential-row strong {
+  font-size: 18px;
+  color: var(--snes-yellow);
+  letter-spacing: 0.02em;
+}
+
+/* Printable credential card: hide everything else on the page. */
+@media print {
+  body * { visibility: hidden; }
+  #account-credential-card, #account-credential-card * { visibility: visible; }
+  #account-credential-card {
+    position: fixed;
+    top: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+  }
+}
+
+/* ── "Summon" box (student signup credential reveal, AUTH_SPEC.md Phase 3) ──
+ * .account-credential-card is reused directly for the button phase so it
+ * doesn't resize when the animation starts; the options-reveal phase (see
+ * .account-summon-box-options below) drops that fixed footprint since the
+ * removed body copy leaves room to size the buttons up. The final username/
+ * passphrase phase renders as its own fresh .account-credential-card via
+ * _stepCredentialCard, unrelated to this element. position:relative +
+ * overflow:hidden gives the swirling particles a contained stage. */
+.account-summon-box {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Options-reveal phase: no fixed height needed (no button/particle content),
+ * so let it size to its (now much larger) button children instead of
+ * matching the credential-card's original cramped footprint. */
+.account-summon-box-options {
+  padding: 10px 14px;
+}
+
+.account-summon-btn {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 22px 0;
+  font-family: var(--font);
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--snes-yellow);
+  cursor: pointer;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+.account-summon-btn:hover {
+  text-shadow: 0 0 8px var(--snes-yellow);
+}
+.account-summon-btn:disabled {
+  cursor: default;
+}
+
+.account-summon-particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--snes-yellow);
+  box-shadow: 0 0 6px 2px rgba(248, 208, 0, 0.7);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.account-summon-option {
+  display: block;
+  width: 100%;
+  margin: 10px 0;
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 21px;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  text-transform: none;   /* override .btn-snes's uppercase — these are shown in CamelCase */
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Conjuring → name-options "payoff" flash (js/account-ui.js
+ * _playConjuringAnimation). Covers the whole popup card; opacity is driven
+ * entirely by GSAP (see that function), never by CSS transition, so its
+ * timing can be synced exactly to the conjuring fade-out. */
+.account-flow-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 20;
 }
 
 /* ── Per-screen palette override: home screen (warm leather + gold) ─────────────

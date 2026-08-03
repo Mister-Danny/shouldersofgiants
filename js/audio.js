@@ -158,6 +158,7 @@ var SFX = (function () {
   var _columbusHowl  = null;
   var _voltaireHowl  = null;
   var _waterflowHowl = null;
+  var _magicSwirlHowl = null;
 
   function cortesHowl() {
     if (typeof Howl === 'undefined') return null;
@@ -313,6 +314,14 @@ var SFX = (function () {
       _waterflowHowl = new Howl({ src: ['sfx/waterflow.m4a'], volume: 1.0, html5: true });
     }
     return _waterflowHowl;
+  }
+
+  function magicSwirlHowl() {
+    if (typeof Howl === 'undefined') return null;
+    if (!_magicSwirlHowl) {
+      _magicSwirlHowl = new Howl({ src: ['sfx/magicswirl.m4a'], volume: 1.0, html5: true });
+    }
+    return _magicSwirlHowl;
   }
 
   function francisHowl() {
@@ -703,6 +712,31 @@ var SFX = (function () {
         return;
       }
       try { new Audio('sfx/waterflow.m4a').play(); } catch (e) {}
+    },
+
+    /** Student-signup "conjuring" flourish (js/account-ui.js, credential-card
+     *  reveal) — 4s swirl with a 500ms fade on its tail, timed to match the
+     *  visual particle animation's own synced fade-out. Never throws: the
+     *  caller's 4s visual timeline runs on its own clock regardless of
+     *  whether this sound loads or plays. */
+    magicSwirl: function () {
+      if (_muted) return;
+      try {
+        var howl = magicSwirlHowl();
+        if (!howl) { try { new Audio('sfx/magicswirl.m4a').play(); } catch (e) {} return; }
+        howl.stop();
+        howl.volume(_sfxVol());
+        var id = howl.play();
+        var FADE_MS = 500;
+        howl.once('play', function () {
+          var durMs = (howl.duration() || 0) * 1000;
+          if (durMs > FADE_MS) {
+            setTimeout(function () {
+              try { howl.fade(howl.volume(), 0, FADE_MS, id); } catch (e) {}
+            }, durMs - FADE_MS);
+          }
+        }, id);
+      } catch (e) {}
     },
 
     /** Columbus arrives at a location with Cultural cards — plays church bell */

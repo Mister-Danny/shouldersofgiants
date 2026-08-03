@@ -606,6 +606,7 @@
         close();
         Progression.playCutscene('Religious', function () {
           showScreen('screen-home');
+          if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') window.HomeFlow.reset();
         }, { preview: true });
       }
     });
@@ -616,6 +617,7 @@
         close();
         Progression.playCutscene('Exploration', function () {
           showScreen('screen-home');
+          if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') window.HomeFlow.reset();
         }, { preview: true });
       }
     });
@@ -626,6 +628,7 @@
         close();
         Progression.playMontage(function () {
           showScreen('screen-home');
+          if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') window.HomeFlow.reset();
         }, { preview: true });
       }
     });
