@@ -1,5 +1,6 @@
 /**
- * account-ui.js — Student account flow UI (AUTH_SPEC.md Phase 3)
+ * account-ui.js — Student + teacher account flow UI
+ * (AUTH_SPEC.md Phase 3 students, Phase 4 teachers)
  *
  * Drives the #account-flow-backdrop modal (markup in index.html) through its
  * steps, calling into window.SogAccount (js/account.js, pure logic/Firebase,
@@ -9,6 +10,9 @@
  *   - The post-Otzi CREATE ACCOUNT modal's YES button (js/overworld.js),
  *     which jumps straight to the class-code step (skipping the chooser —
  *     the player already said yes to creating an account).
+ * The chooser's "TEACHER SIGN UP" button branches into a separate real-
+ * email/password form (see the Teacher signup section below) — no
+ * generated credentials, no printable card, no dashboard (Phase 5).
  *
  * Signup failure fallback (AUTH_SPEC.md §4): a genuine rate-limit or network
  * error lands on the "saved locally" step rather than blocking — the game
@@ -54,10 +58,12 @@ window.SogAccountUI = (function () {
       '<p>Create an account to save your progress permanently, or log back in if you already have one.</p>',
       '<button class="btn-snes" id="af-create">CREATE ACCOUNT</button>' +
       '<button class="btn-snes" id="af-login">LOG IN</button>' +
+      '<button class="btn-snes" id="af-teacher">TEACHER SIGN UP</button>' +
       '<button class="btn-snes btn-snes-close" id="af-cancel">CANCEL</button>'
     );
     _byId('af-create').addEventListener('click', function () { _stepClassCode(); });
     _byId('af-login').addEventListener('click', function () { _stepLoginForm(); });
+    _byId('af-teacher').addEventListener('click', function () { _stepTeacherSignup(); });
     _byId('af-cancel').addEventListener('click', _close);
   }
 
@@ -339,15 +345,28 @@ window.SogAccountUI = (function () {
     });
   }
 
-  /* ── Step: login form ─────────────────────────────────────────────────── */
-  function _stepLoginForm(errorMsg) {
+  /* ── Step: login form ─────────────────────────────────────────────────
+     Serves both audiences from one form: students (username + passphrase)
+     and teachers (email + password). _submitLogin below branches purely on
+     whether the identifier contains "@" — students' generated usernames
+     never do (see js/account.js _formatUsername), so this is an
+     unambiguous signal with no extra UI needed to pick a mode.
+     infoMsg is a separate, non-error slot for "Forgot password?" outcomes
+     (reset sent / student-has-no-recovery) so it doesn't get mistaken for
+     a login failure. prefillIdentifier keeps whatever was typed across a
+     re-render (wrong password, forgot-password click, etc.). */
+  function _stepLoginForm(errorMsg, infoMsg, prefillIdentifier) {
     _render(
       'LOG IN',
+      '<p>Students: enter your username and passphrase. Teachers: enter your email and password.</p>' +
       '<input type="text" id="af-login-username" class="account-flow-input" ' +
-        'placeholder="USERNAME" autocomplete="off" spellcheck="false">' +
-      '<input type="text" id="af-login-passphrase" class="account-flow-input" ' +
-        'placeholder="PASSPHRASE" autocomplete="off" spellcheck="false">' +
-      (errorMsg ? '<div class="account-flow-error">' + errorMsg + '</div>' : ''),
+        'placeholder="USERNAME OR EMAIL" autocomplete="username" spellcheck="false" value="' +
+        _escapeHtml(prefillIdentifier || '') + '">' +
+      '<input type="password" id="af-login-passphrase" class="account-flow-input" ' +
+        'placeholder="PASSWORD" autocomplete="current-password">' +
+      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
+      (infoMsg  ? '<div class="account-flow-info">'  + _escapeHtml(infoMsg)  + '</div>' : '') +
+      '<div class="account-flow-forgot"><a href="#" id="af-forgot">Forgot password?</a></div>',
       '<button class="btn-snes" id="af-login-submit">LOG IN</button>' +
       '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
     );
@@ -358,30 +377,177 @@ window.SogAccountUI = (function () {
     _byId('af-login-submit').addEventListener('click', submit);
     passInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
     _byId('af-back').addEventListener('click', _stepChooser);
-  }
-
-  function _submitLogin(username, passphrase) {
-    if (!username || !passphrase) {
-      _stepLoginForm('Enter both your username and passphrase.');
-      return;
-    }
-    _render('ONE MOMENT', '<p>Logging in…</p>', '');
-    window.SogAccount.loginStudent(username, passphrase, function (err, user) {
-      if (err) {
-        _stepLoginForm('Username or passphrase not recognized. Check with your teacher.');
-        return;
-      }
-      _stepWelcomeBack();
+    _byId('af-forgot').addEventListener('click', function (e) {
+      e.preventDefault();
+      _handleForgotPassword(userInput.value);
     });
   }
 
-  function _stepWelcomeBack() {
+  function _submitLogin(identifier, secret) {
+    identifier = (identifier || '').trim();
+    if (!identifier || !secret) {
+      _stepLoginForm('Enter both fields.', null, identifier);
+      return;
+    }
+    var isTeacher = identifier.indexOf('@') !== -1;
+    _render('ONE MOMENT', '<p>Logging in…</p>', '');
+    if (isTeacher) {
+      window.SogAccount.loginTeacher(identifier, secret, function (err) {
+        if (err) {
+          console.error('[AccountUI] Teacher login failed', err);
+          _stepLoginForm(_teacherLoginErrorMessage(err), null, identifier);
+          return;
+        }
+        _stepWelcomeBack(true);
+      });
+    } else {
+      window.SogAccount.loginStudent(identifier, secret, function (err) {
+        if (err) {
+          _stepLoginForm('Username or passphrase not recognized. Check with your teacher.', null, identifier);
+          return;
+        }
+        _stepWelcomeBack(false);
+      });
+    }
+  }
+
+  function _teacherLoginErrorMessage(err) {
+    var code = err && err.code;
+    if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+      return 'Email or password not recognized.';
+    }
+    if (code === 'auth/invalid-email')      return 'Enter a valid email address.';
+    if (code === 'auth/too-many-requests')  return 'Too many attempts — please wait a moment and try again.';
+    if (code === 'auth/network-request-failed') return 'Network issue — please try again.';
+    return 'Something went wrong logging in. Please try again.';
+  }
+
+  /* ── Forgot password (teachers only) ───────────────────────────────────
+     A student's generated username never contains "@" — that's the same
+     signal _submitLogin uses, so this needs no separate mode toggle. For a
+     student identifier, there is truly nothing to send: matches the
+     credential card's own no-recovery warning verbatim rather than
+     inventing softer language that implies recovery might be possible. */
+  function _handleForgotPassword(identifier) {
+    identifier = (identifier || '').trim();
+    if (!identifier) {
+      _stepLoginForm(null, 'Enter your email above, then tap "Forgot password?" again.', identifier);
+      return;
+    }
+    if (identifier.indexOf('@') === -1) {
+      _stepLoginForm(null, 'Student accounts have no password recovery. There is no password reset ' +
+        'and no recovery email. If this is lost, progress cannot be recovered.', identifier);
+      return;
+    }
+    _stepLoginForm(null, 'Sending reset email…', identifier);
+    window.SogAccount.sendPasswordReset(identifier, function (err) {
+      if (err) {
+        console.error('[AccountUI] Password reset failed', err);
+        _stepLoginForm(null, _resetErrorMessage(err), identifier);
+        return;
+      }
+      _stepLoginForm(null, 'Check your email for a link to reset your password.', identifier);
+    });
+  }
+
+  function _resetErrorMessage(err) {
+    var code = err && err.code;
+    if (code === 'auth/user-not-found')     return 'No account found with that email.';
+    if (code === 'auth/invalid-email')      return 'Enter a valid email address.';
+    if (code === 'auth/too-many-requests')  return 'Too many attempts — please wait a moment and try again.';
+    return 'Something went wrong sending the reset email. Please try again.';
+  }
+
+  function _stepWelcomeBack(isTeacher) {
     _render(
       'WELCOME BACK',
-      '<p>You’re logged in and your saved progress has been restored.</p>',
+      isTeacher
+        ? '<p>You’re logged in to your teacher account.</p>'
+        : '<p>You’re logged in and your saved progress has been restored.</p>',
       '<button class="btn-snes" id="af-ok">OK</button>'
     );
     _byId('af-ok').addEventListener('click', function () {
+      _close();
+      location.reload();
+    });
+  }
+
+  /* ── Teacher signup (AUTH_SPEC.md §4 "Teacher signup", Phase 4) ────────
+     Real email + password + display name + invite code — no generated
+     credentials, no printable card, and (deliberately, per spec) no
+     dashboard yet: that's Phase 5. Errors re-render this same form with an
+     inline message rather than falling through to the student-oriented
+     "saved locally"/"account creation failed" steps below, since a teacher
+     account has no local-only fallback concept — it either exists or it
+     doesn't. */
+  function _stepTeacherSignup(errorMsg, prefill) {
+    prefill = prefill || {};
+    _render(
+      'TEACHER SIGN UP',
+      '<p>Real email and password — Firebase’s standard password reset works for this account.</p>' +
+      '<input type="text" id="af-teacher-name" class="account-flow-input" ' +
+        'placeholder="DISPLAY NAME" autocomplete="name" value="' + _escapeHtml(prefill.displayName || '') + '">' +
+      '<input type="email" id="af-teacher-email" class="account-flow-input" ' +
+        'placeholder="EMAIL" autocomplete="email" value="' + _escapeHtml(prefill.email || '') + '">' +
+      '<input type="password" id="af-teacher-password" class="account-flow-input" ' +
+        'placeholder="PASSWORD" autocomplete="new-password">' +
+      '<input type="text" id="af-teacher-invite" class="account-flow-input" maxlength="8" ' +
+        'placeholder="INVITE CODE" autocomplete="off" spellcheck="false" value="' + _escapeHtml(prefill.inviteCode || '') + '">' +
+      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : ''),
+      '<button class="btn-snes" id="af-teacher-submit">CREATE TEACHER ACCOUNT</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
+    );
+    var nameInput = _byId('af-teacher-name');
+    nameInput.focus();
+    function submit() {
+      _submitTeacherSignup({
+        displayName: nameInput.value,
+        email:       _byId('af-teacher-email').value,
+        password:    _byId('af-teacher-password').value,
+        inviteCode:  _byId('af-teacher-invite').value
+      });
+    }
+    _byId('af-teacher-submit').addEventListener('click', submit);
+    _byId('af-teacher-invite').addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    _byId('af-back').addEventListener('click', _stepChooser);
+  }
+
+  function _submitTeacherSignup(fields) {
+    if (!fields.displayName || !fields.email || !fields.password || !fields.inviteCode) {
+      _stepTeacherSignup('Fill in every field.', fields);
+      return;
+    }
+    _render('ONE MOMENT', '<p>Creating your teacher account…</p>', '');
+    window.SogAccount.signUpTeacher(fields, function (err, result) {
+      if (err) {
+        console.error('[AccountUI] Teacher signup failed', err);
+        _stepTeacherSignup(_teacherErrorMessage(err), fields);
+        return;
+      }
+      _stepTeacherSignupSuccess(result);
+    });
+  }
+
+  function _teacherErrorMessage(err) {
+    var code = err && err.code;
+    if (code === 'invite-invalid')              return "That code isn't valid. Check it with whoever gave it to you.";
+    if (code === 'auth/email-already-in-use')   return 'An account with that email already exists. Try logging in instead.';
+    if (code === 'auth/invalid-email')          return 'Enter a valid email address.';
+    if (code === 'auth/weak-password')          return 'Password must be at least 6 characters.';
+    if (code === 'auth/network-request-failed' ||
+        code === 'auth/too-many-requests')      return 'Network issue — please try again in a moment.';
+    return 'Something went wrong creating your account. Please try again.';
+  }
+
+  function _stepTeacherSignupSuccess(result) {
+    _render(
+      'TEACHER ACCOUNT CREATED',
+      '<p>Welcome, ' + _escapeHtml(result.displayName) + '! Your teacher account is ready.</p>' +
+      '<p>Class management tools are coming soon. For now, use your email and password any time you need ' +
+        'to sign back in — Firebase’s standard password reset works if you forget it.</p>',
+      '<button class="btn-snes" id="af-done">OK</button>'
+    );
+    _byId('af-done').addEventListener('click', function () {
       _close();
       location.reload();
     });
@@ -413,7 +579,7 @@ window.SogAccountUI = (function () {
       '<button class="btn-snes" id="af-retry">TRY AGAIN</button>' +
       '<button class="btn-snes btn-snes-close" id="af-ok">OK</button>'
     );
-    _byId('af-retry').addEventListener('click', _stepCreating);
+    _byId('af-retry').addEventListener('click', _stepSummon);
     _byId('af-ok').addEventListener('click', _close);
   }
 

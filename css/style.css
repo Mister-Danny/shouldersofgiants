@@ -4220,6 +4220,28 @@ body[data-screen="overworld"] .guest-status-strip {
  * cover the bits that modal didn't need before: text inputs (the game had
  * none until this flow — "no student typing" everywhere else), the
  * credential card, and inline warning/error text. */
+
+/* Chooser step (js/account-ui.js _stepChooser) has 4 buttons — CREATE
+ * ACCOUNT / LOG IN / TEACHER SIGN UP / CANCEL — which overflow the modal's
+ * right edge in the base .popup-actions single-row flex layout. Scoped to
+ * :has(#af-teacher) so ONLY this step switches to a 2x2 grid; every other
+ * account-flow step (2-3 buttons) keeps the normal single-row layout
+ * unaffected. Button styling itself (border/shadow/font/colors) is
+ * untouched — still plain .btn-snes — only width/padding change so two fit
+ * per row without overflowing at narrower widths (text wraps rather than
+ * clipping if a row ever gets too tight). */
+#account-flow-actions:has(#af-teacher) {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+#account-flow-actions:has(#af-teacher) .btn-snes {
+  width: 100%;
+  box-sizing: border-box;
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
 .account-flow-input {
   display: block;
   width: 100%;
@@ -4257,6 +4279,31 @@ body[data-screen="overworld"] .guest-status-strip {
   color: var(--snes-red);
   border-left: 3px solid var(--snes-red);
   padding-left: 10px;
+}
+
+/* Non-error info messages on the login form (forgot-password outcomes):
+ * reset sent, "enter your email first", etc. — distinct from
+ * .account-flow-error's red so a confirmation doesn't read as a failure. */
+.account-flow-info {
+  margin-top: 8px;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 13px;
+  color: var(--text-white);
+}
+
+.account-flow-forgot {
+  margin-top: 10px;
+  text-align: right;
+}
+.account-flow-forgot a {
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 12px;
+  color: var(--text-dim);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.account-flow-forgot a:hover {
+  color: var(--snes-yellow);
 }
 
 .account-flow-checkbox-row {

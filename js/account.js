@@ -1,5 +1,6 @@
 /**
- * account.js — Student account signup/login/checkpoints (AUTH_SPEC.md Phase 3)
+ * account.js — Student + teacher account signup/login/checkpoints
+ * (AUTH_SPEC.md Phase 3 students, Phase 4 teachers)
  *
  * Pure logic layer — no DOM. js/account-ui.js drives the modal UI and calls
  * into the functions exposed here. Firebase-only; reuses the default app
@@ -24,9 +25,14 @@
  *      `progress` — this write IS the "checkpoint at account creation".
  *   7. UI layer shows the credential card.
  *
+ * Teacher signup (signUpTeacher, below) follows §4 "Teacher signup" exactly
+ * instead — create-then-rollback, since invites are unreadable client-side
+ * so there's no pre-validation step available. See that function's doc.
+ *
  * Checkpoint saves (checkpointSave()) fire from exactly three places in the
- * app: after a battle win (js/game.js endGame()), the creation write above,
- * and logout() below. Nowhere else.
+ * app: after a battle win (js/game.js endGame()), the student-creation write
+ * above, and logout() below. Nowhere else. Teachers never get a /players/
+ * doc and are unaffected by checkpointSave.
  */
 window.SogAccount = (function () {
   'use strict';
@@ -306,6 +312,119 @@ window.SogAccount = (function () {
     });
   }
 
+  /* ── Teacher login ──────────────────────────────────────────────────────
+     Real email + password, signed in directly — no synthetic domain, and
+     no /players/{uid} progress restore (teachers never get a player doc).
+     js/account-ui.js's login form branches to this vs. loginStudent above
+     based on whether the entered identifier contains "@". */
+  function loginTeacher(email, password, cb) {
+    var normalizedEmail = (email || '').trim().toLowerCase();
+    firebase.auth().signInWithEmailAndPassword(normalizedEmail, password).then(function (userCred) {
+      if (window.SogAuth && typeof window.SogAuth.refresh === 'function') {
+        window.SogAuth.refresh();
+      }
+      cb(null, userCred.user);
+    }).catch(function (err) {
+      cb(err, null);
+    });
+  }
+
+  /* ── Teacher password reset ───────────────────────────────────────────
+     Firebase's standard built-in reset — for a teacher's own real email
+     account only. Students have no recovery path at all (per the
+     credential card's warning); js/account-ui.js gates on "contains @"
+     before ever calling this, but guard here too: a synthetic
+     @sog.invalid address doesn't route anywhere real, so a reset email
+     "sent" to one would silently vanish rather than erroring, which could
+     mask a bug in the caller. */
+  function sendPasswordReset(email, cb) {
+    var normalizedEmail = (email || '').trim().toLowerCase();
+    if (normalizedEmail.indexOf(EMAIL_DOMAIN) !== -1) {
+      var err = new Error('Student accounts have no password recovery.');
+      err.code = 'reset-not-supported';
+      cb(err);
+      return;
+    }
+    firebase.auth().sendPasswordResetEmail(normalizedEmail).then(function () {
+      cb(null);
+    }).catch(function (err) {
+      cb(err);
+    });
+  }
+
+  /* ── Teacher signup (AUTH_SPEC.md §4 "Teacher signup", Phase 4) ────────
+     Invites are `read: false` (see firestore.rules), so there is no
+     pre-validation step like the student class-code lookup — the invite
+     code is only ever checked server-side, inside the /teachers/{uid}
+     create rule's get(). That means a bad/deactivated code can't be
+     detected until AFTER the Auth user already exists, so this follows the
+     spec's create-then-rollback order exactly:
+       1. createUserWithEmailAndPassword — a clean account, NOT linked to
+          the current anonymous session (teachers don't carry over guest
+          progress; real email+password so Firebase's password reset works).
+       2. Attempt the /teachers/{uid} write.
+       3. If that write fails, delete the just-created Auth user so no
+          orphan is left behind, and surface a friendly invite-code message
+          for the specific case the rules would deny (permission-denied) —
+          any other failure (network, timeout) is passed through as-is
+          rather than being mislabeled as a bad code. */
+  function _friendlyTeacherSignupError(writeErr) {
+    if (writeErr && writeErr.code === 'permission-denied') {
+      var err = new Error("That code isn't valid.");
+      err.code = 'invite-invalid';
+      return err;
+    }
+    return writeErr;
+  }
+
+  /**
+   * @param {object} opts  { email, password, displayName, inviteCode }
+   * @param {function(err, result)} cb  result = { uid, email, displayName }
+   */
+  function signUpTeacher(opts, cb) {
+    var email       = (opts.email || '').trim();
+    var password    = opts.password || '';
+    var displayName = (opts.displayName || '').trim();
+    var inviteCode  = (opts.inviteCode || '').trim().toUpperCase();
+
+    _withTimeout(firebase.auth().createUserWithEmailAndPassword(email, password), LINK_TIMEOUT_MS)
+      .then(function (userCred) {
+        var user = userCred.user;
+
+        var teacherData = {
+          email:       email,
+          inviteCode:  inviteCode,
+          displayName: displayName,
+          createdAt:   firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        _withTimeout(_db().collection('teachers').doc(user.uid).set(teacherData), WRITE_TIMEOUT_MS)
+          .then(function () {
+            // createUserWithEmailAndPassword reliably fires onAuthStateChanged
+            // (a genuinely different signed-in user, unlike linkWithCredential
+            // above) but refresh() explicitly anyway per this file's established
+            // "don't assume, verify" rule for auth-state notifications.
+            if (window.SogAuth && typeof window.SogAuth.refresh === 'function') {
+              window.SogAuth.refresh();
+            }
+            cb(null, { uid: user.uid, email: email, displayName: displayName });
+          })
+          .catch(function (writeErr) {
+            console.error('[Account] /teachers/{uid} write failed — rolling back the Auth user', writeErr);
+            user.delete().then(function () {
+              cb(_friendlyTeacherSignupError(writeErr), null);
+            }).catch(function (deleteErr) {
+              console.error('[Account] Teacher signup rollback delete failed — an orphaned Auth user may remain', deleteErr);
+              cb(_friendlyTeacherSignupError(writeErr), null);
+            });
+          });
+      })
+      .catch(function (createErr) {
+        console.error('[Account] Teacher createUserWithEmailAndPassword failed', createErr);
+        cb(createErr, null);
+      });
+  }
+
   /* ── Checkpoint save — one of exactly 3 call sites in the whole app:
      after a battle win (js/game.js endGame()), account creation (the write
      inside signUpStudent above), and logout() below. Never on map
@@ -369,6 +488,9 @@ window.SogAccount = (function () {
     lookupClassCode:   lookupClassCode,
     signUpStudent:     signUpStudent,
     loginStudent:      loginStudent,
+    signUpTeacher:     signUpTeacher,
+    loginTeacher:      loginTeacher,
+    sendPasswordReset: sendPasswordReset,
     checkpointSave:    checkpointSave,
     logout:            logout
   };
