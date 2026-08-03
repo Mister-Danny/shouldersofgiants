@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function classDoc(code) {
+      return get(/databases/$(database)/documents/classes/$(code)).data;
+    }
+
+    // Invite codes: never client-readable, in any form.
+    // Validation happens via get() inside rules, which is server-side
+    // and does not require client read permission.
+    match /invites/{code} {
+      allow read, write: if false;
+    }
+
+    // Classes: fetchable by exact ID so the student can see
+    // "Joining: Mr. S — Period 3" before committing.
+    // list is denied, so codes cannot be enumerated.
+    match /classes/{code} {
+      allow get:    if signedIn();
+      allow list:   if false;
+      allow create: if signedIn()
+                    && request.resource.data.ownerUid == request.auth.uid
+                    && exists(/databases/$(database)/documents/teachers/$(request.auth.uid));
+      allow update: if signedIn()
+                    && resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if false;
+    }
+
+    match /teachers/{uid} {
+      allow get:    if signedIn() && request.auth.uid == uid;
+      allow list:   if false;
+      allow create: if signedIn()
+                    && request.auth.uid == uid
+                    && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.active == true;
+      allow update: if signedIn()
+                    && request.auth.uid == uid
+                    && request.resource.data.inviteCode == resource.data.inviteCode;
+      allow delete: if false;
+    }
+
+    match /players/{uid} {
+      allow get:    if signedIn()
+                    && (request.auth.uid == uid
+                        || resource.data.teacherUid == request.auth.uid);
+
+      allow list:   if signedIn()
+                    && resource.data.teacherUid == request.auth.uid;
+
+      allow create: if signedIn()
+                    && request.auth.uid == uid
+                    && (
+                         // ungrouped play
+                         (request.resource.data.classCode == ''
+                          && request.resource.data.teacherUid == '')
+                         ||
+                         // joined to a live class, teacherUid must match reality
+                         (classDoc(request.resource.data.classCode).active == true
+                          && classDoc(request.resource.data.classCode).ownerUid
+                             == request.resource.data.teacherUid)
+                       );
+
+      // Pin class membership: a student cannot relocate into
+      // another teacher's roster mid-year.
+      allow update: if signedIn()
+                    && request.auth.uid == uid
+                    && request.resource.data.classCode == resource.data.classCode
+                    && request.resource.data.teacherUid == resource.data.teacherUid
+                    && request.resource.data.username == resource.data.username;
+
+      allow delete: if request.auth.uid == uid;
+    }
+
+    // Sessions: pre-existing analytics telemetry (js/analytics.js), predates
+    // this spec. Write-only — no client ever reads it back; the bypass.js
+    // Data Review panel is a teacher-console tool that will need to move
+    // behind a Cloud Function or admin SDK rather than a client-side get/list.
+    // Going forward, session docs should include a `uid` field (the
+    // authenticated writer's uid) so ownership is at least recorded even
+    // though it isn't enforced by a read rule yet.
+    match /sessions/{sessionId} {
+      allow read:   if false;
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+  }
+}

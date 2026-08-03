@@ -1,0 +1,13 @@
+{
+  "name": "shoulders-of-giants-auth-tests",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Firestore security rules test harness (Phase 0 of AUTH_SPEC.md). Not part of the game bundle.",
+  "scripts": {
+    "test:rules": "firebase emulators:exec --only firestore \"node --test\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase-tools": "^13.29.1"
+  }
+}

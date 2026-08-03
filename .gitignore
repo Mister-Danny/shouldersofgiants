@@ -10,3 +10,9 @@ Thumbs.db
 
 # map-editor save backup (one generation, local only)
 data/map-data.js.bak
+
+# Firestore rules test harness (AUTH_SPEC.md Phase 0)
+node_modules
+firebase-debug.log
+firestore-debug.log
+.firebase
