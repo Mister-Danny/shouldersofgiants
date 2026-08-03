@@ -301,7 +301,10 @@ img    { display: block; }
    glow nudge so the eye lands there first without breaking the system.
 ─────────────────────────────────────────────────────────────────── */
 
-/* Shared sizing — identical width + height across all home buttons */
+/* Shared sizing — identical width + height across all home buttons.
+   .btn-home-account is NOT part of this group on purpose — it's a smaller,
+   auto-width .btn-snes pill (see the standalone rule near the bottom of
+   this section), not sized to match the three wood-plank buttons. */
 .btn-home-ready,
 .btn-home-versus,
 .btn-home-learn,
@@ -414,6 +417,18 @@ img    { display: block; }
 
 /* "About the Game" — neutral dark, no tint (quietest button by design).
    Inherits the shared base fill + shared hover. */
+
+/* "Create Account / Login" / "Logout" (AUTH_SPEC.md Phase 2/3 placeholder) —
+   deliberately NOT part of the wood-plank family above: a small, auto-width
+   .btn-snes pill (same family as the CREATE ACCOUNT modal's YES/NO), sized
+   to content via .btn-snes's own padding. Only the font-size is overridden,
+   small enough to keep the longer label on one line. No margin here — the
+   parent .home-nav's flex `gap` already spaces every button uniformly;
+   adding one would open a bigger gap above this button than between the
+   other three. */
+.btn-home-account {
+  font-size: 11px;
+}
 
 /* ── Home-screen Feedback button ─────────────────────────────────
    Conditional 5th button. Hidden by inline style="display:none"
@@ -4143,6 +4158,55 @@ body:not([data-screen="battle"]) #music-track-name {
   cursor: pointer;
   border: 1px solid var(--border-bright);
   box-shadow: 0 0 4px rgba(248, 208, 0, 0.4);
+}
+
+/* ── Guest status corner strip (AUTH_SPEC.md Phase 2) ────────────────────────
+ * Small, quiet, informational-only badge — persistent across every screen
+ * (deliberately does NOT follow the .music-ctrl display:none/flex per-screen
+ * opt-in pattern above). Top-left, staying clear of #adv-hud's top-right
+ * utility icons and .music-ctrl's bottom-right anchor. Not interactive —
+ * the account-creation affordance lives on the home screen instead. */
+.guest-status-strip {
+  position: fixed;
+  top: 10px;
+  left: 14px;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+  padding: 3px 8px;
+  pointer-events: none;
+}
+
+.guest-status-text {
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+}
+
+/* ── Guest first-launch notice modal (AUTH_SPEC.md Phase 2) ──────────────────
+ * Same visual language as .popup-backdrop/.card-popup (see "First-load welcome
+ * popup" above), but position:fixed at the #sog-stage-sibling level (like
+ * .music-ctrl) rather than position:absolute nested inside a .screen — so it
+ * can show correctly regardless of which screen is currently active. */
+.guest-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 14, 0.80);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+.guest-modal-backdrop.visible {
+  opacity: 1;
+  pointer-events: all;
 }
 
 /* ── Per-screen palette override: home screen (warm leather + gold) ─────────────

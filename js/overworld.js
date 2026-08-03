@@ -469,6 +469,15 @@ var Overworld = (function () {
     { who: 'explorer', text: "Well, couldn't you share?" },
     { who: 'hunter',   text: 'What does that mean?' }
   ];
+  // One-time, the FIRST thing on returning to East Africa after beating Otzi —
+  // plays before the post-Otzi East Africa dialogue below. Explorer reflects,
+  // then a "create account" prompt offers to save progress permanently.
+  // Guest-account UX (AUTH_SPEC.md Phase 2); fires once ever.
+  var POST_OTZI_ACCOUNT_DIALOGUE = [
+    { who: 'explorer', text: "I'm starting to sense that history does like to repeat itself." },
+    { who: 'explorer', text: "But I hope I never have to repeat those battles again." },
+    { who: 'explorer', text: 'Now is probably a good time to find a permanent way to save my progress.' }
+  ];
   // One-time, on the FIRST return from the marketplace — un-greys the deck builder.
   var DECKBUILDER_UNLOCK_DIALOGUE = [
     { who: 'explorer', text: 'I’m starting to build quite a collection.' },
@@ -1822,7 +1831,10 @@ var Overworld = (function () {
      One-time Explorer/Hunter exchange. Fires when the player is on
      East Africa with sog_battle_otzi_complete set and the dialogue
      not yet seen. Reuses the standard dialogue runner. Returns true
-     if it started the dialogue (caller then skips scheduleIdle).   */
+     if it started the dialogue (caller then skips scheduleIdle).
+     The one-time "create account" beat (below) runs FIRST, ahead of
+     this exchange — isDialogueLocked stays true across both, and
+     scheduleIdle() only fires once the whole thing resolves. */
   function maybePlayEastAfricaReturnDialogue() {
     if (isDialogueLocked) return false;
     if (currentMapId !== 'eastafrica') return false;
@@ -1833,13 +1845,94 @@ var Overworld = (function () {
 
     isDialogueLocked = true;
     cancelIdle();
-    runDialogue(EASTAFRICA_POSTOTZI_DIALOGUE, function () {
-      isDialogueLocked = false;
-      try { localStorage.setItem(KEY_EASTAFRICA_POSTOTZI_DIALOGUE, 'true'); } catch (e) {}
-      flashExit('to-egypt', 1500);   // point the player at the now-relevant exit
-      scheduleIdle();
+    maybePlayAccountPrompt(function () {
+      runDialogue(EASTAFRICA_POSTOTZI_DIALOGUE, function () {
+        isDialogueLocked = false;
+        try { localStorage.setItem(KEY_EASTAFRICA_POSTOTZI_DIALOGUE, 'true'); } catch (e) {}
+        flashExit('to-egypt', 1500);   // point the player at the now-relevant exit
+        scheduleIdle();
+      });
     });
     return true;
+  }
+
+  /* ── One-time "create account" prompt (AUTH_SPEC.md Phase 2) ───────────
+     Runs FIRST, before the existing post-Otzi East Africa dialogue above —
+     the very first thing after returning to the Overworld post-Otzi. Three
+     Explorer lines via the standard dialogue runner, then a SNES-styled
+     Yes/No modal. Yes is a placeholder dismiss (Phase 3 wires up real
+     account creation); No shows a one-line follow-up. The seen-flag is set
+     BEFORE the sequence runs, not after, so an interrupted attempt (closed
+     tab mid-sequence) can't loop — it simply won't retry, matching "fires
+     once and never repeats regardless of the answer" literally. Caller
+     (maybePlayEastAfricaReturnDialogue) owns isDialogueLocked across both
+     this and the dialogue that follows, so this function doesn't touch it. */
+  var KEY_ACCOUNT_PROMPT_SEEN = 'sog_account_prompt_seen';
+
+  function maybePlayAccountPrompt(cb) {
+    var seen = false;
+    try { seen = localStorage.getItem(KEY_ACCOUNT_PROMPT_SEEN) === 'true'; } catch (e) {}
+    if (seen) { if (cb) cb(); return; }
+    try { localStorage.setItem(KEY_ACCOUNT_PROMPT_SEEN, 'true'); } catch (e) {}
+
+    runDialogue(POST_OTZI_ACCOUNT_DIALOGUE, function () {
+      _showAccountPromptModal(function () {
+        if (cb) cb();
+      });
+    });
+  }
+
+  function _showAccountPromptModal(onDone) {
+    var backdrop = document.getElementById('account-prompt-backdrop');
+    var body     = document.getElementById('account-prompt-body');
+    var actions  = document.getElementById('account-prompt-actions');
+    if (!backdrop || !body || !actions) { if (onDone) onDone(); return; }
+
+    // Reset to the original Yes/No prompt markup every time this runs. The
+    // one-time flag (checked before this function is ever called) means a
+    // second invocation shouldn't happen in production, but the "No" branch
+    // below permanently overwrites body/actions' innerHTML — without this
+    // reset, a second call in the same page session (e.g. manual testing)
+    // would incorrectly show the stale follow-up instead of the fresh prompt.
+    body.innerHTML = '<p>Would you like to create an account to ensure your progress is saved?</p>';
+    actions.innerHTML = '<span class="popup-hint"></span>' +
+      '<button class="btn-snes btn-snes-close" id="account-prompt-yes">YES</button>' +
+      '<button class="btn-snes btn-snes-close" id="account-prompt-no">NO</button>';
+
+    function close() {
+      backdrop.classList.remove('visible');
+      if (onDone) onDone();
+    }
+
+    function showFollowUp() {
+      body.innerHTML = '<p>' +
+        "That's okay. Your progress is still being saved on your browser data. " +
+        'If you change your mind, go back to the main menu for the option to create an account.' +
+        '</p>';
+      actions.innerHTML = '<span class="popup-hint"></span>' +
+        '<button class="btn-snes btn-snes-close" id="account-prompt-ok">OK</button>';
+      document.getElementById('account-prompt-ok').addEventListener('click', close);
+    }
+
+    var yesBtn = document.getElementById('account-prompt-yes');
+    var noBtn  = document.getElementById('account-prompt-no');
+
+    function onYes() {
+      if (yesBtn) yesBtn.removeEventListener('click', onYes);
+      if (noBtn)  noBtn.removeEventListener('click', onNo);
+      // Placeholder — Phase 3 wires up real account creation here.
+      close();
+    }
+    function onNo() {
+      if (yesBtn) yesBtn.removeEventListener('click', onYes);
+      if (noBtn)  noBtn.removeEventListener('click', onNo);
+      showFollowUp();
+    }
+
+    if (yesBtn) yesBtn.addEventListener('click', onYes);
+    if (noBtn)  noBtn.addEventListener('click', onNo);
+
+    backdrop.classList.add('visible');
   }
 
   /* Briefly reveal an exit box + label (border + label), then fade back to

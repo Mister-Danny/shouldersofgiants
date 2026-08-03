@@ -33,7 +33,7 @@ var HomeFlow = (function () {
 
   /* ── Elements ──────────────────────────────────────────────── */
   var screenHomeEl, homeContentEl, adventureStageEl;
-  var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback;
+  var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback, btnAccount;
   var advDevWarningEl, advDevProceedBtn, advDevGoBackBtn;
   var arcadiumLockedEl, arcadiumLockedClose;
   var subtitleIntroEl, subtitlePathEl, subtitleAdventurerEl;
@@ -192,6 +192,7 @@ var HomeFlow = (function () {
     btnVersus            = document.getElementById('btn-versus');
     btnState2Back        = document.getElementById('btn-state2-back');
     btnFeedback          = document.getElementById('btn-home-feedback');
+    btnAccount           = document.getElementById('btn-account');
     subtitleIntroEl      = document.getElementById('home-subtitle-intro');
     subtitlePathEl       = document.getElementById('home-subtitle-path');
     subtitleAdventurerEl = document.getElementById('home-subtitle-adventurer');
@@ -248,6 +249,33 @@ var HomeFlow = (function () {
     if (backBtn)         backBtn.addEventListener('click', onBackToPathChoice);
     if (charFemaleEl)    charFemaleEl.addEventListener('click', function () { onAdventurerPicked('female'); });
     if (charMaleEl)      charMaleEl.addEventListener('click',   function () { onAdventurerPicked('male');   });
+    if (btnAccount)      btnAccount.addEventListener('click', onAccountClick);
+
+    _updateAccountButtonLabel();
+  }
+
+  /* ── Guest/account status button (AUTH_SPEC.md Phase 2 placeholder) ──────
+     Label reflects window.SogAuth's current user: anonymous (or none) →
+     guest, "Create Account / Login"; a real (non-anonymous) user → "Logout".
+     Every player is currently anonymous (student/teacher signup is Phase 3),
+     so this always reads "Create Account / Login" for now. */
+  function _updateAccountButtonLabel() {
+    if (!btnAccount) return;
+    var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
+      ? window.SogAuth.getUser() : null;
+    var loggedIn = !!(user && user.isAnonymous === false);
+    btnAccount.textContent = loggedIn ? 'Logout' : 'Create Account / Login';
+  }
+
+  function onAccountClick() {
+    // Placeholder — Phase 3 wires up real account creation/login/logout.
+    if (btnAccount.disabled) return;
+    btnAccount.disabled = true;
+    btnAccount.textContent = 'Coming soon!';
+    setTimeout(function () {
+      _updateAccountButtonLabel();
+      btnAccount.disabled = false;
+    }, 1600);
   }
 
   function applyVisitState() {
@@ -258,12 +286,14 @@ var HomeFlow = (function () {
       btnLearn.style.display = 'none';
       btnAbout.style.display = 'none';
       if (btnFeedback) btnFeedback.style.display = 'none';
+      if (btnAccount)  btnAccount.style.display = 'none';
     } else {
       // Returning visitor — normal home menu. (Feedback button is threshold-gated
       // separately by feedback.js, so we don't force it here.)
       btnReady.style.display = '';
       btnAbout.style.display = '';
       btnLearn.style.display = localStorage.getItem(KEY_FIRST_VISIT) ? '' : 'none';
+      if (btnAccount) btnAccount.style.display = '';
     }
   }
 
@@ -289,13 +319,14 @@ var HomeFlow = (function () {
     // Fade out intro subtitle + Ready + Learn buttons
     if (typeof gsap === 'undefined') { showPathChoice(); return; }
 
-    gsap.to([subtitleIntroEl, btnReady, btnLearn, btnAbout, btnFeedback], {
+    gsap.to([subtitleIntroEl, btnReady, btnLearn, btnAbout, btnFeedback, btnAccount], {
       opacity: 0, duration: 0.3, ease: 'power2.out',
       onComplete: function () {
         btnReady.style.display = 'none';
         btnLearn.style.display = 'none';
         btnAbout.style.display = 'none';
         if (btnFeedback) btnFeedback.style.display = 'none';
+        if (btnAccount)  btnAccount.style.display = 'none';
         subtitleIntroEl.classList.remove('is-visible');
         gsap.set(subtitleIntroEl, { opacity: '' });
         showPathChoice();
@@ -382,14 +413,15 @@ var HomeFlow = (function () {
   function restoreState1() {
     btnReady.style.display = '';
     btnAbout.style.display = '';
-    applyVisitState();           // restores btn-learn per first-visit rule
+    applyVisitState();           // restores btn-learn + btn-account per first-visit rule
+    _updateAccountButtonLabel();
     // Re-evaluate Feedback button (visible only past the play-count threshold)
     if (window.Feedback && typeof window.Feedback.refreshHomeButton === 'function') {
       window.Feedback.refreshHomeButton();
     }
     subtitleIntroEl.classList.add('is-visible');
     if (typeof gsap !== 'undefined') {
-      gsap.fromTo([btnReady, btnLearn, btnAbout, subtitleIntroEl],
+      gsap.fromTo([btnReady, btnLearn, btnAbout, btnAccount, subtitleIntroEl],
         { opacity: 0 },
         { opacity: 1, duration: 0.4, ease: 'power2.out', stagger: 0.05 });
       if (btnFeedback && btnFeedback.style.display !== 'none') {

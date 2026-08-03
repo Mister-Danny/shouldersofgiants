@@ -47,6 +47,11 @@
         <button class="btn-snes btn-home-uniform btn-home-ready" id="btn-ready">I'm Ready</button>
         <button class="btn-home-uniform btn-home-learn" id="btn-learn">I'm Ready To Learn</button>
         <button class="btn-home-uniform btn-home-about" id="btn-about">About the Game</button>
+        <!-- Guest/account status (AUTH_SPEC.md Phase 2 placeholder) — label is
+             set by js/home.js based on window.SogAuth's current user. Uses the
+             compact .btn-snes dialog-button look (like the CREATE ACCOUNT
+             modal's YES/NO), not the big wood-plank home-button family. -->
+        <button class="btn-snes btn-home-account" id="btn-account">Create Account / Login</button>
 
         <!-- State 2 buttons (hidden initially) -->
         <button class="btn-snes btn-home-uniform btn-home-arcadium"     id="btn-arcadium">Arcadium</button>
@@ -1584,6 +1589,51 @@
     </div>
   </div>
 
+  <!-- ── Guest status corner strip (AUTH_SPEC.md Phase 2) — persistent across
+       every screen; see js/guest-status.js. Quiet, unobtrusive, informational
+       only — no interactive affordance (see the home-screen account button
+       instead, in #screen-home). -->
+  <div id="guest-status-strip" class="guest-status-strip">
+    <span class="guest-status-text">Guest</span>
+  </div>
+
+  <!-- ── Guest first-launch notice modal (AUTH_SPEC.md Phase 2) — see
+       js/guest-status.js. Sequenced to show after the welcome popup (below)
+       is dismissed, so the two never stack. -->
+  <div id="guest-notice-backdrop" class="guest-modal-backdrop">
+    <div class="card-popup guest-modal">
+      <div class="popup-card-name">WELCOME GUEST</div>
+      <div class="popup-divider"></div>
+      <div class="welcome-body">
+        <p>As a GUEST your progress is saved only on this device, in this browser.</p>
+        <p>Clearing your browser data or switching to a different device will erase it. You can create an account later to keep your progress safe.</p>
+      </div>
+      <div class="popup-actions">
+        <span class="popup-hint"></span>
+        <button class="btn-snes btn-snes-close" id="guest-notice-dismiss">GOT IT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Post-Otzi "create account" prompt (AUTH_SPEC.md Phase 2) — see
+       js/overworld.js maybePlayAccountPrompt()/_showAccountPromptModal().
+       Fires once, BEFORE the existing post-Otzi East Africa dialogue. Reuses
+       the guest-modal-backdrop/card-popup visual language. -->
+  <div id="account-prompt-backdrop" class="guest-modal-backdrop">
+    <div class="card-popup guest-modal">
+      <div class="popup-card-name">CREATE ACCOUNT</div>
+      <div class="popup-divider"></div>
+      <div class="welcome-body" id="account-prompt-body">
+        <p>Would you like to create an account to ensure your progress is saved?</p>
+      </div>
+      <div class="popup-actions" id="account-prompt-actions">
+        <span class="popup-hint"></span>
+        <button class="btn-snes btn-snes-close" id="account-prompt-yes">YES</button>
+        <button class="btn-snes btn-snes-close" id="account-prompt-no">NO</button>
+      </div>
+    </div>
+  </div>
+
   </div><!-- /#sog-stage -->
 
   <!-- Stage scaling — must be first so SOG.Stage exists before any module -->
@@ -1594,6 +1644,9 @@
 
   <!-- ── Analytics (Firebase must be loaded above in <head>) ───── -->
   <script src="js/analytics.js"></script>
+  <!-- Anonymous auth (AUTH_SPEC.md Phase 2) — must load after analytics.js,
+       which initializes the default Firebase app this file reuses. -->
+  <script src="js/auth.js"></script>
   <script src="js/multiplayer.js"></script>
   <script src="js/match.js"></script>
   <script src="js/battlelobby.js"></script>
@@ -1649,6 +1702,9 @@
   <script src="js/sog-adventure-hud.js"></script>
   <script src="js/bypass.js"></script>
   <script src="js/welcome.js"></script>
+  <!-- Guest notice + corner strip (AUTH_SPEC.md Phase 2) — must load after
+       welcome.js so it can sequence behind the "Before You Begin" popup. -->
+  <script src="js/guest-status.js"></script>
   <script src="js/feedback.js"></script>
   <!-- Developer state panel (toggle with `): reads/writes the real game state
        (collection, gold, progression flags) and launches anywhere from it.
