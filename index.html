@@ -1086,6 +1086,32 @@
   </div><!-- /#screen-lobby -->
 
   <!-- ═══════════════════════════════════════════════════════════════
+       TEACHER DASHBOARD (AUTH_SPEC.md Phase 5) — see js/teacher-dashboard.js.
+       Auto-shown in place of screen-home whenever the signed-in user has a
+       /teachers/{uid} doc (checked via SogAuth.ready()/onChange(), not a
+       dedicated nav path) — covers fresh signup, fresh login, and a
+       returning teacher's persisted session on reload, from one code path.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="screen-teacher-dashboard" class="screen">
+    <div id="td-header">
+      <div id="td-teacher-name"></div>
+      <button id="td-logout" class="btn-snes btn-snes-close">LOG OUT</button>
+    </div>
+
+    <div id="td-body">
+      <section id="td-classes-section">
+        <h2 class="td-section-title">Classes</h2>
+        <div id="td-classes"></div>
+      </section>
+
+      <section id="td-roster-section">
+        <h2 class="td-section-title">Roster</h2>
+        <div id="td-roster"></div>
+      </section>
+    </div>
+  </div><!-- /#screen-teacher-dashboard -->
+
+  <!-- ═══════════════════════════════════════════════════════════════
        TEACHER TOURNAMENT LOBBY
        Fixed overlay — opened from Tournament Controls in bypass menu.
   ════════════════════════════════════════════════════════════════ -->
@@ -1740,6 +1766,9 @@
   <script src="js/data/username-words.js"></script>
   <script src="js/account.js"></script>
   <script src="js/account-ui.js"></script>
+  <!-- Teacher dashboard (AUTH_SPEC.md Phase 5) — needs SogAuth/SogAccount
+       already defined above. -->
+  <script src="js/teacher-dashboard.js"></script>
 
   <!-- Initial screen tag for CSS selectors (showScreen overwrites on navigation) -->
   <script>document.body.dataset.screen = 'home';</script>

@@ -1,0 +1,410 @@
+/**
+ * teacher-dashboard.js — Teacher dashboard (AUTH_SPEC.md Phase 5)
+ *
+ * Class code generate/deactivate/regenerate + a roster view grouped by
+ * class, queried on /players.teacherUid. No per-question correctness is
+ * read, computed, or stored anywhere here — only the coarse metrics §6
+ * calls for (nodes cleared, bosses beaten, last active). The teacher keeps
+ * the name↔username mapping in their own spreadsheet (§6); this dashboard
+ * never asks for or shows a real student name.
+ *
+ * Data model note: AUTH_SPEC.md §2's /teachers/{uid} doc (email, inviteCode,
+ * displayName, createdAt) predates Phase 5's "teachers can own multiple
+ * classes" requirement, and firestore.rules denies `list` on /classes
+ * entirely (anti-enumeration, §3) — so there is no query that finds "all
+ * classes owned by me". This module adds a `classCodes: array<string>` field
+ * to the teacher doc (arrayUnion'd on generate) purely as a client-side
+ * index of which class IDs to re-fetch by exact ID (get is allowed). This
+ * fits the ALREADY-DEPLOYED /teachers update rule with no rules change: that
+ * rule only pins `inviteCode` unchanged, and doesn't touch anything else.
+ *
+ * Auto-show: rather than threading special-case navigation through
+ * js/account-ui.js's signup/login success screens, this module listens to
+ * window.SogAuth directly (ready() once at boot, onChange() on every
+ * subsequent auth transition) and checks whether the signed-in user has a
+ * /teachers/{uid} doc. If so, it takes over screen navigation and shows the
+ * dashboard — covering fresh signup, a fresh login, and a returning teacher
+ * who simply reloads the page with a persisted session, all from one code
+ * path. A non-teacher (guest or student) always resolves "no such doc" and
+ * this is a complete no-op for them.
+ */
+window.TeacherDashboard = (function () {
+  'use strict';
+
+  var CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  // INVARIANT: class codes are always exactly 6 characters and invite codes
+  // exactly 8. js/account.js's lookupClassCode (student signup class-code
+  // field, maxlength=6) and the teacher-signup form's invite-code field
+  // (maxlength=8) both assume these fixed lengths. Changing CLASS_CODE_LENGTH
+  // here without updating those call sites will silently break signup.
+  var CLASS_CODE_LENGTH = 6;
+  var MAX_GENERATE_ATTEMPTS = 5;
+
+  // Mirrors js/game.js's own NODE_BEATEN_RE exactly (see that file's
+  // getSnapshot) — this is the localStorage key shape SaveState's
+  // `nodeProgress` module snapshot preserves verbatim.
+  var NODE_BEATEN_RE = /^sog_node_.+_(serf|giant)_beaten$/;
+
+  // Every SaveState module (see js/save-state.js) whose snapshot has its own
+  // battleComplete flag — i.e. every named story boss, not side content.
+  var BOSS_MODULES = ['gilgamesh', 'otzi', 'hammurabi', 'hangingGardens', 'narmer', 'sargon', 'prehistory'];
+
+  var _teacherDoc = null;
+  var _shown = false;
+
+  function _db() { return firebase.firestore(); }
+  function _byId(id) { return document.getElementById(id); }
+
+  function _escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function _randomCode(len) {
+    var s = '';
+    for (var i = 0; i < len; i++) {
+      s += CODE_ALPHABET.charAt(Math.floor(Math.random() * CODE_ALPHABET.length));
+    }
+    return s;
+  }
+
+  /* ── Class code CRUD (AUTH_SPEC.md §4 "Class code creation (teacher)") ──
+     Generate: attempt create at /classes/{CODE}; a collision (code already
+     owned by someone) fails the rules' create/update check as
+     permission-denied — retry with a fresh candidate. 32^6 ≈ 1.07 billion
+     combinations, so a real collision is vanishingly rare; the retry cap
+     exists only as a backstop. */
+  function _generateClassCode(label, cb, attempt) {
+    attempt = attempt || 1;
+    var code = _randomCode(CLASS_CODE_LENGTH);
+    var uid = firebase.auth().currentUser.uid;
+
+    _db().collection('classes').doc(code).set({
+      ownerUid:  uid,
+      label:     (label || '').trim(),
+      active:    true,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(function () {
+      _db().collection('teachers').doc(uid).update({
+        classCodes: firebase.firestore.FieldValue.arrayUnion(code)
+      }).then(function () {
+        cb(null, code);
+      }).catch(function (err) {
+        console.error('[TeacherDashboard] Class created but failed to record on teacher doc', err);
+        cb(err, null);
+      });
+    }).catch(function (err) {
+      console.error('[TeacherDashboard] Class code create failed (attempt ' + attempt + ')', err);
+      if (err && err.code === 'permission-denied' && attempt < MAX_GENERATE_ATTEMPTS) {
+        _generateClassCode(label, cb, attempt + 1);
+        return;
+      }
+      cb(err, null);
+    });
+  }
+
+  function _deactivateClassCode(code, cb) {
+    _db().collection('classes').doc(code).update({ active: false }).then(function () {
+      cb(null);
+    }).catch(function (err) {
+      console.error('[TeacherDashboard] Deactivate failed', err);
+      cb(err);
+    });
+  }
+
+  // Deactivate-and-reroll: a code's identity IS its doc ID, so it can't be
+  // edited in place. Regenerate deactivates the leaked code and creates a
+  // brand new one carrying over the same label, so "Period 3" doesn't need
+  // retyping.
+  function _regenerateClassCode(oldCode, cb) {
+    _db().collection('classes').doc(oldCode).get().then(function (snap) {
+      var label = snap.exists ? (snap.data().label || '') : '';
+      _deactivateClassCode(oldCode, function (deactErr) {
+        if (deactErr) { cb(deactErr, null); return; }
+        _generateClassCode(label, cb);
+      });
+    }).catch(function (err) { cb(err, null); });
+  }
+
+  function _updateClassLabel(code, label, cb) {
+    _db().collection('classes').doc(code).update({ label: (label || '').trim() })
+      .then(function () { cb(null); })
+      .catch(function (err) {
+        console.error('[TeacherDashboard] Label update failed', err);
+        cb(err);
+      });
+  }
+
+  /* ── Data loading ────────────────────────────────────────────────────── */
+  function _loadClasses(codes, cb) {
+    if (!codes || !codes.length) { cb([]); return; }
+    Promise.all(codes.map(function (code) {
+      return _db().collection('classes').doc(code).get().then(function (snap) {
+        return snap.exists ? Object.assign({ code: code }, snap.data()) : null;
+      }).catch(function (err) {
+        console.error('[TeacherDashboard] Failed to load class', code, err);
+        return null;
+      });
+    })).then(function (results) {
+      cb(results.filter(Boolean));
+    });
+  }
+
+  // Coarse only — §5/§6: "nodes cleared, bosses beaten, last active. Do not
+  // store per-question correctness." This reads the existing progress
+  // snapshot (already written by Phase 3 signup/checkpoints) and aggregates
+  // it for display; nothing new is computed into storage.
+  function _computeCoarseStats(progress) {
+    var modules = (progress && progress.modules) || {};
+    var nodeProgress = modules.nodeProgress || {};
+    var nodesCleared = Object.keys(nodeProgress).filter(function (k) {
+      var v = nodeProgress[k];
+      return NODE_BEATEN_RE.test(k) && (v === true || v === 'true');
+    }).length;
+    var bossesBeaten = BOSS_MODULES.filter(function (name) {
+      return modules[name] && modules[name].battleComplete === true;
+    }).length;
+    return { nodesCleared: nodesCleared, bossesBeaten: bossesBeaten };
+  }
+
+  function _loadRoster(uid, cb) {
+    _db().collection('players').where('teacherUid', '==', uid).get().then(function (snap) {
+      var players = [];
+      snap.forEach(function (doc) {
+        var data = doc.data();
+        var stats = _computeCoarseStats(data.progress);
+        players.push({
+          uid:          doc.id,
+          username:     data.username,
+          classCode:    data.classCode,
+          nodesCleared: stats.nodesCleared,
+          bossesBeaten: stats.bossesBeaten,
+          lastActive:   data.lastActive
+        });
+      });
+      cb(null, players);
+    }).catch(function (err) {
+      console.error('[TeacherDashboard] Roster query failed', err);
+      cb(err, []);
+    });
+  }
+
+  /* ── Rendering ──────────────────────────────────────────────────────── */
+  function _formatDate(ts) {
+    if (!ts) return '—';
+    try {
+      var date = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (e) { return '—'; }
+  }
+
+  function _renderClassRow(c, isInactive) {
+    return '<div class="td-class-row' + (isInactive ? ' td-class-row-inactive' : '') + '">' +
+      '<div class="td-class-code">' + _escapeHtml(c.code) + '</div>' +
+      '<input type="text" class="td-class-label-input" data-code="' + _escapeHtml(c.code) + '" ' +
+        'value="' + _escapeHtml(c.label || '') + '" placeholder="Class label (e.g. Period 3)"' +
+        (isInactive ? ' disabled' : '') + '>' +
+      (isInactive
+        ? '<span class="td-class-badge">INACTIVE</span>'
+        : '<button class="btn-snes td-regenerate-btn" data-code="' + _escapeHtml(c.code) + '">REGENERATE</button>' +
+          '<button class="btn-snes btn-snes-remove td-deactivate-btn" data-code="' + _escapeHtml(c.code) + '">DEACTIVATE</button>') +
+      '</div>';
+  }
+
+  function _renderClasses(classes) {
+    var active   = classes.filter(function (c) { return c.active; });
+    var inactive = classes.filter(function (c) { return !c.active; });
+
+    var html = '<button class="btn-snes" id="td-generate">GENERATE NEW CLASS CODE</button>';
+
+    html += '<div id="td-class-list">';
+    if (!active.length) {
+      html += '<p class="td-empty">No active classes yet — generate one above.</p>';
+    }
+    active.forEach(function (c) { html += _renderClassRow(c, false); });
+    html += '</div>';
+
+    if (inactive.length) {
+      html += '<div id="td-inactive-toggle"><a href="#" id="td-show-inactive">Show ' +
+        inactive.length + ' deactivated code' + (inactive.length === 1 ? '' : 's') + '</a></div>';
+      html += '<div id="td-inactive-list" style="display:none">';
+      inactive.forEach(function (c) { html += _renderClassRow(c, true); });
+      html += '</div>';
+    }
+
+    return html;
+  }
+
+  function _renderRoster(players, classes) {
+    var labelByCode = {};
+    classes.forEach(function (c) { labelByCode[c.code] = c.label || c.code; });
+
+    var byClass = {};
+    players.forEach(function (p) {
+      var key = p.classCode || '';
+      if (!byClass[key]) byClass[key] = [];
+      byClass[key].push(p);
+    });
+
+    var codes = Object.keys(byClass);
+    if (!codes.length) return '<p class="td-empty">No students yet.</p>';
+
+    var html = '';
+    codes.forEach(function (code) {
+      var label = code === '' ? 'Ungrouped' : (labelByCode[code] || code);
+      html += '<div class="td-roster-group">';
+      html += '<div class="td-roster-group-title">' + _escapeHtml(label) + ' (' + byClass[code].length + ')</div>';
+      html += '<table class="td-roster-table"><thead><tr>' +
+        '<th>Username</th><th>Nodes Cleared</th><th>Bosses Beaten</th><th>Last Active</th>' +
+        '</tr></thead><tbody>';
+      byClass[code].forEach(function (p) {
+        html += '<tr>' +
+          '<td>' + _escapeHtml(p.username) + '</td>' +
+          '<td>' + p.nodesCleared + '</td>' +
+          '<td>' + p.bossesBeaten + '</td>' +
+          '<td>' + _formatDate(p.lastActive) + '</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    return html;
+  }
+
+  function _wireEvents(classes) {
+    var generateBtn = _byId('td-generate');
+    if (generateBtn) generateBtn.addEventListener('click', function () {
+      generateBtn.disabled = true;
+      _generateClassCode('', function (err) {
+        if (err) {
+          console.error('[TeacherDashboard] Generate failed', err);
+          alert('Could not create a new class code. Please try again.');
+          generateBtn.disabled = false;
+          return;
+        }
+        _refreshTeacherDoc();
+      });
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.td-regenerate-btn'), function (btn) {
+      btn.addEventListener('click', function () {
+        var code = btn.getAttribute('data-code');
+        if (!window.confirm('Regenerate this class code? The old code (' + code + ') will stop working immediately.')) return;
+        btn.disabled = true;
+        _regenerateClassCode(code, function (err) {
+          if (err) {
+            console.error('[TeacherDashboard] Regenerate failed', err);
+            alert('Could not regenerate the class code. Please try again.');
+            btn.disabled = false;
+            return;
+          }
+          _refreshTeacherDoc();
+        });
+      });
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.td-deactivate-btn'), function (btn) {
+      btn.addEventListener('click', function () {
+        var code = btn.getAttribute('data-code');
+        if (!window.confirm('Deactivate class code ' + code + '? Students will no longer be able to join with it.')) return;
+        btn.disabled = true;
+        _deactivateClassCode(code, function (err) {
+          if (err) {
+            console.error('[TeacherDashboard] Deactivate failed', err);
+            alert('Could not deactivate. Please try again.');
+            btn.disabled = false;
+            return;
+          }
+          _render(classes);
+        });
+      });
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.td-class-label-input'), function (input) {
+      input.addEventListener('change', function () {
+        _updateClassLabel(input.getAttribute('data-code'), input.value, function (err) {
+          if (err) alert('Could not save that label. Please try again.');
+        });
+      });
+    });
+
+    var showInactive = _byId('td-show-inactive');
+    if (showInactive) showInactive.addEventListener('click', function (e) {
+      e.preventDefault();
+      _byId('td-inactive-list').style.display = '';
+      showInactive.parentNode.style.display = 'none';
+    });
+  }
+
+  function _render(classes) {
+    var uid = firebase.auth().currentUser.uid;
+    _byId('td-teacher-name').textContent = (_teacherDoc && (_teacherDoc.displayName || _teacherDoc.email)) || '';
+    _byId('td-classes').innerHTML = _renderClasses(classes);
+    _byId('td-roster').innerHTML = '<p class="td-empty">Loading roster…</p>';
+    _wireEvents(classes);
+
+    _loadRoster(uid, function (err, players) {
+      _byId('td-roster').innerHTML = _renderRoster(players, classes);
+    });
+  }
+
+  function _fullRender() {
+    var codes = (_teacherDoc && _teacherDoc.classCodes) || [];
+    _loadClasses(codes, function (classes) {
+      _render(classes);
+    });
+  }
+
+  function _refreshTeacherDoc() {
+    var uid = firebase.auth().currentUser.uid;
+    _db().collection('teachers').doc(uid).get().then(function (snap) {
+      _teacherDoc = snap.exists ? snap.data() : _teacherDoc;
+      _fullRender();
+    }).catch(function (err) {
+      console.error('[TeacherDashboard] Failed to reload teacher doc', err);
+      _fullRender();
+    });
+  }
+
+  /* ── Show / auto-show ──────────────────────────────────────────────── */
+  function show(teacherDoc) {
+    _teacherDoc = teacherDoc;
+    _shown = true;
+    if (typeof window.showScreen === 'function') window.showScreen('screen-teacher-dashboard');
+    _fullRender();
+  }
+
+  function _checkAndMaybeShow() {
+    var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
+    if (!user || user.isAnonymous) return;
+    _db().collection('teachers').doc(user.uid).get().then(function (snap) {
+      if (snap.exists) show(snap.data());
+    }).catch(function (e) {
+      console.error('[TeacherDashboard] Teacher-doc check failed', e);
+    });
+  }
+
+  function init() {
+    var logoutBtn = _byId('td-logout');
+    if (logoutBtn) logoutBtn.addEventListener('click', function () {
+      if (window.confirm('Log out?')) window.SogAccount.logout();
+    });
+
+    if (window.SogAuth) {
+      window.SogAuth.ready(_checkAndMaybeShow);
+      window.SogAuth.onChange(_checkAndMaybeShow);
+    }
+  }
+
+  // Script tag sits near the end of body (after #screen-teacher-dashboard's
+  // markup), so readyState is normally already past 'loading' by the time
+  // this executes — mirrors js/guest-status.js's own boot pattern exactly.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  return { init: init, show: show };
+})();

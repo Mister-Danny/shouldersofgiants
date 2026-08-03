@@ -4448,6 +4448,190 @@ body[data-screen="overworld"] .guest-status-strip {
   z-index: 20;
 }
 
+/* ── Teacher dashboard (AUTH_SPEC.md Phase 5) ────────────────────────────
+ * #screen-teacher-dashboard fills the 1280×720 fixed stage like every other
+ * screen; its own sections scroll independently (roster can grow long)
+ * rather than relying on page-level scroll, which #sog-stage's own
+ * overflow:hidden wouldn't allow anyway. */
+#screen-teacher-dashboard {
+  display: flex;
+  flex-direction: column;
+  padding: 24px 32px;
+  box-sizing: border-box;
+  background: var(--bg-base);
+  color: var(--text-white);
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  overflow: hidden;
+}
+
+#td-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--border-mid);
+  margin-bottom: 18px;
+}
+#td-teacher-name {
+  font-family: var(--font);
+  font-size: 20px;
+  color: var(--snes-yellow);
+  letter-spacing: 0.03em;
+}
+
+#td-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 28px;
+  overflow: hidden;
+}
+
+#td-classes-section, #td-roster-section {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#td-classes, #td-roster {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.td-section-title {
+  font-family: var(--font);
+  font-size: 16px;
+  color: var(--text-white);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0 0 12px;
+  flex-shrink: 0;
+}
+
+.td-empty {
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+/* Class rows: code large and readable (read off a whiteboard), editable
+ * label, Regenerate made visually prominent — deactivate-and-reroll is the
+ * only remedy for a leaked code, so it shouldn't be a buried, timid link. */
+.td-class-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-btn);
+  border: 2px solid var(--border-bright);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.td-class-row-inactive {
+  opacity: 0.55;
+  border-color: var(--border-mid);
+}
+
+.td-class-code {
+  font-family: var(--font);
+  font-size: 26px;
+  letter-spacing: 0.08em;
+  color: var(--snes-yellow);
+  flex-shrink: 0;
+  min-width: 7ch;
+}
+
+.td-class-label-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 14px;
+  background: var(--bg-dialog);
+  border: 2px solid var(--border-mid);
+  border-radius: 4px;
+  color: var(--text-white);
+}
+.td-class-label-input:focus {
+  border-color: var(--snes-yellow);
+  outline: none;
+}
+.td-class-label-input:disabled {
+  color: var(--text-dim);
+}
+
+.td-class-row .btn-snes {
+  font-size: 11px;
+  padding: 8px 12px;
+  flex-shrink: 0;
+}
+/* Regenerate: brighter/warmer than the default button so it reads as the
+ * primary remedial action next to the quieter Deactivate. */
+.td-regenerate-btn {
+  border-color: var(--snes-yellow) !important;
+  color: var(--snes-yellow) !important;
+}
+
+.td-class-badge {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  border: 1px solid var(--border-mid);
+  border-radius: 3px;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+#td-inactive-toggle {
+  margin: 4px 0 10px;
+}
+#td-inactive-toggle a {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-decoration: underline;
+  cursor: pointer;
+}
+#td-inactive-toggle a:hover {
+  color: var(--snes-yellow);
+}
+
+/* Roster: grouped by class, coarse metrics only (§6) — no per-question
+ * correctness, no real names (the teacher keeps that mapping themselves). */
+.td-roster-group {
+  margin-bottom: 22px;
+}
+.td-roster-group-title {
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--snes-yellow);
+  letter-spacing: 0.03em;
+  margin-bottom: 8px;
+}
+
+.td-roster-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.td-roster-table th, .td-roster-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-mid);
+}
+.td-roster-table th {
+  color: var(--text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.td-roster-table td {
+  color: var(--text-white);
+}
+
 /* ── Per-screen palette override: home screen (warm leather + gold) ─────────────
  * The home screen's wood-plank background + .btn-home-* gold-on-brown buttons
  * form the "history book" aesthetic. The music widget switches to the same
