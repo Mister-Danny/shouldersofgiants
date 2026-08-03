@@ -80,13 +80,20 @@ service cloud.firestore {
     // this spec. Write-only — no client ever reads it back; the bypass.js
     // Data Review panel is a teacher-console tool that will need to move
     // behind a Cloud Function or admin SDK rather than a client-side get/list.
-    // Going forward, session docs should include a `uid` field (the
-    // authenticated writer's uid) so ownership is at least recorded even
-    // though it isn't enforced by a read rule yet.
+    // Session docs carry a `uid` field (the authenticated writer's uid) set
+    // at creation, and the owner may update their own doc thereafter (turn
+    // durations, outcome, etc. get merged in as the game progresses) — a doc
+    // created without a uid can never satisfy resource.data.uid == auth.uid
+    // for anyone, so it's permanently update-locked. This makes session docs
+    // client-writable by their owner: analytics data is NOT tamper-proof
+    // (a student could, in principle, rewrite their own session's outcome),
+    // which is an accepted tradeoff for now since nothing reads this data
+    // back client-side and it isn't used for grading or progress-gating.
     match /sessions/{sessionId} {
       allow read:   if false;
       allow create: if signedIn();
-      allow update, delete: if false;
+      allow update: if signedIn() && resource.data.uid == request.auth.uid;
+      allow delete: if false;
     }
   }
 }

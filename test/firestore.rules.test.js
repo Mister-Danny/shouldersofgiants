@@ -221,3 +221,72 @@ test('sessions can be created when signed in, and are never readable', async () 
     })
   );
 });
+
+test('session owner can update their own session doc; a different user and an anonymous user cannot', async () => {
+  await seed(async (db) => {
+    await db.doc('sessions/session-owner-test').set({
+      sessionId: 'session-owner-test',
+      uid: 'studentZ',
+      timestamp: new Date(),
+      difficulty: 'easy',
+      gameMode: 'standard',
+      completed: false,
+      outcome: null,
+    });
+  });
+
+  const asStudentZ     = testEnv.authenticatedContext('studentZ').firestore();
+  const asSomeoneElse  = testEnv.authenticatedContext('someoneElse').firestore();
+  const asAnonymous    = testEnv.unauthenticatedContext().firestore();
+
+  // A different signed-in user cannot update studentZ's session.
+  await assertFails(
+    asSomeoneElse.doc('sessions/session-owner-test').set(
+      { completed: true, outcome: 'player' },
+      { merge: true }
+    )
+  );
+
+  // An unauthenticated user cannot update it either.
+  await assertFails(
+    asAnonymous.doc('sessions/session-owner-test').set(
+      { completed: true, outcome: 'player' },
+      { merge: true }
+    )
+  );
+
+  // The owner CAN update their own session doc (turn durations, outcome, etc.
+  // as the game progresses).
+  await assertSucceeds(
+    asStudentZ.doc('sessions/session-owner-test').set(
+      { completed: true, outcome: 'player', turnDurations: [12, 8, 15] },
+      { merge: true }
+    )
+  );
+});
+
+test('a session doc created without a uid cannot be updated by anyone', async () => {
+  await seed(async (db) => {
+    await db.doc('sessions/session-no-uid').set({
+      sessionId: 'session-no-uid',
+      // no uid field — e.g. a doc from before this field existed.
+      timestamp: new Date(),
+      difficulty: 'easy',
+      gameMode: 'standard',
+      completed: false,
+      outcome: null,
+    });
+  });
+
+  const asStudentZ  = testEnv.authenticatedContext('studentZ').firestore();
+  const asAnonymous = testEnv.unauthenticatedContext().firestore();
+
+  // No signed-in uid ever equals a missing field — permanently update-locked,
+  // not even by a plausible-looking owner.
+  await assertFails(
+    asStudentZ.doc('sessions/session-no-uid').set({ completed: true }, { merge: true })
+  );
+  await assertFails(
+    asAnonymous.doc('sessions/session-no-uid').set({ completed: true }, { merge: true })
+  );
+});

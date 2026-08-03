@@ -13,7 +13,13 @@
  *             localStorage. On the next game start that pending record is
  *             written to Firestore (more reliable than beforeunload writes).
  *
- * Depends on: Firebase compat v9 (loaded via CDN before this script)
+ * Depends on: Firebase compat v9 (loaded via CDN before this script). Also
+ *             reads window.SogAuth (js/auth.js, loads right after this file)
+ *             at write time — every Firestore write waits for SogAuth.ready()
+ *             before hitting the network, and session-creation docs are
+ *             stamped with the signed-in uid (AUTH_SPEC.md §3). Guarded so a
+ *             missing SogAuth degrades to writing immediately rather than
+ *             hanging, same spirit as every other failure path in this file.
  * Exposes:    window.Analytics
  */
 
@@ -87,7 +93,37 @@
     // Firestore rules in the Firebase Console — until then, gameplay is
     // unaffected, data is just not captured.
     if (analyticsDisabled) return;
-    ref.set(data, { merge: !!merge }).catch(function (e) {
+
+    // Wait for js/auth.js's anonymous sign-in to settle before the actual
+    // network write. Firestore rules require request.auth != null to create
+    // a session doc — firing this before signInAnonymously() resolves was
+    // getting denied every time, which then (via the permission-denied catch
+    // below) disabled analytics for the rest of the session. ready() calls
+    // back on the same tick once already resolved, so this is a no-op delay
+    // for every write after the first in a session. Falls back to writing
+    // immediately if auth.js somehow isn't loaded, rather than hanging.
+    if (window.SogAuth && typeof window.SogAuth.ready === 'function') {
+      window.SogAuth.ready(function () { _writeDocNow(ref, data, merge); });
+    } else {
+      _writeDocNow(ref, data, merge);
+    }
+  }
+
+  function _writeDocNow(ref, data, merge) {
+    if (analyticsDisabled) return;   // could have flipped true while we were waiting on auth
+    var payload = data;
+    if (!merge) {
+      // Stamp the authenticated writer's uid on the CREATE only (AUTH_SPEC.md
+      // §3 note) — read fresh here rather than at writeDoc()'s call site, so
+      // it reflects the resolved user, not whatever was current before we
+      // waited on ready() above. null if anon sign-in never succeeded; the
+      // create itself will then be denied by rules (signedIn()) and fall
+      // into the permission-denied branch below, same as today.
+      var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
+        ? window.SogAuth.getUser() : null;
+      payload = Object.assign({}, data, { uid: user ? user.uid : null });
+    }
+    ref.set(payload, { merge: !!merge }).catch(function (e) {
       if (e && e.code === 'permission-denied') {
         if (!analyticsDisabled) {
           console.warn('[Analytics] Disabled — Firestore writes denied. Update security rules in Firebase Console to enable telemetry. (Suppressing further warnings this session.)');

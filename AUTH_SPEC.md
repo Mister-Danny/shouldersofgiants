@@ -157,13 +157,20 @@ service cloud.firestore {
     // this spec. Write-only — no client ever reads it back; the bypass.js
     // Data Review panel is a teacher-console tool that will need to move
     // behind a Cloud Function or admin SDK rather than a client-side get/list.
-    // Going forward, session docs should include a `uid` field (the
-    // authenticated writer's uid) so ownership is at least recorded even
-    // though it isn't enforced by a read rule yet.
+    // Session docs carry a `uid` field (the authenticated writer's uid) set
+    // at creation, and the owner may update their own doc thereafter (turn
+    // durations, outcome, etc. get merged in as the game progresses) — a doc
+    // created without a uid can never satisfy resource.data.uid == auth.uid
+    // for anyone, so it's permanently update-locked. This makes session docs
+    // client-writable by their owner: analytics data is NOT tamper-proof
+    // (a student could, in principle, rewrite their own session's outcome),
+    // which is an accepted tradeoff for now since nothing reads this data
+    // back client-side and it isn't used for grading or progress-gating.
     match /sessions/{sessionId} {
       allow read:   if false;
       allow create: if signedIn();
-      allow update, delete: if false;
+      allow update: if signedIn() && resource.data.uid == request.auth.uid;
+      allow delete: if false;
     }
   }
 }
@@ -171,7 +178,7 @@ service cloud.firestore {
 
 Note: `get()` calls inside rules are billed reads and capped at 10 per request. Only the create paths use them, so the cost is negligible.
 
-**Write emulator tests for these before shipping.** At minimum: student A cannot read student B; teacher A cannot list teacher B's players; a student cannot create with a forged `teacherUid`; a student cannot update their own `classCode`.
+**Write emulator tests for these before shipping.** At minimum: student A cannot read student B; teacher A cannot list teacher B's players; a student cannot create with a forged `teacherUid`; a student cannot update their own `classCode`; a session owner can update their own session doc while a different signed-in user and an anonymous user cannot; a session doc created without a `uid` cannot be updated by anyone.
 
 ### Out of scope: Realtime Database
 

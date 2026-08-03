@@ -1866,10 +1866,21 @@ var Overworld = (function () {
      tab mid-sequence) can't loop — it simply won't retry, matching "fires
      once and never repeats regardless of the answer" literally. Caller
      (maybePlayEastAfricaReturnDialogue) owns isDialogueLocked across both
-     this and the dialogue that follows, so this function doesn't touch it. */
+     this and the dialogue that follows, so this function doesn't touch it.
+
+     Self-guarding: re-checks Otzi-completion here too, redundantly with the
+     caller's own gate. maybePlayEastAfricaReturnDialogue() already refuses
+     to call this before sog_battle_otzi_complete is set, but that gate lives
+     several lines away from this function — this repeats the check locally
+     so "only fires after Otzi is beaten" holds regardless of what calls this
+     in the future, not just today's one caller. */
   var KEY_ACCOUNT_PROMPT_SEEN = 'sog_account_prompt_seen';
 
   function maybePlayAccountPrompt(cb) {
+    var otziDone = false;
+    try { otziDone = localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true'; } catch (e) {}
+    if (!otziDone) { if (cb) cb(); return; }
+
     var seen = false;
     try { seen = localStorage.getItem(KEY_ACCOUNT_PROMPT_SEEN) === 'true'; } catch (e) {}
     if (seen) { if (cb) cb(); return; }
