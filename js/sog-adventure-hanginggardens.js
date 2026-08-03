@@ -1085,10 +1085,33 @@ SOG.HangingGardensBattle = (function () {
 
   function isBattleComplete() { return _has(KEY_HG_COMPLETE); }
 
+  /* ── Snapshot (save-state.js) ── */
+  function _setValue(key, v) {
+    try {
+      if (v) localStorage.setItem(key, 'true');
+      else localStorage.removeItem(key);
+    } catch (e) {}
+  }
+  function getSnapshot() {
+    return {
+      battleComplete: _has(KEY_HG_COMPLETE),
+      openingSeen: _has(KEY_HG_OPENING_SEEN),
+      floodIntroSeen: _has(KEY_HG_FLOOD_INTRO_SEEN)
+    };
+  }
+  function applySnapshot(snap) {
+    if (!snap) return;
+    _setValue(KEY_HG_COMPLETE, snap.battleComplete);
+    _setValue(KEY_HG_OPENING_SEEN, snap.openingSeen);
+    _setValue(KEY_HG_FLOOD_INTRO_SEEN, snap.floodIntroSeen);
+  }
+
   return {
     start:                    start,
     buildHangingGardensConfig: buildHangingGardensConfig,
     isBattleComplete:         isBattleComplete,
-    teardown:                 _hgTeardown
+    teardown:                 _hgTeardown,
+    getSnapshot:              getSnapshot,
+    applySnapshot:            applySnapshot
   };
 })();

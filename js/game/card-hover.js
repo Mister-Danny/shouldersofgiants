@@ -192,6 +192,10 @@ SOG.cardHover = (function () {
     _panel = null; _els = null;
   }
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() { return { enabled: isEnabled() }; }
+  function applySnapshot(snap) { setEnabled(!snap || snap.enabled !== false); }
+
   return {
     isEnabled:  isEnabled,
     setEnabled: setEnabled,
@@ -200,6 +204,8 @@ SOG.cardHover = (function () {
     suppress:   suppress,
     unsuppress: unsuppress,
     destroy:    destroy,
-    STORAGE_KEY: STORAGE_KEY
+    STORAGE_KEY: STORAGE_KEY,
+    getSnapshot: getSnapshot,
+    applySnapshot: applySnapshot
   };
 })();

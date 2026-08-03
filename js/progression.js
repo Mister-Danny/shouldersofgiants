@@ -31,6 +31,10 @@ var Progression = (function () {
   function _setInt(key, v) { localStorage.setItem(key, String(v)); }
   function _getBool(key) { return localStorage.getItem(key) === 'true'; }
   function _setBool(key) { localStorage.setItem(key, 'true'); }
+  function _setBoolValue(key, v) {
+    if (v) localStorage.setItem(key, 'true');
+    else localStorage.removeItem(key);
+  }
 
   /* ── Public API ──────────────────────────────────────────────── */
 
@@ -450,6 +454,32 @@ var Progression = (function () {
     tl.to(screen, { autoAlpha: 0, duration: 1 }, 27);
   }
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() {
+    return {
+      serfWins:                _getInt(KEY_SERF_WINS),
+      giantWins:                _getInt(KEY_GIANT_WINS),
+      religiousUnlocked:        _getBool(KEY_REL_UNLOCKED),
+      explorationUnlocked:      _getBool(KEY_EXP_UNLOCKED),
+      religiousCutsceneSeen:    _getBool(KEY_REL_CUTSCENE),
+      explorationCutsceneSeen:  _getBool(KEY_EXP_CUTSCENE),
+      totalWins:                _getInt(KEY_TOTAL_WINS),
+      victoryMontageSeen:       _getBool(KEY_MONTAGE_SEEN)
+    };
+  }
+
+  function applySnapshot(snap) {
+    if (!snap) return;
+    _setInt(KEY_SERF_WINS, snap.serfWins || 0);
+    _setInt(KEY_GIANT_WINS, snap.giantWins || 0);
+    _setBoolValue(KEY_REL_UNLOCKED, !!snap.religiousUnlocked);
+    _setBoolValue(KEY_EXP_UNLOCKED, !!snap.explorationUnlocked);
+    _setBoolValue(KEY_REL_CUTSCENE, !!snap.religiousCutsceneSeen);
+    _setBoolValue(KEY_EXP_CUTSCENE, !!snap.explorationCutsceneSeen);
+    _setInt(KEY_TOTAL_WINS, snap.totalWins || 0);
+    _setBoolValue(KEY_MONTAGE_SEEN, !!snap.victoryMontageSeen);
+  }
+
   /* ── Expose ──────────────────────────────────────────────────── */
   return {
     isTypeUnlocked:     isTypeUnlocked,
@@ -462,7 +492,9 @@ var Progression = (function () {
     playCutscene:       playCutscene,
     hasPendingMontage:  hasPendingMontage,
     markMontageSeen:    markMontageSeen,
-    playMontage:        playMontage
+    playMontage:        playMontage,
+    getSnapshot:        getSnapshot,
+    applySnapshot:      applySnapshot
   };
 })();
 

@@ -998,10 +998,31 @@ SOG.SargonBattle = (function () {
 
   function isBattleComplete() { return _has(KEY_SARGON_COMPLETE); }
 
+  /* ── Snapshot (save-state.js) ── */
+  function _setValue(key, v) {
+    try {
+      if (v) localStorage.setItem(key, 'true');
+      else localStorage.removeItem(key);
+    } catch (e) {}
+  }
+  function getSnapshot() {
+    return {
+      battleComplete: _has(KEY_SARGON_COMPLETE),
+      openingSeen: _has(KEY_OPENING_SEEN)
+    };
+  }
+  function applySnapshot(snap) {
+    if (!snap) return;
+    _setValue(KEY_SARGON_COMPLETE, snap.battleComplete);
+    _setValue(KEY_OPENING_SEEN, snap.openingSeen);
+  }
+
   return {
     start:             start,
     buildSargonConfig: buildSargonConfig,
     isBattleComplete:  isBattleComplete,
-    teardown:          _sargonTeardown
+    teardown:          _sargonTeardown,
+    getSnapshot:       getSnapshot,
+    applySnapshot:     applySnapshot
   };
 })();

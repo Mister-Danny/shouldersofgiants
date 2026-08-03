@@ -40,6 +40,12 @@ SOG.GilgameshBattle = (function () {
   var GILGAMESH_CARD_ID = 43;                  // granted to the player on victory
 
   function _has(key) { try { return localStorage.getItem(key) === 'true'; } catch (e) { return false; } }
+  function _set(key, v) {
+    try {
+      if (v) localStorage.setItem(key, 'true');
+      else localStorage.removeItem(key);
+    } catch (e) {}
+  }
 
   /* ── Timing ──────────────────────────────────────────────────── */
   var TYPE_SPEED_MS = 32;
@@ -1510,10 +1516,29 @@ SOG.GilgameshBattle = (function () {
     catch (e) { return false; }
   }
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() {
+    return {
+      battleComplete: _has(KEY_BATTLE_GILGAMESH_COMPLETE),
+      phase1Complete: _has(KEY_PHASE1_COMPLETE),
+      cuneiformGranted: _has(KEY_CUNEIFORM_GRANTED),
+      openingSeen: _has('sog_gilgamesh_opening_seen')
+    };
+  }
+  function applySnapshot(snap) {
+    if (!snap) return;
+    _set(KEY_BATTLE_GILGAMESH_COMPLETE, snap.battleComplete);
+    _set(KEY_PHASE1_COMPLETE, snap.phase1Complete);
+    _set(KEY_CUNEIFORM_GRANTED, snap.cuneiformGranted);
+    _set('sog_gilgamesh_opening_seen', snap.openingSeen);
+  }
+
   return {
     start:                start,
     isBattleComplete:     isBattleComplete,
-    teardown:             teardown
+    teardown:             teardown,
+    getSnapshot:          getSnapshot,
+    applySnapshot:        applySnapshot
   };
 
 })();

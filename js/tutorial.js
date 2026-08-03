@@ -3649,9 +3649,25 @@
     if (_musicCtrl) _musicCtrl.style.display = '';
   }
 
+  /* ── Snapshot (save-state.js) ── */
+  var TUTORIAL_COMPLETE_KEY = 'sog_tutorial_complete';
+  function getSnapshot() {
+    return { complete: localStorage.getItem(TUTORIAL_COMPLETE_KEY) === 'true' };
+  }
+  function applySnapshot(snap) {
+    try {
+      if (snap && snap.complete) localStorage.setItem(TUTORIAL_COMPLETE_KEY, 'true');
+      else localStorage.removeItem(TUTORIAL_COMPLETE_KEY);
+    } catch (e) {}
+  }
+
   /* ── Exports ─────────────────────────────────────────────────── */
   window.startHomeIntro    = startHomeIntro;
   window.showMatchupScreen = showMatchupScreen;
   window.startTutorial     = startTutorial;
+  window.Tutorial = {
+    getSnapshot:   getSnapshot,
+    applySnapshot: applySnapshot
+  };
 
 }());

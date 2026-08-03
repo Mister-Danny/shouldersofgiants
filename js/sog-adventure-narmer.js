@@ -1038,9 +1038,30 @@ SOG.NarmerBattle = (function () {
     if (typeof window.initGame === 'function') window.initGame(buildNarmerConfig());
   }
 
+  /* ── Snapshot (save-state.js) ── */
+  function _setValue(key, v) {
+    try {
+      if (v) localStorage.setItem(key, 'true');
+      else localStorage.removeItem(key);
+    } catch (e) {}
+  }
+  function getSnapshot() {
+    return {
+      battleComplete: _has(KEY_NARMER_COMPLETE),
+      openingSeen: _has(KEY_NARMER_OPENING_SEEN)
+    };
+  }
+  function applySnapshot(snap) {
+    if (!snap) return;
+    _setValue(KEY_NARMER_COMPLETE, snap.battleComplete);
+    _setValue(KEY_NARMER_OPENING_SEEN, snap.openingSeen);
+  }
+
   return {
     start:             start,
     buildNarmerConfig: buildNarmerConfig,
-    teardown:          _teardown
+    teardown:          _teardown,
+    getSnapshot:       getSnapshot,
+    applySnapshot:     applySnapshot
   };
 })();

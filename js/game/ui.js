@@ -358,7 +358,16 @@
       onUpdate: null,
 
       /** Re-apply the effective music volume (e.g. after the Master slider moves). */
-      refresh: function () { applyVolumeToAll(); _musicUpdateUI(); }
+      refresh: function () { applyVolumeToAll(); _musicUpdateUI(); },
+
+      /* ── Snapshot (save-state.js) ── */
+      getSnapshot: function () {
+        var stored = parseInt(localStorage.getItem('sog_music_volume'), 10);
+        return { musicVolume: isNaN(stored) ? Math.round(_bgMusicVol * 100) : stored };
+      },
+      applySnapshot: function (snap) {
+        SOG.music.setVolume(snap && snap.musicVolume != null ? snap.musicVolume : 10);
+      }
     };
   }());
 

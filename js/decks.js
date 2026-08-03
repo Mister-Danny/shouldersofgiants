@@ -222,6 +222,28 @@
 
   function wasMigrated() { return _migrated; }
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() {
+    return { decks: getAllDecks(), activeSlot: getActiveSlot() };
+  }
+
+  function applySnapshot(snap) {
+    var decks = (snap && Array.isArray(snap.decks)) ? snap.decks : null;
+    if (decks && decks.length === SLOT_COUNT) {
+      _decks = decks.map(function (d, i) {
+        return {
+          id: i + 1,
+          name: sanitizeName(d && d.name, i + 1),
+          cards: (d && Array.isArray(d.cards))
+            ? d.cards.filter(function (x) { return typeof x === 'number'; }).slice(0, DECK_SIZE)
+            : []
+        };
+      });
+      persistDecks(_decks);
+    }
+    if (snap && snap.activeSlot != null) setActiveSlot(snap.activeSlot);
+  }
+
   window.Decks = {
     SLOT_COUNT:     SLOT_COUNT,
     DECK_SIZE:      DECK_SIZE,
@@ -243,6 +265,8 @@
     filterAllCards: filterAllCards,
     sanitizeName:   sanitizeName,
     defaultName:    defaultName,
-    wasMigrated:    wasMigrated
+    wasMigrated:    wasMigrated,
+    getSnapshot:    getSnapshot,
+    applySnapshot:  applySnapshot
   };
 })();

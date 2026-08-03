@@ -71,12 +71,18 @@ SOG.focus = (function () {
   // Restore to full.
   function reset() { return set(MAX); }
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() { return { focus: _read() }; }
+  function applySnapshot(snap) { set(snap && snap.focus); }
+
   return {
-    MAX:     MAX,
-    get:     get,
-    set:     set,
-    spend:   spend,
-    restore: restore,
-    reset:   reset
+    MAX:          MAX,
+    get:          get,
+    set:          set,
+    spend:        spend,
+    restore:      restore,
+    reset:        reset,
+    getSnapshot:  getSnapshot,
+    applySnapshot: applySnapshot
   };
 })();

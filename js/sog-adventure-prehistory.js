@@ -1625,6 +1625,13 @@ window.SOG.Adventure.Prehistory = (function () {
     SOG.BattleHooks.register('prehistory', PREHISTORY_SCRIPT);
   }
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() { return { battleComplete: isBattleComplete() }; }
+  function applySnapshot(snap) {
+    if (snap && snap.battleComplete) markBattleComplete();
+    else resetBattleComplete();
+  }
+
   return {
     startNeanderthalBattle: startNeanderthalBattle,
     isBattleComplete:       isBattleComplete,
@@ -1636,7 +1643,9 @@ window.SOG.Adventure.Prehistory = (function () {
     // Devtools escape
     exitToOverworld:        exitToOverworld,
     // Input guard: true while coaching or post-battle dialogue is running.
-    isCoachingActive:       isCoachingActive
+    isCoachingActive:       isCoachingActive,
+    getSnapshot:            getSnapshot,
+    applySnapshot:          applySnapshot
   };
 
 })();

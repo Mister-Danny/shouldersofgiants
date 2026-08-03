@@ -101,6 +101,13 @@ SOG.sfx = (function () {
   }
   function getMaster() { return _masterPct(); }
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() { return { sfxVolume: _sfxPct(), masterVolume: _masterPct() }; }
+  function applySnapshot(snap) {
+    setVolume(snap && snap.sfxVolume);
+    setMaster(snap && snap.masterVolume);
+  }
+
   return {
     play: play,
     playNamed: playNamed,
@@ -111,6 +118,8 @@ SOG.sfx = (function () {
     setVolume: setVolume,
     getVolume: getVolume,
     setMaster: setMaster,
-    getMaster: getMaster
+    getMaster: getMaster,
+    getSnapshot: getSnapshot,
+    applySnapshot: applySnapshot
   };
 })();

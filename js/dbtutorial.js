@@ -40,6 +40,12 @@
   var KEY = 'sog_deckbuilder_tutorial_complete';
   function isComplete()    { return localStorage.getItem(KEY) === 'true'; }
   function markComplete()  { try { localStorage.setItem(KEY, 'true'); } catch (e) {} }
+  function _setComplete(v) {
+    try {
+      if (v) localStorage.setItem(KEY, 'true');
+      else localStorage.removeItem(KEY);
+    } catch (e) {}
+  }
 
   /* ── State ───────────────────────────────────────────────────── */
   var active             = false;
@@ -734,6 +740,10 @@
     }
   }
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() { return { complete: isComplete() }; }
+  function applySnapshot(snap) { _setComplete(!!(snap && snap.complete)); }
+
   /* ── Public export ─────────────────────────────────────────────── */
   window.DeckBuilderTutorial = {
     start:              start,
@@ -742,7 +752,9 @@
     notifyCardClick:    notifyCardClick,
     notifyCardDblClick: notifyCardDblClick,
     notifyLetsPlay:     notifyLetsPlay,
-    notifyExit:         notifyExit
+    notifyExit:         notifyExit,
+    getSnapshot:        getSnapshot,
+    applySnapshot:      applySnapshot
   };
 
 }());

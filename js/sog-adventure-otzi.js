@@ -921,10 +921,34 @@ SOG.OtziBattle = (function () {
     SOG.BattleHooks.register('otzi', OTZI_SCRIPT);
   }
 
+  /* ── Snapshot (save-state.js) ── */
+  function _flag(key) { try { return localStorage.getItem(key) === 'true'; } catch (e) { return false; } }
+  function _setFlag(key, v) {
+    try {
+      if (v) localStorage.setItem(key, 'true');
+      else localStorage.removeItem(key);
+    } catch (e) {}
+  }
+  function getSnapshot() {
+    return {
+      battleComplete: _flag(KEY_BATTLE_OTZI_COMPLETE),
+      cardUnlocked: _flag(KEY_CARD_OTZI_UNLOCKED),
+      openingSeen: _flag(KEY_OTZI_OPENING_SEEN)
+    };
+  }
+  function applySnapshot(snap) {
+    if (!snap) return;
+    _setFlag(KEY_BATTLE_OTZI_COMPLETE, snap.battleComplete);
+    _setFlag(KEY_CARD_OTZI_UNLOCKED, snap.cardUnlocked);
+    _setFlag(KEY_OTZI_OPENING_SEEN, snap.openingSeen);
+  }
+
   return {
     start:                start,
     isBattleComplete:     isBattleComplete,
-    teardown:             teardown
+    teardown:             teardown,
+    getSnapshot:          getSnapshot,
+    applySnapshot:        applySnapshot
   };
 
 })();

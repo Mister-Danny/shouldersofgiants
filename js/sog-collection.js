@@ -130,12 +130,24 @@ SOG.collection = (function () {
   // Seed the default deck from the collection on boot (no-op once unlocked).
   syncDefaultDeck();
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() { return { earned: _readEarned() }; }
+  function applySnapshot(snap) {
+    var earned = (snap && Array.isArray(snap.earned))
+      ? snap.earned.filter(function (x) { return typeof x === 'number'; })
+      : [];
+    _writeEarned(earned);
+    getUnlockedCards().forEach(function (id) { _applyOwned(id, true); });
+  }
+
   return {
     STARTER_CARD_IDS: STARTER_CARD_IDS.slice(),
     getUnlockedCards: getUnlockedCards,
     isUnlocked:       isUnlocked,
     unlockCard:       unlockCard,
     syncDefaultDeck:  syncDefaultDeck,
-    resetCollection:  resetCollection
+    resetCollection:  resetCollection,
+    getSnapshot:      getSnapshot,
+    applySnapshot:    applySnapshot
   };
 })();

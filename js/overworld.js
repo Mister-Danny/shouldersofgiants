@@ -4699,6 +4699,87 @@ var Overworld = (function () {
       isDialogueLocked = false;
       scheduleIdle();
       log('resumeAfterBattle() — player control restored');
+    },
+
+    /* ── Snapshot (save-state.js) ──────────────────────────────
+       Covers only the state this module actually reads AND writes.
+       Keys this file merely reads (e.g. sog_battle_otzi_complete,
+       sog_battle_gilgamesh_complete) are owned by their respective
+       adventure chapter modules and are snapshotted there instead.
+       The dynamic sog_node_encountered_<hook> / sog_node_<hook>_<tier>_beaten
+       families are handled generically by game.js's getSnapshot. */
+    getSnapshot: function () {
+      // currentMapId/currentPos/visitedMaps only sync from localStorage inside
+      // init() (called when the overworld screen is first shown) — a snapshot
+      // taken before that (e.g. from the home screen) would otherwise see
+      // these vars' raw declaration defaults instead of the real saved state.
+      loadState();
+      function flag(key) { return localStorage.getItem(key) === 'true'; }
+      return {
+        map: currentMapId,
+        pos: { x: currentPos.x, y: currentPos.y },
+        visitedMaps: visitedMaps.slice(),
+        egyptMarketState: _egyptMarketState(),
+        adventureIntroComplete: flag(KEY_ADVENTURE_INTRO),
+        postNeanderthalDialogueSeen: flag(KEY_POST_NEANDERTHAL_DIALOGUE),
+        cardLucyUnlocked: flag(KEY_CARD_LUCY_UNLOCKED),
+        eastafricaPostOtziDialogueSeen: flag(KEY_EASTAFRICA_POSTOTZI_DIALOGUE),
+        toEgyptGoodbyeSeen: flag(KEY_TOEGYPT_GOODBYE),
+        egyptArrivalSeen: flag(KEY_EGYPT_ARRIVAL),
+        mesopotamiaArrivalComplete: flag(KEY_MESOPOTAMIA_ARRIVAL),
+        metGilgamesh: flag(KEY_MET_GILGAMESH),
+        marketFirstVisitDone: flag(KEY_MARKET_FIRST_VISIT),
+        marketIntroSeen: flag(KEY_MARKET_INTRO_SEEN),
+        egyptMarketIntroSeen: flag('sog_egypt_market_intro_seen'),
+        deckbuilderUnlocked: flag(KEY_DECKBUILDER_UNLOCKED),
+        firstMarketInterstitialSeen: flag(KEY_FIRST_MARKET_INTERSTITIAL),
+        sargonNodeRevealed: flag(KEY_SARGON_NODE_REVEALED),
+        hammurabiNodeRevealed: flag(KEY_HAMMURABI_NODE_REVEALED),
+        hangingGardensRevealed: flag(KEY_HANGING_GARDENS_REVEALED),
+        egyptNodeLive: flag(KEY_EGYPT_NODE_LIVE),
+        egyptNodeArrivalSeen: flag(KEY_EGYPT_NODE_ARRIVAL),
+        metNarmer: flag(KEY_MET_NARMER),
+        cuneiformGranted: flag(KEY_CUNEIFORM_GRANTED)
+      };
+    },
+
+    applySnapshot: function (snap) {
+      if (!snap) return;
+      function setFlag(key, v) {
+        try {
+          if (v) localStorage.setItem(key, 'true');
+          else localStorage.removeItem(key);
+        } catch (e) {}
+      }
+      try {
+        if (snap.map) localStorage.setItem(KEY_MAP, snap.map);
+        if (snap.pos) localStorage.setItem(KEY_POS, JSON.stringify({ x: snap.pos.x, y: snap.pos.y }));
+        if (Array.isArray(snap.visitedMaps)) localStorage.setItem(KEY_VISITED, JSON.stringify(snap.visitedMaps));
+      } catch (e) {}
+      if (snap.egyptMarketState) _saveEgyptMarketState(snap.egyptMarketState);
+      setFlag(KEY_ADVENTURE_INTRO, snap.adventureIntroComplete);
+      setFlag(KEY_POST_NEANDERTHAL_DIALOGUE, snap.postNeanderthalDialogueSeen);
+      setFlag(KEY_CARD_LUCY_UNLOCKED, snap.cardLucyUnlocked);
+      setFlag(KEY_EASTAFRICA_POSTOTZI_DIALOGUE, snap.eastafricaPostOtziDialogueSeen);
+      setFlag(KEY_TOEGYPT_GOODBYE, snap.toEgyptGoodbyeSeen);
+      setFlag(KEY_EGYPT_ARRIVAL, snap.egyptArrivalSeen);
+      setFlag(KEY_MESOPOTAMIA_ARRIVAL, snap.mesopotamiaArrivalComplete);
+      setFlag(KEY_MET_GILGAMESH, snap.metGilgamesh);
+      setFlag(KEY_MARKET_FIRST_VISIT, snap.marketFirstVisitDone);
+      setFlag(KEY_MARKET_INTRO_SEEN, snap.marketIntroSeen);
+      setFlag('sog_egypt_market_intro_seen', snap.egyptMarketIntroSeen);
+      setFlag(KEY_DECKBUILDER_UNLOCKED, snap.deckbuilderUnlocked);
+      setFlag(KEY_FIRST_MARKET_INTERSTITIAL, snap.firstMarketInterstitialSeen);
+      setFlag(KEY_SARGON_NODE_REVEALED, snap.sargonNodeRevealed);
+      setFlag(KEY_HAMMURABI_NODE_REVEALED, snap.hammurabiNodeRevealed);
+      setFlag(KEY_HANGING_GARDENS_REVEALED, snap.hangingGardensRevealed);
+      setFlag(KEY_EGYPT_NODE_LIVE, snap.egyptNodeLive);
+      setFlag(KEY_EGYPT_NODE_ARRIVAL, snap.egyptNodeArrivalSeen);
+      setFlag(KEY_MET_NARMER, snap.metNarmer);
+      setFlag(KEY_CUNEIFORM_GRANTED, snap.cuneiformGranted);
+      // Resync in-memory state (currentMapId/currentPos/visitedMaps) from what
+      // was just written, reusing loadState()'s existing parsing/defaulting.
+      loadState();
     }
   };
 })();

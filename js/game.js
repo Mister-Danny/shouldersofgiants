@@ -2038,6 +2038,40 @@
          pipeline helpers that game.js owns; called by ai.js's
          runAiMovements (executeMove) and abilities.js's Wu push
          (executeMoveAnimated). */
+  /* ── Snapshot (save-state.js) ──────────────────────────────────
+     Covers the per-node "encountered" stamps and per-tier "beaten" flags
+     this file stamps generically in endGame (see the win-reward /
+     node-progression block above), keyed dynamically by scriptHook — an
+     open-ended, data-driven set (one per boss across data/map-data.js's
+     milestones), so no fixed module can enumerate them ahead of time.
+     Scanned by pattern rather than by a known key list. */
+  var NODE_ENCOUNTERED_RE = /^sog_node_encountered_/;
+  var NODE_BEATEN_RE      = /^sog_node_.+_(serf|giant)_beaten$/;
+
+  function getSnapshot() {
+    var out = {};
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i);
+        if (NODE_ENCOUNTERED_RE.test(key) || NODE_BEATEN_RE.test(key)) {
+          out[key] = localStorage.getItem(key);
+        }
+      }
+    } catch (e) {}
+    return out;
+  }
+
+  function applySnapshot(snap) {
+    if (!snap) return;
+    try {
+      Object.keys(snap).forEach(function (key) {
+        if (NODE_ENCOUNTERED_RE.test(key) || NODE_BEATEN_RE.test(key)) {
+          localStorage.setItem(key, snap[key]);
+        }
+      });
+    } catch (e) {}
+  }
+
   SOG.game = {
     shuffle:               shuffle,
     getSlotEl:             getSlotEl,
@@ -2050,7 +2084,9 @@
     findSlotEl:            findSlotEl,
     refreshMoveableCards:  refreshMoveableCards,
     // Exposed for the Prehistory adventure module's reveal sequence.
-    flipSlot:              flipSlot
+    flipSlot:              flipSlot,
+    getSnapshot:           getSnapshot,
+    applySnapshot:         applySnapshot
   };
 
 })();

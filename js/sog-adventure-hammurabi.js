@@ -1130,10 +1130,31 @@ SOG.HammurabiBattle = (function () {
 
   function isBattleComplete() { return _has(KEY_HAMMURABI_COMPLETE); }
 
+  /* ── Snapshot (save-state.js) ── */
+  function _setValue(key, v) {
+    try {
+      if (v) localStorage.setItem(key, 'true');
+      else localStorage.removeItem(key);
+    } catch (e) {}
+  }
+  function getSnapshot() {
+    return {
+      battleComplete: _has(KEY_HAMMURABI_COMPLETE),
+      openingSeen: _has(KEY_HAMMURABI_OPENING_SEEN)
+    };
+  }
+  function applySnapshot(snap) {
+    if (!snap) return;
+    _setValue(KEY_HAMMURABI_COMPLETE, snap.battleComplete);
+    _setValue(KEY_HAMMURABI_OPENING_SEEN, snap.openingSeen);
+  }
+
   return {
     start:                start,
     buildHammurabiConfig: buildHammurabiConfig,
     isBattleComplete:     isBattleComplete,
-    teardown:             _hammurabiTeardown
+    teardown:             _hammurabiTeardown,
+    getSnapshot:          getSnapshot,
+    applySnapshot:        applySnapshot
   };
 })();

@@ -891,6 +891,32 @@ var HomeFlow = (function () {
     init();
   }
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() {
+    return {
+      introSeen:           introSeen(),
+      firstVisitComplete:  localStorage.getItem(KEY_FIRST_VISIT) === 'true',
+      adventureWarningSeen: localStorage.getItem(KEY_ADV_WARNING) === 'true',
+      selectedAdventurer:  localStorage.getItem(KEY_ADVENTURER) || null
+    };
+  }
+  function _setFlag(key, v) {
+    try {
+      if (v) localStorage.setItem(key, 'true');
+      else localStorage.removeItem(key);
+    } catch (e) {}
+  }
+  function applySnapshot(snap) {
+    if (!snap) return;
+    _setFlag(KEY_INTRO_SEEN, snap.introSeen);
+    _setFlag(KEY_FIRST_VISIT, snap.firstVisitComplete);
+    _setFlag(KEY_ADV_WARNING, snap.adventureWarningSeen);
+    try {
+      if (snap.selectedAdventurer) localStorage.setItem(KEY_ADVENTURER, snap.selectedAdventurer);
+      else localStorage.removeItem(KEY_ADVENTURER);
+    } catch (e) {}
+  }
+
   return {
     init:        init,
     reset:       resetHomeState,
@@ -906,7 +932,9 @@ var HomeFlow = (function () {
     toggleMusic:    toggleHomeMusic,  // bug 14: global widget play/pause
     pauseMusic:     pauseHomeMusic,   // bug 14
     resumeMusic:    resumeHomeMusic,  // bug 14
-    setMusicVolume: setHomeMusicVolume // bug 14: global widget volume slider
+    setMusicVolume: setHomeMusicVolume, // bug 14: global widget volume slider
+    getSnapshot:    getSnapshot,
+    applySnapshot:  applySnapshot
   };
 })();
 

@@ -61,10 +61,16 @@ SOG.gold = (function () {
 
   function reset() { _write(0); }
 
+  /* ── Snapshot (save-state.js) ── */
+  function getSnapshot() { return { gold: _read() }; }
+  function applySnapshot(snap) { _write(_norm(snap && snap.gold)); }
+
   return {
-    get:   get,
-    add:   add,
-    spend: spend,
-    reset: reset
+    get:          get,
+    add:          add,
+    spend:        spend,
+    reset:        reset,
+    getSnapshot:  getSnapshot,
+    applySnapshot: applySnapshot
   };
 })();
