@@ -344,7 +344,12 @@ window.TeacherDashboard = (function () {
 
   function _render(classes) {
     var uid = firebase.auth().currentUser.uid;
-    _byId('td-teacher-name').textContent = (_teacherDoc && (_teacherDoc.displayName || _teacherDoc.email)) || '';
+    // Never fall back to _teacherDoc.email here — a teacher may have this
+    // modal open while demoing on a projector, and their real email must
+    // never appear in any game UI. displayName is a required field at
+    // signup (see js/account-ui.js _submitTeacherSignup), so this only
+    // ever shows the generic fallback in the unlikely case it's missing.
+    _byId('td-teacher-name').textContent = (_teacherDoc && _teacherDoc.displayName) || 'Teacher';
     _byId('td-classes').innerHTML = _renderClasses(classes);
     _byId('td-roster').innerHTML = '<p class="td-empty">Loading roster…</p>';
     _wireEvents(classes);

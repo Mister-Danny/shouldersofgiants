@@ -4450,8 +4450,8 @@ body[data-screen="overworld"] .guest-status-strip {
 
 /* ── Teacher dashboard (AUTH_SPEC.md Phase 5) ────────────────────────────
  * An in-game MODAL, not a screen — #teacher-dashboard-backdrop reuses
- * .guest-modal-backdrop verbatim (same fixed/inset/z-index/dim/opacity-
- * transition as the account-flow and welcome modals), so the game
+ * .guest-modal-backdrop's fixed/inset/z-index/opacity-transition (same
+ * mechanics as the account-flow and welcome modals), so the game
  * underneath stays visible and on whatever screen it was on. .td-modal is
  * a sibling of .card-popup rather than a reuse of it: .card-popup is
  * hardcoded to 700px, but this needs to read as "roughly 75-80% of the
@@ -4459,6 +4459,14 @@ body[data-screen="overworld"] .guest-status-strip {
  * double-border treatment as .card-popup, just at a different size.
  * Internal sections scroll independently (roster can grow long) rather
  * than relying on page-level scroll. */
+#teacher-dashboard-backdrop {
+  /* Lighter dim than .guest-modal-backdrop's own 0.80 — the dashboard is
+   * meant to be glanced at while the game keeps running behind it, not a
+   * blocking modal, so the game should stay clearly visible through it.
+   * Scoped by ID (not editing .guest-modal-backdrop itself) so the
+   * account-flow/welcome modals keep their own darker dim. */
+  background: rgba(0, 0, 14, 0.33);
+}
 .td-modal {
   width: 78%;
   height: 78%;
