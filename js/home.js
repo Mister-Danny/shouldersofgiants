@@ -33,7 +33,7 @@ var HomeFlow = (function () {
 
   /* ── Elements ──────────────────────────────────────────────── */
   var screenHomeEl, homeContentEl, adventureStageEl;
-  var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback, btnAccount;
+  var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback, btnAccount, btnTeacherDashboard;
   var advDevWarningEl, advDevProceedBtn, advDevGoBackBtn;
   var arcadiumLockedEl, arcadiumLockedClose;
   var subtitleIntroEl, subtitlePathEl, subtitleAdventurerEl;
@@ -193,6 +193,7 @@ var HomeFlow = (function () {
     btnState2Back        = document.getElementById('btn-state2-back');
     btnFeedback          = document.getElementById('btn-home-feedback');
     btnAccount           = document.getElementById('btn-account');
+    btnTeacherDashboard  = document.getElementById('btn-teacher-dashboard');
     subtitleIntroEl      = document.getElementById('home-subtitle-intro');
     subtitlePathEl       = document.getElementById('home-subtitle-path');
     subtitleAdventurerEl = document.getElementById('home-subtitle-adventurer');
@@ -250,6 +251,11 @@ var HomeFlow = (function () {
     if (charFemaleEl)    charFemaleEl.addEventListener('click', function () { onAdventurerPicked('female'); });
     if (charMaleEl)      charMaleEl.addEventListener('click',   function () { onAdventurerPicked('male');   });
     if (btnAccount)      btnAccount.addEventListener('click', onAccountClick);
+    if (btnTeacherDashboard) btnTeacherDashboard.addEventListener('click', function () {
+      if (window.TeacherDashboard && typeof window.TeacherDashboard.show === 'function') {
+        window.TeacherDashboard.show();
+      }
+    });
 
     _updateAccountButtonLabel();
     // Keep the label live for the rest of the session — signup/login/logout
@@ -258,6 +264,14 @@ var HomeFlow = (function () {
     // re-runs resetHomeState()'s own refresh below).
     if (window.SogAuth && typeof window.SogAuth.onChange === 'function') {
       window.SogAuth.onChange(_updateAccountButtonLabel);
+    }
+    // Teacher-dashboard entry button: js/teacher-dashboard.js owns the
+    // /teachers/{uid} check (this file has no Firestore access of its own)
+    // and pushes the result here — fires immediately with whatever's
+    // currently known, then again on every subsequent auth change, so this
+    // is never stale regardless of signup/login/logout/reload.
+    if (window.TeacherDashboard && typeof window.TeacherDashboard.onStatusChange === 'function') {
+      window.TeacherDashboard.onStatusChange(_updateTeacherDashboardButtonVisibility);
     }
   }
 
@@ -273,6 +287,21 @@ var HomeFlow = (function () {
       ? window.SogAuth.getUser() : null;
     var loggedIn = !!(user && user.isAnonymous === false);
     btnAccount.textContent = loggedIn ? 'Logout' : 'Create Account / Login';
+  }
+
+  /* ── Teacher-dashboard entry button (AUTH_SPEC.md Phase 5) ────────────
+     Visible only when window.TeacherDashboard confirms a /teachers/{uid}
+     doc for the signed-in user — guests and students never see it.
+     applyVisitState() is the single source of truth for its display (see
+     below); this callback just re-runs that now that teacher status is
+     known/changed, so it stays in lockstep with btnAccount's own
+     show/hide lifecycle instead of needing separate logic. */
+  function _updateTeacherDashboardButtonVisibility() {
+    applyVisitState();
+  }
+
+  function _isTeacher() {
+    return !!(window.TeacherDashboard && typeof window.TeacherDashboard.isTeacher === 'function' && window.TeacherDashboard.isTeacher());
   }
 
   function onAccountClick() {
@@ -291,6 +320,12 @@ var HomeFlow = (function () {
   }
 
   function applyVisitState() {
+    // Teacher-dashboard button: only ever visible for a confirmed teacher,
+    // in both visit states alike — same "always have a way back in" logic
+    // as btnAccount below, and independent of the funnel/returning-visitor
+    // split since it has nothing to do with a first-time player's onboarding.
+    var teacherDisplay = _isTeacher() ? '' : 'none';
+
     if (!introSeen()) {
       // FIRST-EVER VISIT — funnel: show only "I'm Ready" plus the account
       // button. The rest of the menu stays hidden so a brand-new player
@@ -304,6 +339,7 @@ var HomeFlow = (function () {
       btnAbout.style.display = 'none';
       if (btnFeedback) btnFeedback.style.display = 'none';
       if (btnAccount)  btnAccount.style.display = '';
+      if (btnTeacherDashboard) btnTeacherDashboard.style.display = teacherDisplay;
     } else {
       // Returning visitor — normal home menu. (Feedback button is threshold-gated
       // separately by feedback.js, so we don't force it here.)
@@ -311,6 +347,7 @@ var HomeFlow = (function () {
       btnAbout.style.display = '';
       btnLearn.style.display = localStorage.getItem(KEY_FIRST_VISIT) ? '' : 'none';
       if (btnAccount) btnAccount.style.display = '';
+      if (btnTeacherDashboard) btnTeacherDashboard.style.display = teacherDisplay;
     }
   }
 
@@ -336,7 +373,7 @@ var HomeFlow = (function () {
     // Fade out intro subtitle + Ready + Learn buttons
     if (typeof gsap === 'undefined') { showPathChoice(); return; }
 
-    gsap.to([subtitleIntroEl, btnReady, btnLearn, btnAbout, btnFeedback, btnAccount], {
+    gsap.to([subtitleIntroEl, btnReady, btnLearn, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard], {
       opacity: 0, duration: 0.3, ease: 'power2.out',
       onComplete: function () {
         btnReady.style.display = 'none';
@@ -344,6 +381,7 @@ var HomeFlow = (function () {
         btnAbout.style.display = 'none';
         if (btnFeedback) btnFeedback.style.display = 'none';
         if (btnAccount)  btnAccount.style.display = 'none';
+        if (btnTeacherDashboard) btnTeacherDashboard.style.display = 'none';
         subtitleIntroEl.classList.remove('is-visible');
         gsap.set(subtitleIntroEl, { opacity: '' });
         showPathChoice();
@@ -356,13 +394,14 @@ var HomeFlow = (function () {
      normal Adventure button uses, minus the State-2 menu hop. */
   function launchReadyFunnel() {
     if (typeof gsap === 'undefined') { enterAdventureStage(); return; }
-    gsap.to([subtitleIntroEl, btnReady, btnAbout, btnFeedback, btnAccount], {
+    gsap.to([subtitleIntroEl, btnReady, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard], {
       opacity: 0, duration: 0.3, ease: 'power2.out',
       onComplete: function () {
         btnReady.style.display = 'none';
         btnAbout.style.display = 'none';
         if (btnFeedback) btnFeedback.style.display = 'none';
         if (btnAccount)  btnAccount.style.display = 'none';
+        if (btnTeacherDashboard) btnTeacherDashboard.style.display = 'none';
         subtitleIntroEl.classList.remove('is-visible');
         gsap.set(subtitleIntroEl, { opacity: '' });
         enterAdventureStage();
@@ -439,7 +478,7 @@ var HomeFlow = (function () {
     }
     subtitleIntroEl.classList.add('is-visible');
     if (typeof gsap !== 'undefined') {
-      gsap.fromTo([btnReady, btnLearn, btnAbout, btnAccount, subtitleIntroEl],
+      gsap.fromTo([btnReady, btnLearn, btnAbout, btnAccount, btnTeacherDashboard, subtitleIntroEl],
         { opacity: 0 },
         { opacity: 1, duration: 0.4, ease: 'power2.out', stagger: 0.05 });
       if (btnFeedback && btnFeedback.style.display !== 'none') {
@@ -646,10 +685,18 @@ var HomeFlow = (function () {
       onComplete: function () {
         adventureStageEl.classList.remove('active');
         if (!introSeen()) {
-          // First-visit funnel: back returns to the lone "I'm Ready", not the menu.
+          // First-visit funnel: back returns to the lone "I'm Ready", not the
+          // menu — but btnAccount/btnTeacherDashboard both also render on
+          // this exact funnel state (see applyVisitState()) and were faded
+          // out by the same launchReadyFunnel() call that got us here, so
+          // they need restoring too or a teacher/student loses their only
+          // way back to their account until some OTHER nav path happens to
+          // call resetHomeState().
           btnReady.style.display = '';
+          if (btnAccount) btnAccount.style.display = '';
+          if (btnTeacherDashboard) btnTeacherDashboard.style.display = _isTeacher() ? '' : 'none';
           subtitleIntroEl.classList.add('is-visible');
-          gsap.fromTo(btnReady, { opacity: 0 }, { opacity: 1, duration: 0.4 });
+          gsap.fromTo([btnReady, btnAccount, btnTeacherDashboard], { opacity: 0 }, { opacity: 1, duration: 0.4 });
           return;
         }
         // Returning visitor: restore the State-2 path-choice menu.
@@ -924,6 +971,7 @@ var HomeFlow = (function () {
     gsap.set(btnAbout, { opacity: 1 });
     gsap.set(btnLearn, { opacity: 1 });   // Learn faded to 0 in onReadyClick but never restored — un-stick it
     if (btnAccount) gsap.set(btnAccount, { opacity: 1 });  // same fade-out in onReadyClick, same fix
+    if (btnTeacherDashboard) gsap.set(btnTeacherDashboard, { opacity: 1 });  // same fade-out, same fix
     applyVisitState();
     _updateAccountButtonLabel();   // auth state may have changed since this button was last shown
     // Re-evaluate Feedback button (threshold-gated by feedback.js)

@@ -4449,27 +4449,38 @@ body[data-screen="overworld"] .guest-status-strip {
 }
 
 /* ── Teacher dashboard (AUTH_SPEC.md Phase 5) ────────────────────────────
- * #screen-teacher-dashboard fills the 1280×720 fixed stage like every other
- * screen; its own sections scroll independently (roster can grow long)
- * rather than relying on page-level scroll, which #sog-stage's own
- * overflow:hidden wouldn't allow anyway.
- *
- * IMPORTANT: the flex layout below must stay gated on .active, exactly
- * mirroring .screen/.screen.active's own display:none/block toggle (see
- * "Screen management" near the top of this file). An unconditional
- * `#screen-teacher-dashboard { display: flex }` would win over the base
- * .screen rule's `display: none` on ID-vs-class specificity alone, making
- * this screen visible on top of everything regardless of showScreen() —
- * exactly the bug this comment is here to prevent regressing. */
-#screen-teacher-dashboard.active {
-  display: flex;
-  flex-direction: column;
-  padding: 24px 32px;
+ * An in-game MODAL, not a screen — #teacher-dashboard-backdrop reuses
+ * .guest-modal-backdrop verbatim (same fixed/inset/z-index/dim/opacity-
+ * transition as the account-flow and welcome modals), so the game
+ * underneath stays visible and on whatever screen it was on. .td-modal is
+ * a sibling of .card-popup rather than a reuse of it: .card-popup is
+ * hardcoded to 700px, but this needs to read as "roughly 75-80% of the
+ * screen" per spec, hence percentage sizing here instead. Same SNES
+ * double-border treatment as .card-popup, just at a different size.
+ * Internal sections scroll independently (roster can grow long) rather
+ * than relying on page-level scroll. */
+.td-modal {
+  width: 78%;
+  height: 78%;
   box-sizing: border-box;
-  background: var(--bg-base);
+  padding: 20px 28px;
+  position: relative;
+  background: var(--bg-dialog);
+  border: 3px solid var(--border-bright);
+  box-shadow:
+    0 0 0 3px var(--border-dark),
+    0 0 0 6px var(--border-mid),
+    0 0 0 7px var(--border-dark);
   color: var(--text-white);
   font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+  transform: scale(0.90);
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.guest-modal-backdrop.visible .td-modal {
+  transform: scale(1);
 }
 
 #td-header {
@@ -4486,6 +4497,15 @@ body[data-screen="overworld"] .guest-status-strip {
   font-size: 20px;
   color: var(--snes-yellow);
   letter-spacing: 0.03em;
+}
+#td-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#td-header-actions .btn-snes {
+  font-size: 11px;
+  padding: 8px 14px;
 }
 
 #td-body {

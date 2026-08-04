@@ -52,6 +52,12 @@
              compact .btn-snes dialog-button look (like the CREATE ACCOUNT
              modal's YES/NO), not the big wood-plank home-button family. -->
         <button class="btn-snes btn-home-account" id="btn-account">Create Account / Login</button>
+        <!-- Teacher dashboard entry (AUTH_SPEC.md Phase 5) — see
+             js/teacher-dashboard.js/js/home.js. Hidden by default; shown
+             only once window.TeacherDashboard confirms the signed-in user
+             has a /teachers/{uid} doc. Opens the dashboard as a modal
+             overlay — this screen stays put underneath it. -->
+        <button class="btn-snes btn-home-account" id="btn-teacher-dashboard" style="display:none">Teacher Dashboard</button>
 
         <!-- State 2 buttons (hidden initially) -->
         <button class="btn-snes btn-home-uniform btn-home-arcadium"     id="btn-arcadium">Arcadium</button>
@@ -1086,32 +1092,6 @@
   </div><!-- /#screen-lobby -->
 
   <!-- ═══════════════════════════════════════════════════════════════
-       TEACHER DASHBOARD (AUTH_SPEC.md Phase 5) — see js/teacher-dashboard.js.
-       Auto-shown in place of screen-home whenever the signed-in user has a
-       /teachers/{uid} doc (checked via SogAuth.ready()/onChange(), not a
-       dedicated nav path) — covers fresh signup, fresh login, and a
-       returning teacher's persisted session on reload, from one code path.
-  ════════════════════════════════════════════════════════════════ -->
-  <div id="screen-teacher-dashboard" class="screen">
-    <div id="td-header">
-      <div id="td-teacher-name"></div>
-      <button id="td-logout" class="btn-snes btn-snes-close">LOG OUT</button>
-    </div>
-
-    <div id="td-body">
-      <section id="td-classes-section">
-        <h2 class="td-section-title">Classes</h2>
-        <div id="td-classes"></div>
-      </section>
-
-      <section id="td-roster-section">
-        <h2 class="td-section-title">Roster</h2>
-        <div id="td-roster"></div>
-      </section>
-    </div>
-  </div><!-- /#screen-teacher-dashboard -->
-
-  <!-- ═══════════════════════════════════════════════════════════════
        TEACHER TOURNAMENT LOBBY
        Fixed overlay — opened from Tournament Controls in bypass menu.
   ════════════════════════════════════════════════════════════════ -->
@@ -1369,15 +1349,6 @@
           <div class="bypass-btn-row">
             <button class="btn-snes btn-snes-close bypass-btn-action" id="bypass-reset-tut">Reset Tutorials</button>
             <span class="bypass-btn-desc">Clears all tutorial flags so they play again on next visit</span>
-          </div>
-        </section>
-
-        <!-- ── TOURNAMENT CONTROLS ──────────────��──────────── -->
-        <section class="bypass-section">
-          <h3 class="bypass-section-title">Tournament Controls</h3>
-          <div class="bypass-btn-row">
-            <button class="btn-snes bypass-btn-action" id="bypass-open-lobby">&#9876; Open Tournament Lobby</button>
-            <span class="bypass-btn-desc">Create or resume a multiplayer tournament for your class</span>
           </div>
         </section>
 
@@ -1680,6 +1651,39 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════════
+       TEACHER DASHBOARD (AUTH_SPEC.md Phase 5) — see js/teacher-dashboard.js.
+       An in-game modal overlay (NOT a .screen — the game underneath stays on
+       whatever screen it was on, visible behind the dim). Opened only by an
+       explicit click on the home screen's "Teacher Dashboard" button (shown
+       only when window.TeacherDashboard confirms a /teachers/{uid} doc for
+       the signed-in user); never auto-shown on signup/login/reload.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="teacher-dashboard-backdrop" class="guest-modal-backdrop">
+    <div class="td-modal">
+      <div id="td-header">
+        <div id="td-teacher-name"></div>
+        <div id="td-header-actions">
+          <button id="td-open-lobby" class="btn-snes">&#9876; Tournament Lobby</button>
+          <button id="td-logout" class="btn-snes btn-snes-remove">LOG OUT</button>
+          <button id="td-close" class="btn-snes btn-snes-close">CLOSE</button>
+        </div>
+      </div>
+
+      <div id="td-body">
+        <section id="td-classes-section">
+          <h2 class="td-section-title">Classes</h2>
+          <div id="td-classes"></div>
+        </section>
+
+        <section id="td-roster-section">
+          <h2 class="td-section-title">Roster</h2>
+          <div id="td-roster"></div>
+        </section>
+      </div>
+    </div>
+  </div><!-- /#teacher-dashboard-backdrop -->
+
   </div><!-- /#sog-stage -->
 
   <!-- Stage scaling — must be first so SOG.Stage exists before any module -->
@@ -1693,6 +1697,18 @@
   <!-- Anonymous auth (AUTH_SPEC.md Phase 2) — must load after analytics.js,
        which initializes the default Firebase app this file reuses. -->
   <script src="js/auth.js"></script>
+  <!-- Teacher dashboard (AUTH_SPEC.md Phase 5) — needs SogAuth (just above)
+       at init() time. Deliberately loaded here rather than grouped with
+       account.js/account-ui.js below: js/home.js's own init() runs
+       synchronously at ITS script tag (readyState is already past
+       'loading' by then, same pattern as this file) and must find
+       window.TeacherDashboard.onStatusChange already defined so its
+       dashboard-entry button can subscribe — home.js loads before
+       account.js/account-ui.js, so this has to come before home.js too.
+       Only wired at click-time to window.SogAccount (logout) and
+       window.Multiplayer (tournament lobby), both of which are safe to
+       reference late regardless of this file's own load position. -->
+  <script src="js/teacher-dashboard.js"></script>
   <script src="js/multiplayer.js"></script>
   <script src="js/match.js"></script>
   <script src="js/battlelobby.js"></script>
@@ -1766,9 +1782,6 @@
   <script src="js/data/username-words.js"></script>
   <script src="js/account.js"></script>
   <script src="js/account-ui.js"></script>
-  <!-- Teacher dashboard (AUTH_SPEC.md Phase 5) — needs SogAuth/SogAccount
-       already defined above. -->
-  <script src="js/teacher-dashboard.js"></script>
 
   <!-- Initial screen tag for CSS selectors (showScreen overwrites on navigation) -->
   <script>document.body.dataset.screen = 'home';</script>

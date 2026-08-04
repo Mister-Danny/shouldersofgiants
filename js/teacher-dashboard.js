@@ -18,15 +18,21 @@
  * fits the ALREADY-DEPLOYED /teachers update rule with no rules change: that
  * rule only pins `inviteCode` unchanged, and doesn't touch anything else.
  *
- * Auto-show: rather than threading special-case navigation through
- * js/account-ui.js's signup/login success screens, this module listens to
- * window.SogAuth directly (ready() once at boot, onChange() on every
- * subsequent auth transition) and checks whether the signed-in user has a
- * /teachers/{uid} doc. If so, it takes over screen navigation and shows the
- * dashboard — covering fresh signup, a fresh login, and a returning teacher
- * who simply reloads the page with a persisted session, all from one code
- * path. A non-teacher (guest or student) always resolves "no such doc" and
- * this is a complete no-op for them.
+ * In-game modal, not a screen: #teacher-dashboard-backdrop overlays whatever
+ * screen is currently showing (the game stays exactly where it was) and only
+ * opens on an explicit click — the home screen's "Teacher Dashboard" button
+ * (js/home.js), itself only visible once a /teachers/{uid} doc is confirmed
+ * for the signed-in user. Nothing here auto-opens the modal.
+ *
+ * Status tracking still listens to window.SogAuth directly (ready() once at
+ * boot, onChange() on every subsequent auth transition) and re-checks
+ * whether the signed-in user has a /teachers/{uid} doc — covering fresh
+ * signup, a fresh login, and a returning teacher's persisted session on
+ * reload, from one code path. But instead of taking over navigation itself,
+ * it just caches the result and notifies onStatusChange() subscribers (home.js
+ * uses this to show/hide its button). A non-teacher (guest or student)
+ * always resolves "no such doc" and never sees the dashboard mentioned
+ * anywhere.
  */
 window.TeacherDashboard = (function () {
   'use strict';
@@ -51,7 +57,6 @@ window.TeacherDashboard = (function () {
   var BOSS_MODULES = ['gilgamesh', 'otzi', 'hammurabi', 'hangingGardens', 'narmer', 'sargon', 'prehistory'];
 
   var _teacherDoc = null;
-  var _shown = false;
 
   function _db() { return firebase.firestore(); }
   function _byId(id) { return document.getElementById(id); }
@@ -367,22 +372,68 @@ window.TeacherDashboard = (function () {
     });
   }
 
-  /* ── Show / auto-show ──────────────────────────────────────────────── */
-  function show(teacherDoc) {
-    _teacherDoc = teacherDoc;
-    _shown = true;
-    if (typeof window.showScreen === 'function') window.showScreen('screen-teacher-dashboard');
+  /* ── Show / hide (modal) ───────────────────────────────────────────
+     show() is only ever called from an explicit user action (the home
+     screen's button) — never automatically. Closing just drops the
+     .visible class; the screen underneath was never touched, so "closing
+     returns to the home screen" falls out naturally rather than needing
+     its own navigation logic. */
+  function show() {
+    if (!_teacherDoc) return;   // safety net — the button that calls this is already gated on isTeacher()
+    var backdrop = _byId('teacher-dashboard-backdrop');
+    if (!backdrop) return;
+    backdrop.classList.add('visible');
     _fullRender();
   }
 
-  function _checkAndMaybeShow() {
+  function hide() {
+    var backdrop = _byId('teacher-dashboard-backdrop');
+    if (backdrop) backdrop.classList.remove('visible');
+  }
+
+  /* ── Teacher-status tracking ──────────────────────────────────────
+     Re-checked on every SogAuth transition (see module doc comment above).
+     Purely informational from here on — onStatusChange() subscribers (home.js)
+     decide what to do with it; this module no longer navigates on its own. */
+  var _statusListeners = [];
+
+  function _notifyStatus() {
+    _statusListeners.forEach(function (cb) {
+      try { cb(_teacherDoc); } catch (e) {}
+    });
+  }
+
+  function _checkStatus() {
     var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
-    if (!user || user.isAnonymous) return;
+    if (!user || user.isAnonymous) {
+      _teacherDoc = null;
+      _notifyStatus();
+      return;
+    }
     _db().collection('teachers').doc(user.uid).get().then(function (snap) {
-      if (snap.exists) show(snap.data());
+      _teacherDoc = snap.exists ? snap.data() : null;
+      _notifyStatus();
     }).catch(function (e) {
       console.error('[TeacherDashboard] Teacher-doc check failed', e);
+      _teacherDoc = null;
+      _notifyStatus();
     });
+  }
+
+  function isTeacher() { return !!_teacherDoc; }
+  function getTeacherDoc() { return _teacherDoc; }
+
+  /**
+   * @param {function(teacherDocOrNull)} cb  Fires immediately with whatever
+   *   is currently known (mirrors SogAuth.ready()'s "late subscriber still
+   *   gets current state" behavior — home.js doesn't have to guess whether
+   *   the first _checkStatus() has resolved yet), then again on every
+   *   subsequent change.
+   */
+  function onStatusChange(cb) {
+    if (typeof cb !== 'function') return;
+    _statusListeners.push(cb);
+    cb(_teacherDoc);
   }
 
   function init() {
@@ -391,20 +442,41 @@ window.TeacherDashboard = (function () {
       if (window.confirm('Log out?')) window.SogAccount.logout();
     });
 
+    var closeBtn = _byId('td-close');
+    if (closeBtn) closeBtn.addEventListener('click', hide);
+
+    var lobbyBtn = _byId('td-open-lobby');
+    if (lobbyBtn) lobbyBtn.addEventListener('click', function () {
+      // Close first, matching the dev menu's old open-lobby behavior
+      // (close() then showTeacherLobby()) — two stacked dark overlays would
+      // otherwise compound to a near-total blackout of the game behind them.
+      hide();
+      if (window.Multiplayer && typeof window.Multiplayer.showTeacherLobby === 'function') {
+        window.Multiplayer.showTeacherLobby();
+      }
+    });
+
     if (window.SogAuth) {
-      window.SogAuth.ready(_checkAndMaybeShow);
-      window.SogAuth.onChange(_checkAndMaybeShow);
+      window.SogAuth.ready(_checkStatus);
+      window.SogAuth.onChange(_checkStatus);
     }
   }
 
-  // Script tag sits near the end of body (after #screen-teacher-dashboard's
-  // markup), so readyState is normally already past 'loading' by the time
-  // this executes — mirrors js/guest-status.js's own boot pattern exactly.
+  // Script tag loads before js/home.js on purpose (see the require-order
+  // comment in index.html) specifically so home.js's own synchronous,
+  // same-pattern init() below can find onStatusChange already defined.
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
 
-  return { init: init, show: show };
+  return {
+    init:           init,
+    show:           show,
+    hide:           hide,
+    isTeacher:      isTeacher,
+    getTeacherDoc:  getTeacherDoc,
+    onStatusChange: onStatusChange
+  };
 })();
