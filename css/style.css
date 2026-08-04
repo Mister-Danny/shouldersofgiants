@@ -4452,8 +4452,16 @@ body[data-screen="overworld"] .guest-status-strip {
  * #screen-teacher-dashboard fills the 1280×720 fixed stage like every other
  * screen; its own sections scroll independently (roster can grow long)
  * rather than relying on page-level scroll, which #sog-stage's own
- * overflow:hidden wouldn't allow anyway. */
-#screen-teacher-dashboard {
+ * overflow:hidden wouldn't allow anyway.
+ *
+ * IMPORTANT: the flex layout below must stay gated on .active, exactly
+ * mirroring .screen/.screen.active's own display:none/block toggle (see
+ * "Screen management" near the top of this file). An unconditional
+ * `#screen-teacher-dashboard { display: flex }` would win over the base
+ * .screen rule's `display: none` on ID-vs-class specificity alone, making
+ * this screen visible on top of everything regardless of showScreen() —
+ * exactly the bug this comment is here to prevent regressing. */
+#screen-teacher-dashboard.active {
   display: flex;
   flex-direction: column;
   padding: 24px 32px;
