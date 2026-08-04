@@ -47,7 +47,9 @@ window.SaveState = (function () {
     { name: 'cardHover',            ref: function () { return window.SOG && window.SOG.cardHover; } },
     { name: 'sfx',                  ref: function () { return window.SOG && window.SOG.sfx; } },
     { name: 'music',                ref: function () { return window.SOG && window.SOG.music; } },
-    { name: 'home',                 ref: function () { return window.HomeFlow; } }
+    { name: 'home',                 ref: function () { return window.HomeFlow; } },
+    { name: 'learningCheck',        ref: function () { return window.SOG && window.SOG.LearningCheck; } },
+    { name: 'playtime',             ref: function () { return window.SOG && window.SOG.playtime; } }
   ];
 
   function getSnapshot() {

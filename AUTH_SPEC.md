@@ -245,7 +245,7 @@ Firebase Auth rate-limits account creation per IP, and a district NATs a whole c
 
 **Phase 4 — Teacher signup.** Invite code validation, rollback on failure, teacher doc creation.
 
-**Phase 5 — Teacher dashboard.** Class code generate/deactivate, roster query on `teacherUid`. Keep it coarse: nodes cleared, bosses beaten, last active. **Do not store per-question correctness** — that turns a progress tracker into an assessment record, which is a heavier compliance category.
+**Phase 5 — Teacher dashboard.** Class code generate/deactivate, roster query on `teacherUid`. Keep it coarse: furthest progress reached, learning-check totals, time played, last active. **Do not store per-question correctness** — that turns a progress tracker into an assessment record, which is a heavier compliance category.
 
 **Phase 6 — Housekeeping.** Prune script for anon users with no player doc and stale `lastActive`. Rotate the invite code, add a new one labeled for the next channel.
 
@@ -253,11 +253,20 @@ Firebase Auth rate-limits account creation per IP, and a district NATs a whole c
 
 ## 6. The roster mapping
 
-The teacher sees `bronze-anvil-quarry cleared 3 nodes`. Useless for grading unless someone holds the name↔username mapping.
+The teacher sees `bronze-anvil-quarry — furthest: Narmer / Egypt`. Useless for grading unless someone holds the name↔username mapping.
 
 **The teacher keeps that mapping in their own spreadsheet.** They already have legitimate access to their roster; you never receive a student name. That is a strong, simple line for any SOPIPA / AB 1584 conversation with a district.
 
 It only holds if usernames are generated. One teacher telling 35 kids "just use your first name and last initial" undoes it silently and you would never know. Which is the argument for never shipping a username input field at all.
+
+### Learning Checks: aggregate counts only
+
+The roster's "Learning Checks" column shows two running totals — questions answered correctly, and questions answered in total (e.g. `12 / 15`) — sourced from `/players/{uid}.progress.modules.learningCheck`. This is deliberately the same coarseness contract as the rest of the roster:
+
+- **Stored:** exactly two integers, `correct` and `total`. Incremented in place on every answer; nothing else.
+- **Never stored:** which question was asked, which option was picked, whether a specific question was missed, timestamps per question, or any other per-item detail. There is no question ID or log anywhere in the data model.
+- **Why:** two integers are a progress signal — "this kid is engaging with the material." A per-question log is an assessment record, which is a meaningfully heavier compliance category (see Phase 5's own note above) and isn't something a district conversation should need to account for. If a future feature wants per-question analytics, that decision needs to be made deliberately and separately — it does not fall out of this feature by accident.
+- Same rule applies to any future roster metric: aggregate-only by default; per-item detail requires an explicit, separate design decision.
 
 ---
 

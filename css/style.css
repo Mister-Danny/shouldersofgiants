@@ -4651,11 +4651,13 @@ body[data-screen="overworld"] .guest-status-strip {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
 }
 .td-roster-table th, .td-roster-table td {
   text-align: left;
-  padding: 6px 10px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--border-mid);
+  overflow-wrap: break-word;
 }
 .td-roster-table th {
   color: var(--text-dim);

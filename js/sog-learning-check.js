@@ -16,7 +16,15 @@
  * matches the boss-rules / card-detail popups. Questions + UI strings live in the
  * editable constants below.
  *
- * Public API (SOG.LearningCheck): open(), close(), isOpen()
+ * Public API (SOG.LearningCheck): open(), close(), isOpen(), getSnapshot(),
+ * applySnapshot() — the last two plug into js/save-state.js (see MODULES
+ * there) so the roster's "Learning Checks" column (js/teacher-dashboard.js,
+ * AUTH_SPEC.md §6) has something to read from the player doc.
+ *
+ * Tracking is two running counters ONLY — correct and total answered — never
+ * which questions, never which were missed. See the AUTH_SPEC.md §6 note on
+ * this: aggregate counts only, same "no assessment-level detail" line as the
+ * rest of the roster's coarse metrics.
  */
 window.SOG = window.SOG || {};
 SOG.LearningCheck = (function () {
@@ -24,6 +32,37 @@ SOG.LearningCheck = (function () {
 
   /* ── Tunables ───────────────────────────────────────────────────────────── */
   var RESTORE_AMOUNT = 50;   // focus granted per correct answer (clamped to MAX)
+
+  /* ── Aggregate stats (correct / total answered) ───────────────────────────
+     Deliberately just two counters — no question IDs, no timestamps, no
+     right/wrong-per-question log. Persisted to localStorage on every answer
+     (cheap, local-only) and folded into the Firestore checkpoint write via
+     getSnapshot() below, same as every other SaveState module. */
+  var STATS_KEY = 'sog_learning_check_stats';
+  var _stats = { correct: 0, total: 0 };
+
+  function _loadStats() {
+    try {
+      var raw = localStorage.getItem(STATS_KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        _stats.correct = parsed.correct || 0;
+        _stats.total   = parsed.total   || 0;
+      }
+    } catch (e) {}
+  }
+
+  function _saveStats() {
+    try { localStorage.setItem(STATS_KEY, JSON.stringify(_stats)); } catch (e) {}
+  }
+
+  function _recordAnswer(isCorrect) {
+    _stats.total += 1;
+    if (isCorrect) _stats.correct += 1;
+    _saveStats();
+  }
+
+  _loadStats();
 
   /* ── UI strings (editable) ──────────────────────────────────────────────── */
   var STR = {
@@ -447,6 +486,8 @@ SOG.LearningCheck = (function () {
     var all = optsWrap.querySelectorAll('.lc-option');
     for (var i = 0; i < all.length; i++) all[i].disabled = true;
 
+    _recordAnswer(isCorrect);
+
     var feedback = _panel.querySelector('.lc-feedback');
 
     if (isCorrect) {
@@ -607,5 +648,21 @@ SOG.LearningCheck = (function () {
     backdrop.classList.add('visible');
   }
 
-  return { open: open, close: close, isOpen: isOpen, promptGate: promptGate, gateIsOpen: gateIsOpen, closeGate: closeGate };
+  /* ── Snapshot (save-state.js) ───────────────────────────────────────────── */
+  function getSnapshot() {
+    return { correct: _stats.correct, total: _stats.total };
+  }
+
+  function applySnapshot(snap) {
+    if (!snap) return;
+    _stats.correct = snap.correct || 0;
+    _stats.total   = snap.total   || 0;
+    _saveStats();
+  }
+
+  return {
+    open: open, close: close, isOpen: isOpen,
+    promptGate: promptGate, gateIsOpen: gateIsOpen, closeGate: closeGate,
+    getSnapshot: getSnapshot, applySnapshot: applySnapshot
+  };
 })();

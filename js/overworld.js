@@ -1873,13 +1873,26 @@ var Overworld = (function () {
      to call this before sog_battle_otzi_complete is set, but that gate lives
      several lines away from this function — this repeats the check locally
      so "only fires after Otzi is beaten" holds regardless of what calls this
-     in the future, not just today's one caller. */
+     in the future, not just today's one caller.
+
+     Also skips entirely — dialogue lines AND modal — for anyone who already
+     has a real (non-anonymous) account: a logged-in student or teacher has
+     nothing to be prompted to create. Marks the seen-flag in that case too,
+     so a guest who signs in later doesn't leave this re-evaluating forever;
+     it just never had anything to show once account state resolved. */
   var KEY_ACCOUNT_PROMPT_SEEN = 'sog_account_prompt_seen';
 
   function maybePlayAccountPrompt(cb) {
     var otziDone = false;
     try { otziDone = localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true'; } catch (e) {}
     if (!otziDone) { if (cb) cb(); return; }
+
+    var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
+    if (user && user.isAnonymous === false) {
+      try { localStorage.setItem(KEY_ACCOUNT_PROMPT_SEEN, 'true'); } catch (e) {}
+      if (cb) cb();
+      return;
+    }
 
     var seen = false;
     try { seen = localStorage.getItem(KEY_ACCOUNT_PROMPT_SEEN) === 'true'; } catch (e) {}

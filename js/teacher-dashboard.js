@@ -4,9 +4,11 @@
  * Class code generate/deactivate/regenerate + a roster view grouped by
  * class, queried on /players.teacherUid. No per-question correctness is
  * read, computed, or stored anywhere here — only the coarse metrics §6
- * calls for (nodes cleared, bosses beaten, last active). The teacher keeps
- * the name↔username mapping in their own spreadsheet (§6); this dashboard
- * never asks for or shows a real student name.
+ * calls for: furthest progress (highest boss/unit reached), learning-check
+ * totals (correct/asked — never which questions), time played, and last
+ * active. The teacher keeps the name↔username mapping in their own
+ * spreadsheet (§6); this dashboard never asks for or shows a real student
+ * name.
  *
  * Data model note: AUTH_SPEC.md §2's /teachers/{uid} doc (email, inviteCode,
  * displayName, createdAt) predates Phase 5's "teachers can own multiple
@@ -47,14 +49,24 @@ window.TeacherDashboard = (function () {
   var CLASS_CODE_LENGTH = 6;
   var MAX_GENERATE_ATTEMPTS = 5;
 
-  // Mirrors js/game.js's own NODE_BEATEN_RE exactly (see that file's
-  // getSnapshot) — this is the localStorage key shape SaveState's
-  // `nodeProgress` module snapshot preserves verbatim.
-  var NODE_BEATEN_RE = /^sog_node_.+_(serf|giant)_beaten$/;
-
-  // Every SaveState module (see js/save-state.js) whose snapshot has its own
-  // battleComplete flag — i.e. every named story boss, not side content.
-  var BOSS_MODULES = ['gilgamesh', 'otzi', 'hammurabi', 'hangingGardens', 'narmer', 'sargon', 'prehistory'];
+  // Canonical story order, earliest → latest — each entry's `key` matches a
+  // js/save-state.js MODULES name whose own snapshot carries a
+  // `battleComplete` boolean. "Furthest progress" walks this in order and
+  // keeps the LAST entry whose battleComplete is true — deciding by the
+  // flag's value, never by list position, per the same principle
+  // js/overworld.js's milestone-visibility logic already documents (a save
+  // with flags set out of order — dev panel, an unusual route — must still
+  // resolve correctly). Order confirmed against data/map-data.js's
+  // `milestones` array and game_script.md's PART sequence.
+  var PROGRESSION_ORDER = [
+    { key: 'prehistory',     bossName: 'Neanderthal',    unitName: 'Prehistory' },
+    { key: 'otzi',           bossName: 'Otzi',           unitName: 'Prehistory' },
+    { key: 'gilgamesh',      bossName: 'Gilgamesh',      unitName: 'Mesopotamia' },
+    { key: 'sargon',         bossName: 'Sargon',         unitName: 'Mesopotamia' },
+    { key: 'hammurabi',      bossName: 'Hammurabi',      unitName: 'Mesopotamia' },
+    { key: 'hangingGardens', bossName: 'Nebuchadnezzar', unitName: 'Mesopotamia' },
+    { key: 'narmer',         bossName: 'Narmer',         unitName: 'Egypt' }
+  ];
 
   var _teacherDoc = null;
 
@@ -157,21 +169,43 @@ window.TeacherDashboard = (function () {
     });
   }
 
-  // Coarse only — §5/§6: "nodes cleared, bosses beaten, last active. Do not
-  // store per-question correctness." This reads the existing progress
-  // snapshot (already written by Phase 3 signup/checkpoints) and aggregates
-  // it for display; nothing new is computed into storage.
+  // Coarse only — §6: furthest progress, aggregate learning-check counts,
+  // time played, last active. Do not store or read per-question
+  // correctness anywhere. This reads the existing progress snapshot
+  // (already written by Phase 3 signup/checkpoints) and aggregates it for
+  // display; nothing new is computed into storage.
   function _computeCoarseStats(progress) {
     var modules = (progress && progress.modules) || {};
-    var nodeProgress = modules.nodeProgress || {};
-    var nodesCleared = Object.keys(nodeProgress).filter(function (k) {
-      var v = nodeProgress[k];
-      return NODE_BEATEN_RE.test(k) && (v === true || v === 'true');
-    }).length;
-    var bossesBeaten = BOSS_MODULES.filter(function (name) {
-      return modules[name] && modules[name].battleComplete === true;
-    }).length;
-    return { nodesCleared: nodesCleared, bossesBeaten: bossesBeaten };
+
+    var furthest = null;
+    PROGRESSION_ORDER.forEach(function (entry) {
+      if (modules[entry.key] && modules[entry.key].battleComplete === true) {
+        furthest = entry;   // walk in canonical order — last true wins
+      }
+    });
+
+    var lc = modules.learningCheck || {};
+    var learningTotal   = lc.total   || 0;
+    var learningCorrect = lc.correct || 0;
+
+    var playtimeSeconds = (modules.playtime && modules.playtime.totalSeconds) || 0;
+
+    return {
+      furthestProgress: furthest ? (furthest.bossName + ' / ' + furthest.unitName) : '—',
+      learningCorrect:  learningCorrect,
+      learningTotal:    learningTotal,
+      playtimeSeconds:  playtimeSeconds
+    };
+  }
+
+  // m or h+m, e.g. "45m", "1h 12m" — "—" for no recorded time yet.
+  function _formatDuration(totalSeconds) {
+    if (!totalSeconds) return '—';
+    var totalMinutes = Math.floor(totalSeconds / 60);
+    var hours   = Math.floor(totalMinutes / 60);
+    var minutes = totalMinutes % 60;
+    if (hours > 0) return hours + 'h ' + minutes + 'm';
+    return minutes + 'm';
   }
 
   function _loadRoster(uid, cb) {
@@ -181,12 +215,14 @@ window.TeacherDashboard = (function () {
         var data = doc.data();
         var stats = _computeCoarseStats(data.progress);
         players.push({
-          uid:          doc.id,
-          username:     data.username,
-          classCode:    data.classCode,
-          nodesCleared: stats.nodesCleared,
-          bossesBeaten: stats.bossesBeaten,
-          lastActive:   data.lastActive
+          uid:              doc.id,
+          username:         data.username,
+          classCode:        data.classCode,
+          furthestProgress: stats.furthestProgress,
+          learningCorrect:  stats.learningCorrect,
+          learningTotal:    stats.learningTotal,
+          playtimeSeconds:  stats.playtimeSeconds,
+          lastActive:       data.lastActive
         });
       });
       cb(null, players);
@@ -262,13 +298,15 @@ window.TeacherDashboard = (function () {
       html += '<div class="td-roster-group">';
       html += '<div class="td-roster-group-title">' + _escapeHtml(label) + ' (' + byClass[code].length + ')</div>';
       html += '<table class="td-roster-table"><thead><tr>' +
-        '<th>Username</th><th>Nodes Cleared</th><th>Bosses Beaten</th><th>Last Active</th>' +
+        '<th>Username</th><th>Furthest Progress</th><th>Learning Checks</th><th>Time Played</th><th>Last Active</th>' +
         '</tr></thead><tbody>';
       byClass[code].forEach(function (p) {
+        var learningText = p.learningTotal > 0 ? (p.learningCorrect + ' / ' + p.learningTotal) : '—';
         html += '<tr>' +
           '<td>' + _escapeHtml(p.username) + '</td>' +
-          '<td>' + p.nodesCleared + '</td>' +
-          '<td>' + p.bossesBeaten + '</td>' +
+          '<td>' + _escapeHtml(p.furthestProgress) + '</td>' +
+          '<td>' + _escapeHtml(learningText) + '</td>' +
+          '<td>' + _escapeHtml(_formatDuration(p.playtimeSeconds)) + '</td>' +
           '<td>' + _formatDate(p.lastActive) + '</td>' +
           '</tr>';
       });
