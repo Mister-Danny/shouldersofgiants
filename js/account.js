@@ -43,6 +43,31 @@ window.SogAccount = (function () {
   var LINK_TIMEOUT_MS  = 15000;         // linkWithCredential should never hang the "Creating…" step silently
   var WRITE_TIMEOUT_MS = 15000;         // same for the /players/{uid} write
 
+  // Must match js/auth.js's own PROGRESS_OWNER_UID_KEY exactly — that file
+  // stamps this on every anonymous bootstrap/restore; this file both reads
+  // it (signUpStudent) and stamps it itself (loginStudent, checkpointSave)
+  // so a real account's uid is also on record, not just anonymous ones.
+  var PROGRESS_OWNER_UID_KEY = 'sog_progress_owner_uid';
+
+  function _stampProgressOwner(uid) {
+    if (!uid) return;
+    try { localStorage.setItem(PROGRESS_OWNER_UID_KEY, uid); } catch (e) {}
+  }
+
+  // Guards against carrying a DIFFERENT account's leftover progress into a
+  // brand-new signup — e.g. Firebase's persisted session was lost (cleared
+  // cookies, a fresh profile, whatever) while localStorage itself was not,
+  // so a freshly-bootstrapped anonymous uid would otherwise inherit
+  // whoever's data was last written here. Only trusts localStorage when its
+  // stamped owner matches the uid being upgraded, or when there's no stamp
+  // at all (nothing to contradict — first-ever visit, or data older than
+  // this check existing).
+  function _localProgressBelongsToCurrentSession(uid) {
+    var stamped = null;
+    try { stamped = localStorage.getItem(PROGRESS_OWNER_UID_KEY); } catch (e) {}
+    return !stamped || stamped === uid;
+  }
+
   // Wraps a Firebase promise so a hung request fails visibly instead of
   // leaving the UI stuck on "Creating your account…" forever. Tags the
   // rejection with auth/network-request-failed so callers that branch on
@@ -263,11 +288,22 @@ window.SogAccount = (function () {
       // progress/username stay current even without a passphrase to show.
       if (linkErr && !creds) { cb(linkErr, null); return; }
 
+      // Only carry over local progress if it actually belongs to the guest
+      // session being upgraded — see _localProgressBelongsToCurrentSession
+      // above. A mismatch means this device's localStorage still holds some
+      // OTHER account's leftover data (Firebase session lost while
+      // localStorage survived) — start this new account clean rather than
+      // hand it a stranger's progress.
+      var carryOverProgress = _localProgressBelongsToCurrentSession(user.uid);
+      if (!carryOverProgress) {
+        console.warn('[Account] localStorage progress belongs to a different account (uid mismatch) — starting new student clean.');
+      }
+
       var playerData = {
         username:   creds.username,
         classCode:  classInfo.ungrouped ? '' : classInfo.code,
         teacherUid: classInfo.ungrouped ? '' : classInfo.ownerUid,
-        progress:   (window.SaveState && window.SaveState.getSnapshot()) || {},
+        progress:   carryOverProgress ? ((window.SaveState && window.SaveState.getSnapshot()) || {}) : {},
         createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
         lastActive: firebase.firestore.FieldValue.serverTimestamp()
       };
@@ -301,6 +337,10 @@ window.SogAccount = (function () {
         if (snap.exists && snap.data().progress && window.SaveState) {
           window.SaveState.applySnapshot(snap.data().progress);
         }
+        // This account's uid now owns localStorage — reinforces the stamp
+        // so a later signup attempt on this same device (were it ever to
+        // happen) sees the correct owner rather than a stale one.
+        _stampProgressOwner(uid);
         cb(null, userCred.user);
       }).catch(function () {
         // Couldn't fetch the stored progress (offline, etc.) — still signed
@@ -435,6 +475,10 @@ window.SogAccount = (function () {
     var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
       ? window.SogAuth.getUser() : null;
     if (!user || user.isAnonymous || !window.SaveState) { if (cb) cb(); return; }
+
+    // Reinforce the owner stamp on every checkpoint, not just login — cheap
+    // defense-in-depth for _localProgressBelongsToCurrentSession's check.
+    _stampProgressOwner(user.uid);
 
     try {
       _db().collection('players').doc(user.uid).set({

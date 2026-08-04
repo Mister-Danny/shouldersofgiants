@@ -34,6 +34,13 @@
  * through signup — the guest corner strip (js/guest-status.js), the home
  * screen's account button label (js/home.js) — must not assume
  * onAuthStateChanged alone covers linking.
+ *
+ * Also stamps localStorage with whichever anonymous uid currently owns it
+ * (sog_progress_owner_uid) — see js/account.js's signUpStudent for why:
+ * that's how it tells "this device's local progress genuinely belongs to
+ * the guest session being upgraded" apart from "Firebase's persisted
+ * session was lost while localStorage was not, so a brand-new anonymous
+ * uid is about to inherit some OTHER account's leftover data."
  */
 (function () {
   'use strict';
@@ -51,6 +58,13 @@
   var _ready = false;
   var _readyCallbacks = [];
   var _changeListeners = [];
+
+  // Must match js/account.js's PROGRESS_OWNER_UID_KEY exactly.
+  var PROGRESS_OWNER_UID_KEY = 'sog_progress_owner_uid';
+  function _stampProgressOwner(uid) {
+    if (!uid) return;
+    try { localStorage.setItem(PROGRESS_OWNER_UID_KEY, uid); } catch (e) {}
+  }
 
   function _resolveReady() {
     if (_ready) return;
@@ -117,6 +131,11 @@
         sawFirstState = true;
 
         if (user) {
+          // A restored anonymous session's uid is stable across reloads —
+          // re-stamp defensively so the mark is always present/correct for
+          // signUpStudent's check, even if it was somehow missing (e.g.
+          // data predating this feature).
+          if (user.isAnonymous) _stampProgressOwner(user.uid);
           _resolveReady();
           _notifyChange();
           return;
@@ -124,6 +143,9 @@
         firebase.auth().signInAnonymously()
           .then(function (cred) {
             _user = (cred && cred.user) ? cred.user : firebase.auth().currentUser;
+            // Fresh anonymous uid — this is the ONLY session that can
+            // legitimately claim whatever's currently in localStorage.
+            if (_user) _stampProgressOwner(_user.uid);
           })
           .catch(function (e) {
             console.warn('[Auth] Anonymous sign-in failed — continuing in local-only mode.', e);
