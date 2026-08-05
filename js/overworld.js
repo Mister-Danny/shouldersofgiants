@@ -3444,8 +3444,9 @@ var Overworld = (function () {
          cost/IP corners) + a pricetag@0.5x.png tag with the gold price.
        • Clicking a card opens the shared in-game card-detail popup
          (SOG.ui.openBattlePopup) — buying is NOT wired.
-       • Trader portrait (mesotrader) sits in the HUD conversation slot via
-         enterDialogueMode + swapNpcPortrait('trader'); no dialogue yet.
+       • Trader greeting plays through the shared adventure HUD dialogue system
+         (SOG.HUD.runDialogue) — the trader portrait (mesotrader) slides into
+         the HUD's NPC slot exactly like any boss/NPC conversation elsewhere.
        • Back button (top-right, above the HUD) exits to the overworld.
      Reached by the first-win auto-walk and by clicking the market node.
      TODO(market interior — later): wire gold + buying onto this layout. */
@@ -3665,73 +3666,6 @@ var Overworld = (function () {
     }).filter(function (row) { return row.cards.length; });
   }
 
-  /* ══ TRADER SPEECH BUBBLE — reusable, MARKET TRADERS ONLY ═══════════════════
-     Each market's trader is painted into its backdrop, so his greeting appears
-     in a bubble anchored to him instead of the detached HUD box. Boss-battle
-     dialogue is untouched (it keeps the #adv-bubble-* HUD presentation).
-
-     Presentation is the GIANTS' in-battle bubble, reused verbatim via the
-     shared .giant-bubble class (factored out of body.<boss>-battle
-     #adv-bubble-otzi in style.css — the Giants' own rules are untouched). The
-     market instance adds .giant-bubble--tail-up, because the bubble sits BELOW
-     the trader's mouth (over his chest) and must point back UP at him, whereas
-     the Giants' tails point sideways at a portrait.
-
-     ── TUNING VALUES (per market — nudge by eye) ──
-       leftPct / topPct — the bubble box's TOP-LEFT corner, as % of the market
-                          screen. Drop it just under the speaker's mouth.
-       widthPx         — bubble width.
-       tailXPct        — the tail's horizontal position along the bubble's own
-                          width (0 = left edge, 100 = right edge). Slide this
-                          until the tail tip sits under his mouth. */
-  var TRADER_BUBBLE = {
-    'mesopotamia': { leftPct: 63, topPct: 53, widthPx: 300, tailXPct: 62 },
-    'egypt':       { leftPct: 67, topPct: 34, widthPx: 290, tailXPct: 45 }
-  };
-
-  /* Run `lines` through a click-to-advance bubble anchored per `cfg`, appended to
-     `host` (the market screen). Calls onDone after the last line. Reusable for any
-     future market/shopkeeper — pass a new TRADER_BUBBLE entry. */
-  function _runTraderBubble(host, lines, cfg, onDone) {
-    if (!host || !lines || !lines.length) { if (onDone) onDone(); return; }
-    var bubble = document.createElement('div');
-    // Same component the Giants use in battle, plus the upward-tail modifier.
-    bubble.className = 'giant-bubble giant-bubble--tail-up market-trader-bubble';
-    bubble.style.left  = cfg.leftPct + '%';
-    bubble.style.top   = cfg.topPct + '%';
-    bubble.style.width = cfg.widthPx + 'px';
-    bubble.style.setProperty('--tail-x', (cfg.tailXPct != null ? cfg.tailXPct : 50) + '%');
-    var textEl = document.createElement('div');
-    var hintEl = document.createElement('div');
-    hintEl.className = 'mtb-hint';
-    hintEl.innerHTML = '&#9654; Click to continue';
-    bubble.appendChild(textEl);
-    bubble.appendChild(hintEl);
-    host.appendChild(bubble);
-    void bubble.offsetHeight;                 // reflow so the fade-in animates
-    bubble.classList.add('is-visible');
-
-    var i = 0;
-    function render() {
-      textEl.textContent = lines[i].text;
-      hintEl.style.display = (i === lines.length - 1) ? 'none' : '';
-    }
-    function advance(e) {
-      if (e) e.stopPropagation();
-      if (++i >= lines.length) {
-        bubble.classList.remove('is-visible');
-        setTimeout(function () {
-          if (bubble.parentNode) bubble.parentNode.removeChild(bubble);
-          if (onDone) onDone();
-        }, 220);
-        return;
-      }
-      render();
-    }
-    bubble.addEventListener('click', advance);
-    render();
-  }
-
   /* Region → market data. _enterMarket(regionId) reads this; 'mesopotamia' is the
      default so every existing call site is unchanged. Adding a future region's
      market is one entry here plus a node + click handler. */
@@ -3944,12 +3878,13 @@ var Overworld = (function () {
     try { introSeen = localStorage.getItem(_mk.introKey) === 'true'; } catch (e) {}
 
     if (!introSeen) {
-      // TRADER BUBBLE (both markets): the greeting appears anchored to the trader
-      // in the art, NOT in the HUD box — so the HUD stays in its normal resting
-      // state and the gold balance is visible throughout. Shopping stays blocked
-      // via _marketReady until the last line is dismissed.
+      // Trader greeting plays through the shared adventure HUD (SOG.HUD.runDialogue),
+      // same as every other Explorer/boss conversation — typewriter + bleep, click
+      // AND spacebar to advance, and 'explorer' lines rendering in the Explorer's
+      // own HUD portrait rather than the trader's. Shopping stays blocked via
+      // _marketReady until the last line is dismissed.
       if (hud && typeof hud.refreshGold === 'function') hud.refreshGold();
-      _runTraderBubble(screen, _mk.intro(), TRADER_BUBBLE[_activeMarket] || TRADER_BUBBLE.mesopotamia, function () {
+      runDialogue(_mk.intro(), function () {
         try { localStorage.setItem(_mk.introKey, 'true'); } catch (e) {}
         _marketReady = true;
       });

@@ -30,9 +30,15 @@
  * so there's no pre-validation step available. See that function's doc.
  *
  * Checkpoint saves (checkpointSave()) fire from exactly three places in the
- * app: after a battle win (js/game.js endGame()), the student-creation write
- * above, and logout() below. Nowhere else. Teachers never get a /players/
- * doc and are unaffected by checkpointSave.
+ * app: after a battle win (js/game.js endGame()), the account-creation write
+ * (student OR teacher, both below), and logout() below. Nowhere else.
+ * Teachers get a /players/{uid} doc too (ungrouped shape — empty classCode/
+ * teacherUid, same as a student who joined no class) so their own adventure
+ * progress round-trips across devices exactly like a student's. That doc's
+ * empty teacherUid is what keeps it out of every roster query (js/
+ * teacher-dashboard.js queries `where('teacherUid','==',myUid)`, which an
+ * empty string can never match, including the teacher's own) — no separate
+ * filtering needed.
  */
 window.SogAccount = (function () {
   'use strict';
@@ -353,8 +359,9 @@ window.SogAccount = (function () {
   }
 
   /* ── Teacher login ──────────────────────────────────────────────────────
-     Real email + password, signed in directly — no synthetic domain, and
-     no /players/{uid} progress restore (teachers never get a player doc).
+     Real email + password, signed in directly — no synthetic domain. Restores
+     /players/{uid}.progress exactly like loginStudent below, so a teacher's
+     own adventure progress follows them to a new browser/device too.
      js/account-ui.js's login form branches to this vs. loginStudent above
      based on whether the entered identifier contains "@". */
   function loginTeacher(email, password, cb) {
@@ -363,7 +370,18 @@ window.SogAccount = (function () {
       if (window.SogAuth && typeof window.SogAuth.refresh === 'function') {
         window.SogAuth.refresh();
       }
-      cb(null, userCred.user);
+      var uid = userCred.user.uid;
+      _db().collection('players').doc(uid).get().then(function (snap) {
+        if (snap.exists && snap.data().progress && window.SaveState) {
+          window.SaveState.applySnapshot(snap.data().progress);
+        }
+        _stampProgressOwner(uid);
+        cb(null, userCred.user);
+      }).catch(function () {
+        // Couldn't fetch the stored progress (offline, etc.) — still signed
+        // in; this device just keeps whatever local progress it already had.
+        cb(null, userCred.user);
+      });
     }).catch(function (err) {
       cb(err, null);
     });
@@ -447,7 +465,35 @@ window.SogAccount = (function () {
             if (window.SogAuth && typeof window.SogAuth.refresh === 'function') {
               window.SogAuth.refresh();
             }
-            cb(null, { uid: user.uid, email: email, displayName: displayName });
+
+            // Bootstrap the teacher's OWN /players/{uid} doc — same ungrouped
+            // shape a classless student gets (empty classCode/teacherUid) —
+            // so their own adventure progress gets cloud-saved too. Clean
+            // start, not the local device's guest progress: this is a brand
+            // new Auth user (never linked to the anonymous session), so
+            // whatever's in localStorage right now belongs to whichever
+            // guest was last using this device, not this teacher.
+            var playerData = {
+              username:   displayName,
+              classCode:  '',
+              teacherUid: '',
+              progress:   {},
+              createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
+              lastActive: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            _withTimeout(_db().collection('players').doc(user.uid).set(playerData), WRITE_TIMEOUT_MS)
+              .then(function () {
+                cb(null, { uid: user.uid, email: email, displayName: displayName });
+              })
+              .catch(function (playerWriteErr) {
+                // Never fail teacher signup over this — the real account
+                // (Auth user + /teachers/{uid}) already exists. A later
+                // checkpointSave() merge-write self-heals the missing doc
+                // (same trick student signup relies on), so this teacher
+                // just starts without cloud save until the next checkpoint.
+                console.warn('[Account] /players/{uid} bootstrap write failed for teacher — will self-heal on next checkpoint', playerWriteErr);
+                cb(null, { uid: user.uid, email: email, displayName: displayName });
+              });
           })
           .catch(function (writeErr) {
             console.error('[Account] /teachers/{uid} write failed — rolling back the Auth user', writeErr);
@@ -467,10 +513,10 @@ window.SogAccount = (function () {
 
   /* ── Checkpoint save — one of exactly 3 call sites in the whole app:
      after a battle win (js/game.js endGame()), account creation (the write
-     inside signUpStudent above), and logout() below. Never on map
-     transitions, purchases, deck edits, or turn ends. No-ops silently for
-     guests (anonymous users never get a Firestore write) and on any error —
-     gameplay must never block on this. */
+     inside signUpStudent OR signUpTeacher above), and logout() below. Never
+     on map transitions, purchases, deck edits, or turn ends. No-ops silently
+     for guests (anonymous users never get a Firestore write) and on any
+     error — gameplay must never block on this. */
   function checkpointSave(cb) {
     var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
       ? window.SogAuth.getUser() : null;

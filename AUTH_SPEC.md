@@ -217,6 +217,7 @@ Invites are `read: false`, so there is no pre-validation step. Use create-then-r
 2. `createUserWithEmailAndPassword` (do *not* link the anon user — teachers should be a clean account).
 3. Attempt write to `/teachers/{uid}`.
 4. **If the write fails** (bad or deactivated invite code), call `user.delete()` on the currently signed-in user and surface "That code isn't valid." No orphan left behind.
+5. Once `/teachers/{uid}` exists, also write `/players/{uid}` — same ungrouped shape a classless student gets (`classCode: ''`, `teacherUid: ''`, empty `progress`). This is what gives the teacher's OWN adventure play cloud-save/restore-on-login, same as a student. Unlike student signup, this is a clean slate rather than carrying over whatever's in the device's localStorage: `createUserWithEmailAndPassword` never links the anonymous session, so local progress at signup time belongs to whoever was last a guest on this device, not the new teacher. If this write fails, don't roll back the teacher account over it — log a warning and let it self-heal on the next checkpoint (§ Checkpoint save), same as a flaky student `/players/{uid}` write already does.
 
 Tradeoff, stated plainly: keeping invites unreadable means brute-forcing a code requires account creation, which Firebase rate-limits. Making them gettable would allow cheap read-based guessing. The rollback dance is worth it here; for class codes it is not, since a leaked class code just means someone joins a roster.
 
@@ -258,6 +259,10 @@ The teacher sees `bronze-anvil-quarry — furthest: Narmer / Egypt`. Useless for
 **The teacher keeps that mapping in their own spreadsheet.** They already have legitimate access to their roster; you never receive a student name. That is a strong, simple line for any SOPIPA / AB 1584 conversation with a district.
 
 It only holds if usernames are generated. One teacher telling 35 kids "just use your first name and last initial" undoes it silently and you would never know. Which is the argument for never shipping a username input field at all.
+
+### A teacher's own progress never appears in any roster
+
+Teachers get a `/players/{uid}` doc too (§4 "Teacher signup" step 5), so their own adventure play cloud-saves the same way a student's does. That doc is written `teacherUid: ''` (ungrouped, exactly like a classless student) — the roster query is `where('teacherUid', '==', myUid)`, which an empty string can never satisfy, for any teacher's uid, including their own. No extra "exclude myself" filter exists or is needed; it falls out of the same denormalized-field trick §2 already uses to authorize the roster query in one pass.
 
 ### Learning Checks: aggregate counts only
 
