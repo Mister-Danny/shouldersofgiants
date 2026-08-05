@@ -84,7 +84,13 @@ SOG.sfx = (function () {
       a.volume = factor();
       if (opts.loop) a.loop = true;
       var p = a.play();
-      if (p && typeof p.catch === 'function') p.catch(function () {});
+      // A rejected play() promise (wrong server MIME type, decode failure, a
+      // browser's stricter media validation, etc.) used to vanish here with
+      // no trace — "the sound just doesn't play" and nothing in the console
+      // to say why. Log it instead; still never throws/blocks gameplay.
+      if (p && typeof p.catch === 'function') {
+        p.catch(function (err) { console.warn('[sfx] play() failed for', src, err); });
+      }
       return a;
     } catch (e) { return null; }
   }

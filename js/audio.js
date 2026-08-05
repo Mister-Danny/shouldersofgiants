@@ -134,6 +134,32 @@ var SFX = (function () {
 
   /* ── Howler-based sounds (file-backed) ───────────────────────── */
 
+  // Every Howl below uses the same volume/html5 defaults; centralized here
+  // so a load or play failure is never silent — Howler's html5:true mode
+  // just wraps a real <audio> element, which can reject playback (wrong
+  // server MIME type, decode failure, a browser's stricter media
+  // validation, etc.) with nothing else in the console to say why.
+  // extraOpts can add/override handlers (jesusHowl needs its own
+  // onend/onloaderror/onplayerror) — those still run after this logs.
+  function _makeHowl(src, extraOpts) {
+    extraOpts = extraOpts || {};
+    var srcArr = Array.isArray(src) ? src : [src];
+    var userLoadErr = extraOpts.onloaderror;
+    var userPlayErr = extraOpts.onplayerror;
+    var opts = { volume: 1.0, html5: true };
+    for (var k in extraOpts) { if (Object.prototype.hasOwnProperty.call(extraOpts, k)) opts[k] = extraOpts[k]; }
+    opts.src = srcArr;
+    opts.onloaderror = function (id, err) {
+      console.warn('[audio.js] Howl failed to load "' + srcArr[0] + '":', err);
+      if (userLoadErr) userLoadErr(id, err);
+    };
+    opts.onplayerror = function (id, err) {
+      console.warn('[audio.js] Howl failed to play "' + srcArr[0] + '":', err);
+      if (userPlayErr) userPlayErr(id, err);
+    };
+    return new Howl(opts);
+  }
+
   var _jesusHowl       = null;
   var _jesusOnFinished = null;
 
@@ -163,11 +189,7 @@ var SFX = (function () {
   function cortesHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_cortesHowl) {
-      _cortesHowl = new Howl({
-        src:    ['sfx/cortes-destroy.mp3'],
-        volume: 1.0,
-        html5:  true
-      });
+      _cortesHowl = _makeHowl('sfx/cortes-destroy.mp3');
     }
     return _cortesHowl;
   }
@@ -175,11 +197,7 @@ var SFX = (function () {
   function deflateHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_deflateHowl) {
-      _deflateHowl = new Howl({
-        src:    ['sfx/cortes-deflate.mp3'],
-        volume: 1.0,
-        html5:  true
-      });
+      _deflateHowl = _makeHowl('sfx/cortes-deflate.mp3');
     }
     return _deflateHowl;
   }
@@ -187,11 +205,7 @@ var SFX = (function () {
   function joanHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_joanHowl) {
-      _joanHowl = new Howl({
-        src:    ['sfx/joan-warhorn.mp3'],
-        volume: 1.0,
-        html5:  true
-      });
+      _joanHowl = _makeHowl('sfx/joan-warhorn.mp3');
     }
     return _joanHowl;
   }
@@ -199,11 +213,7 @@ var SFX = (function () {
   function williamHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_williamHowl) {
-      _williamHowl = new Howl({
-        src:    ['sfx/william-mine.mp3'],
-        volume: 1.0,
-        html5:  true
-      });
+      _williamHowl = _makeHowl('sfx/william-mine.mp3');
     }
     return _williamHowl;
   }
@@ -211,11 +221,7 @@ var SFX = (function () {
   function samuraiHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_samuraiHowl) {
-      _samuraiHowl = new Howl({
-        src:    ["sfx/samurai-rise.mp3"],
-        volume: 1.0,
-        html5:  true
-      });
+      _samuraiHowl = _makeHowl('sfx/samurai-rise.mp3');
     }
     return _samuraiHowl;
   }
@@ -223,11 +229,7 @@ var SFX = (function () {
   function coinHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_coinHowl) {
-      _coinHowl = new Howl({
-        src:    ['sfx/scholar-officials-coin.mp3'],
-        volume: 1.0,
-        html5:  true
-      });
+      _coinHowl = _makeHowl('sfx/scholar-officials-coin.mp3');
     }
     return _coinHowl;
   }
@@ -235,11 +237,7 @@ var SFX = (function () {
   function pacalHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_pacalHowl) {
-      _pacalHowl = new Howl({
-        src:   ['sfx/pacal-rewind.mp3'],
-        volume: 1.0,
-        html5:  true
-      });
+      _pacalHowl = _makeHowl('sfx/pacal-rewind.mp3');
     }
     return _pacalHowl;
   }
@@ -247,11 +245,7 @@ var SFX = (function () {
   function wuHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_wuHowl) {
-      _wuHowl = new Howl({
-        src:    ['sfx/empresswu-push.mp3'],
-        volume: 1.0,
-        html5:  true
-      });
+      _wuHowl = _makeHowl('sfx/empresswu-push.mp3');
     }
     return _wuHowl;
   }
@@ -259,11 +253,7 @@ var SFX = (function () {
   function erasmusHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_erasmusHowl) {
-      _erasmusHowl = new Howl({
-        src:   ['sfx/erasmus-noyield.mp3'],
-        volume: 1.0,
-        html5:  true
-      });
+      _erasmusHowl = _makeHowl('sfx/erasmus-noyield.mp3');
     }
     return _erasmusHowl;
   }
@@ -271,7 +261,7 @@ var SFX = (function () {
   function henryHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_henryHowl) {
-      _henryHowl = new Howl({ src: ['sfx/henrynav-watermoney.mp3'], volume: 1.0, html5: true });
+      _henryHowl = _makeHowl('sfx/henrynav-watermoney.mp3');
     }
     return _henryHowl;
   }
@@ -279,7 +269,7 @@ var SFX = (function () {
   function zhengheHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_zhengheHowl) {
-      _zhengheHowl = new Howl({ src: ['sfx/zhenghe-bubble.mp3'], volume: 1.0, html5: true });
+      _zhengheHowl = _makeHowl('sfx/zhenghe-bubble.mp3');
     }
     return _zhengheHowl;
   }
@@ -287,7 +277,7 @@ var SFX = (function () {
   function sailingHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_sailingHowl) {
-      _sailingHowl = new Howl({ src: ['sfx/boat-waves.mp3'], volume: 1.0, html5: true });
+      _sailingHowl = _makeHowl('sfx/boat-waves.mp3');
     }
     return _sailingHowl;
   }
@@ -295,7 +285,7 @@ var SFX = (function () {
   function columbusHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_columbusHowl) {
-      _columbusHowl = new Howl({ src: ['sfx/columbus-churchbell.mp3'], volume: 1.0, html5: true });
+      _columbusHowl = _makeHowl('sfx/columbus-churchbell.mp3');
     }
     return _columbusHowl;
   }
@@ -303,7 +293,7 @@ var SFX = (function () {
   function voltaireHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_voltaireHowl) {
-      _voltaireHowl = new Howl({ src: ['sfx/voltaire-break.mp3'], volume: 1.0, html5: true });
+      _voltaireHowl = _makeHowl('sfx/voltaire-break.mp3');
     }
     return _voltaireHowl;
   }
@@ -311,7 +301,7 @@ var SFX = (function () {
   function waterflowHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_waterflowHowl) {
-      _waterflowHowl = new Howl({ src: ['sfx/waterflow.m4a'], volume: 1.0, html5: true });
+      _waterflowHowl = _makeHowl('sfx/waterflow.m4a');
     }
     return _waterflowHowl;
   }
@@ -319,7 +309,7 @@ var SFX = (function () {
   function magicSwirlHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_magicSwirlHowl) {
-      _magicSwirlHowl = new Howl({ src: ['sfx/magicswirl.m4a'], volume: 1.0, html5: true });
+      _magicSwirlHowl = _makeHowl('sfx/magicswirl.m4a');
     }
     return _magicSwirlHowl;
   }
@@ -327,11 +317,7 @@ var SFX = (function () {
   function francisHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_francisHowl) {
-      _francisHowl = new Howl({
-        src:   ['sfx/francis-prayer.mp3'],
-        volume: 1.0,
-        html5:  true
-      });
+      _francisHowl = _makeHowl('sfx/francis-prayer.mp3');
     }
     return _francisHowl;
   }
@@ -339,11 +325,7 @@ var SFX = (function () {
   function justinianHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_justinianHowl) {
-      _justinianHowl = new Howl({
-        src:    ['sfx/justinian-reset.mp3'],
-        volume: 1.0,
-        html5:  true
-      });
+      _justinianHowl = _makeHowl('sfx/justinian-reset.mp3');
     }
     return _justinianHowl;
   }
@@ -351,7 +333,7 @@ var SFX = (function () {
   function kenteHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_kenteHowl) {
-      _kenteHowl = new Howl({ src: ['sfx/kente-shield.mp3'], volume: 1.0, html5: true });
+      _kenteHowl = _makeHowl('sfx/kente-shield.mp3');
     }
     return _kenteHowl;
   }
@@ -359,7 +341,7 @@ var SFX = (function () {
   function juvenalHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_juvenalHowl) {
-      _juvenalHowl = new Howl({ src: ['sfx/juvenal-laugh.mp3'], volume: 1.0, html5: true });
+      _juvenalHowl = _makeHowl('sfx/juvenal-laugh.mp3');
     }
     return _juvenalHowl;
   }
@@ -367,7 +349,7 @@ var SFX = (function () {
   function cosimoHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_cosimoHowl) {
-      _cosimoHowl = new Howl({ src: ['sfx/demedici-money.mp3'], volume: 1.0, html5: true });
+      _cosimoHowl = _makeHowl('sfx/demedici-money.mp3');
     }
     return _cosimoHowl;
   }
@@ -375,10 +357,7 @@ var SFX = (function () {
   function jesusHowl() {
     if (typeof Howl === 'undefined') return null;
     if (!_jesusHowl) {
-      _jesusHowl = new Howl({
-        src:    ['sfx/jesus-resurrect.mp3'],
-        volume: 1.0,
-        html5:  true,     // stream rather than buffer the whole file
+      _jesusHowl = _makeHowl('sfx/jesus-resurrect.mp3', {
         onend: function () {
           var cb = _jesusOnFinished;
           _jesusOnFinished = null;
@@ -606,7 +585,7 @@ var SFX = (function () {
     janHusSplit: function () {
       if (_muted) return;
       if (!_janHusHowl && typeof Howl !== 'undefined') {
-        _janHusHowl = new Howl({ src: ['sfx/janhus-firebell.mp3'], volume: 1.0, html5: true });
+        _janHusHowl = _makeHowl('sfx/janhus-firebell.mp3');
       }
       if (_janHusHowl) { _playHowl(_janHusHowl); return; }
       try { new Audio('sfx/janhus-firebell.mp3').play(); } catch (e) {}
