@@ -3444,9 +3444,10 @@ var Overworld = (function () {
          cost/IP corners) + a pricetag@0.5x.png tag with the gold price.
        • Clicking a card opens the shared in-game card-detail popup
          (SOG.ui.openBattlePopup) — buying is NOT wired.
-       • Trader greeting plays through the shared adventure HUD dialogue system
-         (SOG.HUD.runDialogue) — the trader portrait (mesotrader) slides into
-         the HUD's NPC slot exactly like any boss/NPC conversation elsewhere.
+       • Trader greeting plays via _runMarketIntro: the trader's own lines type
+         into an on-screen bubble anchored to him (bleeps + click/spacebar
+         advance); his Explorer's interjected lines still route through the
+         shared adventure HUD (her own portrait), same as everywhere else.
        • Back button (top-right, above the HUD) exits to the overworld.
      Reached by the first-win auto-walk and by clicking the market node.
      TODO(market interior — later): wire gold + buying onto this layout. */
@@ -3666,6 +3667,201 @@ var Overworld = (function () {
     }).filter(function (row) { return row.cards.length; });
   }
 
+  /* ══ TRADER SPEECH BUBBLE — reusable, MARKET TRADERS ONLY ═══════════════════
+     Each market's trader is painted into its backdrop, so HIS lines appear in a
+     bubble anchored to him instead of the detached HUD box — but the Explorer's
+     own interjected lines ('who': 'explorer' in *_TRADER_INTRO below) still
+     route through the shared adventure HUD (SOG.HUD), exactly like Explorer
+     dialogue everywhere else in the game. _runMarketIntro below walks a mixed
+     trader/explorer line array and switches presentation per-speaker.
+
+     The bubble's presentation is the GIANTS' in-battle bubble, reused verbatim
+     via the shared .giant-bubble class (factored out of body.<boss>-battle
+     #adv-bubble-otzi in style.css — the Giants' own rules are untouched). The
+     market instance adds .giant-bubble--tail-up, because the bubble sits BELOW
+     the trader's mouth (over his chest) and must point back UP at him, whereas
+     the Giants' tails point sideways at a portrait.
+
+     ── TUNING VALUES (per market — nudge by eye) ──
+       leftPct / topPct — the bubble box's TOP-LEFT corner, as % of the market
+                          screen. Drop it just under the speaker's mouth.
+       widthPx         — bubble width.
+       tailXPct        — the tail's horizontal position along the bubble's own
+                          width (0 = left edge, 100 = right edge). Slide this
+                          until the tail tip sits under his mouth. */
+  var TRADER_BUBBLE = {
+    'mesopotamia': { leftPct: 63, topPct: 53, widthPx: 300, tailXPct: 62 },
+    'egypt':       { leftPct: 67, topPct: 34, widthPx: 290, tailXPct: 45 }
+  };
+
+  // Typewriter + bleep tuning — matches SOG.HUD's own cadence (js/sog-adventure-
+  // hud.js _typeText/BLEEP_EVERY_N) so the trader's bubble feels identical to
+  // every other typed line in the game, even though it's a separate DOM element.
+  var TRADER_TYPE_SPEED_MS = 28;
+  var TRADER_BLEEP_EVERY_N = 2;
+  var TRADER_BLEEP_HZ      = 300;   // matches SOG.HUD CHARACTERS.trader.bleepHz
+
+  // Same square-wave synth voice SOG.HUD uses for its generic (non-Lucy/Ötzi)
+  // speakers — kept independent of that module since the bubble is its own
+  // DOM element outside the HUD's dialogue-mode machinery.
+  var _traderAudioCtx = null;
+  function _getTraderAudioCtx() {
+    if (_traderAudioCtx) return _traderAudioCtx;
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) _traderAudioCtx = new Ctx();
+    } catch (e) {}
+    return _traderAudioCtx;
+  }
+  function _playTraderBleep() {
+    var ctx = _getTraderAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (e) {} }
+    var now  = ctx.currentTime;
+    var osc  = ctx.createOscillator();
+    var gain = ctx.createGain();
+    var freq = TRADER_BLEEP_HZ + (Math.random() - 0.5) * 30;
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, now);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.08 * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1), now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.06);
+  }
+
+  /* Walks a MIXED trader/explorer line array, appended to `host` (the market
+     screen). Trader lines type into an on-screen bubble anchored per `cfg`
+     (bleeps + click/spacebar advance, same feel as the HUD); explorer lines
+     hand off to SOG.HUD for that one line (Explorer's own portrait + voice),
+     then control returns to the bubble for the trader's next line. Calls
+     onDone once every line has been dismissed. Reusable for any future
+     market/shopkeeper — pass a new TRADER_BUBBLE entry. */
+  function _runMarketIntro(host, lines, cfg, onDone) {
+    if (!host || !lines || !lines.length) { if (onDone) onDone(); return; }
+
+    var bubble = null, textEl = null, hintEl = null;
+    function ensureBubble() {
+      if (bubble) return;
+      bubble = document.createElement('div');
+      // Same component the Giants use in battle, plus the upward-tail modifier.
+      bubble.className = 'giant-bubble giant-bubble--tail-up market-trader-bubble';
+      bubble.style.left  = cfg.leftPct + '%';
+      bubble.style.top   = cfg.topPct + '%';
+      bubble.style.width = cfg.widthPx + 'px';
+      bubble.style.setProperty('--tail-x', (cfg.tailXPct != null ? cfg.tailXPct : 50) + '%');
+      textEl = document.createElement('div');
+      hintEl = document.createElement('div');
+      hintEl.className = 'mtb-hint';
+      hintEl.innerHTML = '&#9654; Click to continue';
+      bubble.appendChild(textEl);
+      bubble.appendChild(hintEl);
+      host.appendChild(bubble);
+      void bubble.offsetHeight;                 // reflow so the fade-in animates
+      bubble.classList.add('is-visible');
+    }
+    function removeBubble(cb) {
+      if (!bubble) { if (cb) cb(); return; }
+      bubble.classList.remove('is-visible');
+      var toRemove = bubble;
+      bubble = null; textEl = null; hintEl = null;
+      setTimeout(function () {
+        if (toRemove.parentNode) toRemove.parentNode.removeChild(toRemove);
+        if (cb) cb();
+      }, 220);
+    }
+
+    // ── The bubble's own typewriter + bleep + click/spacebar advance —
+    //    mirrors SOG.HUD's _typeText/_onAdvance, scoped to this bubble only. ──
+    var _tyTimer = null, _tyTyping = false, _tyFullText = '', _tyShownLen = 0, _tyBleepCount = 0;
+    var _advanceCb = null, _advHandler = null;
+
+    function _typeIntoBubble(text, isLast, onLineDone) {
+      textEl.textContent = '';
+      hintEl.style.display = 'none';
+      _tyFullText = text; _tyShownLen = 0; _tyTyping = true; _tyBleepCount = 0;
+      _advanceCb = function () { _advanceCb = null; onLineDone(); };
+      if (_tyTimer) { clearInterval(_tyTimer); _tyTimer = null; }
+      _tyTimer = setInterval(function () {
+        _tyShownLen++;
+        textEl.textContent = _tyFullText.slice(0, _tyShownLen);
+        var c = _tyFullText.charAt(_tyShownLen - 1);
+        if (c && c !== ' ' && c !== '\n') {
+          _tyBleepCount++;
+          if (_tyBleepCount >= TRADER_BLEEP_EVERY_N) { _tyBleepCount = 0; _playTraderBleep(); }
+        }
+        if (_tyShownLen >= _tyFullText.length) {
+          clearInterval(_tyTimer); _tyTimer = null;
+          _tyTyping = false;
+          hintEl.style.display = isLast ? 'none' : '';
+        }
+      }, TRADER_TYPE_SPEED_MS);
+    }
+
+    function _onBubbleAdvance(e) {
+      if (e.type === 'keydown') {
+        if (e.key !== ' ' && e.key !== 'Spacebar' && e.key !== 'Enter') return;
+        e.preventDefault();
+      }
+      if (e.type === 'click') e.stopPropagation();
+      if (_tyTyping) {
+        // Skip typewriter — flash full text immediately, same as the HUD's own advance.
+        if (_tyTimer) { clearInterval(_tyTimer); _tyTimer = null; }
+        _tyShownLen = _tyFullText.length;
+        _tyTyping   = false;
+        textEl.textContent = _tyFullText;
+        return;
+      }
+      if (_advanceCb) { var cb = _advanceCb; _advanceCb = null; cb(); }
+    }
+    function _attachBubbleAdvance() {
+      if (_advHandler) return;
+      _advHandler = function (e) { _onBubbleAdvance(e); };
+      setTimeout(function () {
+        if (bubble) bubble.addEventListener('click', _advHandler);
+        document.addEventListener('keydown', _advHandler);
+      }, 0);
+    }
+    function _detachBubbleAdvance() {
+      if (!_advHandler) return;
+      if (bubble) bubble.removeEventListener('click', _advHandler);
+      document.removeEventListener('keydown', _advHandler);
+      _advHandler = null;
+    }
+
+    var i = 0;
+    var hud = window.SOG && window.SOG.HUD;
+
+    function next() {
+      if (i >= lines.length) {
+        _detachBubbleAdvance();
+        removeBubble(onDone);
+        return;
+      }
+      var line   = lines[i++];
+      var isLast = (i >= lines.length);
+
+      if (line.who === 'explorer' && hud && typeof hud.enterDialogueMode === 'function') {
+        // Explorer's line plays through the shared HUD — her own portrait +
+        // voice, same as Explorer dialogue everywhere else. The bubble just
+        // sits quietly on screen meanwhile (still showing the trader's last
+        // line); control returns to it for the trader's next line.
+        hud.enterDialogueMode(null, function () {
+          hud.runLines([line], function () {
+            hud.exitDialogueMode(function () { next(); });
+          });
+        });
+        return;
+      }
+
+      // Trader line (or HUD unavailable — degrade to the bubble for everyone).
+      ensureBubble();
+      _attachBubbleAdvance();
+      _typeIntoBubble(line.text, isLast, next);
+    }
+    next();
+  }
+
   /* Region → market data. _enterMarket(regionId) reads this; 'mesopotamia' is the
      default so every existing call site is unchanged. Adding a future region's
      market is one entry here plus a node + click handler. */
@@ -3878,13 +4074,14 @@ var Overworld = (function () {
     try { introSeen = localStorage.getItem(_mk.introKey) === 'true'; } catch (e) {}
 
     if (!introSeen) {
-      // Trader greeting plays through the shared adventure HUD (SOG.HUD.runDialogue),
-      // same as every other Explorer/boss conversation — typewriter + bleep, click
-      // AND spacebar to advance, and 'explorer' lines rendering in the Explorer's
-      // own HUD portrait rather than the trader's. Shopping stays blocked via
-      // _marketReady until the last line is dismissed.
+      // TRADER BUBBLE (both markets): the trader's own lines appear anchored to
+      // him in the art, NOT in the HUD box — so the HUD stays in its normal
+      // resting state (gold balance visible) while he's talking. His 'explorer'
+      // interjections still route through the shared HUD (her own portrait +
+      // voice), same as Explorer dialogue everywhere else. Shopping stays
+      // blocked via _marketReady until the last line is dismissed.
       if (hud && typeof hud.refreshGold === 'function') hud.refreshGold();
-      runDialogue(_mk.intro(), function () {
+      _runMarketIntro(screen, _mk.intro(), TRADER_BUBBLE[_activeMarket] || TRADER_BUBBLE.mesopotamia, function () {
         try { localStorage.setItem(_mk.introKey, 'true'); } catch (e) {}
         _marketReady = true;
       });

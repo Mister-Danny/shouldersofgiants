@@ -9892,6 +9892,82 @@ body.tut-locked #battle-reset-turn {
   animation: tut-hint-blink 1.4s ease-in-out infinite;
 }
 
+/* ══ GIANT-STYLE SPEECH BUBBLE (reusable) ══════════════════════
+   The comic-book bubble the GIANTS use in battle (see
+   body.sargon-battle #adv-bubble-otzi and its siblings) factored into a
+   standalone class so non-battle speakers can reuse the exact same look:
+   #f0ebe0 fill, 3px ink border, 12px radius, hard offset shadow.
+
+   The Giants' own rules are LEFT COMPLETELY UNTOUCHED — they still carry their
+   per-battle positioning/anchors. This class only re-expresses the shared
+   *appearance*, so nothing about boss dialogue changes.
+
+   Tail direction is a MODIFIER, because the Giants' tails point sideways at a
+   portrait while a bubble sitting below a speaker needs one pointing UP.
+   --tail-x is the tail's horizontal position (a tuning value set from JS). */
+.giant-bubble {
+  position: absolute;
+  z-index: 165;                 /* above the market shelf cards */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 12px 14px 10px;
+  background: #f0ebe0;
+  border: 3px solid #111;
+  border-radius: 12px;
+  box-shadow: -4px 4px 0 #111;
+  font-family: var(--font);
+  font-size: 18px;
+  line-height: 1.45;
+  color: #111;
+  text-shadow: none;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  --tail-x: 50%;                /* overridden inline by JS — align to the mouth */
+}
+.giant-bubble.is-visible { opacity: 1; }
+
+/* Tail pointing UP (bubble sits BELOW the speaker, e.g. over a trader's chest,
+   pointing back up at his mouth). Two stacked triangles: ink outline behind,
+   fill in front, so the tail reads as part of the bubble body. */
+.giant-bubble--tail-up::before,
+.giant-bubble--tail-up::after {
+  content: '';
+  position: absolute;
+  left: var(--tail-x);
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+.giant-bubble--tail-up::before {   /* ink outline */
+  top: -21px;
+  transform: translateX(-50%);
+  border-width: 0 12px 21px 12px;
+  border-color: transparent transparent #111 transparent;
+}
+.giant-bubble--tail-up::after {    /* fill */
+  top: -15px;
+  transform: translateX(-50%);
+  border-width: 0 9px 16px 9px;
+  border-color: transparent transparent #f0ebe0 transparent;
+}
+
+/* Click-to-continue hint — matches the Giants' in-battle hint treatment.
+   Hidden while typing (JS toggles display), shown once a line finishes. */
+.giant-bubble .mtb-hint {
+  font-family: var(--font);
+  font-size: 11px;
+  color: #666;
+  margin-top: 6px;
+  align-self: flex-end;
+  letter-spacing: 0.05em;
+  opacity: 0.85;
+  animation: tut-hint-blink 1.4s ease-in-out infinite;
+}
+
 /* ── Battle context: comic-book speech-bubble style ─────────────
    In body.prehistory-battle the .adv-bubble boxes are repositioned
    to sit BESIDE the avatar circles (not covering them), with a CSS
