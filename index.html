@@ -1689,6 +1689,11 @@
   <!-- Stage scaling — must be first so SOG.Stage exists before any module -->
   <script src="js/sog-stage.js"></script>
 
+  <!-- Feature flags — must load before js/teacher-dashboard.js and js/home.js,
+       which check MULTIPLAYER_ENABLED to hide their Versus/Tournament entry
+       points. -->
+  <script src="js/feature-flags.js"></script>
+
   <!-- ── Multi-deck save layer (must load before any deck consumer) ── -->
   <script src="js/decks.js"></script>
 

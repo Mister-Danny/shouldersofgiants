@@ -190,6 +190,15 @@ var HomeFlow = (function () {
     btnArcadium          = document.getElementById('btn-arcadium');
     btnAdventureNew      = document.getElementById('btn-adventure-new');
     btnVersus            = document.getElementById('btn-versus');
+    // Multiplayer temporarily disabled (js/feature-flags.js) — force-hide
+    // regardless of the `.btn-visible` class this button's own show/hide
+    // animations toggle elsewhere in this file. An inline `!important`
+    // beats those (plain, non-!important) class rules no matter when they
+    // run later, so this one line is the whole gate; flip the flag back to
+    // re-enable, no other change needed.
+    if (btnVersus && window.SOG_FEATURES && window.SOG_FEATURES.MULTIPLAYER_ENABLED === false) {
+      btnVersus.style.setProperty('display', 'none', 'important');
+    }
     btnState2Back        = document.getElementById('btn-state2-back');
     btnFeedback          = document.getElementById('btn-home-feedback');
     btnAccount           = document.getElementById('btn-account');
@@ -512,6 +521,10 @@ var HomeFlow = (function () {
 
   /* ── Online Versus (existing versus flow) ──────────────────── */
   function onOnlineVersusClick() {
+    // Multiplayer is temporarily disabled (js/feature-flags.js) — #btn-versus
+    // is hidden too, but guard here as well since the button reference alone
+    // isn't what gates reachability.
+    if (window.SOG_FEATURES && window.SOG_FEATURES.MULTIPLAYER_ENABLED === false) return;
     stopHomeMusic(400);
     if (window.BattleLobby && typeof window.BattleLobby.showStudentJoin === 'function') {
       window.BattleLobby.showStudentJoin();

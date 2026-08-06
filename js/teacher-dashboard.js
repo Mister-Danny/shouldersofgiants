@@ -494,15 +494,23 @@ window.TeacherDashboard = (function () {
     if (closeBtn) closeBtn.addEventListener('click', hide);
 
     var lobbyBtn = _byId('td-open-lobby');
-    if (lobbyBtn) lobbyBtn.addEventListener('click', function () {
-      // Close first, matching the dev menu's old open-lobby behavior
-      // (close() then showTeacherLobby()) — two stacked dark overlays would
-      // otherwise compound to a near-total blackout of the game behind them.
-      hide();
-      if (window.Multiplayer && typeof window.Multiplayer.showTeacherLobby === 'function') {
-        window.Multiplayer.showTeacherLobby();
-      }
-    });
+    // Multiplayer temporarily disabled (js/feature-flags.js) — hide the
+    // button entirely rather than just no-op the click, so Tournament mode
+    // isn't reachable from the dashboard at all. Flip the flag back to
+    // re-enable; nothing else here needs to change.
+    if (lobbyBtn && window.SOG_FEATURES && window.SOG_FEATURES.MULTIPLAYER_ENABLED === false) {
+      lobbyBtn.style.display = 'none';
+    } else if (lobbyBtn) {
+      lobbyBtn.addEventListener('click', function () {
+        // Close first, matching the dev menu's old open-lobby behavior
+        // (close() then showTeacherLobby()) — two stacked dark overlays would
+        // otherwise compound to a near-total blackout of the game behind them.
+        hide();
+        if (window.Multiplayer && typeof window.Multiplayer.showTeacherLobby === 'function') {
+          window.Multiplayer.showTeacherLobby();
+        }
+      });
+    }
 
     if (window.SogAuth) {
       window.SogAuth.ready(_checkStatus);

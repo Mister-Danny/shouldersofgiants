@@ -136,9 +136,8 @@ window.SOG_MAP_DATA = {
   },
 
   'egypt': {
-    displayName: 'Egypt',
-    image: 'images/metaworld/maps/egyptz.jpeg',
-    imageFit: { anchor: 'center top', scale: 1.08, offsetY: -4 },
+    displayName: 'Lower Egypt',
+    image: 'images/metaworld/maps/loweregypt.jpg',
     spawn: { x: 10, y: 85 },
     startsFogged: true,
     props: [
@@ -177,62 +176,6 @@ window.SOG_MAP_DATA = {
         scale: 1,
         showFrom: 'neb-beaten',
         note: 'Scaffolded position — drag into place. Shop contents not wired.'
-      },
-      {
-        id:    'hatshepsut',
-        name:  'Hatshepsut',
-        kind:  'battle',
-        image: 'images/metaworld/civilization nodes/hatshepsut.png',
-        x: 24.42, y: 60.74,
-        scale: 1,
-        hook:  'hatshepsut',
-        tiers: 2,
-        flagNudge: { dx: 0, dy: 0 },
-        serfFlagOn: 'encounter',
-        showFrom: 'narmer-beaten',
-        note: 'Scaffolded position — drag into place. Battle not wired.'
-      },
-      {
-        id:    'ramses',
-        name:  'Ramses',
-        kind:  'battle',
-        image: 'images/metaworld/civilization nodes/ramses.png',
-        x: 29.07, y: 79.7,
-        scale: 1,
-        hook:  'ramses',
-        tiers: 2,
-        flagNudge: { dx: 0, dy: 0 },
-        serfFlagOn: 'encounter',
-        showFrom: 'hatshepsut-beaten',
-        note: 'Scaffolded position — drag into place. Battle not wired.'
-      },
-      {
-        id:    'akhenaten',
-        name:  'Akhenaten',
-        kind:  'battle',
-        image: 'images/metaworld/civilization nodes/akhenaten.png',
-        x: 21.03, y: 21.95,
-        scale: 1,
-        hook:  'akhenaten',
-        tiers: 2,
-        flagNudge: { dx: 0, dy: 0 },
-        serfFlagOn: 'encounter',
-        showFrom: 'ramses-beaten',
-        note: 'Scaffolded position — drag into place. Battle not wired.'
-      },
-      {
-        id:    'kush',
-        name:  'Kush',
-        kind:  'battle',
-        image: 'images/metaworld/civilization nodes/kush.png',
-        x: 18.21, y: 95.03,
-        scale: 1,
-        hook:  'kush',
-        tiers: 2,
-        flagNudge: { dx: 0, dy: 0 },
-        serfFlagOn: 'encounter',
-        showFrom: 'akhenaten-beaten',
-        note: 'Scaffolded position — drag into place. Battle not wired.'
       }
     ],
     exits: [
@@ -251,6 +194,94 @@ window.SOG_MAP_DATA = {
         walkTo:  { x: 88, y: 15 },
         target:  'mesopotamia',
         entryAt: { x: 10, y: 85 }
+      },
+      {
+        id:      'to-upper-egypt',
+        label:   'To Upper Egypt ↓',
+        zone:    { x: 40, y: 82, w: 20, h: 18 },
+        walkTo:  { x: 50, y: 88 },
+        target:  'upper-egypt',
+        entryAt: { x: 50, y: 12 },
+        showFrom: 'narmer-beaten',
+        note: 'Bottom of Lower Egypt — the way upriver.'
+      }
+    ],
+    routes: []
+  },
+
+  'upper-egypt': {
+    displayName: 'Upper Egypt',
+    image: 'images/metaworld/maps/upperegypt.jpg',
+    spawn: { x: 50, y: 12 },
+    startsFogged: true,
+    props: [],
+    nodes: [
+      {
+        id:    'hatshepsut',
+        name:  'Hatshepsut',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/hatshepsut.png',
+        x: 20, y: 39,
+        scale: 1,
+        hook:  'hatshepsut',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'narmer-beaten',
+        note: 'Scaffolded position on the new Upper Egypt map — drag into place.'
+      },
+      {
+        id:    'ramses',
+        name:  'Ramses',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/ramses.png',
+        x: 38, y: 57,
+        scale: 1,
+        hook:  'ramses',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'hatshepsut-beaten',
+        note: 'Scaffolded position on the new Upper Egypt map — drag into place.'
+      },
+      {
+        id:    'akhenaten',
+        name:  'Akhenaten',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/akhenaten.png',
+        x: 56, y: 39,
+        scale: 1,
+        hook:  'akhenaten',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'ramses-beaten',
+        note: 'Scaffolded position on the new Upper Egypt map — drag into place.'
+      },
+      {
+        id:    'kush',
+        name:  'Kush',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/kush.png',
+        x: 74, y: 57,
+        scale: 1,
+        hook:  'kush',
+        tiers: 2,
+        flagNudge: { dx: 0, dy: 0 },
+        serfFlagOn: 'encounter',
+        showFrom: 'akhenaten-beaten',
+        note: 'Scaffolded position on the new Upper Egypt map — drag into place.'
+      }
+    ],
+    exits: [
+      {
+        id:      'to-egypt',
+        label:   '↑ To Lower Egypt',
+        zone:    { x: 40, y: 0, w: 20, h: 18 },
+        walkTo:  { x: 50, y: 10 },
+        target:  'egypt',
+        entryAt: { x: 50, y: 86 },
+        note: 'Top of Upper Egypt — returns to the bottom of Lower Egypt.'
       }
     ],
     routes: []
