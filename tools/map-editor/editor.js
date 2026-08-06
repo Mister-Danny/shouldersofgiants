@@ -158,6 +158,11 @@ function render() {
   $('#empty-note').hidden = !!m;
   if (!m) return;
 
+  /* A missing background used to render as an empty stage with no explanation —
+     which happens easily, because renaming art or changing .jpg to .jpeg breaks
+     the reference silently. Say exactly which file is missing instead. */
+  bg.onerror = () => showBgError(m.image);
+  bg.onload  = () => { const w = $('#bg-error'); if (w) w.remove(); };
   bg.src = '/' + m.image;
 
   /* Background framing, mirroring overworld.js exactly. The transform applies to
@@ -190,6 +195,17 @@ function render() {
 
 /* Shared by the stage background and the framing preview so they can never
    drift apart. Same property order as the game. */
+function showBgError(path) {
+  if ($('#bg-error')) return;
+  const d = document.createElement('div');
+  d.id = 'bg-error';
+  d.innerHTML = `<b>Background image not found</b>
+    <code>${esc(path)}</code>
+    <span>Check the filename in <code>images/metaworld/maps/</code> — a changed
+    extension (.jpg vs .jpeg) is the usual cause.</span>`;
+  $('#stage').appendChild(d);
+}
+
 function applyFit(el, fit) {
   fit = fit || {};
   const anchor = fit.anchor || 'center center';

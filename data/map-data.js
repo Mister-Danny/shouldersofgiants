@@ -212,7 +212,7 @@ window.SOG_MAP_DATA = {
 
   'upper-egypt': {
     displayName: 'Upper Egypt',
-    image: 'images/metaworld/maps/upperegypt.jpeg',
+    image: 'images/metaworld/maps/upperegypt.jpg',
     imageFit: { offsetX: 0.5 },
     spawn: { x: 50, y: 12 },
     startsFogged: true,

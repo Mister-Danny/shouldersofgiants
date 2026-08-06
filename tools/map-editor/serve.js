@@ -335,6 +335,12 @@ function validate(doc) {
   for (var i = 0; i < mapIds.length; i++) {
     var id = mapIds[i], m = maps[id];
     if (!m.image)  return 'map "' + id + '" has no background image';
+    // Catch a broken art path before it reaches disk. Renaming a background, or
+    // saving it as .jpeg instead of .jpg, otherwise leaves the map blank in game
+    // with nothing to explain why.
+    if (!fs.existsSync(path.join(ROOT, m.image))) {
+      return 'map "' + id + '" points at "' + m.image + '", which does not exist on disk';
+    }
     if (!m.spawn || !isNum(m.spawn.x) || !isNum(m.spawn.y)) return 'map "' + id + '" has an invalid spawn';
 
     var seen = {};
