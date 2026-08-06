@@ -138,19 +138,19 @@ window.SOG_MAP_DATA = {
   'egypt': {
     displayName: 'Lower Egypt',
     image: 'images/metaworld/maps/loweregypt.jpg',
-    spawn: { x: 10, y: 85 },
+    imageFit: { scale: 2, offsetY: 50 },
+    spawn: { x: 11.28, y: 78.22 },
     startsFogged: true,
     props: [
-      { image: 'images/metaworld/topography/ummelqaab@0.25x.png', x: 28, y: 87, scale: 0.35, rotation: 0, showUntil: 'neb-beaten', note: 'Umm el-Qaab necropolis' },
-      { image: 'images/metaworld/topography/riverhut.png', x: 29, y: 18, scale: 0.21, rotation: -3, showUntil: 'neb-beaten', note: 'Delta river hut — replaced by the River Market node at the same spot once Neb falls' },
-      { image: 'images/metaworld/topography/granary.png', x: 27, y: 46, scale: 0.29, rotation: 0, showUntil: 'neb-beaten' },
-      { image: 'images/metaworld/topography/mudhut.png', x: 16, y: 24, scale: 0.2, rotation: 20, showUntil: 'neb-beaten', note: 'north (delta)' },
-      { image: 'images/metaworld/topography/mudhut.png', x: 21, y: 57, scale: 0.2, rotation: 20, showUntil: 'neb-beaten', note: 'west bank' },
-      { image: 'images/metaworld/topography/mudhut.png', x: 29, y: 66, scale: 0.2, rotation: 40, showUntil: 'neb-beaten', note: 'east bank' },
-      { image: 'images/metaworld/topography/advgranary.png', x: 27.87, y: 45.78, scale: 0.26, rotation: 0, showFrom: 'neb-beaten' },
-      { image: 'images/metaworld/topography/advmudhouse3@0.25x.png', x: 17, y: 24, scale: 0.3, rotation: 20, showFrom: 'neb-beaten', note: 'north (delta)' },
-      { image: 'images/metaworld/topography/advmudhouse3@0.25x.png', x: 22, y: 57, scale: 0.3, rotation: 20, showFrom: 'neb-beaten', note: 'west bank' },
-      { image: 'images/metaworld/topography/advmudhouse3@0.25x.png', x: 27, y: 66, scale: 0.3, rotation: -15, flipX: true, showFrom: 'neb-beaten', note: 'east bank — mirrored' }
+      { image: 'images/metaworld/topography/riverhut.png', x: 61.48, y: 31.15, scale: 0.21, rotation: -3, showUntil: 'neb-beaten', note: 'Delta river hut — replaced by the River Market node at the same spot once Neb falls' },
+      { image: 'images/metaworld/topography/granary.png', x: 37.77, y: 18.38, scale: 0.22, rotation: 0, showUntil: 'neb-beaten' },
+      { image: 'images/metaworld/topography/mudhut.png', x: 50.47, y: 77.41, scale: 0.2, rotation: 20, showUntil: 'neb-beaten', note: 'north (delta)' },
+      { image: 'images/metaworld/topography/mudhut.png', x: 41.67, y: 36.26, scale: 0.2, rotation: 20, showUntil: 'neb-beaten', note: 'west bank' },
+      { image: 'images/metaworld/topography/mudhut.png', x: 56.45, y: 96.75, scale: 0.2, rotation: 40, showUntil: 'neb-beaten', note: 'east bank' },
+      { image: 'images/metaworld/topography/advgranary.png', x: 37.02, y: 19.28, scale: 0.26, rotation: 0, showFrom: 'neb-beaten' },
+      { image: 'images/metaworld/topography/advmudhouse3@0.25x.png', x: 52.23, y: 76.9, scale: 0.3, rotation: 20, showFrom: 'neb-beaten', note: 'north (delta)' },
+      { image: 'images/metaworld/topography/advmudhouse3@0.25x.png', x: 43.05, y: 35.95, scale: 0.3, rotation: 20, showFrom: 'neb-beaten', note: 'west bank' },
+      { image: 'images/metaworld/topography/advmudhouse3@0.25x.png', x: 54.46, y: 95.94, scale: 0.3, rotation: -15, flipX: true, showFrom: 'neb-beaten', note: 'east bank — mirrored' }
     ],
     nodes: [
       {
@@ -158,8 +158,9 @@ window.SOG_MAP_DATA = {
         name:  'Narmer',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/narmer.png',
-        x: 22.85, y: 33.66,
+        x: 55.85, y: 61.99,
         scale: 0.8,
+        flipX: true,
         hook:  'narmer',
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
@@ -172,7 +173,7 @@ window.SOG_MAP_DATA = {
         name:  'The River Market',
         kind:  'market',
         image: 'images/metaworld/civilization nodes/egyptmarket.png',
-        x: 28.42, y: 17.38,
+        x: 61.41, y: 31.43,
         scale: 1,
         showFrom: 'neb-beaten',
         note: 'Scaffolded position — drag into place. Shop contents not wired.'
@@ -182,7 +183,7 @@ window.SOG_MAP_DATA = {
       {
         id:      'to-eastafrica',
         label:   '← To East Africa',
-        zone:    { x: 0, y: 70, w: 20, h: 30 },
+        zone:    { x: 0, y: 69.7, w: 20, h: 30 },
         walkTo:  { x: 10, y: 85 },
         target:  'eastafrica',
         entryAt: { x: 88, y: 15 }
@@ -190,7 +191,7 @@ window.SOG_MAP_DATA = {
       {
         id:      'to-mesopotamia',
         label:   'To Mesopotamia →',
-        zone:    { x: 80, y: 5, w: 20, h: 30 },
+        zone:    { x: 80.62, y: 38.79, w: 20, h: 30 },
         walkTo:  { x: 88, y: 15 },
         target:  'mesopotamia',
         entryAt: { x: 10, y: 85 }
@@ -211,7 +212,8 @@ window.SOG_MAP_DATA = {
 
   'upper-egypt': {
     displayName: 'Upper Egypt',
-    image: 'images/metaworld/maps/upperegypt.jpg',
+    image: 'images/metaworld/maps/upperegypt.jpeg',
+    imageFit: { offsetX: 0.5 },
     spawn: { x: 50, y: 12 },
     startsFogged: true,
     props: [],
@@ -221,7 +223,7 @@ window.SOG_MAP_DATA = {
         name:  'Hatshepsut',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/hatshepsut.png',
-        x: 20, y: 39,
+        x: 80.5, y: 47.09,
         scale: 1,
         hook:  'hatshepsut',
         tiers: 2,
@@ -235,7 +237,7 @@ window.SOG_MAP_DATA = {
         name:  'Ramses',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/ramses.png',
-        x: 38, y: 57,
+        x: 51.56, y: 63.37,
         scale: 1,
         hook:  'ramses',
         tiers: 2,
@@ -249,7 +251,7 @@ window.SOG_MAP_DATA = {
         name:  'Akhenaten',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/akhenaten.png',
-        x: 56, y: 39,
+        x: 44.9, y: 29.49,
         scale: 1,
         hook:  'akhenaten',
         tiers: 2,
@@ -263,7 +265,7 @@ window.SOG_MAP_DATA = {
         name:  'Kush',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/kush.png',
-        x: 74, y: 57,
+        x: 45.08, y: 87.55,
         scale: 1,
         hook:  'kush',
         tiers: 2,
