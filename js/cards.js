@@ -594,6 +594,45 @@ const CARDS = [
     ability: "Next Turn:\nReceive +1 Capital.",
     image:   "images/cards/egyptcards/nubiangold@0.5x.jpg",
     imageSm: "images/cards/egyptcards/nubiangold@0.3x.jpg", locked: true, token: true
+  },
+  {
+    /* ─────────────────────────────────────────────────────────────────────
+       MERCHANT — PROVISIONAL PLACEHOLDER ENTRY.
+
+       The ABILITY IS FULLY WIRED (abilities.js → abilityMerchantTrade); it is
+       the DATA here that is provisional. id 900 sits far outside the real card
+       band (1–73 today) precisely so the incoming card set can number itself
+       from 74 upward without colliding. Nothing in the codebase assumes
+       contiguous ids — checked — so a gap is safe.
+
+       WHEN THE REAL CARD SET LANDS, change three things and nothing else:
+         1. this id  →  its real id
+         2. MERCHANT_ID in abilities.js  →  the same value
+         3. the CARD_ABILITIES key (900)  →  the same value
+       cc / ip / art below are guesses in the shape of the other Egypt
+       Economic cards (Trader 1/1, Nubian Gold 0/1) — replace with the real
+       values. Art paths are intentionally the Trader's: buildCardImg has an
+       onerror fallback, so a wrong path degrades to hidden rather than broken.
+
+       ONE MERCHANT PER CIVILIZATION: the text and the wiring are identical for
+       every copy — only the civ tag differs. The ability reads the civ off the
+       card via civOf() (explicit `civilization` field, else `era`), so adding
+       e.g. a Mesopotamia Merchant means copying this entry and changing the
+       era/civilization value. No code change.
+
+       DEPENDENCIES NOT YET BUILT (the ability degrades safely without them):
+         • Punt / Thebes locations + their MOVE_HERE_IP / MOVE_HERE_CAPITAL
+           keys — the move-here bonus seam is inert until they exist.
+
+       locked: true keeps it out of the deck builder (ownership gates on
+       SOG.collection), so this placeholder is invisible in normal play.
+    ───────────────────────────────────────────────────────────────────────── */
+    id: 900, name: "Merchant", cc: 1, ip: 1,                    // PROVISIONAL DATA — ability WIRED (reactive: Economic played here → +1 IP, different-civ bonus, random move)
+    type: "Economic", type2: null, era: "Egypt",                // era doubles as the CIVILIZATION tag (see civOf in abilities.js)
+    abilityName: "Trade Route",
+    ability: "When an Economic card is played here, the Merchant gains +1 IP and moves. If the Economic card is from a different civilization, it also gains +1 IP.",
+    image:   "images/cards/egyptcards/trader@0.5x.jpg",
+    imageSm: "images/cards/egyptcards/trader@0.3x.jpg", locked: true
   }
 
 ];

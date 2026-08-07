@@ -2315,6 +2315,157 @@
     }
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     MERCHANT (900) — "Trade Route". REACTIVE, LOCAL.
+     ───────────────────────────────────────────────────────────────
+     When an ECONOMIC card is played at THIS Merchant's location:
+       1. the Merchant gains +1 IP (at its current location), THEN
+       2. it moves to a RANDOM other location that has an open spot.
+     If no other location has an open spot the WHOLE trigger fizzles —
+     no IP, no move. That is why the destination is resolved BEFORE the
+     +1 is applied: a blocked Merchant must not bank the IP.
+
+     DIFFERENT-CIVILIZATION BONUS: if the played Economic card is from a
+     different civilization than the Merchant, THE PLAYED CARD (not the
+     Merchant) gains +1 IP. Card text: "…If the Economic card is from a
+     different civilization, it also gains +1 IP." — "it" is the played card.
+     The Merchant's own +1 is unconditional; only this second +1 is gated.
+     The played card does NOT move; only the Merchant moves (no swap).
+
+     WHY THE TRIGGER IS LOCAL (the anti-snowball rule): fireOnCardLandedHere
+     only fires reactors that sit at the location the card landed at, and it
+     excludes the just-landed card itself. Two Merchants at DIFFERENT
+     locations therefore cannot both fire on one play — no extra guard needed,
+     the dispatcher's contract already is the rule. Each reactor is invoked
+     exactly once per landing, so the Merchant reacts exactly once.
+
+     EITHER SIDE'S Economic play counts. The spec says "an Economic card is
+     played at this Merchant's location" without qualifying whose, so this
+     deliberately does NOT gate on ctx.landedOwner (contrast Tribe below,
+     which is explicitly same-owner). Note the cross-side consequence: an
+     opponent's Economic card played here gets the different-civ +1 too.
+
+     [PROVISIONAL DATA — see cards.js id 900] The card entry, its id, and the
+     Punt/Thebes move-here bonuses are placeholders pending the real card set.
+     The LOGIC below is final and data-driven; only the numbers move. */
+  var MERCHANT_ID = 900;   // PROVISIONAL — renumber with the real card set
+
+  /* A card's CIVILIZATION. Prefers an explicit `civilization` / `civ` field and
+     falls back to `era`, which every card already carries and which gameplay
+     code already treats as a civilization key (board.js / input.js gate Neb's
+     discount on card.era === 'Mesopotamia').
+
+     CAVEAT worth knowing: `era` is mostly civilizations (Egypt, Mesopotamia,
+     Rome, China, Japan) but some values are PERIODS (Middle Ages, Renaissance,
+     Reformation, Enlightenment, Age of Exploration). Those still compare as
+     distinct keys, so the mechanic works today with zero data migration — but
+     when a Merchant needs to reason about a period-named card's true
+     civilization, add an explicit `civilization:` to that card and this picks
+     it up with no change here. */
+  function civOf(card) {
+    if (!card) return null;
+    return card.civilization || card.civ || card.era || null;
+  }
+
+  /* Location "when a card MOVES here" bonus. INERT TODAY — no location defines
+     these keys yet, so this is a no-op lookup. It exists so the Merchant's move
+     already routes through the seam: when Punt and Thebes land, give them
+     abilityKey 'MOVE_HERE_IP' (+1 IP to the arriving card) or
+     'MOVE_HERE_CAPITAL' (+1 capital next turn) and this starts paying out with
+     no change here.
+     FOLLOW-UP when those locations exist: call this from the shared move
+     pipeline (executeMoveAnimated's completion) instead of only here, so
+     Chariot and Ötzi moves trigger it too. It is called only from the Merchant
+     for now because that is the only mover the spec covers. */
+  function fireMoveHereBonus(owner, destLocId, movedSlot) {
+    var loc = G.locations.find(function (l) { return l.id === destLocId; });
+    if (!loc || !loc.abilityKey) return;
+    if (loc.abilityKey === 'MOVE_HERE_IP' && movedSlot) {
+      addIPMod(movedSlot, 1, 'Punt');
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+    } else if (loc.abilityKey === 'MOVE_HERE_CAPITAL') {
+      grantCapitalNextTurn(owner, 1);
+    }
+  }
+
+  function abilityMerchantTrade(ctx, done) {
+    done = typeof done === 'function' ? done : function () {};
+    var owner   = ctx.owner;          // the MERCHANT's side
+    var fromLoc = ctx.locId;
+    var landed  = CARDS.find(function (c) { return c.id === ctx.landedCardId; });
+
+    // Type gate is the ONLY test left — the dispatcher already guaranteed
+    // "landed at my location" and "not my own reveal".
+    if (!landed || landed.type !== 'Economic') { done(); return; }
+
+    // FIZZLE CHECK FIRST — see the header. Open spots are counted on the
+    // MERCHANT'S OWN side (a move relocates it within its owner's slots),
+    // matching how Ötzi's flee picks its destination.
+    var ownerSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var candidates = G.locations.filter(function (loc) {
+      return loc.id !== fromLoc && ownerSlots[loc.id] && ownerSlots[loc.id].indexOf(null) !== -1;
+    });
+    if (!candidates.length) { done(); return; }   // whole trigger fizzles
+    var dest = candidates[Math.floor(Math.random() * candidates.length)];
+
+    // 1. Merchant's own +1 IP — UNCONDITIONAL, banked at the CURRENT location
+    //    before the move.
+    addIPMod(ctx.slot, 1, 'Merchant');
+    if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
+      SOG.ui.showIPFloat(owner, MERCHANT_ID, 1);
+    }
+
+    // 2. DIFFERENT-CIVILIZATION BONUS → +1 IP to THE PLAYED CARD (not the
+    //    Merchant). Resolve the played card's own slot on ITS owner's side: the
+    //    landed card may belong to either side, so it is NOT necessarily in
+    //    ownerSlots. Same-civ (or unknown civ on either card) → no bonus.
+    var merchantCard = CARDS.find(function (c) { return c.id === MERCHANT_ID; });
+    var myCiv        = civOf(merchantCard);
+    var theirCiv     = civOf(landed);
+    var differentCiv = !!myCiv && !!theirCiv && myCiv !== theirCiv;
+    if (differentCiv) {
+      var landedSlots = (ctx.landedOwner === 'player' ? G.playerSlots : G.aiSlots)[fromLoc] || [];
+      for (var i = 0; i < landedSlots.length; i++) {
+        var ls = landedSlots[i];
+        if (ls && ls.cardId === ctx.landedCardId) {
+          addIPMod(ls, 1, 'Merchant');
+          if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
+            SOG.ui.showIPFloat(ctx.landedOwner, ctx.landedCardId, 1);
+          }
+          break;   // one card played, one bonus
+        }
+      }
+    }
+
+    // Both +1s are in — recompute once for the pair rather than twice.
+    evaluateContinuous();
+    refreshSlotIPDisplays();
+    updateScores();
+
+    // 3. The Merchant moves (the played card stays put — no swap), then the
+    //    destination's move-here bonus. The one-shot guard stays: executeMoveAnimated
+    //    is an external callback, and a double invocation must never double-move
+    //    or double-release the reveal pipeline's barrier.
+    var advanced = false;
+    var doMove = function () {
+      if (advanced) return;
+      advanced = true;
+      if (!SOG.game || typeof SOG.game.executeMoveAnimated !== 'function') { done(); return; }
+      SOG.game.executeMoveAnimated(owner, MERCHANT_ID, fromLoc, dest.id, { sd: ctx.slot }, function () {
+        fireMoveHereBonus(owner, dest.id, ctx.slot);
+        if (window.SOG_DEBUG && typeof console !== 'undefined') {
+          console.log('[Merchant] traded on ' + landed.name + ' (' + theirCiv + ' vs ' + myCiv +
+                      (differentCiv ? ', different civ → played card +1 IP' : ', same civ → no bonus') +
+                      '): moved loc ' + fromLoc + ' → ' + dest.id);
+        }
+        done();
+      });
+    };
+    doMove();
+  }
+
   /* Tribe (id 36) — REACTIVE PRESENTATION ONLY (no IP/state/timing change).
      Tribe's actual +IP is computed in evaluateContinuous (a lump-sum continuous
      recompute), which isn't a clean per-card event. Instead this onCardLandedHere
@@ -2992,6 +3143,7 @@
     31: { endOfTurn: megalithEndOfTurn      },  // Megalith — End of turn: gain +1 IP (permanent, cumulative)
     35: { onCardLandedHere: abilityOtziFlee },  // Ötzi — reactive flee (any card lands at his loc after he's revealed)
     36: { onCardLandedHere: tribeReactBounce },  // Tribe — reactive bounce+sfx (presentation only; IP stays in evaluateContinuous)
+    900: { onCardLandedHere: abilityMerchantTrade },  // Merchant — PROVISIONAL ID. Economic played here → +1 IP, then random move (fizzles if nowhere to go)
 
     /* ── Mesopotamia era ───────────────────────────────────────────
        Phase C cards (37 Sargon, 43 Gilgamesh) remain stubbed.      */
