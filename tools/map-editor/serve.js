@@ -100,6 +100,82 @@ function listArt(relDir) {
    diffable: one node per block, coordinates on a single line, stable key
    order. A generated file that produces a 400-line diff for a 2px nudge is a
    file nobody will review. */
+/* ── Field table ────────────────────────────────────────────────────────
+   ONE list, per kind, of every field beyond the required core (written by
+   hand at a fixed spot in serialise() below, since that shape is old and
+   stable). This used to be three separately hand-kept lists: serialise()'s
+   own if-chain of what to write, KNOWN's flat array of what unknownFields()
+   accepts, and — for required fields — a matching presence check in
+   validate(). The dangerous direction was a field added to KNOWN (so the
+   editor accepts and round-trips it in memory) without a matching
+   serialise() case: it saves fine, then vanishes from disk on the very
+   next save, silently. Optional fields with a `write(o)` are now emitted
+   from this table, so that specific failure mode can't happen — the field
+   is either wired to both or neither.
+
+   A `write` of null marks a field that's real (known, required-checked)
+   but stays hand-emitted at a fixed position in serialise() — either
+   because it's interleaved among required fields (exit's walkOff) or
+   always written with a default rather than conditionally (prop's scale/
+   rotation). `gate: true` marks showFrom/showUntil, already unified by the
+   gates() helper above; they need a table entry only so KNOWN sees them.
+   required-field presence/type checks in validate() stay hand-written —
+   unlike the optional-tail case, a required field silently missing was
+   never silent, it already hard-blocks the save with its own message. */
+function OPT(key, write) { return { key: key, write: write || null }; }
+function GATE(key) { return { key: key, gate: true }; }
+
+var FIELDS = {
+  map: {
+    required: ['displayName', 'image', 'spawn', 'startsFogged'],
+    // imageFit/props/nodes/exits/routes are structural containers, always
+    // written by hand in serialise() — not optional scalar fields.
+    optional: [],
+    late: []
+  },
+  node: {
+    required: ['id', 'name', 'kind', 'image', 'x', 'y'],
+    optional: [
+      OPT('scale',       function (n) { return n.scale != null ? 'scale: ' + scaleNum(n.scale) : null; }),
+      OPT('flipX',       function (n) { return n.flipX ? 'flipX: true' : null; }),
+      OPT('rotation',    function (n) { return n.rotation ? 'rotation: ' + num(n.rotation) : null; }),
+      OPT('label',       function (n) { return n.label ? 'label: ' + q(n.label) : null; }),
+      OPT('hook',        function (n) { return n.hook ? 'hook:  ' + q(n.hook) : null; }),
+      OPT('tiers',       function (n) { return n.tiers != null ? 'tiers: ' + num(n.tiers) : null; }),
+      OPT('flagNudge',   function (n) { return n.flagNudge ? 'flagNudge: { dx: ' + num(n.flagNudge.dx || 0) + ', dy: ' + num(n.flagNudge.dy || 0) + ' }' : null; }),
+      OPT('serfFlagOn',  function (n) { return n.serfFlagOn ? 'serfFlagOn: ' + q(n.serfFlagOn) : null; }),
+      OPT('victoryFlag', function (n) { return n.victoryFlag ? 'victoryFlag: true' : null; }),
+      GATE('showFrom'), GATE('showUntil')
+    ],
+    late: [ OPT('note', function (n) { return n.note ? 'note: ' + q(n.note) : null; }) ]
+  },
+  exit: {
+    required: ['id', 'label', 'zone', 'walkTo', 'target', 'entryAt'],
+    optional: [
+      OPT('walkOff'),   // positional — hand-emitted between walkTo and target
+      GATE('showFrom'), GATE('showUntil')
+    ],
+    late: [ OPT('note', function (x) { return x.note ? 'note: ' + q(x.note) : null; }) ]
+  },
+  prop: {
+    required: ['image', 'x', 'y'],
+    optional: [
+      OPT('scale'),     // always written, with a default — hand-emitted
+      OPT('rotation'),  // always written, with a default — hand-emitted
+      OPT('flipX', function (p) { return p.flipX ? 'flipX: true' : null; }),
+      OPT('flipY', function (p) { return p.flipY ? 'flipY: true' : null; }),
+      GATE('showFrom'), GATE('showUntil')
+    ],
+    late: [ OPT('note', function (p) { return p.note ? 'note: ' + q(p.note) : null; }) ]
+  }
+};
+
+function fieldsOf(kind) {
+  var f = FIELDS[kind];
+  return f.required.concat(f.optional.map(function (o) { return o.key; }))
+                    .concat(f.late.map(function (o) { return o.key; }));
+}
+
 function serialise(doc) {
   var HEADER = fs.readFileSync(path.join(__dirname, 'data-header.txt'), 'utf8');
   var maps = doc.maps || {};
@@ -143,10 +219,16 @@ function serialise(doc) {
            ', x: ' + num(p.x) + ', y: ' + num(p.y) +
            ', scale: ' + scaleNum(p.scale == null ? 1 : p.scale) +
            ', rotation: ' + num(p.rotation || 0);
-      if (p.flipX)     s += ', flipX: true';
-      if (p.flipY)     s += ', flipY: true';
+      FIELDS.prop.optional.forEach(function (f) {
+        if (!f.write) return;
+        var frag = f.write(p);
+        if (frag != null) s += ', ' + frag;
+      });
       s += gates(p, '');
-      if (p.note)      s += ', note: ' + q(p.note);
+      FIELDS.prop.late.forEach(function (f) {
+        var frag = f.write(p);
+        if (frag != null) s += ', ' + frag;
+      });
       s += ' }' + (i < m.props.length - 1 ? ',' : '') + '\n';
     });
     s += (m.props || []).length ? '    ],\n' : '],\n';
@@ -159,20 +241,18 @@ function serialise(doc) {
       s += '        kind:  ' + q(n.kind === 'market' ? 'market' : 'battle') + ',\n';
       s += '        image: ' + q(n.image) + ',\n';
       s += '        x: ' + num(n.x) + ', y: ' + num(n.y);
-      if (n.scale != null) s += ',\n        scale: ' + scaleNum(n.scale);
-      if (n.flipX)         s += ',\n        flipX: true';
-      if (n.rotation)      s += ',\n        rotation: ' + num(n.rotation);
-      if (n.label)         s += ',\n        label: ' + q(n.label);
-      // Boss ladder. `hook` is the flag key + script hook; `tiers` 2 means a
-      // Serf/Giant pair (and therefore flags), 1 means a single-level battle.
-      if (n.hook)          s += ',\n        hook:  ' + q(n.hook);
-      if (n.tiers != null) s += ',\n        tiers: ' + num(n.tiers);
-      if (n.flagNudge)     s += ',\n        flagNudge: { dx: ' + num(n.flagNudge.dx || 0) +
-                                ', dy: ' + num(n.flagNudge.dy || 0) + ' }';
-      if (n.serfFlagOn)    s += ',\n        serfFlagOn: ' + q(n.serfFlagOn);
-      if (n.victoryFlag)   s += ',\n        victoryFlag: true';
+      // Boss ladder fields (hook/tiers/flagNudge/serfFlagOn/victoryFlag) and
+      // everything else optional live in FIELDS.node — see the field table.
+      FIELDS.node.optional.forEach(function (f) {
+        if (!f.write) return;
+        var frag = f.write(n);
+        if (frag != null) s += ',\n        ' + frag;
+      });
       s += gates(n, ',\n        ');
-      if (n.note)          s += ',\n        note: ' + q(n.note);
+      FIELDS.node.late.forEach(function (f) {
+        var frag = f.write(n);
+        if (frag != null) s += ',\n        ' + frag;
+      });
       s += '\n      }' + (i < m.nodes.length - 1 ? ',' : '') + '\n';
     });
     s += (m.nodes || []).length ? '    ],\n' : '],\n';
@@ -189,7 +269,10 @@ function serialise(doc) {
       s += '        target:  ' + q(x.target) + ',\n';
       s += '        entryAt: { x: ' + num(x.entryAt.x) + ', y: ' + num(x.entryAt.y) + ' }';
       s += gates(x, ',\n        ');
-      if (x.note) s += ',\n        note: ' + q(x.note);
+      FIELDS.exit.late.forEach(function (f) {
+        var frag = f.write(x);
+        if (frag != null) s += ',\n        ' + frag;
+      });
       s += '\n      }' + (i < m.exits.length - 1 ? ',' : '') + '\n';
     });
     s += (m.exits || []).length ? '    ],\n' : '],\n';
@@ -355,13 +438,6 @@ function validate(doc) {
       if (!n.image) return 'node "' + n.id + '" has no image';
       if (!isNum(n.x) || !isNum(n.y)) return 'node "' + n.id + '" has non-numeric coordinates';
       checkGates(n, 'node "' + n.id + '"');
-      if (n.path) {
-        for (var p = 0; p < n.path.length; p++) {
-          if (!isNum(n.path[p].x) || !isNum(n.path[p].y)) {
-            return 'node "' + n.id + '" has an invalid path waypoint at index ' + p;
-          }
-        }
-      }
     }
 
     // `xi`, not `k` — `k` is the milestone loop counter above and `var` is
@@ -422,15 +498,14 @@ function isNum(v) { return typeof v === 'number' && isFinite(v); }
 /* The serialiser writes a fixed set of keys. Anything it does not know about
    would be silently dropped on the next save -- data loss with no error, which
    is exactly the kind of failure that costs an afternoon. Refuse the save
-   instead, and name the field. */
+   instead, and name the field. Derived from FIELDS (see serialise() above) —
+   map's containers (props/nodes/exits/routes) and imageFit aren't scalar
+   fields, so they're listed here directly rather than through fieldsOf(). */
 var KNOWN = {
-  map:  ['displayName', 'image', 'imageFit', 'spawn', 'startsFogged', 'props', 'nodes', 'exits', 'routes'],
-  node: ['id', 'name', 'kind', 'image', 'x', 'y', 'scale', 'flipX', 'label', 'note',
-         'showFrom', 'showUntil', 'hook', 'tiers', 'flagNudge', 'serfFlagOn', 'victoryFlag', 'rotation'],
-  exit: ['id', 'label', 'zone', 'walkTo', 'walkOff', 'target', 'entryAt', 'note',
-         'showFrom', 'showUntil'],
-  prop: ['image', 'x', 'y', 'scale', 'rotation', 'flipX', 'flipY', 'note',
-         'showFrom', 'showUntil']
+  map:  fieldsOf('map').concat(['imageFit', 'props', 'nodes', 'exits', 'routes']),
+  node: fieldsOf('node'),
+  exit: fieldsOf('exit'),
+  prop: fieldsOf('prop')
 };
 
 function unknownFields(doc) {
