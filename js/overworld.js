@@ -3590,23 +3590,30 @@ var Overworld = (function () {
     return EGYPT_TIERS;   // e.g. if (_nubianUnlocked()) return EGYPT_TIERS_WITH_NUBIAN;
   }
 
-  /* ── PERSISTED QUEUE STATE ────────────────────────────────────────────────
-     Shape: { tiers: [ { slots: [id|null ×3], next: <queue index> }, … ] }
-     `slots` is what's on the shelf right now; `next` is how far into that tier's
-     queue we've drawn. Progression state, so it survives reload/sessions. */
-  var KEY_EGYPT_MARKET = 'sog_egypt_market_state';
-
   function _cardOwned(id) {
     return !!(window.SOG && SOG.collection && typeof SOG.collection.isUnlocked === 'function'
               && SOG.collection.isUnlocked(id));
   }
 
-  function _egyptMarketState() {
-    var tiers = _egyptTiers();
+  /* ── GENERIC tiered-market restock+persistence engine ─────────────────────
+     Extracted from what was a hand-duplicated Egypt-only trio
+     (_egyptMarketState/_saveEgyptMarketState/_restockEgyptMarket) so a SECOND
+     tiered market (see 'spike-market' below) doesn't require re-copying it a
+     third time — Egypt now calls this too (same localStorage key it always
+     used, passed in explicitly, so existing save data keeps working
+     byte-for-byte), one implementation. Parameterized by storageKey (each
+     market keeps its own queue state) and `tiers` ([{label,cards:[{id,
+     price}]}], top→bottom).
+
+     Persisted shape per market: { tiers: [ { slots: [id|null ×3], next:
+     <queue index> }, … ] }. `slots` is what's on the shelf right now; `next`
+     is how far into that tier's queue we've drawn. Progression state, so it
+     survives reload/sessions. */
+  function _tieredMarketState(storageKey, tiers) {
     var st = null;
-    try { st = JSON.parse(localStorage.getItem(KEY_EGYPT_MARKET) || 'null'); } catch (e) {}
+    try { st = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch (e) {}
     if (!st || !Array.isArray(st.tiers)) st = { tiers: [] };
-    // Length guard — also the migration path when a future expansion adds a tier.
+    // Length guard — also the migration path when a tier is added later.
     while (st.tiers.length < tiers.length) st.tiers.push({ slots: [null, null, null], next: 0 });
     st.tiers.length = tiers.length;
     st.tiers.forEach(function (t) {
@@ -3617,8 +3624,8 @@ var Overworld = (function () {
     });
     return st;
   }
-  function _saveEgyptMarketState(st) {
-    try { localStorage.setItem(KEY_EGYPT_MARKET, JSON.stringify(st)); } catch (e) {}
+  function _saveTieredMarketState(storageKey, st) {
+    try { localStorage.setItem(storageKey, JSON.stringify(st)); } catch (e) {}
   }
 
   /* RESTOCK — run ONCE per market entry, before the shelves render.
@@ -3627,9 +3634,8 @@ var Overworld = (function () {
      cards the player already owns. Ownership is the source of truth, so a slot
      emptied by a purchase mid-visit naturally backfills on the NEXT entry — which
      is exactly the specified timing. */
-  function _restockEgyptMarket() {
-    var tiers = _egyptTiers();
-    var st = _egyptMarketState();
+  function _restockTieredMarket(storageKey, tiers) {
+    var st = _tieredMarketState(storageKey, tiers);
     st.tiers.forEach(function (t, ti) {
       var queue = tiers[ti].cards;
       for (var s = 0; s < t.slots.length; s++) {
@@ -3641,17 +3647,16 @@ var Overworld = (function () {
         }
       }
     });
-    _saveEgyptMarketState(st);
+    _saveTieredMarketState(storageKey, st);
     return st;
   }
 
   /* Build the display in the { topPct, xs, cards } shape _enterMarket consumes.
      Reads the RESTOCKED state — empty slots simply contribute no card, which the
      renderer already treats as a gap (that's the sold/sold-out look). */
-  function _egyptShelves() {
-    var tiers = _egyptTiers();
-    var st = _restockEgyptMarket();
-    return EGYPT_GRID.rowTops.slice(0, tiers.length).map(function (topPct, ti) {
+  function _tieredShelves(storageKey, tiers, grid) {
+    var st = _restockTieredMarket(storageKey, tiers);
+    return grid.rowTops.slice(0, tiers.length).map(function (topPct, ti) {
       var queue = tiers[ti].cards;
       var row   = st.tiers[ti];
       var cards = [], xs = [];
@@ -3661,11 +3666,20 @@ var Overworld = (function () {
         for (var i = 0; i < queue.length; i++) if (queue[i].id === id) { entry = queue[i]; break; }
         if (!entry) return;                           // stale id (inventory edited) → skip
         cards.push(entry);
-        xs.push(EGYPT_GRID.colXs[s]);                 // keep each card at ITS slot's column
+        xs.push(grid.colXs[s]);                        // keep each card at ITS slot's column
       });
       return { topPct: topPct, xs: xs, cards: cards };
     }).filter(function (row) { return row.cards.length; });
   }
+
+  /* Egypt-specific bindings — SAME key it has always used, so save data from
+     before this generalization reads back identically. getSnapshot/
+     applySnapshot below still read/write KEY_EGYPT_MARKET directly. */
+  var KEY_EGYPT_MARKET = 'sog_egypt_market_state';
+  function _egyptMarketState()  { return _tieredMarketState(KEY_EGYPT_MARKET, _egyptTiers()); }
+  function _saveEgyptMarketState(st) { _saveTieredMarketState(KEY_EGYPT_MARKET, st); }
+  function _restockEgyptMarket() { return _restockTieredMarket(KEY_EGYPT_MARKET, _egyptTiers()); }
+  function _egyptShelves() { return _tieredShelves(KEY_EGYPT_MARKET, _egyptTiers(), EGYPT_GRID); }
 
   /* ══ TRADER SPEECH BUBBLE — reusable, MARKET TRADERS ONLY ═══════════════════
      Each market's trader is painted into its backdrop, so HIS lines appear in a
