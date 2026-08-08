@@ -182,11 +182,20 @@ function serialise(doc) {
   var s = HEADER + '\nwindow.SOG_MAP_DATA = {\n';
 
   /* ── Milestones ── the ordered story beats. Order matters here only for the
-     editor's scrubber; the game decides visibility from the flag. */
+     editor's scrubber; the game decides visibility from the flag. Milestones
+     are the one place left where a hand-written prose comment can still be
+     silently dropped: they aren't part of FIELDS/KNOWN (unknownFields()
+     never looks at doc.milestones, so a stray field here never fails a
+     save), but this loop only ever emits id/label/flag/note — anything else
+     hand-added to a milestone object round-trips in the editor's memory for
+     the session and then vanishes on the next save. `note` is the one
+     scalar this DOES write back, same "survives saving" contract as node
+     and prop notes — use it, not a // comment above the entry. */
   s += '\n  milestones: [\n';
   (doc.milestones || []).forEach(function (ms, i) {
     s += '    { id: ' + q(ms.id) + ', label: ' + q(ms.label) +
-         ', flag: ' + (ms.flag ? q(ms.flag) : 'null') + ' }' +
+         ', flag: ' + (ms.flag ? q(ms.flag) : 'null') +
+         (ms.note ? ', note: ' + q(ms.note) : '') + ' }' +
          (i < doc.milestones.length - 1 ? ',' : '') + '\n';
   });
   s += '  ],\n';

@@ -75,11 +75,7 @@ window.SOG_MAP_DATA = {
     { id: 'christianity-complete', label: 'Paul Giant beaten → opens what follows', flag: 'sog_node_paul_giant_beaten' },
     { id: 'constantine-beaten', label: 'Constantine defeated', flag: 'sog_node_constantine_serf_beaten' },
     { id: 'empire-complete', label: 'Constantine Giant beaten → opens what follows', flag: 'sog_node_constantine_giant_beaten' },
-    // DEV-ONLY gate. flag is never set by any game code — nothing stamps
-    // 'sog_dev_fixture_never_set', so _milestoneReached() reads it as false
-    // forever. Exists solely to hide dev/test fixtures (see 'spike-sargon-
-    // shadow' below) from real playthroughs. Not a story milestone.
-    { id: 'dev-fixture-never', label: 'DEV ONLY — never reached, gates test fixtures', flag: 'sog_dev_fixture_never_set' }
+    { id: 'dev-fixture-never', label: 'DEV ONLY — never reached, gates test fixtures', flag: 'sog_dev_fixture_never_set', note: 'Flag is never set by any game code — nothing stamps sog_dev_fixture_never_set, so _milestoneReached() reads it as false forever. Exists solely to hide dev/test fixtures (see spike-sargon-shadow) from real playthroughs. Not a story milestone.' }
   ],
 
   maps: {

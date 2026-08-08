@@ -11,6 +11,19 @@
 
    Same file-format precedent as data/map-data.js: a .js file assigning a
    global, not JSON, so it loads synchronously over file:// on Chromebooks.
+
+   ⚠ HAND-WRITTEN FOR NOW, BUT WON'T STAY THAT WAY. This file is going to get
+   the same treatment map-data.js already has: a level editor that loads it,
+   edits in memory, and re-serialises the whole file on save. That serialiser
+   will almost certainly be schema/field-table driven the same way
+   tools/map-editor/serve.js's serialise() is — which means, by construction,
+   it will only write the fields the level schema actually declares. Any // or
+   /* comment in this file — including this header — WILL be silently dropped
+   the first time a level gets saved through that editor, the same failure
+   map-data.js had for its milestones until this same session added a `note`
+   field to carry exactly this kind of prose. When the level schema is built:
+   give it its own `note`-equivalent field for anything that needs to survive
+   a save, and do not rely on hand comments in this file past that point.
    ══════════════════════════════════════════════════════════════════════════ */
 window.SOG_LEVEL_DATA = {
   levels: {
