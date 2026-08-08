@@ -1494,6 +1494,25 @@ var Overworld = (function () {
     // Clicking the Prehistory node ends the urgent idle pulse if active
     clearUrgentPulse();
 
+    // ── Data-driven levels (SOG_LEVEL_DATA) — level-editor spike. A node whose
+    //    id has an entry here is launched generically, with NO per-node branch
+    //    of its own. Everything below this block is the pre-existing if-chain,
+    //    kept as the fallback for every node not yet migrated to level data. ──
+    if (window.SOG_LEVEL_DATA && SOG_LEVEL_DATA.levels && SOG_LEVEL_DATA.levels[node.id]) {
+      isDialogueLocked = true;
+      cancelIdle();
+      walkPath(_routeTo(node.id), function () {
+        _fireWipeFromNode(node.id, function () {
+          if (!SOG.LevelRuntime.launch(node.id)) {
+            _clearWipe();
+            isDialogueLocked = false;
+            scheduleIdle();
+          }
+        });
+      });
+      return;
+    }
+
     // ── Walls of Uruk — Gilgamesh (difficulty-picker system) ──────────
     if (node.id === 'walls-of-uruk' && currentMapId === 'mesopotamia') {
       isDialogueLocked = true;
@@ -3879,7 +3898,51 @@ var Overworld = (function () {
   /* Region → market data. _enterMarket(regionId) reads this; 'mesopotamia' is the
      default so every existing call site is unchanged. Adding a future region's
      market is one entry here plus a node + click handler. */
+  /* SPIKE — throwaway third market, added only to confirm the market engine
+     (_enterMarket/_buildMarketCard/the purchase popup, AND now the tiered
+     restock+persistence engine above) is genuinely region-agnostic and not
+     secretly Egypt-shaped. TIERED shelf (Egypt's restocking shape, not
+     Mesopotamia's static one) — that's the part the level editor actually
+     has to author, per the level-editor-suite investigation. Own storage
+     key, own cards/prices/positions than either real market, so a passing
+     render+restock+purchase can't be coincidence. Delete this MARKETS entry
+     + SPIKE_MARKET_TIERS/SPIKE_MARKET_GRID/SPIKE_MARKET_INTRO +
+     window.SOG_DEBUG_openMarket once verified — none of this is real content. */
+  var SPIKE_MARKET_INTRO = [
+    { who: 'trader',   text: 'A market that has never existed until this moment.' },
+    { who: 'explorer', text: 'Neat.' }
+  ];
+  var SPIKE_MARKET_GRID = {
+    colXs:   [30, 50, 70],
+    rowTops: [15, 45],
+    cardW:   null,
+    cardH:   null
+  };
+  // Two 6-card queues (3 visible + 3 backfill each) — same shape as EGYPT_TIERS,
+  // deliberately different ids/prices. Avoids id 44 (Enkidu) on purpose: the
+  // unconditional Enkidu-lock check in _enterMarket applies to every market's
+  // shelves, so a level-data card list has to route around it (flagged in the
+  // investigation as the one un-generalized special case left in that path).
+  var SPIKE_MARKET_TIERS = [
+    { label: 'Tier 1', cards: [
+      { id: 34, price:  3 }, { id: 35, price:  3 }, { id: 56, price:  3 },
+      { id: 57, price:  4 }, { id: 58, price:  4 }, { id: 59, price:  4 }
+    ] },
+    { label: 'Tier 2', cards: [
+      { id: 38, price:  9 }, { id: 39, price:  9 }, { id: 40, price: 11 },
+      { id: 41, price: 11 }, { id: 42, price: 13 }, { id: 43, price: 13 }
+    ] }
+  ];
+  var KEY_SPIKE_MARKET = 'sog_spike_market_state';
   var MARKETS = {
+    'spike-market': {
+      bg:       'images/ui_images/mesomarket.jpg',
+      hudTitle: 'Spike Market',
+      shelves:  function () { return _tieredShelves(KEY_SPIKE_MARKET, SPIKE_MARKET_TIERS, SPIKE_MARKET_GRID); },
+      intro:    function () { return SPIKE_MARKET_INTRO; },
+      introKey: 'sog_spike_market_intro_seen',
+      postExit: false
+    },
     'mesopotamia': {
       bg:       'images/ui_images/mesomarket.jpg',
       hudTitle: 'Marketplace',   // HUD region label while inside; restored on exit
@@ -4605,6 +4668,10 @@ var Overworld = (function () {
     if (!dialogueStarted) dialogueStarted = maybePlayMesopotamiaArrival();
     if (!dialogueStarted) scheduleIdle();
   }
+
+  // SPIKE — console-only test hook for the throwaway 'spike-market' MARKETS
+  // entry above. Delete alongside it once verified.
+  window.SOG_DEBUG_openMarket = function (id) { _enterMarket(id); };
 
   /* ── Expose ────────────────────────────────────────────────── */
   return {

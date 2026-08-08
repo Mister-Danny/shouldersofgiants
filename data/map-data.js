@@ -359,6 +359,15 @@ window.SOG_MAP_DATA = {
         flagNudge: { dx: 0, dy: -2 },
         showFrom: 'hanging-gardens-revealed',
         note: 'Sparkle-revealed on the first overworld return after defeating Hammurabi. Positioned at the midpoint between Walls of Uruk and Akkad.'
+      },
+      {
+        id:    'spike-sargon-shadow',
+        name:  'Spike: Shadow of Sargon',
+        kind:  'battle',
+        image: 'images/metaworld/civilization nodes/sargon.png',
+        x: 15, y: 20,
+        scale: 1,
+        note: 'THROWAWAY — level-editor spike (see task in progress). Not gated by showFrom on purpose, for easy manual testing. Delete once the spike is verified; not part of the real map.'
       }
     ],
     exits: [
