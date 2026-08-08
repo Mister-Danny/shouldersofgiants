@@ -657,49 +657,11 @@ SOG.HammurabiBattle = (function () {
     { who: 'hammurabi', text: 'Now, you will obey.' }
   ];
 
-  // Semantic speaker → shared bubble element id (Hammurabi borrows the opponent box).
-  function _bubbleId(who) { return who === 'explorer' ? 'explorer' : 'otzi'; }
-
-  var _bleepCtx = null;
-  function getBleepCtx() {
-    if (_bleepCtx) return _bleepCtx;
-    try {
-      var Ctx = window.AudioContext || window.webkitAudioContext;
-      if (Ctx) _bleepCtx = new Ctx();
-    } catch (e) {}
-    return _bleepCtx;
-  }
   // Hammurabi's bleep matches his overworld HUD tone (square wave, 240 Hz).
   var BLEEP_PROFILES = {
     hammurabi: { freq: 240, wobble: 30, peak: 0.08, decay: 0.05, dur: 0.06, every: 2 },
     explorer:  { freq: 520, wobble: 30, peak: 0.08, decay: 0.05, dur: 0.06, every: 2 }
   };
-  function playBleep(who) {
-    var ctx = getBleepCtx();
-    if (!ctx) return;
-    if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (e) {} }
-    var p   = BLEEP_PROFILES[who] || BLEEP_PROFILES.hammurabi;
-    var now = ctx.currentTime;
-    var osc  = ctx.createOscillator();
-    var gain = ctx.createGain();
-    var freq = p.freq + (Math.random() - 0.5) * p.wobble;
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(freq, now);
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(p.peak * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1), now + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + p.dur);
-  }
-
-  function getBubbleEl(id) { return document.getElementById('adv-bubble-' + id); }
-  function hideBubbles() {
-    ['otzi', 'explorer'].forEach(function (id) {
-      var el = getBubbleEl(id);
-      if (el) el.classList.remove('is-visible', 'is-ready');
-    });
-  }
 
   // Swap the shared opponent bubble's portrait to Hammurabi for the battle; restore
   // it on teardown so other battles are unaffected.
@@ -717,138 +679,51 @@ SOG.HammurabiBattle = (function () {
     _origOtziBubbleSrc = null;
   }
 
-  var _dlg = {
-    lines: null, lineIdx: 0, isTyping: false, timer: null,
-    fullText: '', textEl: null, activeEl: null, clickHandler: null, onAllDone: null
-  };
-
   // Reveal-before-line gating: when a line is flagged `revealBefore`, the location
   // ability reveal plays to COMPLETION before that line is delivered. _revealFired
   // makes it fire once; _revealInProgress blocks input so the player can't click
-  // past the reveal (or skip the upcoming line) while it animates.
+  // past the reveal (or skip the upcoming line) while it animates. Slam-before-line
+  // is the same idea for the first gavel (tiles slam into place, no abilities yet).
+  // This gate is Hammurabi-only — every other boss's onLineGate is a no-op.
   var _revealFired = false;
   var _slamFired  = false;
   var _revealInProgress = false;
 
+  var _runner = SOG.DialogueRunner.create({
+    bleepProfiles:     BLEEP_PROFILES,
+    defaultProfileKey: 'hammurabi',
+    typeSpeedMs:       TYPE_SPEED_MS,
+    onLineGate: function (line, next) {
+      if (line.slamBefore && !_slamFired) {
+        _slamFired        = true;
+        _revealInProgress = true;
+        _slamLocations(function () {
+          _revealInProgress = false;
+          next();   // _slamFired now set → falls through to deliver the line
+        });
+        return true;
+      }
+      if (line.revealBefore && !_revealFired) {
+        _revealFired      = true;
+        _revealInProgress = true;
+        _revealLocationAbilities(function () {
+          _revealInProgress = false;
+          next();   // _revealFired now set → falls through to deliver the line
+        });
+        return true;
+      }
+      return false;
+    },
+    isAdvanceBlocked: function () { return _revealInProgress; }   // ignore clicks while the reveal plays to completion
+  });
   function runLines(lines, onAllDone) {
-    if (window.SOG && SOG.music && typeof SOG.music.duckForDialogue === 'function') SOG.music.duckForDialogue(true);   // duck battle music during dialogue
-    _dlg.lines     = lines;
-    _dlg.lineIdx   = 0;
-    _dlg.onAllDone = onAllDone;
-    _revealFired      = false;
-    _slamFired        = false;
+    _revealFired = false;
+    _slamFired = false;
     _revealInProgress = false;
-    _dlg.clickHandler = function (e) {
-      if (e.type === 'keydown' && e.key !== ' ' && e.key !== 'Enter') return;
-      if (e.type === 'keydown') e.preventDefault();
-      advanceLine();
-    };
-    // Defer so the click that ended the previous phase doesn't skip line 1.
-    setTimeout(function () {
-      document.addEventListener('click',   _dlg.clickHandler);
-      document.addEventListener('keydown', _dlg.clickHandler);
-    }, 0);
-    showLine();
+    _runner.runLines(lines, onAllDone);
   }
-
-  function showLine() {
-    var line = _dlg.lines[_dlg.lineIdx];
-    if (!line) { finishRunner(); return; }
-
-    // Reveal-BEFORE-line: the location-ability reveal must COMPLETELY FINISH before
-    // this line is delivered. The prior bubble lingers while the nameplates shake +
-    // the laws fade in; once the reveal's onDone fires we re-enter and Hammurabi
-    // speaks. Input stays blocked (advanceLine guards on _revealInProgress) so the
-    // player can't click past the reveal or skip the upcoming line.
-    // Slam-BEFORE-line: first gavel — the tiles slam into place (no abilities yet).
-    if (line.slamBefore && !_slamFired) {
-      _slamFired        = true;
-      _revealInProgress = true;
-      _slamLocations(function () {
-        _revealInProgress = false;
-        showLine();   // _slamFired now set → falls through to deliver the line
-      });
-      return;
-    }
-
-    if (line.revealBefore && !_revealFired) {
-      _revealFired      = true;
-      _revealInProgress = true;
-      _revealLocationAbilities(function () {
-        _revealInProgress = false;
-        showLine();   // _revealFired now set → falls through to deliver the line
-      });
-      return;
-    }
-
-    var thisId  = _bubbleId(line.who);
-    var otherId = (thisId === 'explorer') ? 'otzi' : 'explorer';
-    var otherEl = getBubbleEl(otherId);
-    if (otherEl) otherEl.classList.remove('is-visible', 'is-ready');
-
-    var el = getBubbleEl(thisId);
-    if (!el)     { _dlg.lineIdx++; showLine(); return; }
-    var textEl = el.querySelector('.adv-bubble-text');
-    if (!textEl) { _dlg.lineIdx++; showLine(); return; }
-
-    textEl.textContent = '';
-    el.classList.add('is-visible');
-    el.classList.remove('is-ready');
-
-    _dlg.fullText = line.text;
-    _dlg.textEl   = textEl;
-    _dlg.isTyping = true;
-    _dlg.activeEl = el;
-
-    var i = 0, bleepCount = 0;
-    if (_dlg.timer) clearInterval(_dlg.timer);
-    _dlg.timer = setInterval(function () {
-      i++;
-      textEl.textContent = line.text.slice(0, i);
-      var c = line.text.charAt(i - 1);
-      if (c && c !== ' ' && c !== '\n') {
-        var p = BLEEP_PROFILES[line.who] || BLEEP_PROFILES.hammurabi;
-        bleepCount++;
-        if (bleepCount >= p.every) { bleepCount = 0; playBleep(line.who); }
-      }
-      if (i >= line.text.length) {
-        clearInterval(_dlg.timer);
-        _dlg.timer    = null;
-        _dlg.isTyping = false;
-        el.classList.add('is-ready');
-      }
-    }, TYPE_SPEED_MS);
-  }
-
-  function advanceLine() {
-    if (_revealInProgress) return;   // ignore clicks while the reveal plays to completion
-    if (_dlg.isTyping) {
-      if (_dlg.timer) { clearInterval(_dlg.timer); _dlg.timer = null; }
-      if (_dlg.textEl) _dlg.textEl.textContent = _dlg.fullText;
-      _dlg.isTyping = false;
-      if (_dlg.activeEl) _dlg.activeEl.classList.add('is-ready');
-      return;
-    }
-    _dlg.lineIdx++;
-    if (_dlg.lineIdx >= _dlg.lines.length) { finishRunner(); return; }
-    showLine();
-  }
-
-  function finishRunner() {
-    if (window.SOG && SOG.music && typeof SOG.music.duckForDialogue === 'function') SOG.music.duckForDialogue(false);   // restore battle music after dialogue
-    if (_dlg.clickHandler) {
-      document.removeEventListener('click',   _dlg.clickHandler);
-      document.removeEventListener('keydown', _dlg.clickHandler);
-      _dlg.clickHandler = null;
-    }
-    if (_dlg.timer) { clearInterval(_dlg.timer); _dlg.timer = null; }
-    _dlg.isTyping = false;
-    hideBubbles();
-    var onDone     = _dlg.onAllDone;
-    _dlg.onAllDone = null;
-    _dlg.lines     = null;
-    if (onDone) onDone();
-  }
+  function hideBubbles()   { _runner.hideBubbles(); }
+  function getBubbleEl(id) { return _runner.getBubbleEl(id); }
 
   /* Opening dialogue (first-time only; skipped → immediate onComplete on re-entry). */
   function _runOpeningDialogue(onComplete) {

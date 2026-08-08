@@ -54,157 +54,21 @@ SOG.GilgameshBattle = (function () {
   /* ── Logging ─────────────────────────────────────────────────── */
   function log(msg) { if (window.SOG_DEBUG) console.log('[Adventure/Gilgamesh] ' + msg); }
 
-  /* ── Web Audio bleeps ────────────────────────────────────────── */
-  var _bleepCtx = null;
-  function getBleepCtx() {
-    if (_bleepCtx) return _bleepCtx;
-    try {
-      var Ctx = window.AudioContext || window.webkitAudioContext;
-      if (Ctx) _bleepCtx = new Ctx();
-    } catch (e) {}
-    return _bleepCtx;
-  }
-
+  /* ── Bleep profiles + shared dialogue runner (js/game/dialogue-runner.js) ── */
   var BLEEP_PROFILES = {
     otzi:     { freq: 210, wobble: 20, wave: 'triangle', peak: 0.07, decay: 0.07, dur: 0.08, every: 2 },
     explorer: { freq: 520, wobble: 30, wave: 'square',   peak: 0.08, decay: 0.05, dur: 0.06, every: 2 }
   };
-
-  function playBleep(who) {
-    var ctx = getBleepCtx();
-    if (!ctx) return;
-    if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (e) {} }
-    var p   = BLEEP_PROFILES[who] || BLEEP_PROFILES.otzi;
-    var now = ctx.currentTime;
-    var osc  = ctx.createOscillator();
-    var gain = ctx.createGain();
-    var freq = p.freq + (Math.random() - 0.5) * p.wobble;
-    osc.type = p.wave;
-    osc.frequency.setValueAtTime(freq, now);
-    gain.gain.setValueAtTime(0,        now);
-    gain.gain.linearRampToValueAtTime(p.peak * (window.SOG && window.SOG.sfx ? window.SOG.sfx.factor() : 1), now + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + p.decay);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + p.dur);
-  }
-
-  /* ── Bubble helpers ──────────────────────────────────────────── */
-  function getBubbleEl(who) {
-    return document.getElementById('adv-bubble-' + who);
-  }
-
-  function hideBubbles() {
-    ['otzi', 'explorer'].forEach(function (who) {
-      var el = getBubbleEl(who);
-      if (el) el.classList.remove('is-visible', 'is-ready');
-    });
-  }
-
-  /* ── Dialogue runner (click-to-advance typewriter) ───────────── */
-  var _dlg = {
-    lines:        null,
-    lineIdx:      0,
-    isTyping:     false,
-    timer:        null,
-    fullText:     '',
-    textEl:       null,
-    activeEl:     null,
-    clickHandler: null,
-    onAllDone:    null
-  };
-
-  function runLines(lines, onAllDone) {
-    if (window.SOG && SOG.music && typeof SOG.music.duckForDialogue === 'function') SOG.music.duckForDialogue(true);   // duck battle music during dialogue
-    _dlg.lines     = lines;
-    _dlg.lineIdx   = 0;
-    _dlg.onAllDone = onAllDone;
-
-    _dlg.clickHandler = function (e) {
-      if (e.type === 'keydown' && e.key !== ' ' && e.key !== 'Enter') return;
-      if (e.type === 'keydown') e.preventDefault();
-      advanceLine();
-    };
-    // Defer so the click that ended the previous phase doesn't skip line 1.
-    setTimeout(function () {
-      document.addEventListener('click',   _dlg.clickHandler);
-      document.addEventListener('keydown', _dlg.clickHandler);
-    }, 0);
-
-    showLine();
-  }
-
-  function showLine() {
-    var line = _dlg.lines[_dlg.lineIdx];
-    if (!line) { finishRunner(); return; }
-
-    // Hide the other speaker's bubble
-    var other = (line.who === 'otzi') ? 'explorer' : 'otzi';
-    var otherEl = getBubbleEl(other);
-    if (otherEl) otherEl.classList.remove('is-visible', 'is-ready');
-
-    var el     = getBubbleEl(line.who);
-    if (!el)     { _dlg.lineIdx++; showLine(); return; }
-    var textEl = el.querySelector('.adv-bubble-text');
-    if (!textEl) { _dlg.lineIdx++; showLine(); return; }
-
-    textEl.textContent = '';
-    el.classList.add('is-visible');
-    el.classList.remove('is-ready');
-
-    _dlg.fullText = line.text;
-    _dlg.textEl   = textEl;
-    _dlg.isTyping = true;
-    _dlg.activeEl = el;
-
-    var i = 0, bleepCount = 0;
-    if (_dlg.timer) clearInterval(_dlg.timer);
-    _dlg.timer = setInterval(function () {
-      i++;
-      textEl.textContent = line.text.slice(0, i);
-      var c = line.text.charAt(i - 1);
-      if (c && c !== ' ' && c !== '\n') {
-        var p = BLEEP_PROFILES[line.who] || BLEEP_PROFILES.otzi;
-        bleepCount++;
-        if (bleepCount >= p.every) { bleepCount = 0; playBleep(line.who); }
-      }
-      if (i >= line.text.length) {
-        clearInterval(_dlg.timer);
-        _dlg.timer    = null;
-        _dlg.isTyping = false;
-        el.classList.add('is-ready');
-      }
-    }, TYPE_SPEED_MS);
-  }
-
-  function advanceLine() {
-    if (_dlg.isTyping) {
-      if (_dlg.timer) { clearInterval(_dlg.timer); _dlg.timer = null; }
-      if (_dlg.textEl) _dlg.textEl.textContent = _dlg.fullText;
-      _dlg.isTyping = false;
-      if (_dlg.activeEl) _dlg.activeEl.classList.add('is-ready');
-      return;
-    }
-    _dlg.lineIdx++;
-    if (_dlg.lineIdx >= _dlg.lines.length) { finishRunner(); return; }
-    showLine();
-  }
-
-  function finishRunner() {
-    if (window.SOG && SOG.music && typeof SOG.music.duckForDialogue === 'function') SOG.music.duckForDialogue(false);   // restore battle music after dialogue
-    if (_dlg.clickHandler) {
-      document.removeEventListener('click',   _dlg.clickHandler);
-      document.removeEventListener('keydown', _dlg.clickHandler);
-      _dlg.clickHandler = null;
-    }
-    if (_dlg.timer) { clearInterval(_dlg.timer); _dlg.timer = null; }
-    _dlg.isTyping = false;
-    hideBubbles();
-    var onDone    = _dlg.onAllDone;
-    _dlg.onAllDone = null;
-    _dlg.lines     = null;
-    if (onDone) onDone();
-  }
+  var _runner = SOG.DialogueRunner.create({
+    bleepProfiles:     BLEEP_PROFILES,
+    defaultProfileKey: 'otzi',
+    typeSpeedMs:       TYPE_SPEED_MS
+  });
+  function runLines(lines, onAllDone) { _runner.runLines(lines, onAllDone); }
+  function hideBubbles()              { _runner.hideBubbles(); }
+  function getBubbleEl(who)           { return _runner.getBubbleEl(who); }
+  function playBleep(who)             { _runner.playBleep(who); }
+  function getBleepCtx()              { return _runner.getBleepCtx(); }
 
   /* ── Turn counter ────────────────────────────────────────────── */
   function setTurnCounter(current, total) {
