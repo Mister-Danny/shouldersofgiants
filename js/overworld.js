@@ -4670,8 +4670,15 @@ var Overworld = (function () {
   }
 
   // SPIKE — console-only test hook for the throwaway 'spike-market' MARKETS
-  // entry above. Delete alongside it once verified.
-  window.SOG_DEBUG_openMarket = function (id) { _enterMarket(id); };
+  // entry above. Gated on window.SOG_DEBUG (checked at CALL time, not here at
+  // definition time — it defaults false in production, per preload.js, and is
+  // only ever flipped true by a developer typing it into the console) so a
+  // student poking devtools finds a function that refuses to do anything.
+  // Delete alongside spike-market once verified.
+  window.SOG_DEBUG_openMarket = function (id) {
+    if (!window.SOG_DEBUG) { console.warn('[Overworld] SOG_DEBUG_openMarket requires window.SOG_DEBUG = true first.'); return; }
+    _enterMarket(id);
+  };
 
   /* ── Expose ────────────────────────────────────────────────── */
   return {

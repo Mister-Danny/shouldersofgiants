@@ -74,7 +74,12 @@ window.SOG_MAP_DATA = {
     { id: 'paul-beaten', label: 'Paul defeated', flag: 'sog_node_paul_serf_beaten' },
     { id: 'christianity-complete', label: 'Paul Giant beaten → opens what follows', flag: 'sog_node_paul_giant_beaten' },
     { id: 'constantine-beaten', label: 'Constantine defeated', flag: 'sog_node_constantine_serf_beaten' },
-    { id: 'empire-complete', label: 'Constantine Giant beaten → opens what follows', flag: 'sog_node_constantine_giant_beaten' }
+    { id: 'empire-complete', label: 'Constantine Giant beaten → opens what follows', flag: 'sog_node_constantine_giant_beaten' },
+    // DEV-ONLY gate. flag is never set by any game code — nothing stamps
+    // 'sog_dev_fixture_never_set', so _milestoneReached() reads it as false
+    // forever. Exists solely to hide dev/test fixtures (see 'spike-sargon-
+    // shadow' below) from real playthroughs. Not a story milestone.
+    { id: 'dev-fixture-never', label: 'DEV ONLY — never reached, gates test fixtures', flag: 'sog_dev_fixture_never_set' }
   ],
 
   maps: {
@@ -367,7 +372,8 @@ window.SOG_MAP_DATA = {
         image: 'images/metaworld/civilization nodes/sargon.png',
         x: 15, y: 20,
         scale: 1,
-        note: 'THROWAWAY — level-editor spike (see task in progress). Not gated by showFrom on purpose, for easy manual testing. Delete once the spike is verified; not part of the real map.'
+        showFrom: 'dev-fixture-never',
+        note: 'THROWAWAY — level-editor spike (see task in progress). Gated behind the dev-fixture-never milestone (flag never set by any game code) so it cannot appear in a real playthrough. To test manually: localStorage.setItem(\'sog_dev_fixture_never_set\',\'true\') then reload, or just call SOG.LevelRuntime.launch(\'spike-sargon-shadow\') from console. Delete once the spike is verified; not part of the real map.'
       }
     ],
     exits: [
