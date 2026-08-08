@@ -583,21 +583,35 @@ function onDragEnd() {
   drag = null;
 }
 
-function currentPos(t) {
-  if (t.type === 'node') { const n = node(t.id); return { x: n.x, y: n.y }; }
-  if (t.type === 'exit') { const x = exit(t.id); return { x: x.zone.x, y: x.zone.y }; }
-  if (t.type === 'prop')  { const p = prop(t.index); return { x: p.x, y: p.y }; }
-  if (t.type === 'spawn') { return { x: maps[mapId].spawn.x, y: maps[mapId].spawn.y }; }
-  return bend(t.wpIndex);
-}
+/* One entry per draggable/selectable thing. Adding a new kind of stage
+   object means adding one entry here — currentPos/setPos, drag, arrow-key
+   nudge, and the position readout all go through this, so nothing can add a
+   kind here and forget to wire it into one of those call sites. */
+const KINDS = {
+  node:  {
+    get: t => { const n = node(t.id); return { x: n.x, y: n.y }; },
+    set: (t, x, y) => { const n = node(t.id); n.x = r2(x); n.y = r2(y); }
+  },
+  exit:  {
+    get: t => { const x = exit(t.id); return { x: x.zone.x, y: x.zone.y }; },
+    set: (t, x, y) => { const e = exit(t.id); e.zone.x = r2(x); e.zone.y = r2(y); }
+  },
+  prop:  {
+    get: t => { const p = prop(t.index); return { x: p.x, y: p.y }; },
+    set: (t, x, y) => { const p = prop(t.index); p.x = r2(x); p.y = r2(y); }
+  },
+  spawn: {
+    get: () => ({ x: maps[mapId].spawn.x, y: maps[mapId].spawn.y }),
+    set: (t, x, y) => { const sp = maps[mapId].spawn; sp.x = r2(x); sp.y = r2(y); }
+  },
+  wp:    {
+    get: t => bend(t.wpIndex),
+    set: (t, x, y) => { const p = bend(t.wpIndex); if (p) { p.x = r2(x); p.y = r2(y); } }
+  }
+};
 
-function setPos(t, x, y) {
-  if (t.type === 'node')      { const n = node(t.id); n.x = r2(x); n.y = r2(y); }
-  else if (t.type === 'exit') { const e = exit(t.id); e.zone.x = r2(x); e.zone.y = r2(y); }
-  else if (t.type === 'prop')  { const p = prop(t.index); p.x = r2(x); p.y = r2(y); }
-  else if (t.type === 'spawn') { const sp = maps[mapId].spawn; sp.x = r2(x); sp.y = r2(y); }
-  else                         { const p = bend(t.wpIndex); if (p) { p.x = r2(x); p.y = r2(y); } }
-}
+function currentPos(t) { return (KINDS[t.type] || KINDS.wp).get(t); }
+function setPos(t, x, y) { return (KINDS[t.type] || KINDS.wp).set(t, x, y); }
 
 /* Cursor position as a percentage of the stage. This is the only place screen
    pixels touch the data model. */
