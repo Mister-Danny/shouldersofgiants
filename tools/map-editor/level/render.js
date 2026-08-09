@@ -4,6 +4,7 @@ import { State as mapState } from '../map/state.js';
 import { State, markDirty } from './state.js';
 import {
   bindField, setLevelField, selectLevel, createLevel, deleteLevel,
+  setTurnCount, setCapitalForTurn,
   setDeckIds, addDialogueLine, removeDialogueLine, setDialogueLine
 } from './commands.js';
 import { pickDeck } from './deck-picker.js';
@@ -89,21 +90,45 @@ function formHtml(id, lvl) {
 
 function structureSection(lvl) {
   const s = lvl.structure || {};
-  const r = lvl.resource || {};
   return `
     <div class="form-section">
       <h3>Structure</h3>
       <div class="f2">
-        <div class="f"><label>turns</label><input type="number" data-path="structure.turns" data-num="1" value="${s.turns ?? 4}"></div>
+        <div class="f"><label>turns</label><input type="number" min="1" data-resize-turns="1" value="${s.turns ?? 4}"></div>
         <div class="f"><label>locations</label><input type="number" data-path="structure.locationsCount" data-num="1" value="${s.locationsCount ?? 3}"></div>
       </div>
       <div class="f2">
         <div class="f"><label>slots per location</label><input type="number" data-path="structure.slotsPerLocation" data-num="1" value="${s.slotsPerLocation ?? 4}"></div>
         <div class="f"><label>hand start</label><input type="number" data-path="structure.handStart" data-num="1" value="${s.handStart ?? 4}"></div>
       </div>
-      <div class="f2">
-        <div class="f"><label>max hand size</label><input type="number" data-path="structure.maxHandSize" data-num="1" value="${s.maxHandSize ?? 7}"></div>
-        <div class="f"><label>capital per turn</label><input type="number" data-path="resource.capital" data-num="1" value="${r.capital ?? 5}"></div>
+      <div class="f"><label>max hand size</label><input type="number" data-path="structure.maxHandSize" data-num="1" value="${s.maxHandSize ?? 7}"></div>
+    </div>
+    ${capitalSection(lvl)}`;
+}
+
+/* Capital per turn, one box per turn instead of one flat rate — changing
+   "turns" above resizes this list (new turns default to the level's
+   current flat rate; shrinking drops the trailing turns and keeps the
+   rest). See commands.js's setTurnCount/setCapitalForTurn.
+
+   A level with no resource.capitalByTurn yet (hand-written, or authored
+   before this existed — e.g. the spike) shows a DERIVED array here, the
+   flat resource.capital repeated once per turn, purely for display; commands.js
+   only actually writes the real array the first time a box is touched. */
+function capitalSection(lvl) {
+  const turns = (lvl.structure && lvl.structure.turns) || 0;
+  const stored = (lvl.resource && lvl.resource.capitalByTurn) || [];
+  const fallback = (lvl.resource && lvl.resource.capital) ?? 5;
+  const perTurn = Array.from({ length: turns }, (_, i) => stored[i] != null ? stored[i] : fallback);
+  return `
+    <div class="form-section">
+      <h3>Capital per turn</h3>
+      <div class="turn-grid">
+        ${perTurn.map((amt, i) => `
+          <div class="f" style="flex:0 0 90px">
+            <label>Turn ${i + 1}</label>
+            <input type="number" min="0" data-capital-turn="${i}" value="${amt}">
+          </div>`).join('')}
       </div>
     </div>`;
 }
@@ -262,6 +287,21 @@ function wireForm(id, lvl) {
   // comment). Refresh once on blur, so it catches up as soon as you leave
   // the field instead of staying wrong until some unrelated repaint.
   $$('[data-blur-rerender]').forEach(el => { el.addEventListener('blur', () => requestRender()); });
+
+  // Turns resizes the per-turn capital list, so it has to rerender — but
+  // only on 'change' (blur/Enter), never on 'input', or typing "10" would
+  // resize/rerender after the "1" and drop focus mid-keystroke.
+  const turnsEl = $('[data-resize-turns]');
+  if (turnsEl) turnsEl.addEventListener('change', () => {
+    const n = Math.max(1, Number(turnsEl.value) || 1);
+    turnsEl.value = n;
+    setTurnCount(n);
+  });
+  // Per-turn capital boxes: plain number inputs, no rerender needed (nothing
+  // else on screen reflects a single turn's value), so typing is safe as-is.
+  $$('[data-capital-turn]').forEach(el => {
+    el.addEventListener('input', () => setCapitalForTurn(Number(el.dataset.capitalTurn), Number(el.value) || 0));
+  });
 
   const dp = $('#lvl-pick-ai-deck');
   if (dp) dp.onclick = () => {

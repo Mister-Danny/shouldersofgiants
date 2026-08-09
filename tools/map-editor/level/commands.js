@@ -50,7 +50,7 @@ function blankLevel() {
     kind: 'battle',
     tiers: 2,
     structure: { turns: 4, locationsCount: 3, slotsPerLocation: 4, handStart: 4, maxHandSize: 7 },
-    resource: { model: 'capital', capital: 5, resetEachTurn: true },
+    resource: { model: 'capital', capital: 5, resetEachTurn: true, capitalByTurn: [5, 5, 5, 5] },
     draw: { model: 'replenish' },
     decks: {
       player: { source: 'active-deck', shuffle: true },
@@ -136,6 +136,49 @@ export function bindField(selector, ev, path, transform, opts) {
     setLevelField(path, transform ? transform(e.target.value) : e.target.value);
     if (opts && opts.rerender) requestRender();
   });
+}
+
+/* Capital is authored per turn, not as one flat number — resource.
+   capitalByTurn holds one entry per turn (js/game.js's _capitalForTurn
+   reads capitalByTurn[turn-1], falling back to the old flat resource.
+   capital only for hand-written bosses that never set the array at all).
+   Changing the turn count resizes the array: growing keeps every existing
+   turn's value and defaults new turns to the level's current flat rate
+   (falling back to 5 only if that's also unset — matches every hand-
+   written boss), shrinking drops the trailing turns. resource.capital is
+   kept mirroring turn 1 throughout — not shown in the form any more, but
+   the engine's fallback path still reads it, so it can't go stale.
+
+   A level authored before this feature existed (or hand-written, like the
+   spike) has no capitalByTurn at all — render.js's capitalSection() shows
+   it a DERIVED array (the flat rate repeated) purely for display, without
+   touching State. The actual array only gets created here, lazily, the
+   first time an author edits a turn box or the turn count — viewing an
+   old-style level never marks it dirty by itself. */
+export function setTurnCount(n) {
+  snapshot();
+  const lvl = State.levels[State.levelId];
+  const fallback = lvl.resource.capital ?? 5;
+  const old = (lvl.resource.capitalByTurn || []).slice();
+  const next = [];
+  for (let i = 0; i < n; i++) next.push(old[i] != null ? old[i] : fallback);
+  lvl.resource.capitalByTurn = next;
+  lvl.resource.capital = next[0];
+  lvl.structure.turns = n;
+  markDirty();
+  requestRender();
+}
+
+export function setCapitalForTurn(index, value) {
+  snapshotOnce();
+  const lvl = State.levels[State.levelId];
+  if (!lvl.resource.capitalByTurn) {
+    const fallback = lvl.resource.capital ?? 5;
+    lvl.resource.capitalByTurn = Array((lvl.structure && lvl.structure.turns) || 0).fill(fallback);
+  }
+  lvl.resource.capitalByTurn[index] = value;
+  if (index === 0) lvl.resource.capital = value;
+  markDirty();
 }
 
 export function setDeckIds(who, ids) {

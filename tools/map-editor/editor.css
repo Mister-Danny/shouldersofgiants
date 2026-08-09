@@ -352,6 +352,8 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 .form-section h4:first-child { margin-top: 0; }
 
+.turn-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* ── Deck picker modal ────────────────────────────────────────────────── */
 .deck-picker { display: flex; flex-direction: column; gap: 10px; height: 58vh; }
 .deck-picker-filters { display: flex; gap: 8px; flex: 0 0 auto; }

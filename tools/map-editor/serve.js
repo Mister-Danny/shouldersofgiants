@@ -656,6 +656,20 @@ function validateLevel(doc) {
     if (lvl.kind === 'market') return 'level "' + id + '" is kind "market" — not wired in js/level-runtime.js yet, only "battle" is';
     if (lvl.tiers !== 1 && lvl.tiers !== 2) return 'level "' + id + '" has tiers ' + lvl.tiers + ', expected 1 or 2';
 
+    // capitalByTurn is optional (js/game.js falls back to the flat resource.
+    // capital when absent — see _capitalForTurn), but if present it has to
+    // cover every turn or the last turns would silently read undefined.
+    var cbt = lvl.resource && lvl.resource.capitalByTurn;
+    if (cbt) {
+      if (!Array.isArray(cbt) || cbt.length !== lvl.structure.turns) {
+        return 'level "' + id + '" has resource.capitalByTurn with ' + (cbt.length || 0) +
+               ' entries, but structure.turns is ' + lvl.structure.turns + ' — needs one entry per turn';
+      }
+      for (var ci = 0; ci < cbt.length; ci++) {
+        if (!isNum(cbt[ci])) return 'level "' + id + '" has a non-numeric capitalByTurn entry at turn ' + (ci + 1);
+      }
+    }
+
     var locs = lvl.locations;
     if (!Array.isArray(locs) || locs.length !== 3) return 'level "' + id + '" needs exactly 3 locations, has ' + (locs ? locs.length : 0);
     for (var li = 0; li < locs.length; li++) {
@@ -737,7 +751,9 @@ function serialiseLevel(id, lvl) {
   s += '      },\n';
 
   s += '      resource: { model: ' + q(lvl.resource.model) + ', capital: ' + num(lvl.resource.capital) +
-       (lvl.resource.resetEachTurn ? ', resetEachTurn: true' : '') + ' },\n';
+       (lvl.resource.resetEachTurn ? ', resetEachTurn: true' : '') +
+       (lvl.resource.capitalByTurn ? ', capitalByTurn: [' + lvl.resource.capitalByTurn.map(num).join(', ') + ']' : '') +
+       ' },\n';
   s += '      draw:     { model: ' + q(lvl.draw.model) + ' },\n\n';
 
   s += '      decks: {\n';

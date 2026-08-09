@@ -291,8 +291,8 @@
 
     G.turn              = 1;
     G.phase             = 'select';
-    G.capital           = cfg.resource.capital;
-    G.turnStartCapital  = cfg.resource.capital;
+    G.capital           = _capitalForTurn(cfg.resource, G.turn);
+    G.turnStartCapital  = G.capital;
     G.playerFirst       = Math.random() < 0.5;
     showRevealFirstHighlight(G.playerFirst);
     G.playerRevealQueue = [];
@@ -1512,6 +1512,20 @@
 
 
 
+  /* Per-turn capital override. resource.capitalByTurn is optional and
+     level-editor-authored — every hand-written boss config only ever sets
+     resource.capital (a flat number), so capitalByTurn is undefined for all
+     of them and this always falls through to the old behavior unchanged.
+     1-indexed turn in, capitalByTurn is 0-indexed (turn 1 -> index 0). Falls
+     back to the flat capital for any turn past the array's end, which won't
+     happen for editor-authored levels (the form keeps the array's length in
+     sync with structure.turns) but keeps this safe regardless. */
+  function _capitalForTurn(resource, turn) {
+    var perTurn = resource.capitalByTurn;
+    if (perTurn && perTurn[turn - 1] != null) return perTurn[turn - 1];
+    return resource.capital;
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      NEXT TURN / END GAME
   ═══════════════════════════════════════════════════════════════ */
@@ -1531,11 +1545,13 @@
     }
     /* Capital reset via config.resource (was hardcoded CAPITAL). 'none' holds
        capital at 0 (future capital-less battles); any other model resets to
-       resource.capital + bonus. Arcadium (model 'capital', capital 5) is
+       _capitalForTurn(resource, G.turn) + bonus — resource.capital unless a
+       level-editor level sets resource.capitalByTurn, a flat number for
+       every hand-written boss. Arcadium (model 'capital', capital 5) is
        identical to the old CAPITAL + bonus. The 'none' branch is unreached
        by Arcadium. */
     var _res = G.config.resource;
-    G.capital  = (_res.model === 'none') ? 0 : (_res.capital + G.bonusCapitalNextTurn);
+    G.capital  = (_res.model === 'none') ? 0 : (_capitalForTurn(_res, G.turn) + G.bonusCapitalNextTurn);
     G.turnStartCapital     = G.capital;
     G.bonusCapitalNextTurn = 0;
     SOG.input.resetDragInfo();
