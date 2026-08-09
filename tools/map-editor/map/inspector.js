@@ -1,7 +1,12 @@
 import { $, esc, r2 } from '../shared/utils.js';
 import { requestRender } from '../shared/notify.js';
+import { requestConfigureLevel } from '../shared/navigate.js';
 import { State, CSS_SIZED, markDirty, node, exit, prop } from './state.js';
 import { bind, snapshot, snapshotOnce, deleteSelection } from './commands.js';
+// Read-only cross-reference into the OTHER document, purely to know whether
+// this node already has a level authored — never mutated from here, and
+// level/state.js has zero imports of its own, so this can't become a cycle.
+import { State as levelState } from '../level/state.js';
 
 /* ── Inspector ────────────────────────────────────────────────────────────
    Painted BY render.js (render() calls renderInspector as its last step —
@@ -59,6 +64,8 @@ function renderInspector() {
   bind('#i-note',  'input', v => { if (v) n.note = v; else delete n.note; });
   $('#i-flip').onchange = e => { if (e.target.checked) n.flipX = true; else delete n.flipX; markDirty(); requestRender(); };
   $('#i-del').onclick = () => deleteSelection();
+  const cfgBtn = $('#i-configure-level');
+  if (cfgBtn) cfgBtn.onclick = () => requestConfigureLevel(n.id, n.kind);
 }
 
 /* Boss ladder. `tiers: 2` is what makes a node draw Serf and Giant flags; the
@@ -157,18 +164,29 @@ function bindGates(o) {
 }
 
 /* Whether the game has a click handler for this node id. The editor cannot make
-   a node DO anything — onNodeClick still dispatches on literal id — so saying so
-   per-node is more useful than a blanket warning. */
+   a node DO anything by itself — onNodeClick dispatches on literal id — so
+   saying so per-node is more useful than a blanket warning. As of the level
+   editor, "wired" has two independent sources: this hand-maintained set of
+   ids overworld.js's if-chain still handles directly, OR a data-driven entry
+   in level-data.js (onNodeClick checks that FIRST, unconditionally, before
+   ever reaching this list — see js/overworld.js). Only 'battle' offers the
+   Configure/Edit path: 'market' levels aren't wired in js/level-runtime.js
+   yet, so pairing one would be a dead end the level form can't save. */
 const WIRED_NODES = new Set([
   'walls-of-uruk', 'market', 'sargon', 'hammurabi', 'hanging-gardens',
   'double-crown', 'egypt-market', 'prehistory', 'egypt-signpost'
 ]);
 function src2(n) {
-  if (WIRED_NODES.has(n.id)) return '';
-  return `<p class="warn"><b>Nothing happens when this node is clicked.</b>
+  const hasLevel = n.kind === 'battle' && !!(levelState.levels && levelState.levels[n.id]);
+  const wired = WIRED_NODES.has(n.id) || hasLevel;
+  let html = wired ? '' : `<p class="warn"><b>Nothing happens when this node is clicked.</b>
     The game dispatches clicks on literal node id in <code>onNodeClick</code>, and
     there is no branch for <code>${esc(n.id)}</code> yet. Position it here, then ask
     Claude to wire up the ${esc(n.kind || 'battle')}.</p>`;
+  if (n.kind === 'battle') {
+    html += `<div class="rowbtns"><button class="ghost sm" id="i-configure-level">${hasLevel ? 'Edit' : 'Configure'} battle →</button></div>`;
+  }
+  return html;
 }
 
 /* Topography inspector. Props have rotation and a Y flip that nodes do not —

@@ -1,9 +1,11 @@
 import { $, $$ } from './shared/utils.js';
 import { setActiveTab } from './shared/active-tab.js';
+import { onConfigureLevel } from './shared/navigate.js';
 import { State as mapState } from './map/state.js';
 import { State as levelState } from './level/state.js';
 import { initMapEditor } from './map/app.js';
 import { initLevelEditor } from './level/app.js';
+import { createLevel } from './level/commands.js';
 
 /* ── Shell ────────────────────────────────────────────────────────────────
    Owns exactly one thing: which document is on screen. Both editors mount
@@ -37,6 +39,17 @@ function switchTo(id) {
 
 $$('#workspace-tabs button').forEach(b => {
   b.onclick = () => switchTo(b.dataset.workspace);
+});
+
+// map/inspector.js's "Configure battle →" button (shared/navigate.js) — it
+// can't import the Level tab's own modules (map/ has no business depending
+// on level/), so it asks the shell to do both halves: switch tabs, then
+// select-or-create that node's level. createLevel() already handles both
+// cases (existing id → select; new id → create then select).
+onConfigureLevel((nodeId, kind) => {
+  if (kind !== 'battle') return;   // 'market' isn't wired in level-runtime.js yet
+  switchTo('level');
+  createLevel(nodeId);
 });
 
 // Losing work to a stray Cmd-W is the actual risk — checked here, once, for

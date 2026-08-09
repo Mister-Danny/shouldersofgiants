@@ -110,12 +110,31 @@
 <div id="level-editor-root" hidden>
   <header id="level-topbar">
     <h1>Level Editor</h1>
+    <div class="spacer"></div>
+    <span id="level-dirty" hidden>● unsaved</span>
+    <button id="level-btn-save" class="primary" disabled>Save to level-data.js</button>
   </header>
   <main id="level-main">
-    <p class="note">Nothing here yet — battle and market levels are configured
-      here once the level form exists. The Map Editor's own node inspector
-      already tells you which node ids don't have a click handler wired up;
-      building this is what wires it up without a code change.</p>
+    <!-- ── Level list ───────────────────────────────────────────────────
+         Direct access, same as the map editor's node/exit/prop lists — the
+         Map tab's "Configure battle/market" button is the other way in,
+         not the only way in. Gap markers (● unconfigured) come from
+         cross-referencing this list against every battle/market node in
+         map-data.js, so a missing level is visible from EITHER document. -->
+    <aside id="level-sidebar">
+      <div class="panel-head">Levels</div>
+      <ul id="level-list"></ul>
+      <div class="panel-head sub">Unconfigured nodes</div>
+      <ul id="unconfigured-list"></ul>
+    </aside>
+
+    <section id="level-form-wrap">
+      <div id="level-empty-note" class="note">Select a level on the left, or
+        click "Configure battle" on a battle node in the Map tab's inspector.
+        Markets aren't authored here yet — js/level-runtime.js doesn't launch
+        them, so a market-paired form would have nowhere to save.</div>
+      <div id="level-form" hidden></div>
+    </section>
   </main>
 </div><!-- #level-editor-root -->
 

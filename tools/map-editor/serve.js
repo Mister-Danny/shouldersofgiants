@@ -550,12 +550,14 @@ var CARDS_FILE       = path.join(ROOT, 'js', 'cards.js');
 
 /* js/cards.js assigns a plain `const CARDS`, not JSON — same reason
    loadMapData() in editor.js has to actually run map-data.js client-side
-   rather than parse it. Read fresh per save; the file is small and this
-   only happens on save, not per request. */
-function loadCardIds() {
+   rather than parse it. Read fresh per call; the file is small, and this
+   runs on a save or a GET /api/level-meta, never per static-file request. */
+function loadCards() {
   var src = fs.readFileSync(CARDS_FILE, 'utf8');
-  var cards = new Function('window', src + '\nreturn CARDS;')({});
-  return cards.map(function (c) { return c.id; });
+  return new Function('window', src + '\nreturn CARDS;')({});
+}
+function loadCardIds() {
+  return loadCards().map(function (c) { return c.id; });
 }
 
 /* Every abilityKey the battle engine actually branches on, discovered by
@@ -859,6 +861,20 @@ var server = http.createServer(function (req, res) {
   }
   if (url === '/api/save-level' && req.method === 'POST') {
     return handleSaveLevel(req, res);
+  }
+  if (url === '/api/level-meta') {
+    // Same scanners validateLevel() uses to reject a bad save — the level
+    // form's card picker and abilityKey dropdown read from this instead of
+    // a hand-copied list in the client, so there is exactly one place each
+    // closed set is computed, not a server copy and a client copy that can
+    // drift apart.
+    var meta;
+    try {
+      meta = { cards: loadCards(), abilityKeys: discoverAbilityKeys() };
+    } catch (e) {
+      return sendJson(res, 500, { error: 'could not read js/cards.js: ' + e.message });
+    }
+    return sendJson(res, 200, meta);
   }
 
   if (url === '/tools/map-editor' || url === '/tools/map-editor/') url = '/tools/map-editor/index.html';
