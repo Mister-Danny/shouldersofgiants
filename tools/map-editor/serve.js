@@ -536,6 +536,318 @@ function unknownFields(doc) {
     : null;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   LEVEL DATA — battle/market levels (data/level-data.js). Same discipline as
+   the map section above: FIELDS tables are the single declaration a field
+   gets, driving KNOWN and serialise() together so a field can't be "known"
+   without also being written. Deliberately its own file, own endpoint
+   (/api/save-level below), own backup — handleSaveLevel() never touches
+   DATA_FILE/serialise()/validate() (the map ones), so a level save
+   structurally cannot reach map-data.js.
+   ══════════════════════════════════════════════════════════════════════════ */
+var LEVEL_DATA_FILE = path.join(ROOT, 'data', 'level-data.js');
+var CARDS_FILE       = path.join(ROOT, 'js', 'cards.js');
+
+/* js/cards.js assigns a plain `const CARDS`, not JSON — same reason
+   loadMapData() in editor.js has to actually run map-data.js client-side
+   rather than parse it. Read fresh per save; the file is small and this
+   only happens on save, not per request. */
+function loadCardIds() {
+  var src = fs.readFileSync(CARDS_FILE, 'utf8');
+  var cards = new Function('window', src + '\nreturn CARDS;')({});
+  return cards.map(function (c) { return c.id; });
+}
+
+/* Every abilityKey the battle engine actually branches on, discovered by
+   scanning the engine files rather than hand-copied into a list here — a
+   hand-copied list is exactly the "known in one place but not the other"
+   failure this session spent all day closing for map-data.js. A new
+   ability key is a code change by definition (the level form will say so),
+   so this can only grow when one of these files does — nothing to keep in
+   sync by hand. */
+var ABILITY_KEY_FILES = [
+  'js/game/abilities.js', 'js/game/board.js', 'js/game/state.js',
+  'js/game/ai.js', 'js/game/input.js', 'js/locations.js',
+  'js/game.js', 'js/tutorial.js'
+];
+function discoverAbilityKeys() {
+  var keys = {};
+  ABILITY_KEY_FILES.forEach(function (rel) {
+    var abs = path.join(ROOT, rel);
+    if (!fs.existsSync(abs)) return;
+    var src = fs.readFileSync(abs, 'utf8');
+    var re = /abilityKey\s*[!=]==?\s*'([A-Z0-9_]+)'/g, m;
+    while ((m = re.exec(src))) keys[m[1]] = true;
+  });
+  return Object.keys(keys).sort();
+}
+
+/* A level's three battle locations. Every field is always written (no
+   optional tail here — unlike a node, nothing about a location has been
+   added incrementally over time) but abilityKey/thumbnailCrop are
+   genuinely nullable, so KNOWN still needs to be centrally declared. */
+var LOCATION_FIELDS = { required: ['id', 'name', 'region', 'abilityText', 'abilityKey', 'image', 'thumbnailCrop'] };
+
+/* required = the engine reads these with no guard (cfg.structure.handStart,
+   not (cfg.structure||{}).handStart) — absence is a crash, not a degrade.
+   optional = the engine guards every read (`ctx.config && ctx.config.
+   presentation`, `level.dialogue || {}`, etc.) and falls back gracefully.
+   `note` is the same "survives saving" contract as node.note in the map
+   editor — see data-header-level.txt. */
+var LEVEL_FIELDS = {
+  required: ['kind', 'tiers', 'structure', 'resource', 'draw', 'decks', 'locations', 'scoring'],
+  optional: ['presentation', 'rulesPopup', 'bleep', 'reward', 'dialogue'],
+  late: ['note']
+};
+
+function levelFieldsOf() {
+  var f = LEVEL_FIELDS;
+  return f.required.concat(f.optional).concat(f.late);
+}
+
+var KNOWN_LEVEL = { level: levelFieldsOf(), location: LOCATION_FIELDS.required };
+
+function unknownLevelFields(doc) {
+  var bad = [];
+  Object.keys(doc.levels || {}).forEach(function (id) {
+    var lvl = doc.levels[id];
+    Object.keys(lvl).forEach(function (k) {
+      if (KNOWN_LEVEL.level.indexOf(k) === -1) bad.push('level "' + id + '" has unknown field "' + k + '"');
+    });
+    (lvl.locations || []).forEach(function (loc, i) {
+      Object.keys(loc).forEach(function (k) {
+        if (KNOWN_LEVEL.location.indexOf(k) === -1) bad.push('level "' + id + '" location ' + i + ' has unknown field "' + k + '"');
+      });
+    });
+  });
+  return bad.length
+    ? bad.join('; ') + ' — the serialiser would drop these. Add them to LEVEL_FIELDS/LOCATION_FIELDS and serialiseLevel() in serve.js.'
+    : null;
+}
+
+function validateLevel(doc) {
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return 'payload must be an object';
+  var levels = doc.levels;
+  if (!levels || typeof levels !== 'object') return 'payload has no levels';
+  var ids = Object.keys(levels);
+  if (!ids.length) return 'refusing to save zero levels';
+
+  var unknown = unknownLevelFields(doc);
+  if (unknown) return unknown;
+
+  var cardIds;
+  try { cardIds = loadCardIds(); } catch (e) { return 'could not read js/cards.js: ' + e.message; }
+  var knownCardIds = {};
+  cardIds.forEach(function (id) { knownCardIds[id] = true; });
+
+  var abilityKeys = {};
+  discoverAbilityKeys().forEach(function (k) { abilityKeys[k] = true; });
+
+  for (var i = 0; i < ids.length; i++) {
+    var id = ids[i], lvl = levels[id];
+
+    for (var r = 0; r < LEVEL_FIELDS.required.length; r++) {
+      var need = LEVEL_FIELDS.required[r];
+      if (lvl[need] == null) return 'level "' + id + '" has no ' + need;
+    }
+    if (lvl.kind !== 'battle' && lvl.kind !== 'market') return 'level "' + id + '" has unknown kind "' + lvl.kind + '"';
+    if (lvl.kind === 'market') return 'level "' + id + '" is kind "market" — not wired in js/level-runtime.js yet, only "battle" is';
+    if (lvl.tiers !== 1 && lvl.tiers !== 2) return 'level "' + id + '" has tiers ' + lvl.tiers + ', expected 1 or 2';
+
+    var locs = lvl.locations;
+    if (!Array.isArray(locs) || locs.length !== 3) return 'level "' + id + '" needs exactly 3 locations, has ' + (locs ? locs.length : 0);
+    for (var li = 0; li < locs.length; li++) {
+      var loc = locs[li];
+      for (var lr = 0; lr < LOCATION_FIELDS.required.length; lr++) {
+        var lneed = LOCATION_FIELDS.required[lr];
+        // abilityKey/thumbnailCrop are nullable, everything else must be set.
+        if (lneed !== 'abilityKey' && lneed !== 'thumbnailCrop' && loc[lneed] == null) {
+          return 'level "' + id + '" location ' + li + ' has no ' + lneed;
+        }
+      }
+      if (loc.abilityKey && !abilityKeys[loc.abilityKey]) {
+        return 'level "' + id + '" location ' + li + ' has abilityKey "' + loc.abilityKey +
+               '", which no engine file checks for — a new ability needs a code change first';
+      }
+      if (loc.image && !fs.existsSync(path.join(ROOT, loc.image))) {
+        return 'level "' + id + '" location ' + li + ' points at "' + loc.image + '", which does not exist on disk';
+      }
+    }
+
+    // Deck ids — the level equivalent of the map's art-exists-on-disk check.
+    // 'active-deck' has no ids to check; 'explicit' must name real cards.
+    var checkDeck = function (who, deck) {
+      if (!deck || !deck.source) return who + ' has no source';
+      if (deck.source === 'explicit') {
+        if (!Array.isArray(deck.ids) || !deck.ids.length) return who + ' has source "explicit" but no ids';
+        for (var di = 0; di < deck.ids.length; di++) {
+          if (!knownCardIds[deck.ids[di]]) return who + ' has id ' + deck.ids[di] + ', which is not in CARDS (js/cards.js)';
+        }
+      } else if (who.indexOf('.player') !== -1 && deck.source !== 'active-deck') {
+        return who + ' has source "' + deck.source + '" — expected "active-deck" or "explicit"';
+      } else if (who.indexOf('.ai') !== -1 && deck.source !== 'explicit') {
+        return who + ' has source "' + deck.source + '" — a level-editor level needs "explicit" (a scripted opponent), not arcadium\'s random deck or the 2P "scripted" mode';
+      }
+      return null;
+    };
+    var deckErr = checkDeck('level "' + id + '".decks.player', lvl.decks && lvl.decks.player) ||
+                  checkDeck('level "' + id + '".decks.ai', lvl.decks && lvl.decks.ai);
+    if (deckErr) return deckErr;
+  }
+  return null;
+}
+
+function serialiseLocation(loc) {
+  return '{ id: ' + num(loc.id) + ', name: ' + q(loc.name) + ', region: ' + q(loc.region) +
+         ', abilityText: ' + q(loc.abilityText || '') +
+         ', abilityKey: ' + (loc.abilityKey ? q(loc.abilityKey) : 'null') +
+         ', image: ' + q(loc.image) +
+         ', thumbnailCrop: ' + (loc.thumbnailCrop
+           ? '{ bgSize: ' + q(loc.thumbnailCrop.bgSize) + ', bgPos: ' + q(loc.thumbnailCrop.bgPos) + ' }'
+           : 'null') +
+         ' }';
+}
+
+function serialiseDeck(deck) {
+  if (!deck) return '{}';
+  var bits = ['source: ' + q(deck.source)];
+  if (deck.ids) bits.push('ids: [' + deck.ids.map(num).join(', ') + ']');
+  if (deck.shuffle) bits.push('shuffle: true');
+  return '{ ' + bits.join(', ') + ' }';
+}
+
+function serialiseDialogueLines(lines) {
+  if (!lines || !lines.length) return '[]';
+  return '[\n' + lines.map(function (l) {
+    return '      { who: ' + q(l.who) + ', text: ' + q(l.text) + ' }';
+  }).join(',\n') + '\n    ]';
+}
+
+function serialiseLevel(id, lvl) {
+  var s = '    ' + q(id) + ': {\n';
+  s += '      kind:  ' + q(lvl.kind) + ',\n';
+  s += '      tiers: ' + num(lvl.tiers) + ',\n\n';
+
+  s += '      structure: {\n';
+  ['turns', 'locationsCount', 'slotsPerLocation', 'handStart', 'maxHandSize'].forEach(function (k, i, arr) {
+    s += '        ' + k + ': ' + num(lvl.structure[k]) + (i < arr.length - 1 ? ',\n' : '\n');
+  });
+  s += '      },\n';
+
+  s += '      resource: { model: ' + q(lvl.resource.model) + ', capital: ' + num(lvl.resource.capital) +
+       (lvl.resource.resetEachTurn ? ', resetEachTurn: true' : '') + ' },\n';
+  s += '      draw:     { model: ' + q(lvl.draw.model) + ' },\n\n';
+
+  s += '      decks: {\n';
+  s += '        player: ' + serialiseDeck(lvl.decks.player) + ',\n';
+  s += '        ai:     ' + serialiseDeck(lvl.decks.ai) + '\n';
+  s += '      },\n\n';
+
+  s += '      locations: [\n';
+  s += lvl.locations.map(function (loc) { return '        ' + serialiseLocation(loc); }).join(',\n');
+  s += '\n      ],\n';
+
+  s += '      scoring: { rule: ' + q(lvl.scoring.rule) + ', winThreshold: ' + num(lvl.scoring.winThreshold) +
+       ', tiebreaker: ' + q(lvl.scoring.tiebreaker) + ', exactTie: ' + q(lvl.scoring.exactTie) + ' },\n';
+
+  if (lvl.presentation) {
+    s += '\n      presentation: {\n';
+    var pKeys = ['bodyClass', 'allyAvatar', 'opponentAvatar', 'opponentBubblePortrait', 'popAlly'];
+    var pLines = [];
+    pKeys.forEach(function (k) {
+      if (lvl.presentation[k] == null) return;
+      pLines.push('        ' + k + ': ' + (k === 'popAlly' ? (lvl.presentation[k] ? 'true' : 'false') : q(lvl.presentation[k])));
+    });
+    s += pLines.join(',\n') + '\n      },\n';
+  }
+
+  if (lvl.rulesPopup) {
+    s += '\n      rulesPopup: {\n';
+    s += '        title: ' + q(lvl.rulesPopup.title) + ',\n';
+    s += '        body: [\n          ' + (lvl.rulesPopup.body || []).map(q).join(',\n          ') + '\n        ]\n';
+    s += '      },\n';
+  }
+
+  if (lvl.bleep) {
+    s += '\n      bleep: {\n';
+    s += '        profiles: {\n';
+    var profKeys = Object.keys(lvl.bleep.profiles || {});
+    s += profKeys.map(function (pk) {
+      var p = lvl.bleep.profiles[pk];
+      return '          ' + pk + ': { freq: ' + num(p.freq) + ', wobble: ' + num(p.wobble) + ', peak: ' + p.peak +
+             ', decay: ' + p.decay + ', dur: ' + p.dur + ', every: ' + num(p.every) + ' }';
+    }).join(',\n') + '\n        },\n';
+    s += '        defaultKey: ' + q(lvl.bleep.defaultKey) + '\n';
+    s += '      },\n';
+  }
+
+  if (lvl.reward) {
+    s += '\n      reward: { cardIdOnGiantWin: ' + num(lvl.reward.cardIdOnGiantWin) + ' },\n';
+  }
+
+  if (lvl.dialogue) {
+    s += '\n      dialogue: {\n';
+    var dKeys = Object.keys(lvl.dialogue);
+    s += dKeys.map(function (dk) {
+      return '        ' + dk + ': ' + serialiseDialogueLines(lvl.dialogue[dk]);
+    }).join(',\n') + '\n';
+    s += '      }' + (lvl.note ? ',\n' : '\n');
+  }
+
+  if (lvl.note) s += '\n      note: ' + q(lvl.note) + '\n';
+
+  s += '    }';
+  return s;
+}
+
+function serialiseLevels(doc) {
+  var HEADER = fs.readFileSync(path.join(__dirname, 'data-header-level.txt'), 'utf8');
+  var ids = Object.keys(doc.levels || {});
+  var s = HEADER + '\nwindow.SOG_LEVEL_DATA = {\n  levels: {\n';
+  s += ids.map(function (id) { return serialiseLevel(id, doc.levels[id]); }).join(',\n');
+  s += '\n  }\n};\n';
+  return s;
+}
+
+function handleSaveLevel(req, res) {
+  var body = '';
+  req.on('data', function (c) {
+    body += c;
+    if (body.length > 5e6) { req.destroy(); }
+  });
+  req.on('end', function () {
+    var doc;
+    try {
+      doc = JSON.parse(body);
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: 'bad JSON: ' + e.message });
+    }
+
+    var err = validateLevel(doc);
+    if (err) return sendJson(res, 400, { ok: false, error: err });
+
+    var out;
+    try {
+      out = serialiseLevels(doc);
+      new Function(makeCheckable(out));
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: 'level serialiser produced invalid JS: ' + e.message });
+    }
+
+    try {
+      if (fs.existsSync(LEVEL_DATA_FILE)) fs.copyFileSync(LEVEL_DATA_FILE, LEVEL_DATA_FILE + '.bak');
+      fs.mkdirSync(path.dirname(LEVEL_DATA_FILE), { recursive: true });
+      fs.writeFileSync(LEVEL_DATA_FILE, out, 'utf8');
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: 'write failed: ' + e.message });
+    }
+
+    var ids = Object.keys(doc.levels || {});
+    console.log('[map-editor] saved data/level-data.js — ' + ids.length + ' levels');
+    sendJson(res, 200, { ok: true, levels: ids.length });
+  });
+}
+
 var server = http.createServer(function (req, res) {
   var url = decodeURIComponent(req.url.split('?')[0]);
 
@@ -544,6 +856,9 @@ var server = http.createServer(function (req, res) {
   }
   if (url === '/api/save' && req.method === 'POST') {
     return handleSave(req, res);
+  }
+  if (url === '/api/save-level' && req.method === 'POST') {
+    return handleSaveLevel(req, res);
   }
 
   if (url === '/tools/map-editor' || url === '/tools/map-editor/') url = '/tools/map-editor/index.html';

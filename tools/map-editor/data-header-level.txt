@@ -1,0 +1,30 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   LEVEL DATA — battle/market configuration, keyed by node id.
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ THIS FILE IS WRITTEN BY tools/map-editor. Comments you add here WILL BE
+   LOST the next time someone saves from the editor. Put durable prose in a
+   level's `note` field (it round-trips).
+
+   WHY A .js FILE AND NOT .json — the game is opened straight off disk on
+   Chromebooks (file://), and fetch() of a local .json is CORS-blocked there.
+   A plain script tag assigning a global works everywhere and stays
+   synchronous, matching data/map-data.js's own precedent.
+
+   WHAT LIVES HERE — a level entry is looked up by node id from
+   js/overworld.js's onNodeClick and launched by js/level-runtime.js, which
+   builds a full battle-engine config from it (structure/resource/draw/decks/
+   locations/scoring/presentation/reward/dialogue) and registers a generic
+   two-tier script with SOG.BattleHooks — no boss-specific code required.
+   Only `kind: 'battle'` is wired so far; `kind: 'market'` is recorded but not
+   yet consumed.
+
+   abilityKey (per location) and deck ids (in decks.player.ids / decks.ai.ids)
+   are both closed sets, validated on save: abilityKey against every
+   abilityKey the battle engine actually checks for (js/game/abilities.js and
+   friends — see validateLevel() in serve.js), deck ids against CARDS in
+   js/cards.js. A value outside either set fails the save with the specific
+   field named, the same way an unknown field does.
+
+   To edit:  node tools/map-editor/serve.js  →  localhost:8750/tools/map-editor/
+   ══════════════════════════════════════════════════════════════════════════ */
