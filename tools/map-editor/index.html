@@ -7,6 +7,21 @@
 </head>
 <body>
 
+<!-- ── Shell ────────────────────────────────────────────────────────────────
+     Owns exactly one thing: which document is on screen. Everything below —
+     including the map editor's OWN #topbar — belongs to whichever editor is
+     active; the shell never reaches into their DOM beyond toggling [hidden]
+     and the dirty dot on its own tab button. -->
+<header id="shell-bar">
+  <h1>SoG Editor Suite</h1>
+  <nav id="workspace-tabs">
+    <button data-workspace="map" class="on">Map Editor<span class="tab-dirty" hidden>●</span></button>
+    <button data-workspace="level">Level Editor<span class="tab-dirty" hidden>●</span></button>
+  </nav>
+</header>
+
+<div id="map-editor-root">
+
 <header id="topbar">
   <h1>Map Editor</h1>
   <nav id="map-tabs"><!-- one button per map, built by JS --></nav>
@@ -89,6 +104,20 @@
 
   </aside>
 </main>
+
+</div><!-- #map-editor-root -->
+
+<div id="level-editor-root" hidden>
+  <header id="level-topbar">
+    <h1>Level Editor</h1>
+  </header>
+  <main id="level-main">
+    <p class="note">Nothing here yet — battle and market levels are configured
+      here once the level form exists. The Map Editor's own node inspector
+      already tells you which node ids don't have a click handler wired up;
+      building this is what wires it up without a code change.</p>
+  </main>
+</div><!-- #level-editor-root -->
 
 <!-- ── Art picker (used for both Add Node and New Map) ─────────────────── -->
 <div id="modal" hidden>

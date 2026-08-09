@@ -1,139 +1,50 @@
-import { $, $$, fmt, clamp, pct } from './shared/utils.js';
-import { toast } from './shared/toast.js';
-import { onChange, requestRender } from './shared/notify.js';
-import { State, markDirty } from './map/state.js';
-import { insertBend } from './map/routes.js';
-import {
-  snapshot, undo, deleteSelection, currentPos, setPos,
-  addNodeFlow, addPropFlow, newMapFlow
-} from './map/commands.js';
-import { render, buildTabs, buildScrubber } from './map/render.js';
-import { showHelp, showMilestones } from './map/modals.js';
+import { $, $$ } from './shared/utils.js';
+import { setActiveTab } from './shared/active-tab.js';
+import { State as mapState } from './map/state.js';
+import { State as levelState } from './level/state.js';
+import { initMapEditor } from './map/app.js';
+import { initLevelEditor } from './level/app.js';
 
-/* ── App ──────────────────────────────────────────────────────────────────
-   The entry point and the wiring layer — the only module that imports
-   everyone. Registers render.js's repaint as the target of the notify.js
-   seam (the one thing every module below render.js calls instead of
-   render() directly, to avoid an import cycle), then boots. */
+/* ── Shell ────────────────────────────────────────────────────────────────
+   Owns exactly one thing: which document is on screen. Both editors mount
+   ONCE at boot and stay mounted for the session — switching tabs toggles
+   [hidden] on their root elements, it never unmounts or re-fetches
+   anything. That's the explicit choice for unsaved changes on switch:
+   allow it silently. Both documents keep their own State object (and
+   therefore their own dirty flag and undo stack) in memory regardless of
+   which tab is visible, so nothing is lost by looking away — the risk that
+   actually loses work is closing the tab/window with something unsaved,
+   which beforeunload below still catches for either document. A confirm-
+   before-switch prompt would only protect against a loss that was never
+   possible in the first place, for the cost of an interruption every time. */
 
-onChange(() => { buildTabs(); buildScrubber(); render(); });
+const ROOTS = { map: $('#map-editor-root'), level: $('#level-editor-root') };
+const DOCS  = { map: mapState, level: levelState };
 
-/* ── Boot ─────────────────────────────────────────────────────────────── */
-(async function boot() {
-  try {
-    State.doc  = await loadMapData();
-    State.maps = State.doc.maps;
-    State.art  = await fetch('/api/art').then(r => r.json());
-  } catch (e) {
-    return toast('Could not load map data: ' + e.message, true);
-  }
-  State.mapId = Object.keys(State.maps)[0];
-  State.sel = null;
-  requestRender();
-  wireGlobalEvents();
-})();
-
-/* data/map-data.js is a script that assigns a global, not JSON — so fetch the
-   text and run it against a fake `window` to get the object back out. Same
-   reason the game can load it off file://. */
-async function loadMapData() {
-  const src = await fetch('/data/map-data.js?t=' + Date.now()).then(r => {
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.text();
-  });
-  const w = {};
-  new Function('window', src)(w);
-  if (!w.SOG_MAP_DATA) throw new Error('map-data.js did not assign window.SOG_MAP_DATA');
-  if (!w.SOG_MAP_DATA.maps) throw new Error('map-data.js is in the old format (no `maps` key)');
-  return w.SOG_MAP_DATA;
-}
-
-/* ── Stage-level interactions ─────────────────────────────────────────── */
-function wireGlobalEvents() {
-  const stage = $('#stage');
-
-  stage.addEventListener('pointermove', e => {
-    const p = pct(e);
-    $('#cursor-pos').textContent = `x ${fmt(p.x)}   y ${fmt(p.y)}`;
-  });
-  stage.addEventListener('pointerleave', () => { $('#cursor-pos').textContent = '—'; });
-
-  // Bare click on the map: in route mode append a waypoint, otherwise deselect.
-  stage.addEventListener('pointerdown', e => {
-    if (State.mode === 'route') {
-      if (!State.routeSel) return toast('Click two places to pick a route between them');
-      snapshot();
-      insertBend(pct(e));
-      markDirty(); requestRender();
-    } else {
-      State.sel = null; requestRender();
-    }
-  });
-
-  $$('.seg button').forEach(b => {
-    b.onclick = () => {
-      State.mode = b.dataset.mode;
-      $$('.seg button').forEach(x => x.classList.toggle('on', x === b));
-      requestRender();
-    };
-  });
-
-  $('#btn-save').onclick     = save;
-  $('#btn-add-node').onclick = addNodeFlow;
-  $('#btn-new-map').onclick  = newMapFlow;
-  $('#btn-help').onclick     = showHelp;
-  $('#btn-add-prop').onclick = addPropFlow;
-  $('#btn-story').onclick    = showMilestones;
-
-  document.addEventListener('keydown', onKey);
-
-  // Cheap insurance — losing a session of positioning to a stray Cmd-W is
-  // exactly the kind of thing that makes a tool feel untrustworthy.
-  window.addEventListener('beforeunload', e => {
-    if (State.dirty) { e.preventDefault(); e.returnValue = ''; }
+function refreshDirtyDots() {
+  Object.keys(DOCS).forEach(id => {
+    const dot = $(`#workspace-tabs button[data-workspace="${id}"] .tab-dirty`);
+    dot.hidden = !DOCS[id].dirty;
   });
 }
 
-function onKey(e) {
-  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
-  if (typing) return;
-
-  if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); return undo(); }
-  if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); return save(); }
-
-  if (!State.sel) return;
-
-  if (e.key === 'Backspace' || e.key === 'Delete') {
-    e.preventDefault();
-    return deleteSelection();
-  }
-
-  const step = e.shiftKey ? 1 : 0.1;
-  const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
-  if (!d) return;
-  e.preventDefault();
-  snapshot();
-  const cur = currentPos(State.sel);
-  setPos(State.sel, clamp(cur.x + d[0]), clamp(cur.y + d[1]));
-  markDirty(); requestRender();
+function switchTo(id) {
+  setActiveTab(id);
+  Object.keys(ROOTS).forEach(k => { ROOTS[k].hidden = k !== id; });
+  $$('#workspace-tabs button').forEach(b => b.classList.toggle('on', b.dataset.workspace === id));
+  refreshDirtyDots();
 }
 
-/* ── Save ─────────────────────────────────────────────────────────────── */
-async function save() {
-  $('#btn-save').disabled = true;
-  try {
-    const res = await fetch('/api/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(State.doc)
-    });
-    const out = await res.json();
-    if (!out.ok) { $('#btn-save').disabled = false; return toast(out.error, true); }
-    State.dirty = false;
-    $('#dirty').hidden = true;
-    toast(`Saved — ${out.maps} maps, ${out.nodes} nodes. Reload the game to see it.`);
-  } catch (e) {
-    $('#btn-save').disabled = false;
-    toast('Save failed: ' + e.message, true);
-  }
-}
+$$('#workspace-tabs button').forEach(b => {
+  b.onclick = () => switchTo(b.dataset.workspace);
+});
+
+// Losing work to a stray Cmd-W is the actual risk — checked here, once, for
+// both documents, regardless of which is on screen right now.
+window.addEventListener('beforeunload', e => {
+  if (mapState.dirty || levelState.dirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
+switchTo('map');
+initMapEditor({ onAfterRender: refreshDirtyDots });
+initLevelEditor({ onAfterRender: refreshDirtyDots });

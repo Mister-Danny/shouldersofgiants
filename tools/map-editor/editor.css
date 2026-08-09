@@ -35,6 +35,78 @@ body {
   overflow: hidden;
 }
 
+/* ── Shell ────────────────────────────────────────────────────────────────
+   One header row, same height budget as #topbar always had — the shell adds
+   this row ABOVE #topbar rather than merging into it, but #stage's aspect
+   ratio depends on #stage-wrap's WIDTH, not on how much vertical chrome sits
+   above it, so an extra flex:0 0 auto row here doesn't touch it (measured;
+   see the tab-shell commit message). #map-editor-root / #level-editor-root
+   take over the flex:1 column role #topbar + main used to get directly from
+   body, so each editor's own internal layout is untouched below this line. */
+#shell-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+#shell-bar h1 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+#workspace-tabs { display: flex; gap: 4px; }
+#workspace-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  padding: 5px 12px;
+  cursor: pointer;
+  font: inherit;
+  border-radius: 3px;
+}
+#workspace-tabs button:hover { color: var(--text); border-color: var(--gold); }
+#workspace-tabs button.on {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #191203;
+  font-weight: bold;
+}
+/* Per-document dirty — one dot per tab, independent of which is active. */
+.tab-dirty { color: var(--gold-hi); font-size: 14px; line-height: 1; }
+#workspace-tabs button.on .tab-dirty { color: #191203; }
+
+#map-editor-root, #level-editor-root {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#level-topbar {
+  display: flex;
+  align-items: center;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+#level-topbar h1 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+#level-main { flex: 1; padding: 24px; overflow-y: auto; }
+
 /* ── Top bar ──────────────────────────────────────────────────────────── */
 #topbar {
   display: flex;
