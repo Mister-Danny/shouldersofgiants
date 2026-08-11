@@ -1013,16 +1013,19 @@ function handleSaveBossDialogue(req, res) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   Phase 3 — dialogue write-back for js/overworld.js, the 39 named arrays
-   approved from the read-only inventory (tools/map-editor/overworld-
-   extract.js's OVERWORLD_DIALOGUE_GROUPS). Same shape as
-   handleSaveBossDialogue, same underlying applyDialogueEdits, but its own
-   handler and its own whitelist: every submitted var name is checked
-   against isKnownArray() before the file is even read, so this endpoint
-   structurally cannot reach a var this session's inventory didn't cover
-   (the 4 dead arrays already deleted, the config/spike arrays, and
-   anything not in overworld.js at all) — never a client-supplied file
-   path, there's only ever the one file this endpoint touches. */
+   Phase 3 (+ 3b) — dialogue write-back for js/overworld.js: the 39 named
+   arrays approved from the read-only inventory, plus the 3 inline (unnamed)
+   dialogue blocks in the D2a flow (tools/map-editor/overworld-extract.js's
+   OVERWORLD_DIALOGUE_GROUPS). Named arrays go through applyDialogueEdits,
+   same as the boss files; inline blocks go through applyInlineDialogueEdit,
+   which additionally requires (and verifies) `expectedCurrent` — the value
+   the edit was staged against — before touching anything, since a
+   position-based anchor can find the WRONG content in a way a name-based
+   one structurally cannot (see that function's own docstring). Every
+   submitted name/id is checked against this file's own whitelist
+   (isKnownArray / inlineBlockSpec) before the file is even read — never a
+   client-supplied file path or locator, there's only ever the one file and
+   the registry's own specs this endpoint can reach. */
 function handleSaveOverworldDialogue(req, res) {
   var body = '';
   req.on('data', function (c) {
@@ -1038,12 +1041,25 @@ function handleSaveOverworldDialogue(req, res) {
     }
 
     var owe = overworldExtract();
+    var be = bossExtract();
     var dialogue = (payload && payload.dialogue) || {};
+    var inline = (payload && payload.inline) || {};
     var varNames = Object.keys(dialogue);
-    if (!varNames.length) return sendJson(res, 200, { ok: true, changed: [], commentsLost: [], message: 'nothing submitted' });
+    var inlineIds = Object.keys(inline);
+    if (!varNames.length && !inlineIds.length) {
+      return sendJson(res, 200, { ok: true, changed: [], commentsLost: [], message: 'nothing submitted' });
+    }
 
     var unknown = varNames.filter(function (n) { return !owe.isKnownArray(n); });
     if (unknown.length) return sendJson(res, 400, { ok: false, error: 'unknown or unapproved array name(s): ' + unknown.join(', ') });
+
+    var inlineSpecs = {};
+    var unknownInline = [];
+    inlineIds.forEach(function (id) {
+      var spec = owe.inlineBlockSpec(id);
+      if (!spec) unknownInline.push(id); else inlineSpecs[id] = spec;
+    });
+    if (unknownInline.length) return sendJson(res, 400, { ok: false, error: 'unknown or unapproved inline block id(s): ' + unknownInline.join(', ') });
 
     var edits = varNames.map(function (n) { return { varName: n, lines: dialogue[n] }; });
 
@@ -1055,40 +1071,65 @@ function handleSaveOverworldDialogue(req, res) {
       return sendJson(res, 500, { ok: false, error: 'could not read ' + owe.OVERWORLD_FILE + ': ' + e.message });
     }
 
-    var result;
-    try {
-      result = bossExtract().applyDialogueEdits(original, edits);
-    } catch (e) {
-      return sendJson(res, 500, { ok: false, error: 'write-back failed: ' + e.message });
+    var text = original;
+    var allResults = [];
+
+    if (edits.length) {
+      var namedResult;
+      try {
+        namedResult = be.applyDialogueEdits(text, edits);
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: 'write-back failed: ' + e.message });
+      }
+      text = namedResult.fileText;
+      allResults = allResults.concat(namedResult.results.map(function (r) { return { id: r.varName, changed: r.changed, hadComments: r.hadComments, error: r.error }; }));
     }
 
-    var failed = result.results.filter(function (r) { return r.error; });
+    // Inline blocks applied one at a time, sequentially, on the RUNNING
+    // text — same reasoning as applyDialogueEdits' own multi-var handling:
+    // an earlier write in this same request can shift bytes, so each
+    // locate has to happen fresh against the current state, never against
+    // offsets computed before any prior write in this call.
+    for (var i = 0; i < inlineIds.length; i++) {
+      var id = inlineIds[i];
+      var body_ = inline[id] || {};
+      var result;
+      try {
+        result = be.applyInlineDialogueEdit(text, inlineSpecs[id], body_.expectedCurrent, body_.lines);
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: 'write-back failed for ' + id + ': ' + e.message });
+      }
+      text = result.fileText;
+      allResults.push({ id: id, changed: result.changed, hadComments: result.hadComments, error: result.error });
+    }
+
+    var failed = allResults.filter(function (r) { return r.error; });
     if (failed.length) {
-      return sendJson(res, 400, { ok: false, error: 'refused: ' + failed.map(function (r) { return r.varName + ': ' + r.error; }).join('; ') });
+      return sendJson(res, 400, { ok: false, error: 'refused: ' + failed.map(function (r) { return r.id + ': ' + r.error; }).join('; ') });
     }
 
-    var changed = result.results.filter(function (r) { return r.changed; });
+    var changed = allResults.filter(function (r) { return r.changed; });
     if (!changed.length) {
       return sendJson(res, 200, { ok: true, changed: [], commentsLost: [], message: 'no changes' });
     }
 
     try {
-      new Function(result.fileText);
+      new Function(text);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: owe.OVERWORLD_FILE + ' would not parse after this edit: ' + e.message });
     }
 
     try {
       fs.copyFileSync(abs, abs + '.bak');
-      fs.writeFileSync(abs, result.fileText, 'utf8');
+      fs.writeFileSync(abs, text, 'utf8');
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: 'write failed: ' + e.message });
     }
 
-    var commentsLost = changed.filter(function (r) { return r.hadComments; }).map(function (r) { return r.varName; });
-    console.log('[map-editor] saved ' + owe.OVERWORLD_FILE + ' — ' + changed.length + ' dialogue array(s) rewritten' +
+    var commentsLost = changed.filter(function (r) { return r.hadComments; }).map(function (r) { return r.id; });
+    console.log('[map-editor] saved ' + owe.OVERWORLD_FILE + ' — ' + changed.length + ' dialogue block(s) rewritten' +
                 (commentsLost.length ? ' (comments lost in ' + commentsLost.join(', ') + ')' : ''));
-    sendJson(res, 200, { ok: true, changed: changed.map(function (r) { return r.varName; }), commentsLost: commentsLost });
+    sendJson(res, 200, { ok: true, changed: changed.map(function (r) { return r.id; }), commentsLost: commentsLost });
   });
 }
 

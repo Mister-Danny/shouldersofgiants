@@ -9,7 +9,8 @@ import {
   editBossDialogueLine, addBossDialogueLine, removeBossDialogueLine,
   revertBossDialogueEdits, saveBossDialogue,
   viewOverworldDialogue, editOverworldDialogueLine, addOverworldDialogueLine,
-  removeOverworldDialogueLine, revertOverworldDialogueEdits, saveOverworldDialogue
+  removeOverworldDialogueLine, revertOverworldDialogueEdits, saveOverworldDialogue,
+  editInlineDialogueLine, revertInlineDialogueEdits
 } from './commands.js';
 import { pickDeck } from './deck-picker.js';
 
@@ -748,17 +749,18 @@ function overworldArraySpeakerColors(lines) {
 }
 
 function overworldFormHtml(preview) {
-  const dirtyCount = Object.keys(State.overworldDialogueEdits).length;
+  const dirtyCount = Object.keys(State.overworldDialogueEdits).length + Object.keys(State.overworldInlineDialogueEdits).length;
   const totalArrays = preview.groups.reduce((n, g) => n + g.arrays.length, 0);
+  const totalInline = preview.groups.reduce((n, g) => n + (g.inline || []).length, 0);
   return `
-    <div class="ro-banner">Hand-authored in <code>${esc(preview.file)}</code>. ${totalArrays} dialogue arrays across ${preview.groups.length} flow groups — grouped to match the approved read-only inventory. The 4 inline (unnamed) dialogue blocks in the Mesopotamia-arrival flow aren't here; see the Phase 3b proposal for those.</div>
+    <div class="ro-banner">Hand-authored in <code>${esc(preview.file)}</code>. ${totalArrays} named dialogue arrays + ${totalInline} inline blocks across ${preview.groups.length} flow groups — grouped to match the approved read-only inventory.</div>
     <div class="form-section">
       <h3>Overworld Dialogue</h3>
       <div class="rowbtns">
         <button class="primary sm" id="overworld-dlg-save" ${dirtyCount ? '' : 'disabled'}>
-          Save dialogue${dirtyCount ? ` (${dirtyCount} array${dirtyCount === 1 ? '' : 's'} changed)` : ''}
+          Save dialogue${dirtyCount ? ` (${dirtyCount} block${dirtyCount === 1 ? '' : 's'} changed)` : ''}
         </button>
-        <p class="note">Writes only the array(s) you've changed, straight into ${esc(preview.file)} — .bak kept, whole file syntax-checked first.</p>
+        <p class="note">Writes only the array(s)/block(s) you've changed, straight into ${esc(preview.file)} — .bak kept, whole file syntax-checked first.</p>
       </div>
     </div>
     ${preview.groups.map(overworldGroupHtml).join('')}
@@ -771,6 +773,7 @@ function overworldGroupHtml(g) {
       <h3>${esc(g.group)}</h3>
       ${g.note ? `<p class="note">${esc(g.note)}</p>` : ''}
       ${g.arrays.map(overworldArrayHtml).join('')}
+      ${(g.inline || []).map(overworldInlineBlockHtml).join('')}
     </div>`;
 }
 
@@ -816,6 +819,53 @@ function overworldArrayHtml(a) {
   `;
 }
 
+/* Phase 3b — inline (unnamed) dialogue block. Same visual language as
+   overworldArrayHtml, three deliberate differences: the heading shows the
+   human description + locator (functionName/occurrence) instead of a var
+   name, since there isn't one; NO add-line button and NO per-line remove
+   button, ever — lineOpsBlocked is unconditionally true for these (see
+   overworld-extract.js's buildInlineBlockPreview); and a note explaining
+   why, since "there's no + Add line button here" is easy to misread as a
+   bug rather than a deliberate safety choice. */
+function overworldInlineBlockHtml(b) {
+  const pending = State.overworldInlineDialogueEdits[b.id];
+  const isDirty = !!pending;
+  const lines = isDirty ? pending.lines : (b.extraction.value || []);
+  const colors = overworldArraySpeakerColors(b.extraction.value);
+  const header = `<h4>${esc(b.description)} <span class="note">(inline — in ${esc(b.functionName)}())</span></h4>`;
+
+  if (!b.editable) {
+    return `
+      ${header}
+      <p class="impure-note">Not editable — ${esc(b.editBlockedReason || 'unknown reason')}.</p>
+      ${lines.map(line => {
+        const c = colors[line.who] || 'var(--text)';
+        return `<div class="ro-line"><span class="who" style="color:${c}">${esc(line.who || '')}</span><span class="text" style="color:${c}">${esc(line.text || '')}</span></div>`;
+      }).join('')}
+    `;
+  }
+
+  const commentWarning = b.extraction.hasComments
+    ? `<p class="impure-note">This block has a comment in the source${isDirty ? ' — saving these changes may remove it.' : '; editing it will remove that comment on save.'}</p>`
+    : '';
+  return `
+    ${header}
+    <p class="note">Inline block, no name to anchor on — located by position and re-verified against what you loaded right before saving. Lines can't be added or removed here.</p>
+    ${commentWarning}
+    ${lines.map((line, i) => {
+      const c = colors[line.who] || 'var(--text)';
+      return `
+      <div class="f2" data-ow-inline-dlg="${esc(b.id)}:${i}">
+        <div class="f" style="flex:0 0 120px">
+          <input data-ow-inline-who="${esc(b.id)}:${i}" value="${esc(line.who || '')}" style="color:${c}">
+        </div>
+        <div class="f"><input data-ow-inline-text="${esc(b.id)}:${i}" value="${esc(line.text || '')}" style="color:${c}"></div>
+      </div>`;
+    }).join('')}
+    ${isDirty ? `<div class="rowbtns"><button class="ghost sm" data-ow-inline-revert="${esc(b.id)}">Revert to saved</button></div>` : ''}
+  `;
+}
+
 function wireOverworldDialogue() {
   const saveBtn = $('#overworld-dlg-save');
   if (saveBtn) saveBtn.onclick = () => saveOverworldDialogue();
@@ -833,6 +883,16 @@ function wireOverworldDialogue() {
   $$('[data-ow-dlg-text]').forEach(el => {
     const [name, idx] = el.dataset.owDlgText.split(':');
     el.addEventListener('input', () => editOverworldDialogueLine(name, Number(idx), 'text', el.value));
+  });
+
+  $$('[data-ow-inline-revert]').forEach(b => { b.onclick = () => revertInlineDialogueEdits(b.dataset.owInlineRevert); });
+  $$('[data-ow-inline-who]').forEach(el => {
+    const [id, idx] = el.dataset.owInlineWho.split(':');
+    el.addEventListener('input', () => editInlineDialogueLine(id, Number(idx), 'who', el.value));
+  });
+  $$('[data-ow-inline-text]').forEach(el => {
+    const [id, idx] = el.dataset.owInlineText.split(':');
+    el.addEventListener('input', () => editInlineDialogueLine(id, Number(idx), 'text', el.value));
   });
 }
 

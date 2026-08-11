@@ -384,25 +384,75 @@ export function revertOverworldDialogueEdits(varName) {
   requestRender();
 }
 
-/* Submits every array with a pending edit buffer in one request — same
-   "server decides what actually changed" reasoning as saveBossDialogue.
-   On success: clear the whole edit buffer and re-fetch the preview fresh
-   (never patch sourceText/isPlainLiteral/etc. client-side). On failure:
-   keep the buffer so nothing typed is lost. */
+/* ── Phase 3b: the 3 inline (unnamed) dialogue blocks ────────────────────
+   Same edit-buffer shape as the named arrays, but the buffer also freezes
+   expectedCurrent at creation time (never touched again after that) — the
+   server needs it to verify the block it locates by POSITION still holds
+   the same content this edit was staged against, before writing anything.
+   See state.js's own comment on overworldInlineDialogueEdits. */
+
+function _findInlineBlock(id) {
+  for (const g of State.overworldPreview.groups) {
+    const b = (g.inline || []).find(b => b.id === id);
+    if (b) return b;
+  }
+  return null;
+}
+
+function _inlineEditBuffer(id) {
+  let created = false;
+  if (!State.overworldInlineDialogueEdits[id]) {
+    const current = (_findInlineBlock(id).extraction.value || []).map(l => ({ who: l.who, text: l.text }));
+    State.overworldInlineDialogueEdits[id] = { expectedCurrent: current, lines: current.map(l => ({ ...l })) };
+    created = true;
+  }
+  return { entry: State.overworldInlineDialogueEdits[id], created };
+}
+
+/* No add/remove commands here on purpose — inline blocks never support
+   line-count changes (see boss-extract.js's applyInlineDialogueEdit), so
+   there is nothing for an add/remove button to call; render.js simply
+   never renders one for these. */
+export function editInlineDialogueLine(id, index, field, value) {
+  const { entry, created } = _inlineEditBuffer(id);
+  entry.lines[index][field] = value;
+  if (created) requestRender();
+}
+
+export function revertInlineDialogueEdits(id) {
+  delete State.overworldInlineDialogueEdits[id];
+  requestRender();
+}
+
+/* Submits every array AND every inline block with a pending edit buffer
+   in one request — same "server decides what actually changed" reasoning
+   as saveBossDialogue/saveOverworldDialogue's named-array path. On
+   success: clear both buffers and re-fetch the preview fresh (never patch
+   sourceText/isPlainLiteral/etc. client-side). On failure: keep both
+   buffers so nothing typed is lost — including expectedCurrent, so a
+   retry after reloading isn't needed unless the server specifically said
+   the block had drifted. */
 export async function saveOverworldDialogue() {
   const edits = State.overworldDialogueEdits;
-  if (!Object.keys(edits).length) return toast('No overworld dialogue changes to save');
+  const inlineEdits = State.overworldInlineDialogueEdits;
+  if (!Object.keys(edits).length && !Object.keys(inlineEdits).length) return toast('No overworld dialogue changes to save');
+
+  const inlinePayload = {};
+  Object.keys(inlineEdits).forEach(id => {
+    inlinePayload[id] = { expectedCurrent: inlineEdits[id].expectedCurrent, lines: inlineEdits[id].lines };
+  });
 
   try {
     const res = await fetch('/api/save-overworld-dialogue', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dialogue: edits })
+      body: JSON.stringify({ dialogue: edits, inline: inlinePayload })
     });
     const out = await res.json();
     if (!out.ok) return toast(out.error, true);
 
     State.overworldDialogueEdits = {};
+    State.overworldInlineDialogueEdits = {};
     const res2 = await fetch('/api/overworld-dialogue-preview');
     if (res2.ok) State.overworldPreview = await res2.json();
 

@@ -76,6 +76,52 @@ function findFunctionReturnSpan(src, name) {
   return _bracketSpan(src, valueStart, m.index);
 }
 
+/* Just the function BODY span (the { ... } braces, unlike
+   findFunctionReturnSpan which digs further for a `return`'d literal
+   inside it) — the anchor primitive Phase 3b's inline-dialogue locator is
+   built on. */
+function findFunctionBodySpan(src, name) {
+  var re = new RegExp('\\bfunction\\s+' + name + '\\s*\\([^)]*\\)\\s*\\{');
+  var m = re.exec(src);
+  if (!m) return null;
+  var bodyOpen = m.index + m[0].length - 1;
+  return _bracketSpan(src, bodyOpen, m.index);
+}
+
+/* Locates an INLINE (unnamed) array literal argument — e.g.
+   `_runLinesKeepOpen([{ who: 'hunter', text: '...' }], function () {...})`
+   — where there is no var name to anchor findVarSpan on. The anchor is
+   positional: the Nth occurrence of `callPattern` (e.g.
+   '_runLinesKeepOpen(') within a NAMED function's own body, immediately
+   followed (after whitespace) by '['. occurrenceIndex counts ALL
+   occurrences of callPattern in that function, not just inline ones — if
+   the Nth one doesn't turn out to have '[' right after it, that's treated
+   as drift (something restructured) and this returns null rather than
+   guessing at a different occurrence.
+
+   This is deliberately a WEAKER guarantee than findVarSpan's (a name
+   can't be mislocated; a position can, if code is inserted/reordered
+   nearby) — callers that write through this MUST additionally verify the
+   located content matches what was last shown before trusting it, which
+   is exactly what applyInlineDialogueEdit does. This function only
+   finds; it never validates content. */
+function findInlineArraySpan(src, functionName, callPattern, occurrenceIndex) {
+  var fnSpan = findFunctionBodySpan(src, functionName);
+  if (!fnSpan) return null;
+  var body = fnSpan.text;
+  var searchFrom = 0, idx = -1;
+  for (var i = 0; i <= occurrenceIndex; i++) {
+    idx = body.indexOf(callPattern, searchFrom);
+    if (idx === -1) return null;
+    searchFrom = idx + callPattern.length;
+  }
+  var afterCall = idx + callPattern.length;
+  while (afterCall < body.length && /\s/.test(body[afterCall])) afterCall++;
+  if (body[afterCall] !== '[') return null;
+  var absValueStart = fnSpan.valueStart + afterCall;
+  return _bracketSpan(src, absValueStart, absValueStart);
+}
+
 /* Shared bracket-matcher: src[valueStart] must be '[' or '{'; walks forward
    respecting single/double-quoted strings (backslash-escaped) until the
    matching close, and returns the value's exact span. declStart is kept
@@ -502,6 +548,63 @@ function applyDialogueEdits(fileText, edits) {
   return { fileText: text, results: results };
 }
 
+/* Phase 3b — write-back for an INLINE (unnamed) dialogue block, located
+   positionally via findInlineArraySpan rather than by name. `spec` is
+   {functionName, callPattern, occurrenceIndex} (one entry from
+   overworld-extract.js's INLINE_DIALOGUE_BLOCKS). `expectedCurrent` is
+   whatever the caller's edit was based on — normally the exact value the
+   preview endpoint last returned for this block.
+
+   The compare-and-swap: after locating the array, its CURRENT evaluated
+   value must deep-equal expectedCurrent before a single byte is touched.
+   This is what makes a drifted anchor fail safe. A position-based anchor
+   can find the WRONG array (if code was inserted/reordered near it,
+   changing which occurrence lands where) in a way a name-based one
+   structurally cannot — findVarSpan either finds the right name or finds
+   nothing, it can never quietly find a different named var instead. So
+   where applyDialogueEdits can trust "found by name" on its own,
+   applyInlineDialogueEdit cannot trust "found by position" on its own —
+   it also has to confirm the content it found is still the content the
+   edit was actually made against. A mismatch (wrong array OR the file
+   changed since the edit was staged) refuses the write outright rather
+   than patching whatever happens to be sitting at that position now.
+
+   No add/remove: line count changing is refused unconditionally, not
+   just when flagged — the position-based anchor makes this a strictly
+   higher-risk write than a named array's, so the safety margin should be
+   wider, not the same. */
+function applyInlineDialogueEdit(fileText, spec, expectedCurrent, newLines) {
+  var span = findInlineArraySpan(fileText, spec.functionName, spec.callPattern, spec.occurrenceIndex);
+  if (!span) {
+    return { fileText: fileText, changed: false, error: 'anchor not found for ' + spec.functionName + ' (occurrence ' + spec.occurrenceIndex + ') — the surrounding code may have moved; reload and try again' };
+  }
+  if (!isPlainLiteral(span.text)) {
+    return { fileText: fileText, changed: false, error: 'not a plain literal — refusing to write' };
+  }
+  var current;
+  try { current = evalLiteral(span.text); }
+  catch (e) { return { fileText: fileText, changed: false, error: 'could not evaluate current value: ' + e.message }; }
+
+  if (!_linesEqual(current, expectedCurrent)) {
+    return { fileText: fileText, changed: false, error: 'this block has changed since it was loaded (or the anchor drifted to different content) — reload and try again' };
+  }
+
+  if (newLines.length !== current.length) {
+    return { fileText: fileText, changed: false, error: 'adding or removing lines is not supported for inline dialogue blocks — only who/text edits to existing lines' };
+  }
+
+  if (_linesEqual(current, newLines)) {
+    return { fileText: fileText, changed: false, hadComments: hasComments(span.text) };
+  }
+
+  var itemSpans = findObjectItemSpans(fileText, span.valueStart, span.valueEnd);
+  if (itemSpans.length !== current.length) {
+    return { fileText: fileText, changed: false, error: 'internal: line-span count did not match evaluated line count — refusing to guess' };
+  }
+  var patched = _patchLinesInPlace(fileText, itemSpans, current, newLines);
+  return { fileText: patched.text, changed: patched.changed, hadComments: patched.hadComments };
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    BOSS_SOURCES — hand-curated, not auto-discovered. Each boss's dialogue
    var names, location/presentation source, and structure/resource/scoring
@@ -796,5 +899,8 @@ module.exports = {
   findObjectItemSpans: findObjectItemSpans,
   findQuotedFieldSpan: findQuotedFieldSpan,
   rewriteDialogueLineText: rewriteDialogueLineText,
-  applyDialogueEdits: applyDialogueEdits
+  applyDialogueEdits: applyDialogueEdits,
+  findFunctionBodySpan: findFunctionBodySpan,
+  findInlineArraySpan: findInlineArraySpan,
+  applyInlineDialogueEdit: applyInlineDialogueEdit
 };

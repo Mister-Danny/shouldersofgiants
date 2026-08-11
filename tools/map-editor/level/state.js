@@ -68,7 +68,21 @@ export const State = {
   // grouped under any single "document" the way a boss's 10 keys are.
   // Saves through POST /api/save-overworld-dialogue — its own endpoint,
   // its own file, never touches dirty/markDirty() either.
-  overworldDialogueEdits: {}
+  overworldDialogueEdits: {},
+
+  // Phase 3b: edit buffers for the 3 inline (unnamed) dialogue blocks.
+  // { [id]: { expectedCurrent: [{who,text},...], lines: [{who,text},...] } }
+  // — unlike every other edit buffer in this file, this one ALSO carries
+  // expectedCurrent (a snapshot of the value the edit was staged against,
+  // taken once at buffer-creation time and never touched again). The
+  // server's applyInlineDialogueEdit re-verifies the block's actual
+  // current content still equals expectedCurrent before writing anything
+  // — a position-based anchor can find the WRONG content in a way a
+  // named var structurally cannot, so this is the compare-and-swap that
+  // makes that failure mode "refuse and ask to reload" instead of
+  // "silently patch whatever's there now". lines is what actually gets
+  // edited; expectedCurrent stays frozen at its original value.
+  overworldInlineDialogueEdits: {}
 };
 
 export function markDirty() {

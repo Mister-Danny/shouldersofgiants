@@ -135,3 +135,142 @@ test('isKnownArray whitelists only the 39 registered names', () => {
   assert.equal(owExtract.isKnownArray('DECKBUILDER_UNLOCK_DIALOGUE'), false);
   assert.equal(owExtract.isKnownArray('___NOT_A_REAL_VAR___'), false);
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Phase 3b — the 3 inline (unnamed) dialogue blocks. Same round-trip proof
+   standard as the 39 named arrays, plus tests specific to what makes an
+   inline block riskier: the position-based anchor and the compare-and-
+   swap check that exists because of it.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function allInlineSpecs() {
+  return owExtract.OVERWORLD_DIALOGUE_GROUPS.reduce((acc, g) => acc.concat(g.inline || []), []);
+}
+
+test('registry has exactly the 3 approved inline blocks, all in the D2a group', () => {
+  const specs = allInlineSpecs();
+  assert.equal(specs.length, 3);
+  assert.deepEqual(specs.map((s) => s.id).sort(), [
+    'd2a-closing-cities-bye', 'd2a-closing-final-line', 'd2a-hunter-transform',
+  ]);
+});
+
+test('every inline block is found, plain-literal, and editable (but lineOpsBlocked)', () => {
+  const preview = owExtract.buildOverworldPreview();
+  const d2a = preview.groups.find((g) => g.group.includes('D2a'));
+  assert.equal(d2a.inline.length, 3);
+  d2a.inline.forEach((b) => {
+    assert.equal(b.extraction.found, true, `${b.id} not found`);
+    assert.equal(b.extraction.isPlainLiteral, true, `${b.id} not a plain literal`);
+    assert.equal(b.editable, true, `${b.id} not editable: ${b.editBlockedReason}`);
+    assert.equal(b.lineOpsBlocked, true, `${b.id} must always have lineOpsBlocked`);
+  });
+});
+
+test('no-edit round trip is byte-identical for all 3 inline blocks, individually and together', () => {
+  const original = fs.readFileSync(OVERWORLD_ABS, 'utf8');
+  const specs = allInlineSpecs();
+
+  specs.forEach((spec) => {
+    const preview = owExtract.buildInlineBlockPreview(original, spec);
+    const out = boss.applyInlineDialogueEdit(original, spec, preview.extraction.value, preview.extraction.value);
+    assert.equal(out.fileText, original, `${spec.id}: no-op save must not change a single byte`);
+    assert.equal(out.changed, false);
+    assert.equal(out.error, undefined);
+  });
+
+  // All three in sequence, simulating one save request touching all of them —
+  // proves re-locating fresh after each (no-op) write still finds the right
+  // spans, not stale offsets from before the loop started.
+  let text = original;
+  specs.forEach((spec) => {
+    const preview = owExtract.buildInlineBlockPreview(text, spec);
+    const out = boss.applyInlineDialogueEdit(text, spec, preview.extraction.value, preview.extraction.value);
+    text = out.fileText;
+  });
+  assert.equal(text, original);
+});
+
+test('a genuine edit to one inline block changes only that block (minimal diff, per-line patch)', () => {
+  const original = fs.readFileSync(OVERWORLD_ABS, 'utf8');
+  const spec = allInlineSpecs().find((s) => s.id === 'd2a-closing-cities-bye');
+  const preview = owExtract.buildInlineBlockPreview(original, spec);
+  const current = preview.extraction.value;
+
+  const edited = current.map((l, i) => i === 1 ? { who: l.who, text: 'EDITED LINE' } : l);
+  const out = boss.applyInlineDialogueEdit(original, spec, current, edited);
+
+  assert.equal(out.changed, true);
+  assert.equal(out.error, undefined);
+  assert.doesNotThrow(() => new Function(out.fileText));
+
+  const newSpan = boss.findInlineArraySpan(out.fileText, spec.functionName, spec.callPattern, spec.occurrenceIndex);
+  assert.deepEqual(boss.evalLiteral(newSpan.text), edited);
+
+  // Every OTHER line in this same block, plus the other two inline blocks
+  // and a couple of named arrays before/after, must be byte-identical.
+  const otherLinesUnchanged = boss.findObjectItemSpans(original, boss.findInlineArraySpan(original, spec.functionName, spec.callPattern, spec.occurrenceIndex).valueStart, boss.findInlineArraySpan(original, spec.functionName, spec.callPattern, spec.occurrenceIndex).valueEnd);
+  const newItems = boss.findObjectItemSpans(out.fileText, newSpan.valueStart, newSpan.valueEnd);
+  otherLinesUnchanged.forEach((item, i) => {
+    if (i === 1) return;
+    assert.equal(newItems[i].text, item.text, `line ${i} of the edited block must be byte-identical`);
+  });
+
+  ['d2a-hunter-transform', 'd2a-closing-final-line'].forEach((id) => {
+    const s = allInlineSpecs().find((x) => x.id === id);
+    const before = boss.findInlineArraySpan(original, s.functionName, s.callPattern, s.occurrenceIndex).text;
+    const after = boss.findInlineArraySpan(out.fileText, s.functionName, s.callPattern, s.occurrenceIndex).text;
+    assert.equal(after, before, `${id} must be untouched by an edit to a different inline block`);
+  });
+  ['D2A_FARMING_DIALOGUE', 'NARMER_ENCOUNTER_DIALOGUE'].forEach((name) => {
+    const before = boss.findVarSpan(original, name).text;
+    const after = boss.findVarSpan(out.fileText, name).text;
+    assert.equal(after, before, `${name} must be untouched by an inline-block edit`);
+  });
+});
+
+test('compare-and-swap: a stale/wrong expectedCurrent is refused, file untouched', () => {
+  const original = fs.readFileSync(OVERWORLD_ABS, 'utf8');
+  const spec = allInlineSpecs().find((s) => s.id === 'd2a-hunter-transform');
+  const wrongExpected = [{ who: 'hunter', text: 'this is not what is actually there' }];
+  const out = boss.applyInlineDialogueEdit(original, spec, wrongExpected, [{ who: 'hunter', text: 'new text' }]);
+  assert.equal(out.fileText, original, 'a refused write must not alter the file at all');
+  assert.ok(out.error, 'expected an error for the expectedCurrent mismatch');
+  assert.match(out.error, /changed since it was loaded|anchor drifted/);
+});
+
+test('add/remove is refused unconditionally on inline blocks, even though none are flagged', () => {
+  const original = fs.readFileSync(OVERWORLD_ABS, 'utf8');
+  const spec = allInlineSpecs().find((s) => s.id === 'd2a-closing-final-line');
+  const preview = owExtract.buildInlineBlockPreview(original, spec);
+  const current = preview.extraction.value;
+
+  const withExtra = [...current, { who: 'explorer', text: 'new line' }];
+  const outAdd = boss.applyInlineDialogueEdit(original, spec, current, withExtra);
+  assert.equal(outAdd.fileText, original);
+  assert.ok(outAdd.error);
+
+  const withoutOne = current.slice(1);
+  const outRemove = boss.applyInlineDialogueEdit(original, spec, current, withoutOne);
+  assert.equal(outRemove.fileText, original);
+  assert.ok(outRemove.error);
+});
+
+test('a bogus/moved anchor fails clean (not found), never guesses at different content', () => {
+  const original = fs.readFileSync(OVERWORLD_ABS, 'utf8');
+  const bogusSpec = { functionName: '_thisFunctionDoesNotExist', callPattern: '_runLinesKeepOpen(', occurrenceIndex: 0 };
+  const out = boss.applyInlineDialogueEdit(original, bogusSpec, [{ who: 'x', text: 'y' }], [{ who: 'x', text: 'z' }]);
+  assert.equal(out.fileText, original);
+  assert.match(out.error, /anchor not found/);
+
+  // Same function, but an occurrence index past how many calls it actually has.
+  const outOfRange = { functionName: '_d2aClosingSequence', callPattern: '_runLinesKeepOpen(', occurrenceIndex: 99 };
+  const out2 = boss.applyInlineDialogueEdit(original, outOfRange, [{ who: 'x', text: 'y' }], [{ who: 'x', text: 'z' }]);
+  assert.equal(out2.fileText, original);
+  assert.match(out2.error, /anchor not found/);
+});
+
+test('inlineBlockSpec resolves known ids and rejects unknown ones', () => {
+  assert.ok(owExtract.inlineBlockSpec('d2a-hunter-transform'));
+  assert.equal(owExtract.inlineBlockSpec('not-a-real-id'), null);
+});
