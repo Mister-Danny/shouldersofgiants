@@ -17,17 +17,18 @@
   --path:   #6fd47a;
 
   /* Dialogue speaker colors (boss preview only — see level/render.js's
-     SPEAKER_COLORS). --exit and --path are reused as-is (unused elsewhere in
-     the Level Editor, good contrast already). The four below are new — every
-     existing var was either too close in hue to --gold/--gold-hi (would blur
-     together at a glance) or, in --danger's case, under the ~4.5:1 contrast
-     ratio needed for a full line of body text against --bg (it measures
-     ~3.8:1, fine for the short warning notes it's used for today, not for
-     paragraph-length dialogue). All four measure 6:1 or better against --bg. */
+     bossSpeakerColors). Explorer is always --dlg-explorer, the boss is
+     always --exit (reused as-is — unused elsewhere in the Level Editor,
+     good contrast already), a genuine third speaker is always --dlg-violet
+     — assigned by POSITION within one boss's dialogue, not per-character,
+     so every boss reads as the same two colors. --dlg-explorer is new:
+     every existing var was either too close in hue to --gold/--gold-hi
+     (would blur together at a glance) or, in --danger's case, under the
+     ~4.5:1 contrast ratio a full line of body text needs against --bg (it
+     measures ~3.8:1 — fine for the short warning notes it's used for
+     today, not for paragraph-length dialogue). Both measure 6:1+. */
   --dlg-explorer: #c9a876;  /* ~9.2:1 — warm light brown, distinct from --dim/--text */
-  --dlg-coral:    #e2685a;  /* ~6.3:1 */
   --dlg-violet:   #a78bfa;  /* ~7.6:1 */
-  --dlg-teal:     #4fd4c9;  /* ~11.2:1 */
 }
 
 * { box-sizing: border-box; }

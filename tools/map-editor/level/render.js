@@ -381,7 +381,7 @@ function cssEscape(s) { return s.replace(/["\\]/g, '\\$&'); }
 
 function bossFormHtml(p) {
   return `
-    <div class="ro-banner">Read-only — hand-authored in <code>${esc(p.file)}</code>. Nothing on this screen can be edited (see Phase 2 for dialogue write-back).</div>
+    <div class="ro-banner">Hand-authored in <code>${esc(p.file)}</code>. Structure/locations/decks/etc. below are read-only — only the Dialogue section can be edited and saved back to the file.</div>
     <div class="form-section"><h3>${esc(p.nodeId)}</h3></div>
     ${bossStructureSection(p)}
     ${bossDecksSection(p)}
@@ -530,6 +530,7 @@ function bossDialogueSection(p) {
   const bossKey = p.nodeId;
   const pending = State.bossDialogueEdits[bossKey] || {};
   const dirtyCount = Object.keys(pending).length;
+  const colors = bossSpeakerColors(p);
   return `
     <div class="form-section">
       <h3>Dialogue</h3>
@@ -559,7 +560,7 @@ function bossDialogueSection(p) {
             <p class="impure-note">Not editable — ${esc(d.editBlockedReason || 'unknown reason')}.</p>
             ${src}
             ${lines.map(line => {
-              const c = speakerColor(line.who);
+              const c = speakerColor(colors, line.who);
               return `<div class="ro-line"><span class="who" style="color:${c}">${esc(line.who || '')}</span><span class="text" style="color:${c}">${esc(line.text || '')}</span></div>`;
             }).join('')}
           `;
@@ -574,7 +575,7 @@ function bossDialogueSection(p) {
           ${header}
           ${noteHtml}${commentWarning}
           ${lines.map((line, i) => {
-            const c = speakerColor(line.who);
+            const c = speakerColor(colors, line.who);
             return `
             <div class="f2" data-boss-dlg="${esc(key)}:${i}">
               <div class="f" style="flex:0 0 120px">
@@ -619,44 +620,36 @@ function wireBossDialogue(preview) {
   });
 }
 
-/* Speaker → color, keyed by the raw `who` string so the SAME character is
-   the SAME color in every dialogue array and every boss (per-line, not
-   per-boss — a hardcoded "boss N gets color N" scheme would give the wrong
-   answer the moment two bosses' dialogue is compared side by side, or a
-   character like the Farmer shows up in more than one place).
+/* Speaker → color, by POSITION within one boss's dialogue, not a fixed
+   per-character lookup — every boss reads as the same two colors
+   (Explorer's light brown + the boss's own blue) instead of each boss
+   having its own hue, which read as harder to scan across bosses than it
+   was worth. A genuine third speaker (none of the 10 standard arrays has
+   one today — Farmer only speaks in Gilgamesh's Cuneiform-intervention
+   beat, which isn't one of the 10) gets purple; a 4th+ would also get
+   purple rather than growing the palette further.
 
-   Hand-typed for every speaker key actually in the 5 boss files today
-   (confirmed via `grep -oE "who:\s*'[a-zA-Z_]+'"` across all 5 — 'explorer'
-   plus 6 named characters, note Gilgamesh's own dialogue key is 'otzi', not
-   'gilgamesh'). nebuchadnezzar and farmer intentionally share --dlg-coral —
-   they never appear in the same dialogue array (Farmer only speaks in
-   Gilgamesh's Cuneiform-intervention beat, nowhere near Nebuchadnezzar's
-   battle), so reusing one of the 5 non-explorer colors there is the "cycle"
-   the palette is sized for, not a scanability problem.
-
-   FALLBACK_PALETTE + the hash below exist only for a speaker key not yet in
-   this map (a 6th boss, say) — still fully deterministic (pure function of
-   the string), so a new character is stable-colored from its first render
-   without needing this file touched, though adding a real entry above once
-   you know the name is the better long-term move (same reasoning as
-   BOSS_SOURCES being hand-curated rather than auto-discovered). */
-const SPEAKER_COLORS = {
-  explorer:       'var(--dlg-explorer)',
-  sargon:         'var(--exit)',
-  hammurabi:      'var(--path)',
-  nebuchadnezzar: 'var(--dlg-coral)',
-  narmer:         'var(--dlg-violet)',
-  otzi:           'var(--dlg-teal)',
-  farmer:         'var(--dlg-coral)'
-};
-const FALLBACK_PALETTE = ['var(--exit)', 'var(--path)', 'var(--dlg-coral)', 'var(--dlg-violet)', 'var(--dlg-teal)'];
-
-function speakerColor(who) {
-  if (!who) return 'var(--text)';
-  if (SPEAKER_COLORS[who]) return SPEAKER_COLORS[who];
-  let h = 0;
-  for (let i = 0; i < who.length; i++) h = (h * 31 + who.charCodeAt(i)) >>> 0;
-  return FALLBACK_PALETTE[h % FALLBACK_PALETTE.length];
+   Computed fresh per boss from whichever `who` values actually appear in
+   ITS OWN dialogue (never a hand-maintained per-boss list — that's what
+   drifts), but stable within one render: the non-explorer speakers are
+   collected once and sorted alphabetically, not colored in whatever order
+   the 10 arrays happen to be walked in — so "the boss" is always blue and
+   a third character is always purple, regardless of which array or which
+   line within it is read first. */
+function bossSpeakerColors(preview) {
+  const whoSet = new Set();
+  Object.values(preview.dialogue).forEach(d => {
+    if (d.present && d.extraction && d.extraction.isPlainLiteral) {
+      (d.extraction.value || []).forEach(line => { if (line.who) whoSet.add(line.who); });
+    }
+  });
+  const nonExplorer = [...whoSet].filter(w => w !== 'explorer').sort();
+  const colors = { explorer: 'var(--dlg-explorer)' };
+  nonExplorer.forEach((who, i) => { colors[who] = i === 0 ? 'var(--exit)' : 'var(--dlg-violet)'; });
+  return colors;
+}
+function speakerColor(colors, who) {
+  return (who && colors[who]) || 'var(--text)';
 }
 
 function bossBespokeSection(p) {
