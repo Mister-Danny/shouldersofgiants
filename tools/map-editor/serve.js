@@ -15,14 +15,18 @@
    updated. This is a local tool that must still boot in a year.
 
    Endpoints beyond static files:
-     GET  /api/art          → the map + node art on disk, for the picker
-     POST /api/save         → overwrite data/map-data.js (the only write)
+     GET  /api/art                → the map + node art on disk, for the picker
+     POST /api/save                → overwrite data/map-data.js
+     POST /api/save-level          → overwrite data/level-data.js
+     GET  /api/boss-previews       → read-only extraction of the 5 boss files
+     POST /api/save-boss-dialogue  → surgical dialogue rewrite in ONE boss file
    ══════════════════════════════════════════════════════════════════════════ */
 'use strict';
 
 var http = require('http');
 var fs   = require('fs');
 var path = require('path');
+var bossExtract = require('./boss-extract.js');
 
 var ROOT = path.resolve(__dirname, '..', '..');
 var PORT = Number(process.env.PORT) || 8750;
@@ -866,6 +870,116 @@ function handleSaveLevel(req, res) {
   });
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Phase 2 — dialogue write-back for the 5 hand-authored bosses. Deliberately
+   its own function/endpoint, not folded into handleSaveLevel: the two write
+   to completely different files (a boss's own .js vs data/level-data.js)
+   under a completely different validation model (surgical span replacement
+   vs whole-document serialisation), and mixing them would mean one bug
+   could reach both.
+
+   Body shape: { bossKey: '<nodeId>', dialogue: { <schemaKey>: [{who,text}] } }
+   bossKey is the client's nodeId (viewBoss()'s key, e.g. 'walls-of-uruk' for
+   Gilgamesh) — resolved server-side via bossExtract.bossSourceByNodeId,
+   NEVER a client-supplied file path. That resolution, plus BOSS_SOURCES'
+   own hand-curated dialogue-key → varName map, is what makes this endpoint
+   structurally unable to touch any file or variable outside the 5 boss
+   files' own dialogue arrays — there is no field in the request body that
+   ever becomes a path or a var name directly. */
+function handleSaveBossDialogue(req, res) {
+  var body = '';
+  req.on('data', function (c) {
+    body += c;
+    if (body.length > 2e6) { req.destroy(); }
+  });
+  req.on('end', function () {
+    var payload;
+    try {
+      payload = JSON.parse(body);
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: 'bad JSON: ' + e.message });
+    }
+
+    var src = payload && payload.bossKey ? bossExtract.bossSourceByNodeId(payload.bossKey) : null;
+    if (!src) return sendJson(res, 400, { ok: false, error: 'unknown bossKey: ' + (payload && payload.bossKey) });
+
+    var dialogue = payload.dialogue || {};
+    var schemaKeys = Object.keys(dialogue);
+    if (!schemaKeys.length) return sendJson(res, 200, { ok: true, changed: [], commentsLost: [], message: 'nothing submitted' });
+
+    // Resolve every submitted key to a real varName BEFORE touching the
+    // file at all — a sameAs/unknown key aborts the whole save rather than
+    // silently skipping it, so a client bug can't look like a successful
+    // partial save.
+    var edits = [];
+    for (var i = 0; i < schemaKeys.length; i++) {
+      var schemaKey = schemaKeys[i];
+      var spec = src.dialogue[schemaKey];
+      if (spec == null) return sendJson(res, 400, { ok: false, error: 'no such dialogue key "' + schemaKey + '" for ' + payload.bossKey });
+      if (typeof spec === 'object' && spec.sameAs) {
+        return sendJson(res, 400, { ok: false, error: '"' + schemaKey + '" shares its array with "' + spec.sameAs + '" — not directly editable' });
+      }
+      var varName = typeof spec === 'object' ? spec.varName : spec;
+      edits.push({ varName: varName, lines: dialogue[schemaKey] });
+    }
+
+    var abs = path.join(ROOT, src.file);
+    var original;
+    try {
+      original = fs.readFileSync(abs, 'utf8');
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: 'could not read ' + src.file + ': ' + e.message });
+    }
+
+    var result;
+    try {
+      result = bossExtract.applyDialogueEdits(original, edits);
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: 'write-back failed: ' + e.message });
+    }
+
+    // Any single array failing validation (not found / not a plain literal /
+    // fields this editor can't represent) aborts the ENTIRE save — nothing
+    // gets written, not even the arrays that were fine. A confusing partial
+    // save is worse than making the author retry.
+    var failed = result.results.filter(function (r) { return r.error; });
+    if (failed.length) {
+      return sendJson(res, 400, { ok: false, error: 'refused: ' + failed.map(function (r) { return r.varName + ': ' + r.error; }).join('; ') });
+    }
+
+    var changed = result.results.filter(function (r) { return r.changed; });
+    if (!changed.length) {
+      // True no-op — the file was never touched, not even re-written with
+      // identical bytes. See applyDialogueEdits' own docstring for why this
+      // is the case that has to hold exactly.
+      return sendJson(res, 200, { ok: true, changed: [], commentsLost: [], message: 'no changes' });
+    }
+
+    // Whole-file syntax check before anything touches disk. new Function
+    // COMPILES the body without running it (there is no top-level call
+    // here, same as makeCheckable's window-wrapped map/level check above) —
+    // a real syntax error throws here; an undefined SOG/window reference
+    // does not, since nothing executes.
+    try {
+      new Function(result.fileText);
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: src.file + ' would not parse after this edit: ' + e.message });
+    }
+
+    try {
+      fs.copyFileSync(abs, abs + '.bak');
+      fs.writeFileSync(abs, result.fileText, 'utf8');
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: 'write failed: ' + e.message });
+    }
+
+    var commentsLost = changed.filter(function (r) { return r.hadComments; }).map(function (r) { return r.varName; });
+    console.log('[map-editor] saved ' + src.file + ' — ' + changed.length + ' dialogue array(s) rewritten' +
+                (commentsLost.length ? ' (comments lost in ' + commentsLost.join(', ') + ')' : ''));
+    sendJson(res, 200, { ok: true, changed: changed.map(function (r) { return r.varName; }), commentsLost: commentsLost });
+  });
+}
+
 var server = http.createServer(function (req, res) {
   var url = decodeURIComponent(req.url.split('?')[0]);
 
@@ -891,6 +1005,22 @@ var server = http.createServer(function (req, res) {
       return sendJson(res, 500, { error: 'could not read js/cards.js: ' + e.message });
     }
     return sendJson(res, 200, meta);
+  }
+  if (url === '/api/boss-previews') {
+    // Phase 1, read-only: the 5 hand-authored bosses, extracted fresh from
+    // their own .js files on every request (no caching — these files are
+    // hand-edited directly, not through this tool, so a stale cache here
+    // would show the wrong thing after any edit). See boss-extract.js.
+    var previews;
+    try {
+      previews = bossExtract.buildAllBossPreviews();
+    } catch (e) {
+      return sendJson(res, 500, { error: 'boss extraction failed: ' + e.message });
+    }
+    return sendJson(res, 200, previews);
+  }
+  if (url === '/api/save-boss-dialogue' && req.method === 'POST') {
+    return handleSaveBossDialogue(req, res);
   }
 
   if (url === '/tools/map-editor' || url === '/tools/map-editor/') url = '/tools/map-editor/index.html';

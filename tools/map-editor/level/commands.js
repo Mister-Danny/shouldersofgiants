@@ -37,6 +37,18 @@ export function bind(selector, ev, fn) {
 
 export function selectLevel(id) {
   State.levelId = id;
+  State.bossKey = null;   // mutually exclusive with viewing a boss read-only
+  requestRender();
+}
+
+/* Selects a hand-authored boss for viewing. Structure/locations/decks/etc.
+   stay read-only (no document behind them to mutate); only dialogue is
+   editable (Phase 2, via editBossDialogueLine et al. below), which is why
+   this still never snapshots or touches State.levels/State.doc — that
+   undo stack belongs to the AUTHORED levels document, not boss files. */
+export function viewBoss(nodeId) {
+  State.bossKey = nodeId;
+  State.levelId = null;
   requestRender();
 }
 
@@ -73,10 +85,11 @@ function blankLevel() {
    'market' isn't wired in js/level-runtime.js yet, and validateLevel()
    rejects saving one, so a market-paired form would be a dead end. */
 export function createLevel(id) {
-  if (State.levels[id]) { State.levelId = id; requestRender(); return; }
+  if (State.levels[id]) { State.levelId = id; State.bossKey = null; requestRender(); return; }
   snapshot();
   State.levels[id] = blankLevel();
   State.levelId = id;
+  State.bossKey = null;
   markDirty();
   requestRender();
 }
@@ -210,4 +223,101 @@ export function removeDialogueLine(arrayName, index) {
 export function setDialogueLine(arrayName, index, field, value) {
   State.levels[State.levelId].dialogue[arrayName][index][field] = value;
   markDirty();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Phase 2 — boss dialogue editing. A completely separate track from
+   everything above: edits live in State.bossDialogueEdits, never
+   State.doc/State.levels, and save through POST /api/save-boss-dialogue to
+   one boss's own .js file — never markDirty()/the #level-dirty dot, which
+   belong to the authored-levels document and its own "Save to level-
+   data.js" button. Conflating the two would make a boss-dialogue edit look
+   like an unsaved LEVEL change, and vice versa.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Lazily starts an edit buffer for one (boss, dialogueKey) pair from its
+   current extracted value — never called for a key whose preview marked
+   editable:false; render.js only wires inputs for editable arrays, so
+   there is nothing here re-checking that gate (the DOM simply has no input
+   to invoke this from otherwise). */
+function _bossEditBuffer(bossKey, dialogueKey) {
+  State.bossDialogueEdits[bossKey] = State.bossDialogueEdits[bossKey] || {};
+  const buf = State.bossDialogueEdits[bossKey];
+  let created = false;
+  if (!buf[dialogueKey]) {
+    const current = State.bossPreviews[bossKey].dialogue[dialogueKey].extraction.value || [];
+    buf[dialogueKey] = current.map(l => ({ who: l.who, text: l.text }));
+    created = true;
+  }
+  return { lines: buf[dialogueKey], created };
+}
+
+/* No requestRender() on every keystroke — same reasoning as bindField's own
+   comment (a full innerHTML rebuild on 'input' drops focus). The ONE thing
+   on screen that needs to reflect a plain text edit is the "N arrays
+   changed" Save button label/enabled-state, and that only changes the
+   FIRST time a given array gets an edit buffer at all — so only THAT
+   transition rerenders. */
+export function editBossDialogueLine(bossKey, dialogueKey, index, field, value) {
+  const { lines, created } = _bossEditBuffer(bossKey, dialogueKey);
+  lines[index][field] = value;
+  if (created) requestRender();
+}
+
+export function addBossDialogueLine(bossKey, dialogueKey) {
+  _bossEditBuffer(bossKey, dialogueKey).lines.push({ who: '', text: '' });
+  requestRender();
+}
+
+export function removeBossDialogueLine(bossKey, dialogueKey, index) {
+  _bossEditBuffer(bossKey, dialogueKey).lines.splice(index, 1);
+  requestRender();
+}
+
+/* Backs out edits to ONE array, restoring the read-only/editable-input view
+   to whatever is currently on disk (re-derived fresh next time it's
+   touched, via _bossEditBuffer). Does not affect any other array's
+   pending edits for this boss. */
+export function revertBossDialogueEdits(bossKey, dialogueKey) {
+  if (State.bossDialogueEdits[bossKey]) delete State.bossDialogueEdits[bossKey][dialogueKey];
+  requestRender();
+}
+
+/* Submits every array with a pending edit buffer for this boss in one
+   request — the server (applyDialogueEdits) is what actually decides,
+   per array, whether anything changed; an array whose buffer happens to
+   equal what's on disk is a no-op there, so sending the whole buffer here
+   is simpler than this file also tracking a precise per-array dirty flag.
+   On success: drop this boss's edit buffer and re-fetch bossPreviews fresh
+   (server is the only ground truth for sourceText/isPlainLiteral/etc. —
+   patching them in client-side would risk drifting from what's really on
+   disk). On failure: keep the buffer so nothing typed is lost. */
+export async function saveBossDialogue(bossKey) {
+  const edits = State.bossDialogueEdits[bossKey];
+  if (!edits || !Object.keys(edits).length) return toast('No dialogue changes to save for this boss');
+
+  try {
+    const res = await fetch('/api/save-boss-dialogue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bossKey, dialogue: edits })
+    });
+    const out = await res.json();
+    if (!out.ok) return toast(out.error, true);
+
+    delete State.bossDialogueEdits[bossKey];
+    const res2 = await fetch('/api/boss-previews');
+    if (res2.ok) State.bossPreviews = await res2.json();
+
+    if (!out.changed.length) {
+      toast('No changes — already matched what was on disk');
+    } else {
+      let msg = `Saved ${out.changed.join(', ')} to ${(State.bossPreviews[bossKey] || {}).file || 'the boss file'}.`;
+      if (out.commentsLost.length) msg += ` Comment lost in: ${out.commentsLost.join(', ')}.`;
+      toast(msg);
+    }
+    requestRender();
+  } catch (e) {
+    toast('Save failed: ' + e.message, true);
+  }
 }

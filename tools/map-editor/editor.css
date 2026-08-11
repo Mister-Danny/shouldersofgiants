@@ -15,6 +15,19 @@
   --danger: #c0392b;
   --exit:   #4a9ed4;
   --path:   #6fd47a;
+
+  /* Dialogue speaker colors (boss preview only — see level/render.js's
+     SPEAKER_COLORS). --exit and --path are reused as-is (unused elsewhere in
+     the Level Editor, good contrast already). The four below are new — every
+     existing var was either too close in hue to --gold/--gold-hi (would blur
+     together at a glance) or, in --danger's case, under the ~4.5:1 contrast
+     ratio needed for a full line of body text against --bg (it measures
+     ~3.8:1, fine for the short warning notes it's used for today, not for
+     paragraph-length dialogue). All four measure 6:1 or better against --bg. */
+  --dlg-explorer: #c9a876;  /* ~9.2:1 — warm light brown, distinct from --dim/--text */
+  --dlg-coral:    #e2685a;  /* ~6.3:1 */
+  --dlg-violet:   #a78bfa;  /* ~7.6:1 */
+  --dlg-teal:     #4fd4c9;  /* ~11.2:1 */
 }
 
 * { box-sizing: border-box; }
@@ -354,6 +367,54 @@ main { flex: 1; display: flex; min-height: 0; }
 
 .turn-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* ── Read-only boss preview (Phase 1) ─────────────────────────────────────
+   Deliberately NOT reusing .f/.f2 (real inputs) — this content can never
+   become an input by accident, only ever plain text, so there is nothing
+   here to wire a stray edit handler to. */
+.ro-banner {
+  background: rgba(192,57,43,0.15);
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  color: #e88;
+  font-size: 12px;
+}
+.ro-field { margin-bottom: 8px; }
+.ro-field .k { display: block; color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+.ro-field .v { color: var(--text); }
+.ro-field .v.computed { color: var(--gold); font-style: italic; }
+.ro-line { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px solid rgba(58,47,28,0.5); }
+/* Color comes from an inline style (level/render.js's speakerColor()) — it's
+   per-line data (which character said this), not a fixed rule. Both spans
+   get it, not just .who, so a whole exchange stays scannable by color, not
+   just the name. */
+.ro-line .who { flex: 0 0 90px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.ro-line .text { color: var(--text); }
+.ro-line .flag { color: var(--danger); font-size: 10px; margin-left: 6px; }
+.bespoke-box {
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgba(212,170,80,0.06);
+}
+.bespoke-box h4 { margin: 0 0 4px; color: var(--gold-hi); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+.bespoke-box .loc { color: var(--dim); font-size: 10px; font-family: inherit; margin-bottom: 6px; }
+.impure-note { color: var(--danger); font-size: 10px; margin-top: 2px; }
+.ro-source {
+  background: rgba(0,0,0,0.25);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--dim);
+  margin: 4px 0;
+}
+.ro-notes { margin: 0; padding-left: 18px; font-size: 11px; color: var(--dim); }
+.ro-notes li { margin-bottom: 4px; }
+
 /* ── Deck picker modal ────────────────────────────────────────────────── */
 .deck-picker { display: flex; flex-direction: column; gap: 10px; height: 58vh; }
 .deck-picker-filters { display: flex; gap: 8px; flex: 0 0 auto; }
@@ -426,8 +487,8 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 .seg button.on { background: var(--gold); border-color: var(--gold); color: #191203; font-weight: bold; }
 
-#node-list, #exit-list, #prop-list, #level-list, #unconfigured-list { list-style: none; margin: 0; padding: 0; }
-#node-list li, #exit-list li, #prop-list li, #level-list li, #unconfigured-list li {
+#node-list, #exit-list, #prop-list, #level-list, #boss-list, #unconfigured-list { list-style: none; margin: 0; padding: 0; }
+#node-list li, #exit-list li, #prop-list li, #level-list li, #boss-list li, #unconfigured-list li {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -436,9 +497,9 @@ main { flex: 1; display: flex; min-height: 0; }
   border-radius: 3px;
 }
 #node-list li:hover, #exit-list li:hover, #prop-list li:hover,
-#level-list li:hover, #unconfigured-list li:hover { background: rgba(212,170,80,0.10); }
+#level-list li:hover, #boss-list li:hover, #unconfigured-list li:hover { background: rgba(212,170,80,0.10); }
 #node-list li.sel, #exit-list li.sel, #prop-list li.sel,
-#level-list li.sel { background: rgba(212,170,80,0.22); color: var(--gold-hi); }
+#level-list li.sel, #boss-list li.sel { background: rgba(212,170,80,0.22); color: var(--gold-hi); }
 #node-list li img { width: 22px; height: 22px; object-fit: contain; }
 #node-list li .k, #exit-list li .k, #prop-list li .k,
 #level-list li .k, #unconfigured-list li .k { margin-left: auto; color: var(--dim); font-size: 10px; }

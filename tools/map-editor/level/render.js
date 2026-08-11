@@ -3,9 +3,11 @@ import { requestRender } from './notify.js';
 import { State as mapState } from '../map/state.js';
 import { State, markDirty } from './state.js';
 import {
-  bindField, setLevelField, selectLevel, createLevel, deleteLevel,
+  bindField, setLevelField, selectLevel, createLevel, deleteLevel, viewBoss,
   setTurnCount, setCapitalForTurn,
-  setDeckIds, addDialogueLine, removeDialogueLine, setDialogueLine
+  setDeckIds, addDialogueLine, removeDialogueLine, setDialogueLine,
+  editBossDialogueLine, addBossDialogueLine, removeBossDialogueLine,
+  revertBossDialogueEdits, saveBossDialogue
 } from './commands.js';
 import { pickDeck } from './deck-picker.js';
 
@@ -24,6 +26,7 @@ function battleNodesFromMap() {
 
 function render() {
   renderLevelList();
+  renderBossList();
   renderForm();
 }
 
@@ -32,7 +35,12 @@ function render() {
    no matching entry here shows in "Unconfigured nodes", clickable straight
    into createLevel(). The map inspector's own src2() shows the same gap
    the other way (a "Configure battle →" button on the node itself) — two
-   views of one fact, not two separate trackers to keep in sync. */
+   views of one fact, not two separate trackers to keep in sync.
+
+   Nodes with a hand-authored boss preview (State.bossPreviews) are excluded
+   from the gap list — they're not unconfigured, they're configured in a
+   .js file this tool doesn't write to yet; they show in their own "Hand-
+   authored bosses" section instead (renderBossList). */
 function renderLevelList() {
   const ul = $('#level-list');
   const ids = Object.keys(State.levels || {});
@@ -42,7 +50,7 @@ function renderLevelList() {
     </li>`).join('') || '<li class="note">No levels authored yet.</li>';
   $$('#level-list li[data-id]').forEach(li => { li.onclick = () => selectLevel(li.dataset.id); });
 
-  const gaps = battleNodesFromMap().filter(n => !State.levels[n.id]);
+  const gaps = battleNodesFromMap().filter(n => !State.levels[n.id] && !(State.bossPreviews || {})[n.id]);
   const gl = $('#unconfigured-list');
   gl.innerHTML = gaps.map(n => `
     <li data-id="${esc(n.id)}"><span class="gap-dot">●</span><span>${esc(n.name || n.id)}</span></li>
@@ -50,10 +58,32 @@ function renderLevelList() {
   $$('#unconfigured-list li[data-id]').forEach(li => { li.onclick = () => createLevel(li.dataset.id); });
 }
 
+/* Phase 1: the five hand-authored bosses, read-only. Selecting one calls
+   viewBoss() (state.js), which clears levelId — see that command's own
+   docstring for why there's no snapshot/dirty/undo wiring here at all. */
+function renderBossList() {
+  const ul = $('#boss-list');
+  const keys = Object.keys(State.bossPreviews || {});
+  ul.innerHTML = keys.map(nodeId => `
+    <li class="${nodeId === State.bossKey ? 'sel' : ''}" data-id="${esc(nodeId)}">
+      <span>${esc(nodeId)}</span><span class="k">boss</span>
+    </li>`).join('') || '<li class="note">None loaded.</li>';
+  $$('#boss-list li[data-id]').forEach(li => { li.onclick = () => viewBoss(li.dataset.id); });
+}
+
 /* ── Form ─────────────────────────────────────────────────────────────── */
 function renderForm() {
   const wrap = $('#level-form');
   const empty = $('#level-empty-note');
+
+  if (State.bossKey) {
+    const preview = State.bossPreviews[State.bossKey];
+    empty.hidden = true; wrap.hidden = false;
+    wrap.innerHTML = preview ? bossFormHtml(preview) : '<p class="note">No preview data for this boss.</p>';
+    if (preview) wireBossDialogue(preview);
+    return;   // everything but dialogue is read-only — nothing else to wire
+  }
+
   const lvl = State.levelId && State.levels[State.levelId];
   if (!lvl) { wrap.hidden = true; empty.hidden = false; return; }
   empty.hidden = true; wrap.hidden = false;
@@ -332,5 +362,324 @@ function wireForm(id, lvl) {
    never containing quotes) but a stray one would break the attribute
    selector silently — cheap insurance. */
 function cssEscape(s) { return s.replace(/["\\]/g, '\\$&'); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Boss preview (Phase 1, read-only) ─────────────────────────────────────
+   Mirrors formHtml's section layout field-for-field so the two views are
+   visually comparable, but built entirely from <div>/<span> — no <input>,
+   <select>, or <textarea> anywhere in this half of the file. There is
+   nothing here to wire: renderForm() returns right after setting
+   innerHTML for a boss, unlike wireForm() for an authored level.
+
+   Every value comes straight from tools/map-editor/boss-extract.js's
+   extraction result (see that file's own docstring for the two mechanisms
+   — bracket-span-finding and isPlainLiteral). A field whose extraction
+   isn't a plain literal is flagged with .impure-note rather than silently
+   shown as if it were an ordinary value — the user asked specifically for
+   dynamically-built dialogue/fields to be visible but never mistakable for
+   editable data. */
+
+function bossFormHtml(p) {
+  return `
+    <div class="ro-banner">Read-only — hand-authored in <code>${esc(p.file)}</code>. Nothing on this screen can be edited (see Phase 2 for dialogue write-back).</div>
+    <div class="form-section"><h3>${esc(p.nodeId)}</h3></div>
+    ${bossStructureSection(p)}
+    ${bossDecksSection(p)}
+    ${bossLocationsSection(p)}
+    ${bossScoringSection(p)}
+    ${bossPresentationSection(p)}
+    ${bossRulesPopupSection(p)}
+    ${bossDialogueSection(p)}
+    ${bossBespokeSection(p)}
+    ${bossNotesSection(p)}
+  `;
+}
+
+function roField(label, value) {
+  return `<div class="ro-field"><span class="k">${esc(label)}</span><span class="v">${esc(value == null || value === '' ? '—' : String(value))}</span></div>`;
+}
+
+function bossStructureSection(p) {
+  const s = p.structure || {};
+  const r = p.resource || {};
+  return `
+    <div class="form-section">
+      <h3>Structure</h3>
+      <div class="f2">${roField('turns', s.turns)}${roField('locations', s.locationsCount)}</div>
+      <div class="f2">${roField('slots per location', s.slotsPerLocation)}${roField('hand start', s.handStart)}</div>
+      ${roField('max hand size', s.maxHandSize)}
+      <h4>Resource</h4>
+      <div class="f2">${roField('model', r.model)}${r.model === 'capital' ? roField('capital (flat, per turn)', r.capital) : ''}</div>
+    </div>`;
+}
+
+function bossDecksSection(p) {
+  const ai = p.aiIds;
+  let idsText, flag = '';
+  if (ai.computed) {
+    idsText = (ai.value || []).join(', ');
+    flag = `<p class="impure-note">Computed via a method call, not a literal in the source — ${esc(ai.note)}</p>`;
+  } else {
+    const ex = ai.extraction;
+    if (!ex.found) { idsText = '(not found)'; flag = '<p class="impure-note">Variable not found in source.</p>'; }
+    else if (!ex.isPlainLiteral) { idsText = ex.evalError ? '(could not evaluate)' : (ex.value || []).join(', '); flag = '<p class="impure-note">Source is not a plain literal — displayed only.</p>'; }
+    else idsText = (ex.value || []).join(', ');
+  }
+  return `
+    <div class="form-section">
+      <h3>Decks</h3>
+      ${roField('player deck', 'not extracted by this tool — see notes below for this boss\'s actual rule')}
+      ${roField('AI deck ids', idsText)}
+      ${flag}
+    </div>`;
+}
+
+/* Prefers the constant-resolved version only when it IS a plain literal
+   after substitution — otherwise falls back to the raw (unresolved)
+   extraction so a genuinely dynamic span is never silently displayed as
+   if it were clean. See boss-extract.js's extractWithResolution. */
+function bestExtraction(pair) {
+  if (pair.resolved && pair.resolved.isPlainLiteral) return { ...pair.resolved, resolvedFrom: pair.raw };
+  return pair.raw;
+}
+
+function bossLocationsSection(p) {
+  const raw = p.locations.raw;
+  const best = bestExtraction(p.locations);
+  let body;
+  if (!raw.found) {
+    body = '<p class="impure-note">Not found in source.</p>';
+  } else if (best.value == null) {
+    body = `<p class="impure-note">Could not evaluate: ${esc(best.evalError || 'unknown error')}</p><pre class="ro-source">${esc(best.sourceText)}</pre>`;
+  } else {
+    body = best.value.map((loc, i) => `
+      <h4>Location ${i + 1}</h4>
+      <div class="f2">${roField('id', loc.id)}${roField('name', loc.name)}</div>
+      <div class="f2">${roField('region', loc.region)}${roField('image', loc.image)}</div>
+      ${roField('ability key', loc.abilityKey)}
+      ${roField('ability text', loc.abilityText)}
+    `).join('');
+  }
+  const impureNote = best.resolvedFrom
+    ? '<p class="impure-note">Source references named constants (e.g. a location-id variable), not raw literals — resolved below by substituting each constant\'s own value. Display only; Phase 2 would never treat a resolved span as directly editable.</p>'
+    : (!best.isPlainLiteral && raw.found ? '<p class="impure-note">Source is not a plain literal and could not be resolved — displayed only.</p>' : '');
+  return `<div class="form-section"><h3>Locations</h3>${impureNote}${body}</div>`;
+}
+
+function bossScoringSection(p) {
+  const sc = p.scoring || {};
+  return `
+    <div class="form-section">
+      <h3>Scoring</h3>
+      <div class="f2">${roField('win threshold (locations)', sc.winThreshold)}${roField('tiebreaker', sc.tiebreaker)}</div>
+      ${roField('exact tie', sc.exactTie)}
+    </div>`;
+}
+
+function bubbleText(bubble) {
+  if (!bubble) return null;
+  if (!bubble.found) return '(not found)';
+  return bubble.isPlainLiteral ? bubble.value : bubble.sourceText;
+}
+
+function bossPresentationSection(p) {
+  const pr = p.presentation;
+  if (pr.inline) {
+    const bt = bubbleText(pr.bubblePortrait);
+    return `<div class="form-section"><h3>Presentation</h3>
+      <p class="impure-note">${esc(pr.note)}</p>
+      ${bt != null ? roField('opponent bubble portrait', bt) : ''}
+    </div>`;
+  }
+  const best = bestExtraction(pr.extraction);
+  const val = best.value || {};
+  const bt = bubbleText(pr.bubblePortrait) ?? val.opponentBubblePortrait;
+  return `
+    <div class="form-section">
+      <h3>Presentation</h3>
+      ${!best.isPlainLiteral ? '<p class="impure-note">Source is not a plain literal — displayed only.</p>' : ''}
+      ${roField('body class', val.bodyClass)}
+      <div class="f2">${roField('ally avatar', val.allyAvatar)}${roField('opponent avatar', val.opponentAvatar)}</div>
+      ${roField('opponent bubble portrait', bt)}
+      ${roField('pop ally on battle start', val.popAlly ? 'yes' : 'no')}
+    </div>`;
+}
+
+function bossRulesPopupSection(p) {
+  const rp = p.rulesPopup;
+  const title = rp.title.found ? rp.title.value : '(not found)';
+  const body = (rp.body.found && rp.body.isPlainLiteral) ? (rp.body.value || []) : [];
+  return `
+    <div class="form-section">
+      <h3>Rules popup <span class="note">(shown once, first time)</span></h3>
+      ${roField('title', title)}
+      ${!rp.body.found ? '<p class="impure-note">Body not found in source.</p>' : (!rp.body.isPlainLiteral ? '<p class="impure-note">Body is not a plain literal — displayed only.</p>' : '')}
+      <div class="ro-field"><span class="k">body</span>
+        ${body.map(l => `<div class="v">${esc(l)}</div>`).join('') || '<span class="v">—</span>'}
+      </div>
+    </div>`;
+}
+
+/* Phase 2: an array with editable:true (see boss-extract.js's
+   dialogueEditability — plain literal, no sameAs, no fields beyond
+   who/text) renders as editable rows, same input shape as the authored-
+   level dialogue form. Everything else keeps Phase 1's read-only .ro-line
+   rendering, with editBlockedReason shown instead of re-deriving why —
+   that gate is computed once, server-side, in boss-extract.js. */
+function bossDialogueSection(p) {
+  const bossKey = p.nodeId;
+  const pending = State.bossDialogueEdits[bossKey] || {};
+  const dirtyCount = Object.keys(pending).length;
+  return `
+    <div class="form-section">
+      <h3>Dialogue</h3>
+      <div class="rowbtns">
+        <button class="primary sm" id="boss-dlg-save" ${dirtyCount ? '' : 'disabled'}>
+          Save dialogue${dirtyCount ? ` (${dirtyCount} array${dirtyCount === 1 ? '' : 's'} changed)` : ''}
+        </button>
+        <p class="note">Writes only the array(s) you've changed, straight into ${esc(p.file)} — .bak kept, whole file syntax-checked first. Structure/locations/etc. above stay read-only.</p>
+      </div>
+      ${DIALOGUE_KEYS.map(key => {
+        const d = p.dialogue[key];
+        if (!d || !d.present) return `<h4>${esc(key)}</h4><p class="note">(no such beat for this boss)</p>`;
+        const varName = d.varName || d.sharedWith;
+        let noteHtml = '';
+        if (d.sharedWith) noteHtml = `<p class="note">Shares dialogue with <code>${esc(d.sharedWith)}</code> — ${esc(d.note || '')}</p>`;
+        else if (d.note) noteHtml = `<p class="note">${esc(d.note)}</p>`;
+
+        const header = `<h4>${esc(key)} ${varName ? `<span class="note">(${esc(varName)})</span>` : ''}</h4>`;
+
+        if (!d.editable) {
+          const ex = d.extraction;
+          const lines = (ex && ex.isPlainLiteral) ? (ex.value || []) : [];
+          const src = (ex && ex.found && !ex.isPlainLiteral && !ex.evalError) ? `<pre class="ro-source">${esc(ex.sourceText)}</pre>` : '';
+          return `
+            ${header}
+            ${noteHtml}
+            <p class="impure-note">Not editable — ${esc(d.editBlockedReason || 'unknown reason')}.</p>
+            ${src}
+            ${lines.map(line => {
+              const c = speakerColor(line.who);
+              return `<div class="ro-line"><span class="who" style="color:${c}">${esc(line.who || '')}</span><span class="text" style="color:${c}">${esc(line.text || '')}</span></div>`;
+            }).join('')}
+          `;
+        }
+
+        const isDirty = !!pending[key];
+        const lines = isDirty ? pending[key] : d.extraction.value;
+        const commentWarning = d.extraction.hasComments
+          ? `<p class="impure-note">This array has a comment in the source${isDirty ? ' — saving these changes will remove it (comments aren\'t preserved on rewrite).' : '; editing it will remove that comment on save.'}</p>`
+          : '';
+        return `
+          ${header}
+          ${noteHtml}${commentWarning}
+          ${lines.map((line, i) => {
+            const c = speakerColor(line.who);
+            return `
+            <div class="f2" data-boss-dlg="${esc(key)}:${i}">
+              <div class="f" style="flex:0 0 120px">
+                <input data-boss-dlg-who="${esc(key)}:${i}" value="${esc(line.who || '')}" style="color:${c}">
+              </div>
+              <div class="f"><input data-boss-dlg-text="${esc(key)}:${i}" value="${esc(line.text || '')}" style="color:${c}"></div>
+              <button class="ghost sm" data-boss-dlg-remove="${esc(key)}:${i}" title="Remove line">✕</button>
+            </div>`;
+          }).join('')}
+          <div class="rowbtns">
+            <button class="ghost sm" data-boss-dlg-add="${esc(key)}">+ Add line</button>
+            ${isDirty ? `<button class="ghost sm" data-boss-dlg-revert="${esc(key)}">Revert to saved</button>` : ''}
+          </div>
+        `;
+      }).join('')}
+    </div>`;
+}
+
+function wireBossDialogue(preview) {
+  const bossKey = preview.nodeId;
+
+  const saveBtn = $('#boss-dlg-save');
+  if (saveBtn) saveBtn.onclick = () => saveBossDialogue(bossKey);
+
+  DIALOGUE_KEYS.forEach(key => {
+    const addBtn = $(`[data-boss-dlg-add="${cssEscape(key)}"]`);
+    if (addBtn) addBtn.onclick = () => addBossDialogueLine(bossKey, key);
+    const revertBtn = $(`[data-boss-dlg-revert="${cssEscape(key)}"]`);
+    if (revertBtn) revertBtn.onclick = () => revertBossDialogueEdits(bossKey, key);
+  });
+  $$('[data-boss-dlg-remove]').forEach(b => {
+    const [key, idx] = b.dataset.bossDlgRemove.split(':');
+    b.onclick = () => removeBossDialogueLine(bossKey, key, Number(idx));
+  });
+  $$('[data-boss-dlg-who]').forEach(el => {
+    const [key, idx] = el.dataset.bossDlgWho.split(':');
+    el.addEventListener('input', () => editBossDialogueLine(bossKey, key, Number(idx), 'who', el.value));
+  });
+  $$('[data-boss-dlg-text]').forEach(el => {
+    const [key, idx] = el.dataset.bossDlgText.split(':');
+    el.addEventListener('input', () => editBossDialogueLine(bossKey, key, Number(idx), 'text', el.value));
+  });
+}
+
+/* Speaker → color, keyed by the raw `who` string so the SAME character is
+   the SAME color in every dialogue array and every boss (per-line, not
+   per-boss — a hardcoded "boss N gets color N" scheme would give the wrong
+   answer the moment two bosses' dialogue is compared side by side, or a
+   character like the Farmer shows up in more than one place).
+
+   Hand-typed for every speaker key actually in the 5 boss files today
+   (confirmed via `grep -oE "who:\s*'[a-zA-Z_]+'"` across all 5 — 'explorer'
+   plus 6 named characters, note Gilgamesh's own dialogue key is 'otzi', not
+   'gilgamesh'). nebuchadnezzar and farmer intentionally share --dlg-coral —
+   they never appear in the same dialogue array (Farmer only speaks in
+   Gilgamesh's Cuneiform-intervention beat, nowhere near Nebuchadnezzar's
+   battle), so reusing one of the 5 non-explorer colors there is the "cycle"
+   the palette is sized for, not a scanability problem.
+
+   FALLBACK_PALETTE + the hash below exist only for a speaker key not yet in
+   this map (a 6th boss, say) — still fully deterministic (pure function of
+   the string), so a new character is stable-colored from its first render
+   without needing this file touched, though adding a real entry above once
+   you know the name is the better long-term move (same reasoning as
+   BOSS_SOURCES being hand-curated rather than auto-discovered). */
+const SPEAKER_COLORS = {
+  explorer:       'var(--dlg-explorer)',
+  sargon:         'var(--exit)',
+  hammurabi:      'var(--path)',
+  nebuchadnezzar: 'var(--dlg-coral)',
+  narmer:         'var(--dlg-violet)',
+  otzi:           'var(--dlg-teal)',
+  farmer:         'var(--dlg-coral)'
+};
+const FALLBACK_PALETTE = ['var(--exit)', 'var(--path)', 'var(--dlg-coral)', 'var(--dlg-violet)', 'var(--dlg-teal)'];
+
+function speakerColor(who) {
+  if (!who) return 'var(--text)';
+  if (SPEAKER_COLORS[who]) return SPEAKER_COLORS[who];
+  let h = 0;
+  for (let i = 0; i < who.length; i++) h = (h * 31 + who.charCodeAt(i)) >>> 0;
+  return FALLBACK_PALETTE[h % FALLBACK_PALETTE.length];
+}
+
+function bossBespokeSection(p) {
+  if (!p.bespokeMechanics || !p.bespokeMechanics.length) return '';
+  return `
+    <div class="form-section">
+      <h3>Bespoke mechanics <span class="note">(not expressible in this schema)</span></h3>
+      ${p.bespokeMechanics.map(m => `
+        <div class="bespoke-box">
+          <h4>${esc(m.name)}</h4>
+          <div class="loc">${esc(m.file)} — ${esc(m.lines)}</div>
+          <p>${esc(m.description)}</p>
+        </div>`).join('')}
+    </div>`;
+}
+
+function bossNotesSection(p) {
+  if (!p.notes || !p.notes.length) return '';
+  return `
+    <div class="form-section">
+      <h3>Notes</h3>
+      <ul class="ro-notes">${p.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>
+    </div>`;
+}
 
 export { render };

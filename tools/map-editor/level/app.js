@@ -23,11 +23,12 @@ export function initLevelEditor(opts) {
 
 async function boot() {
   try {
-    const [doc, meta] = await Promise.all([loadLevelData(), loadLevelMeta()]);
+    const [doc, meta, bossPreviews] = await Promise.all([loadLevelData(), loadLevelMeta(), loadBossPreviews()]);
     State.doc    = doc;
     State.levels = State.doc.levels;
     State.cards       = meta.cards;
     State.abilityKeys = meta.abilityKeys;
+    State.bossPreviews = bossPreviews;
   } catch (e) {
     return toast('Could not load level data: ' + e.message, true);
   }
@@ -51,6 +52,12 @@ async function loadLevelData() {
 
 async function loadLevelMeta() {
   const res = await fetch('/api/level-meta');
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+async function loadBossPreviews() {
+  const res = await fetch('/api/boss-previews');
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }

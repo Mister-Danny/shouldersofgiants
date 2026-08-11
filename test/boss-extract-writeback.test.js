@@ -1,0 +1,157 @@
+'use strict';
+
+// Phase 2 write-back tests for tools/map-editor/boss-extract.js's
+// applyDialogueEdits(). The one hard requirement that gates all of this:
+// loading a boss and saving with NO edits must reproduce the file
+// byte-for-byte. Everything else (real edits, comment-loss detection,
+// multi-var isolation, refusing unsafe writes) is tested against that
+// same guarantee — a regenerated array is only allowed to touch bytes
+// when the data actually changed.
+//
+// Run via `npm run test:boss-extract-writeback` (or `node --test test/`).
+
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const boss = require('../tools/map-editor/boss-extract.js');
+
+const ROOT = path.resolve(__dirname, '..');
+
+test('no-edit round trip is byte-identical for every editable dialogue array, all 5 bosses', () => {
+  Object.keys(boss.BOSS_SOURCES).forEach((key) => {
+    const preview = boss.buildBossPreview(key);
+    const abs = path.join(ROOT, preview.file);
+    const original = fs.readFileSync(abs, 'utf8');
+
+    const edits = Object.keys(preview.dialogue)
+      .map((k) => preview.dialogue[k])
+      .filter((d) => d.editable)
+      .map((d) => ({ varName: d.varName, lines: d.extraction.value }));
+
+    assert.ok(edits.length > 0, `${key} has no editable dialogue arrays — did BOSS_SOURCES change?`);
+
+    const out = boss.applyDialogueEdits(original, edits);
+    assert.equal(out.fileText, original, `${key}: no-op save must not change a single byte`);
+    assert.ok(out.results.every((r) => r.changed === false), `${key}: no edit should report changed:true`);
+    assert.ok(out.results.every((r) => !r.error), `${key}: no-op save should never error: ${JSON.stringify(out.results)}`);
+  });
+});
+
+test('Hammurabi LOSS_DIALOGUE (apostrophe inside double quotes) round-trips byte-identical', () => {
+  const abs = path.join(ROOT, 'js/sog-adventure-hammurabi.js');
+  const original = fs.readFileSync(abs, 'utf8');
+  const span = boss.findVarSpan(original, 'LOSS_DIALOGUE');
+  const current = boss.evalLiteral(span.text);
+
+  // Confirm the apostrophe-in-double-quotes line is actually still there —
+  // otherwise this test would pass for the wrong reason if the source ever
+  // changes.
+  assert.ok(current.some((l) => l.text.includes("I'm kind of on a deadline")),
+    'expected line not found — has LOSS_DIALOGUE changed?');
+
+  const out = boss.applyDialogueEdits(original, [{ varName: 'LOSS_DIALOGUE', lines: current }]);
+  assert.equal(out.fileText, original, 'naive re-quoting would have broken on this exact line');
+});
+
+test('a genuine edit changes only the targeted var, leaves every other byte untouched', () => {
+  const abs = path.join(ROOT, 'js/sog-adventure-sargon.js');
+  const original = fs.readFileSync(abs, 'utf8');
+  const span = boss.findVarSpan(original, 'SARGON_GIANT_WIN_B');
+  const current = boss.evalLiteral(span.text);
+
+  const edited = current.map((l, i) => i === 0 ? { who: l.who, text: 'REPLACED LINE' } : l);
+  const out = boss.applyDialogueEdits(original, [{ varName: 'SARGON_GIANT_WIN_B', lines: edited }]);
+
+  assert.notEqual(out.fileText, original);
+  assert.equal(out.results[0].changed, true);
+
+  // Whole file still has to be valid JS syntax.
+  assert.doesNotThrow(() => new Function(out.fileText));
+
+  // The edit landed.
+  const newSpan = boss.findVarSpan(out.fileText, 'SARGON_GIANT_WIN_B');
+  assert.deepEqual(boss.evalLiteral(newSpan.text), edited);
+
+  // Every OTHER dialogue array in the file is untouched — spot-check a few,
+  // including ones that sit both before and after the edited var in the
+  // file, to catch an off-by-offset bug in the byte-slicing.
+  ['OPENING_DIALOGUE', 'SARGON_SERF_WIN_A', 'LOSS_SMACK', 'SARGON_GIANT_DRAW'].forEach((name) => {
+    const before = boss.findVarSpan(original, name).text;
+    const after = boss.findVarSpan(out.fileText, name).text;
+    assert.equal(after, before, `${name} should be byte-identical after an unrelated edit`);
+  });
+
+  // And everything outside ANY dialogue var (the 5 lines around the edited
+  // one, e.g.) is untouched too — the whole file minus the one array's
+  // value span should be identical.
+  const prefix = original.slice(0, span.valueStart);
+  const suffix = original.slice(span.valueEnd);
+  assert.ok(out.fileText.startsWith(prefix), 'bytes before the edited var must be untouched');
+  assert.ok(out.fileText.endsWith(suffix), 'bytes after the edited var must be untouched');
+});
+
+test('editing an array that has a trailing comment reports hadComments and actually drops it', () => {
+  const abs = path.join(ROOT, 'js/sog-adventure-sargon.js');
+  const original = fs.readFileSync(abs, 'utf8');
+  const span = boss.findVarSpan(original, 'SARGON_SERF_WIN_A');
+  assert.equal(boss.hasComments(span.text), true, 'fixture assumption: this array currently has a comment');
+  const current = boss.evalLiteral(span.text);
+
+  const edited = current.map((l, i) => i === 0 ? { who: l.who, text: 'edited' } : l);
+  const out = boss.applyDialogueEdits(original, [{ varName: 'SARGON_SERF_WIN_A', lines: edited }]);
+
+  assert.equal(out.results[0].changed, true);
+  assert.equal(out.results[0].hadComments, true);
+  const newSpan = boss.findVarSpan(out.fileText, 'SARGON_SERF_WIN_A');
+  assert.doesNotMatch(newSpan.text, /GOLD/, 'the reward comment should be gone after regeneration');
+});
+
+test('multiple vars in one call are each found correctly despite earlier edits shifting offsets', () => {
+  const abs = path.join(ROOT, 'js/sog-adventure-narmer.js');
+  const original = fs.readFileSync(abs, 'utf8');
+  const a = boss.evalLiteral(boss.findVarSpan(original, 'NARMER_SERF_WIN_A').text);
+  const b = boss.evalLiteral(boss.findVarSpan(original, 'NARMER_GIANT_DRAW').text);
+
+  const editedA = [{ who: a[0].who, text: 'A CHANGED' }, ...a.slice(1)];
+  const editedB = [{ who: b[0].who, text: 'B CHANGED' }, ...b.slice(1)];
+
+  const out = boss.applyDialogueEdits(original, [
+    { varName: 'NARMER_SERF_WIN_A', lines: editedA },
+    { varName: 'NARMER_GIANT_DRAW', lines: editedB },
+  ]);
+
+  assert.ok(out.results.every((r) => r.changed));
+  assert.doesNotThrow(() => new Function(out.fileText));
+  assert.deepEqual(boss.evalLiteral(boss.findVarSpan(out.fileText, 'NARMER_SERF_WIN_A').text), editedA);
+  assert.deepEqual(boss.evalLiteral(boss.findVarSpan(out.fileText, 'NARMER_GIANT_DRAW').text), editedB);
+});
+
+test('refuses to write a var whose current source is not a plain literal', () => {
+  const abs = path.join(ROOT, 'js/sog-adventure-hanginggardens.js');
+  const original = fs.readFileSync(abs, 'utf8');
+  // NEB_AI_IDS is a real, plain array — reuse applyDialogueEdits against it
+  // is fine for shape purposes, but to hit the impure path we need a var
+  // that genuinely isn't a plain literal. There is no NAMED impure dialogue
+  // var in the corpus (the one known-impure case, the flood intro, has no
+  // name at all — see boss-extract.test.js) — so simulate the same guard
+  // directly with a fabricated var to prove the check fires, using
+  // isPlainLiteral's own documented impure case.
+  assert.equal(boss.isPlainLiteral("['a' + 'b']"), false);
+
+  // Real-world guard: Hammurabi's OPENING_DIALOGUE contains lines with
+  // slamBefore/revealBefore — applyDialogueEdits must refuse to write it
+  // even if handed back its own unmodified current value, and must leave
+  // the file completely untouched when it refuses.
+  const hSrc = fs.readFileSync(path.join(ROOT, 'js/sog-adventure-hammurabi.js'), 'utf8');
+  const current = boss.evalLiteral(boss.findVarSpan(hSrc, 'OPENING_DIALOGUE').text);
+  const out = boss.applyDialogueEdits(hSrc, [{ varName: 'OPENING_DIALOGUE', lines: current }]);
+  assert.equal(out.fileText, hSrc, 'a refused write must not alter the file at all');
+  assert.ok(out.results[0].error, 'expected an error for the unrepresentable-fields case');
+});
+
+test('dialogueEditability blocks a sameAs entry with a clear reason', () => {
+  const gate = boss.dialogueEditability({ present: true, sharedWith: 'LOSS_SMACK', note: 'x' });
+  assert.equal(gate.editable, false);
+  assert.match(gate.reason, /LOSS_SMACK/);
+});
