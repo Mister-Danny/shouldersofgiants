@@ -7,7 +7,9 @@ import {
   setTurnCount, setCapitalForTurn,
   setDeckIds, addDialogueLine, removeDialogueLine, setDialogueLine,
   editBossDialogueLine, addBossDialogueLine, removeBossDialogueLine,
-  revertBossDialogueEdits, saveBossDialogue
+  revertBossDialogueEdits, saveBossDialogue,
+  viewOverworldDialogue, editOverworldDialogueLine, addOverworldDialogueLine,
+  removeOverworldDialogueLine, revertOverworldDialogueEdits, saveOverworldDialogue
 } from './commands.js';
 import { pickDeck } from './deck-picker.js';
 
@@ -27,6 +29,7 @@ function battleNodesFromMap() {
 function render() {
   renderLevelList();
   renderBossList();
+  renderOverworldList();
   renderForm();
 }
 
@@ -71,10 +74,32 @@ function renderBossList() {
   $$('#boss-list li[data-id]').forEach(li => { li.onclick = () => viewBoss(li.dataset.id); });
 }
 
+/* Phase 3: one entry — there's only one overworld.js, unlike the 5 bosses —
+   that opens the grouped dialogue view. */
+function renderOverworldList() {
+  const ul = $('#overworld-list');
+  if (!ul) return;
+  const count = State.overworldPreview ? State.overworldPreview.groups.reduce((n, g) => n + g.arrays.length, 0) : 0;
+  ul.innerHTML = `
+    <li class="${State.viewingOverworld ? 'sel' : ''}" data-id="overworld-dialogue">
+      <span>Dialogue</span><span class="k">${count} arrays</span>
+    </li>`;
+  const li = ul.querySelector('li[data-id="overworld-dialogue"]');
+  if (li) li.onclick = () => viewOverworldDialogue();
+}
+
 /* ── Form ─────────────────────────────────────────────────────────────── */
 function renderForm() {
   const wrap = $('#level-form');
   const empty = $('#level-empty-note');
+
+  if (State.viewingOverworld) {
+    const preview = State.overworldPreview;
+    empty.hidden = true; wrap.hidden = false;
+    wrap.innerHTML = preview ? overworldFormHtml(preview) : '<p class="note">No overworld dialogue data loaded.</p>';
+    if (preview) wireOverworldDialogue();
+    return;
+  }
 
   if (State.bossKey) {
     const preview = State.bossPreviews[State.bossKey];
@@ -690,6 +715,125 @@ function bossNotesSection(p) {
       <h3>Notes</h3>
       <ul class="ro-notes">${p.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>
     </div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Phase 3 — overworld dialogue (js/overworld.js, the 39 approved arrays).
+   Same read/edit shape as the boss dialogue section above, grouped by flow
+   instead of by boss — one flat list of {group, arrays} instead of one
+   boss's 10 fixed keys, so the rendering is array-driven rather than
+   walking a fixed DIALOGUE_KEYS list. Every array here is currently
+   editable (verified server-side, see overworld-extract.js's tests), but
+   the !a.editable branch is kept for parity with the boss section — a
+   future addition to the registry could add an impure or sameAs-like case
+   without this file needing a second code path built from scratch.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Colors are computed PER ARRAY, not per-document — unlike a boss (one
+   character + Explorer, persistent across all 10 keys), overworld dialogue
+   has a wide cast (hunter, lucy, farmer, gilgamesh, sargon, trader, ...)
+   that changes array to array and rarely repeats. Same positional scheme
+   as bossSpeakerColors (Explorer always brown, first other speaker blue,
+   a third purple) applied at the scope where it actually makes sense here
+   — one array at a time, so an array with only Explorer+one other speaker
+   still reads as brown+blue, just not "the same blue as some OTHER array's
+   different character" (there's no single "the boss" to anchor on
+   document-wide the way there is for a boss preview). */
+function overworldArraySpeakerColors(lines) {
+  const whoSet = new Set((lines || []).map(l => l.who).filter(Boolean));
+  const nonExplorer = [...whoSet].filter(w => w !== 'explorer').sort();
+  const colors = { explorer: 'var(--dlg-explorer)' };
+  nonExplorer.forEach((who, i) => { colors[who] = i === 0 ? 'var(--exit)' : 'var(--dlg-violet)'; });
+  return colors;
+}
+
+function overworldFormHtml(preview) {
+  const dirtyCount = Object.keys(State.overworldDialogueEdits).length;
+  const totalArrays = preview.groups.reduce((n, g) => n + g.arrays.length, 0);
+  return `
+    <div class="ro-banner">Hand-authored in <code>${esc(preview.file)}</code>. ${totalArrays} dialogue arrays across ${preview.groups.length} flow groups — grouped to match the approved read-only inventory. The 4 inline (unnamed) dialogue blocks in the Mesopotamia-arrival flow aren't here; see the Phase 3b proposal for those.</div>
+    <div class="form-section">
+      <h3>Overworld Dialogue</h3>
+      <div class="rowbtns">
+        <button class="primary sm" id="overworld-dlg-save" ${dirtyCount ? '' : 'disabled'}>
+          Save dialogue${dirtyCount ? ` (${dirtyCount} array${dirtyCount === 1 ? '' : 's'} changed)` : ''}
+        </button>
+        <p class="note">Writes only the array(s) you've changed, straight into ${esc(preview.file)} — .bak kept, whole file syntax-checked first.</p>
+      </div>
+    </div>
+    ${preview.groups.map(overworldGroupHtml).join('')}
+  `;
+}
+
+function overworldGroupHtml(g) {
+  return `
+    <div class="form-section">
+      <h3>${esc(g.group)}</h3>
+      ${g.note ? `<p class="note">${esc(g.note)}</p>` : ''}
+      ${g.arrays.map(overworldArrayHtml).join('')}
+    </div>`;
+}
+
+function overworldArrayHtml(a) {
+  const pending = State.overworldDialogueEdits[a.varName];
+  const isDirty = !!pending;
+  const lines = isDirty ? pending : (a.extraction.value || []);
+  const colors = overworldArraySpeakerColors(a.extraction.value);
+  const header = `<h4>${esc(a.varName)}</h4>`;
+
+  if (!a.editable) {
+    return `
+      ${header}
+      <p class="impure-note">Not editable — ${esc(a.editBlockedReason || 'unknown reason')}.</p>
+      ${lines.map(line => {
+        const c = colors[line.who] || 'var(--text)';
+        return `<div class="ro-line"><span class="who" style="color:${c}">${esc(line.who || '')}</span><span class="text" style="color:${c}">${esc(line.text || '')}</span></div>`;
+      }).join('')}
+    `;
+  }
+
+  const commentWarning = a.extraction.hasComments
+    ? `<p class="impure-note">This array has a comment in the source${isDirty ? ' — saving these changes may remove it (a comment inside an edited line isn\'t preserved on rewrite).' : '; editing it will remove that comment on save.'}</p>`
+    : '';
+  return `
+    ${header}
+    ${commentWarning}
+    ${lines.map((line, i) => {
+      const c = colors[line.who] || 'var(--text)';
+      return `
+      <div class="f2" data-ow-dlg="${esc(a.varName)}:${i}">
+        <div class="f" style="flex:0 0 120px">
+          <input data-ow-dlg-who="${esc(a.varName)}:${i}" value="${esc(line.who || '')}" style="color:${c}">
+        </div>
+        <div class="f"><input data-ow-dlg-text="${esc(a.varName)}:${i}" value="${esc(line.text || '')}" style="color:${c}"></div>
+        <button class="ghost sm" data-ow-dlg-remove="${esc(a.varName)}:${i}" title="Remove line">✕</button>
+      </div>`;
+    }).join('')}
+    <div class="rowbtns">
+      <button class="ghost sm" data-ow-dlg-add="${esc(a.varName)}">+ Add line</button>
+      ${isDirty ? `<button class="ghost sm" data-ow-dlg-revert="${esc(a.varName)}">Revert to saved</button>` : ''}
+    </div>
+  `;
+}
+
+function wireOverworldDialogue() {
+  const saveBtn = $('#overworld-dlg-save');
+  if (saveBtn) saveBtn.onclick = () => saveOverworldDialogue();
+
+  $$('[data-ow-dlg-add]').forEach(b => { b.onclick = () => addOverworldDialogueLine(b.dataset.owDlgAdd); });
+  $$('[data-ow-dlg-revert]').forEach(b => { b.onclick = () => revertOverworldDialogueEdits(b.dataset.owDlgRevert); });
+  $$('[data-ow-dlg-remove]').forEach(b => {
+    const [name, idx] = b.dataset.owDlgRemove.split(':');
+    b.onclick = () => removeOverworldDialogueLine(name, Number(idx));
+  });
+  $$('[data-ow-dlg-who]').forEach(el => {
+    const [name, idx] = el.dataset.owDlgWho.split(':');
+    el.addEventListener('input', () => editOverworldDialogueLine(name, Number(idx), 'who', el.value));
+  });
+  $$('[data-ow-dlg-text]').forEach(el => {
+    const [name, idx] = el.dataset.owDlgText.split(':');
+    el.addEventListener('input', () => editOverworldDialogueLine(name, Number(idx), 'text', el.value));
+  });
 }
 
 export { render };

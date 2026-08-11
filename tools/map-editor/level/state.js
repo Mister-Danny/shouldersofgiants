@@ -48,7 +48,27 @@ export const State = {
   // dialogue is just Object.keys(bossDialogueEdits[key]||{}).length > 0,
   // computed where needed rather than tracked as a second boolean that
   // could drift out of sync with the buffer it describes.
-  bossDialogueEdits: {}
+  bossDialogueEdits: {},
+
+  // Phase 3: read/edit view of the 39 approved dialogue arrays in
+  // js/overworld.js, grouped by flow (tools/map-editor/overworld-
+  // extract.js's OVERWORLD_DIALOGUE_GROUPS). { file, groups: [{group,
+  // note, arrays: [{varName, extraction, editable, ...}]}] } — same shape
+  // as one boss's `dialogue` object, just grouped instead of flat, and
+  // for the whole overworld file instead of one boss's.
+  overworldPreview: null,
+
+  // Whether the overworld dialogue view is on screen — mutually exclusive
+  // with levelId/bossKey (see commands.js's viewOverworldDialogue). There's
+  // only one of these (unlike bosses, no "which one" key needed).
+  viewingOverworld: false,
+
+  // Same shape/reasoning as bossDialogueEdits, but flat (keyed directly by
+  // varName, not [bossKey][dialogueKey]) since overworld arrays aren't
+  // grouped under any single "document" the way a boss's 10 keys are.
+  // Saves through POST /api/save-overworld-dialogue — its own endpoint,
+  // its own file, never touches dirty/markDirty() either.
+  overworldDialogueEdits: {}
 };
 
 export function markDirty() {

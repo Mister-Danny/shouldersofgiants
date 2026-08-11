@@ -23,12 +23,15 @@ export function initLevelEditor(opts) {
 
 async function boot() {
   try {
-    const [doc, meta, bossPreviews] = await Promise.all([loadLevelData(), loadLevelMeta(), loadBossPreviews()]);
+    const [doc, meta, bossPreviews, overworldPreview] = await Promise.all([
+      loadLevelData(), loadLevelMeta(), loadBossPreviews(), loadOverworldPreview()
+    ]);
     State.doc    = doc;
     State.levels = State.doc.levels;
     State.cards       = meta.cards;
     State.abilityKeys = meta.abilityKeys;
     State.bossPreviews = bossPreviews;
+    State.overworldPreview = overworldPreview;
   } catch (e) {
     return toast('Could not load level data: ' + e.message, true);
   }
@@ -58,6 +61,12 @@ async function loadLevelMeta() {
 
 async function loadBossPreviews() {
   const res = await fetch('/api/boss-previews');
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+async function loadOverworldPreview() {
+  const res = await fetch('/api/overworld-dialogue-preview');
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }

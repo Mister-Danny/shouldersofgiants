@@ -5,7 +5,8 @@
   "description": "Firestore security rules test harness (Phase 0 of AUTH_SPEC.md). Not part of the game bundle.",
   "scripts": {
     "test:rules": "firebase emulators:exec --only firestore \"node --test\"",
-    "test:boss-extract": "node --test test/boss-extract.test.js test/boss-extract-writeback.test.js"
+    "test:boss-extract": "node --test test/boss-extract.test.js test/boss-extract-writeback.test.js",
+    "test:overworld-extract": "node --test test/overworld-extract.test.js"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.4",

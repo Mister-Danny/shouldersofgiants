@@ -15,11 +15,13 @@
    updated. This is a local tool that must still boot in a year.
 
    Endpoints beyond static files:
-     GET  /api/art                → the map + node art on disk, for the picker
-     POST /api/save                → overwrite data/map-data.js
-     POST /api/save-level          → overwrite data/level-data.js
-     GET  /api/boss-previews       → read-only extraction of the 5 boss files
-     POST /api/save-boss-dialogue  → surgical dialogue rewrite in ONE boss file
+     GET  /api/art                       → the map + node art on disk, for the picker
+     POST /api/save                       → overwrite data/map-data.js
+     POST /api/save-level                 → overwrite data/level-data.js
+     GET  /api/boss-previews              → read-only extraction of the 5 boss files
+     POST /api/save-boss-dialogue         → surgical dialogue rewrite in ONE boss file
+     GET  /api/overworld-dialogue-preview → read-only extraction, 39 approved arrays in overworld.js
+     POST /api/save-overworld-dialogue    → surgical dialogue rewrite in overworld.js
    ══════════════════════════════════════════════════════════════════════════ */
 'use strict';
 
@@ -42,6 +44,19 @@ var BOSS_EXTRACT_PATH = require.resolve('./boss-extract.js');
 function bossExtract() {
   delete require.cache[BOSS_EXTRACT_PATH];
   return require('./boss-extract.js');
+}
+
+var OVERWORLD_EXTRACT_PATH = require.resolve('./overworld-extract.js');
+/* Same reasoning as bossExtract() above — plus overworld-extract.js itself
+   requires boss-extract.js at ITS OWN module-load time, so busting only
+   THIS cache entry wouldn't be enough: the module body wouldn't re-run,
+   and its own `var be = require('./boss-extract.js')` line would never
+   re-execute to pick up a freshly-busted boss-extract.js either. Both
+   entries have to go together. */
+function overworldExtract() {
+  delete require.cache[BOSS_EXTRACT_PATH];
+  delete require.cache[OVERWORLD_EXTRACT_PATH];
+  return require('./overworld-extract.js');
 }
 
 var ROOT = path.resolve(__dirname, '..', '..');
@@ -997,6 +1012,86 @@ function handleSaveBossDialogue(req, res) {
   });
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Phase 3 — dialogue write-back for js/overworld.js, the 39 named arrays
+   approved from the read-only inventory (tools/map-editor/overworld-
+   extract.js's OVERWORLD_DIALOGUE_GROUPS). Same shape as
+   handleSaveBossDialogue, same underlying applyDialogueEdits, but its own
+   handler and its own whitelist: every submitted var name is checked
+   against isKnownArray() before the file is even read, so this endpoint
+   structurally cannot reach a var this session's inventory didn't cover
+   (the 4 dead arrays already deleted, the config/spike arrays, and
+   anything not in overworld.js at all) — never a client-supplied file
+   path, there's only ever the one file this endpoint touches. */
+function handleSaveOverworldDialogue(req, res) {
+  var body = '';
+  req.on('data', function (c) {
+    body += c;
+    if (body.length > 2e6) { req.destroy(); }
+  });
+  req.on('end', function () {
+    var payload;
+    try {
+      payload = JSON.parse(body);
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: 'bad JSON: ' + e.message });
+    }
+
+    var owe = overworldExtract();
+    var dialogue = (payload && payload.dialogue) || {};
+    var varNames = Object.keys(dialogue);
+    if (!varNames.length) return sendJson(res, 200, { ok: true, changed: [], commentsLost: [], message: 'nothing submitted' });
+
+    var unknown = varNames.filter(function (n) { return !owe.isKnownArray(n); });
+    if (unknown.length) return sendJson(res, 400, { ok: false, error: 'unknown or unapproved array name(s): ' + unknown.join(', ') });
+
+    var edits = varNames.map(function (n) { return { varName: n, lines: dialogue[n] }; });
+
+    var abs = path.join(ROOT, owe.OVERWORLD_FILE);
+    var original;
+    try {
+      original = fs.readFileSync(abs, 'utf8');
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: 'could not read ' + owe.OVERWORLD_FILE + ': ' + e.message });
+    }
+
+    var result;
+    try {
+      result = bossExtract().applyDialogueEdits(original, edits);
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: 'write-back failed: ' + e.message });
+    }
+
+    var failed = result.results.filter(function (r) { return r.error; });
+    if (failed.length) {
+      return sendJson(res, 400, { ok: false, error: 'refused: ' + failed.map(function (r) { return r.varName + ': ' + r.error; }).join('; ') });
+    }
+
+    var changed = result.results.filter(function (r) { return r.changed; });
+    if (!changed.length) {
+      return sendJson(res, 200, { ok: true, changed: [], commentsLost: [], message: 'no changes' });
+    }
+
+    try {
+      new Function(result.fileText);
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: owe.OVERWORLD_FILE + ' would not parse after this edit: ' + e.message });
+    }
+
+    try {
+      fs.copyFileSync(abs, abs + '.bak');
+      fs.writeFileSync(abs, result.fileText, 'utf8');
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: 'write failed: ' + e.message });
+    }
+
+    var commentsLost = changed.filter(function (r) { return r.hadComments; }).map(function (r) { return r.varName; });
+    console.log('[map-editor] saved ' + owe.OVERWORLD_FILE + ' — ' + changed.length + ' dialogue array(s) rewritten' +
+                (commentsLost.length ? ' (comments lost in ' + commentsLost.join(', ') + ')' : ''));
+    sendJson(res, 200, { ok: true, changed: changed.map(function (r) { return r.varName; }), commentsLost: commentsLost });
+  });
+}
+
 var server = http.createServer(function (req, res) {
   var url = decodeURIComponent(req.url.split('?')[0]);
 
@@ -1040,6 +1135,22 @@ var server = http.createServer(function (req, res) {
   }
   if (url === '/api/save-boss-dialogue' && req.method === 'POST') {
     return handleSaveBossDialogue(req, res);
+  }
+  if (url === '/api/overworld-dialogue-preview') {
+    // Phase 3, read: the 39 approved dialogue arrays in js/overworld.js,
+    // grouped by flow (tools/map-editor/overworld-extract.js). Same no-
+    // caching discipline as /api/boss-previews — extracted fresh from the
+    // live file on every request.
+    var owPreview;
+    try {
+      owPreview = overworldExtract().buildOverworldPreview();
+    } catch (e) {
+      return sendJson(res, 500, { error: 'overworld dialogue extraction failed: ' + e.message });
+    }
+    return sendJson(res, 200, owPreview);
+  }
+  if (url === '/api/save-overworld-dialogue' && req.method === 'POST') {
+    return handleSaveOverworldDialogue(req, res);
   }
 
   if (url === '/tools/map-editor' || url === '/tools/map-editor/') url = '/tools/map-editor/index.html';

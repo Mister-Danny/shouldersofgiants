@@ -37,7 +37,8 @@ export function bind(selector, ev, fn) {
 
 export function selectLevel(id) {
   State.levelId = id;
-  State.bossKey = null;   // mutually exclusive with viewing a boss read-only
+  State.bossKey = null;          // mutually exclusive with viewing a boss read-only
+  State.viewingOverworld = false;   // ...or the overworld dialogue view
   requestRender();
 }
 
@@ -48,6 +49,18 @@ export function selectLevel(id) {
    undo stack belongs to the AUTHORED levels document, not boss files. */
 export function viewBoss(nodeId) {
   State.bossKey = nodeId;
+  State.levelId = null;
+  State.viewingOverworld = false;
+  requestRender();
+}
+
+/* Phase 3: selects the overworld dialogue view — same read/edit split as
+   viewBoss (everything is grouped dialogue, all potentially editable per
+   overworld-extract.js's registry), but there's only one of these (no key
+   needed) since it's one file, not five. */
+export function viewOverworldDialogue() {
+  State.viewingOverworld = true;
+  State.bossKey = null;
   State.levelId = null;
   requestRender();
 }
@@ -85,11 +98,12 @@ function blankLevel() {
    'market' isn't wired in js/level-runtime.js yet, and validateLevel()
    rejects saving one, so a market-paired form would be a dead end. */
 export function createLevel(id) {
-  if (State.levels[id]) { State.levelId = id; State.bossKey = null; requestRender(); return; }
+  if (State.levels[id]) { State.levelId = id; State.bossKey = null; State.viewingOverworld = false; requestRender(); return; }
   snapshot();
   State.levels[id] = blankLevel();
   State.levelId = id;
   State.bossKey = null;
+  State.viewingOverworld = false;
   markDirty();
   requestRender();
 }
@@ -313,6 +327,89 @@ export async function saveBossDialogue(bossKey) {
       toast('No changes — already matched what was on disk');
     } else {
       let msg = `Saved ${out.changed.join(', ')} to ${(State.bossPreviews[bossKey] || {}).file || 'the boss file'}.`;
+      if (out.commentsLost.length) msg += ` Comment lost in: ${out.commentsLost.join(', ')}.`;
+      toast(msg);
+    }
+    requestRender();
+  } catch (e) {
+    toast('Save failed: ' + e.message, true);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Phase 3 — overworld dialogue editing. Same split as the boss-dialogue
+   commands above (separate edit buffer, separate save endpoint, never
+   markDirty()/#level-dirty), just flat-keyed by varName instead of
+   [bossKey][dialogueKey] — overworld arrays aren't grouped under any one
+   "document" the way a boss's 10 dialogue keys are, they're 39
+   independent named vars in one file.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function _findOverworldArray(varName) {
+  for (const g of State.overworldPreview.groups) {
+    const a = g.arrays.find(a => a.varName === varName);
+    if (a) return a;
+  }
+  return null;
+}
+
+function _overworldEditBuffer(varName) {
+  let created = false;
+  if (!State.overworldDialogueEdits[varName]) {
+    const current = _findOverworldArray(varName).extraction.value || [];
+    State.overworldDialogueEdits[varName] = current.map(l => ({ who: l.who, text: l.text }));
+    created = true;
+  }
+  return { lines: State.overworldDialogueEdits[varName], created };
+}
+
+export function editOverworldDialogueLine(varName, index, field, value) {
+  const { lines, created } = _overworldEditBuffer(varName);
+  lines[index][field] = value;
+  if (created) requestRender();
+}
+
+export function addOverworldDialogueLine(varName) {
+  _overworldEditBuffer(varName).lines.push({ who: '', text: '' });
+  requestRender();
+}
+
+export function removeOverworldDialogueLine(varName, index) {
+  _overworldEditBuffer(varName).lines.splice(index, 1);
+  requestRender();
+}
+
+export function revertOverworldDialogueEdits(varName) {
+  delete State.overworldDialogueEdits[varName];
+  requestRender();
+}
+
+/* Submits every array with a pending edit buffer in one request — same
+   "server decides what actually changed" reasoning as saveBossDialogue.
+   On success: clear the whole edit buffer and re-fetch the preview fresh
+   (never patch sourceText/isPlainLiteral/etc. client-side). On failure:
+   keep the buffer so nothing typed is lost. */
+export async function saveOverworldDialogue() {
+  const edits = State.overworldDialogueEdits;
+  if (!Object.keys(edits).length) return toast('No overworld dialogue changes to save');
+
+  try {
+    const res = await fetch('/api/save-overworld-dialogue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dialogue: edits })
+    });
+    const out = await res.json();
+    if (!out.ok) return toast(out.error, true);
+
+    State.overworldDialogueEdits = {};
+    const res2 = await fetch('/api/overworld-dialogue-preview');
+    if (res2.ok) State.overworldPreview = await res2.json();
+
+    if (!out.changed.length) {
+      toast('No changes — already matched what was on disk');
+    } else {
+      let msg = `Saved ${out.changed.join(', ')} to ${State.overworldPreview.file}.`;
       if (out.commentsLost.length) msg += ` Comment lost in: ${out.commentsLost.join(', ')}.`;
       toast(msg);
     }
