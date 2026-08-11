@@ -328,19 +328,19 @@ SOG.NarmerBattle = (function () {
 
   /* ── In-battle opening dialogue — teaches the advance gate (first-time only). ── */
   var OPENING_DIALOGUE = [
-    { who: 'narmer',   text: 'Behold the two lands, traveler.' },
-    { who: 'narmer',   text: 'Lower Egypt, your ground. Upper Egypt, mine.' },
+    { who: 'narmer', text: 'Behold two lands...' },
+    { who: 'narmer', text: 'Lower Egypt, your ground. Upper Egypt, mine.' },
     { who: 'explorer', text: 'And that big one in the middle?' },
-    { who: 'narmer',   text: 'Memphis. The capital. Where the two lands meet.' },
-    { who: 'narmer',   text: 'To reach it, you must first hold your own ground completely.' },
-    { who: 'explorer', text: 'So… fill up my side before I can push forward?' },
-    { who: 'narmer',   text: 'You do learn.' },
-    { who: 'narmer',   text: 'Secure your land. Then contest Memphis. Only then may you march on mine.' },
+    { who: 'narmer', text: 'Memphis. My capital. Where the two lands meet.' },
+    { who: 'narmer', text: 'To reach it, you must first hold your own ground completely.' },
+    { who: 'explorer', text: 'So I fill up my side first?' },
+    { who: 'narmer', text: 'You do learn.' },
+    { who: 'narmer', text: 'Secure your land. Then contest Memphis. Only then may you march on mine.' },
     { who: 'explorer', text: 'One step at a time. Got it.' },
-    { who: 'narmer',   text: 'Accumulate more Influence Points at 2 of the 3 locations to become The Unifier.' },
-    { who: 'narmer',   text: 'But you will not.' },
-    { who: 'narmer',   text: 'The crown is clearly not meant for you.' },
-    { who: 'explorer', text: "We'll see about that." }
+    { who: 'narmer', text: 'Accumulate more Influence Points at 2 of the 3 locations to become The Unifier.' },
+    { who: 'narmer', text: 'But you will not.' },
+    { who: 'narmer', text: 'The crown is clearly not meant for you.' },
+    { who: 'explorer', text: 'We\'ll see about that.' }
   ];
 
   /* ══════════════════════════════════════════════════════════════════════════
