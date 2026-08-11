@@ -219,7 +219,14 @@ SOG.DevPanel = (function () {
   function _launchBattle(boss, tier, skipIntro) {
     _commitBeforeLaunch();
     _ensureAdventurer();
-    if (skipIntro && boss.skipFlag) _setFlag(boss.skipFlag, true);
+    // Actively set the flag BOTH ways — not just when skipping. Each boss's
+    // own opening-dialogue gate reads this same key (e.g. narmer.js's
+    // KEY_NARMER_OPENING_SEEN, checked in onNodeClick before OPENING_DIALOGUE
+    // runs), so if it was left 'true' by an earlier launch, real gameplay, or
+    // a previous test, only setting it when skipIntro is true would leave
+    // that stale value in place the moment you uncheck the box — the
+    // checkbox would look off while the opening still silently skipped.
+    if (boss.skipFlag) _setFlag(boss.skipFlag, !!skipIntro);
     hide();
     _stopHomeMusic();
     _teardownBattles();
@@ -263,6 +270,18 @@ SOG.DevPanel = (function () {
   var _dirty = false;
   // Collapse state persists across re-renders so applying doesn't fold your groups.
   var _groupOpen = {};
+  // Launch controls (Section 4) aren't staged/applied state at all — they're
+  // read live at boss-launch-click time (_launchBattle(b, tierSel.value,
+  // skipCb.checked)) — but _render() rebuilds the whole panel from scratch
+  // on every open AND after every Apply (see _applyBtn's click handler), and
+  // a freshly-created <input>/<select> has no memory of what you last set
+  // it to. Without these, "skip intro dialogue" silently snapped back to
+  // its hardcoded default the moment you hit Apply, making it impossible to
+  // turn off for more than one battle launch. Same fix _groupOpen already
+  // uses for section collapse state: a module-level variable that survives
+  // the rebuild, read on create and written on change.
+  var _skipIntro = true;
+  var _launchTier = 'serf';
 
   function _markDirty() {
     _dirty = true;
@@ -607,10 +626,13 @@ SOG.DevPanel = (function () {
       op.value = o[0]; op.textContent = o[1];
       tierSel.appendChild(op);
     });
+    tierSel.value = _launchTier;
+    tierSel.addEventListener('change', function () { _launchTier = tierSel.value; });
     ctl.appendChild(tierSel);
     var skipLab = _el('label', 'dp-chk');
     var skipCb  = document.createElement('input');
-    skipCb.type = 'checkbox'; skipCb.checked = true;
+    skipCb.type = 'checkbox'; skipCb.checked = _skipIntro;
+    skipCb.addEventListener('change', function () { _skipIntro = skipCb.checked; });
     skipLab.appendChild(skipCb);
     skipLab.appendChild(_el('span', null, 'skip intro dialogue'));
     ctl.appendChild(skipLab);
