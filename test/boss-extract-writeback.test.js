@@ -127,27 +127,79 @@ test('multiple vars in one call are each found correctly despite earlier edits s
   assert.deepEqual(boss.evalLiteral(boss.findVarSpan(out.fileText, 'NARMER_GIANT_DRAW').text), editedB);
 });
 
-test('refuses to write a var whose current source is not a plain literal', () => {
-  const abs = path.join(ROOT, 'js/sog-adventure-hanginggardens.js');
-  const original = fs.readFileSync(abs, 'utf8');
+test('refuses a genuinely non-plain-literal var (fabricated, since no NAMED dialogue var is impure)', () => {
   // NEB_AI_IDS is a real, plain array — reuse applyDialogueEdits against it
   // is fine for shape purposes, but to hit the impure path we need a var
   // that genuinely isn't a plain literal. There is no NAMED impure dialogue
   // var in the corpus (the one known-impure case, the flood intro, has no
-  // name at all — see boss-extract.test.js) — so simulate the same guard
-  // directly with a fabricated var to prove the check fires, using
-  // isPlainLiteral's own documented impure case.
+  // name at all — see boss-extract.test.js) — so this just checks the
+  // underlying isPlainLiteral guard applyDialogueEdits relies on.
   assert.equal(boss.isPlainLiteral("['a' + 'b']"), false);
+});
 
-  // Real-world guard: Hammurabi's OPENING_DIALOGUE contains lines with
-  // slamBefore/revealBefore — applyDialogueEdits must refuse to write it
-  // even if handed back its own unmodified current value, and must leave
-  // the file completely untouched when it refuses.
-  const hSrc = fs.readFileSync(path.join(ROOT, 'js/sog-adventure-hammurabi.js'), 'utf8');
-  const current = boss.evalLiteral(boss.findVarSpan(hSrc, 'OPENING_DIALOGUE').text);
-  const out = boss.applyDialogueEdits(hSrc, [{ varName: 'OPENING_DIALOGUE', lines: current }]);
-  assert.equal(out.fileText, hSrc, 'a refused write must not alter the file at all');
-  assert.ok(out.results[0].error, 'expected an error for the unrepresentable-fields case');
+test('a line with slamBefore/revealBefore is editable: text changes, the flag stays exactly in place', () => {
+  const abs = path.join(ROOT, 'js/sog-adventure-hammurabi.js');
+  const original = fs.readFileSync(abs, 'utf8');
+  const span = boss.findVarSpan(original, 'OPENING_DIALOGUE');
+  const current = boss.evalLiteral(span.text);
+
+  assert.equal(current[15].slamBefore, true, 'fixture assumption: line 15 carries slamBefore');
+  assert.equal(current[17].revealBefore, true, 'fixture assumption: line 17 carries revealBefore');
+
+  const edited = current.map((l, i) => i === 15 ? { ...l, text: 'EDITED SLAM LINE' } : l);
+  const out = boss.applyDialogueEdits(original, [{ varName: 'OPENING_DIALOGUE', lines: edited }]);
+
+  assert.equal(out.results[0].changed, true);
+  assert.equal(out.results[0].error, undefined);
+  assert.doesNotThrow(() => new Function(out.fileText));
+
+  const newVal = boss.evalLiteral(boss.findVarSpan(out.fileText, 'OPENING_DIALOGUE').text);
+  assert.equal(newVal[15].text, 'EDITED SLAM LINE');
+  assert.equal(newVal[15].slamBefore, true, 'slamBefore must survive the edit');
+  assert.equal(newVal[17].revealBefore, true, 'an untouched flagged line must be completely unaffected');
+  // Every OTHER line, flagged or not, must be byte-identical — only line 15
+  // changed.
+  const oldItems = boss.findObjectItemSpans(original, span.valueStart, span.valueEnd);
+  const newSpan = boss.findVarSpan(out.fileText, 'OPENING_DIALOGUE');
+  const newItems = boss.findObjectItemSpans(out.fileText, newSpan.valueStart, newSpan.valueEnd);
+  oldItems.forEach((item, i) => {
+    if (i === 15) return;
+    assert.equal(newItems[i].text, item.text, `line ${i} must be byte-identical`);
+  });
+});
+
+test('no-edit save on a flagged array (Hammurabi opening) is byte-identical, not refused', () => {
+  const abs = path.join(ROOT, 'js/sog-adventure-hammurabi.js');
+  const original = fs.readFileSync(abs, 'utf8');
+  const current = boss.evalLiteral(boss.findVarSpan(original, 'OPENING_DIALOGUE').text);
+  const out = boss.applyDialogueEdits(original, [{ varName: 'OPENING_DIALOGUE', lines: current }]);
+  assert.equal(out.fileText, original);
+  assert.equal(out.results[0].changed, false);
+  assert.equal(out.results[0].error, undefined);
+});
+
+test('refuses to add or remove a line on a flagged array, leaves the file untouched', () => {
+  const abs = path.join(ROOT, 'js/sog-adventure-hammurabi.js');
+  const original = fs.readFileSync(abs, 'utf8');
+  const current = boss.evalLiteral(boss.findVarSpan(original, 'OPENING_DIALOGUE').text);
+
+  const withExtra = [...current, { who: 'explorer', text: 'new line' }];
+  const outAdd = boss.applyDialogueEdits(original, [{ varName: 'OPENING_DIALOGUE', lines: withExtra }]);
+  assert.equal(outAdd.fileText, original, 'a refused add must not alter the file at all');
+  assert.ok(outAdd.results[0].error);
+
+  const withoutOne = current.slice(1);
+  const outRemove = boss.applyDialogueEdits(original, [{ varName: 'OPENING_DIALOGUE', lines: withoutOne }]);
+  assert.equal(outRemove.fileText, original, 'a refused remove must not alter the file at all');
+  assert.ok(outRemove.results[0].error);
+});
+
+test('dialogueEditability reports Hammurabi opening as editable with lineOpsBlocked', () => {
+  const p = boss.buildBossPreview('hammurabi');
+  const gate = p.dialogue.opening;
+  assert.equal(gate.editable, true);
+  assert.equal(gate.lineOpsBlocked, true);
+  assert.match(gate.lineOpsBlockedReason, /slamBefore/);
 });
 
 test('dialogueEditability blocks a sameAs entry with a clear reason', () => {

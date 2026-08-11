@@ -568,25 +568,42 @@ function bossDialogueSection(p) {
 
         const isDirty = !!pending[key];
         const lines = isDirty ? pending[key] : d.extraction.value;
+        // Extra fields (slamBefore/revealBefore etc.) come from the ORIGINAL
+        // server data by line INDEX, never from the edit buffer — the buffer
+        // only ever holds {who,text} (see commands.js's _bossEditBuffer),
+        // and these flags never change from the UI, only their line's
+        // who/text does. Indexing is safe here specifically because
+        // lineOpsBlocked arrays can't have their line count changed (add/
+        // remove is disabled below), so index i always means the same line
+        // on both sides.
+        const originalLines = d.extraction.value;
         const commentWarning = d.extraction.hasComments
-          ? `<p class="impure-note">This array has a comment in the source${isDirty ? ' — saving these changes will remove it (comments aren\'t preserved on rewrite).' : '; editing it will remove that comment on save.'}</p>`
+          ? `<p class="impure-note">This array has a comment in the source${isDirty ? ' — saving these changes may remove it (a comment inside an edited line isn\'t preserved on rewrite).' : '; editing a line that contains it will remove it on save.'}</p>`
+          : '';
+        const lineOpsNote = d.lineOpsBlocked
+          ? `<p class="impure-note">${esc(d.lineOpsBlockedReason)}</p>`
           : '';
         return `
           ${header}
-          ${noteHtml}${commentWarning}
+          ${noteHtml}${commentWarning}${lineOpsNote}
           ${lines.map((line, i) => {
             const c = speakerColor(colors, line.who);
+            const extra = Object.keys(originalLines[i] || {}).filter(k => k !== 'who' && k !== 'text');
+            const extraHtml = extra.length
+              ? `<span class="dlg-extra-flags" title="Not editable here — preserved as-is on save">${extra.map(k => esc(k) + ':' + esc(String(originalLines[i][k]))).join(', ')}</span>`
+              : '';
             return `
             <div class="f2" data-boss-dlg="${esc(key)}:${i}">
               <div class="f" style="flex:0 0 120px">
                 <input data-boss-dlg-who="${esc(key)}:${i}" value="${esc(line.who || '')}" style="color:${c}">
               </div>
               <div class="f"><input data-boss-dlg-text="${esc(key)}:${i}" value="${esc(line.text || '')}" style="color:${c}"></div>
-              <button class="ghost sm" data-boss-dlg-remove="${esc(key)}:${i}" title="Remove line">✕</button>
+              ${extraHtml}
+              ${d.lineOpsBlocked ? '' : `<button class="ghost sm" data-boss-dlg-remove="${esc(key)}:${i}" title="Remove line">✕</button>`}
             </div>`;
           }).join('')}
           <div class="rowbtns">
-            <button class="ghost sm" data-boss-dlg-add="${esc(key)}">+ Add line</button>
+            ${d.lineOpsBlocked ? '' : `<button class="ghost sm" data-boss-dlg-add="${esc(key)}">+ Add line</button>`}
             ${isDirty ? `<button class="ghost sm" data-boss-dlg-revert="${esc(key)}">Revert to saved</button>` : ''}
           </div>
         `;

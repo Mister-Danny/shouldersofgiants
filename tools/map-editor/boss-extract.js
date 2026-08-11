@@ -235,14 +235,13 @@ function extractWithResolution(src, name, isFunctionReturn) {
    this module testable with zero I/O, same as extraction above.
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* The only fields the level editor's {who,text} dialogue UI can represent.
-   A line carrying anything else — Hammurabi's OPENING_DIALOGUE has two with
+/* Fields the level editor's dialogue UI has its OWN input for. Anything
+   else on a line — Hammurabi's OPENING_DIALOGUE has two lines with
    slamBefore/revealBefore, see BOSS_SOURCES.hammurabi.bespokeMechanics —
-   would silently lose that field the moment the array is regenerated from
-   edited lines. Rather than build a partial-editability UI (editable
-   EXCEPT these two lines), an array containing any such line is treated as
-   not editable at all, same as an impure one — one clear reason beats a
-   half-working form. */
+   isn't something the UI can construct from scratch, but that's different
+   from "must never be touched": see applyDialogueEdits' per-line patch
+   path below, which edits who/text in place and leaves every other field
+   exactly where it was, byte for byte. */
 var EDITABLE_LINE_FIELDS = ['who', 'text'];
 function hasUnrepresentableFields(lines) {
   return (lines || []).some(function (line) {
@@ -254,15 +253,30 @@ function hasUnrepresentableFields(lines) {
    values) can be edited at all, and why not when it can't. Computed once,
    server-side, and shipped in the /api/boss-previews payload so the client
    never re-derives this logic — same "one field one declaration" reasoning
-   as everywhere else in this file. */
+   as everywhere else in this file.
+
+   An array with a line carrying extra fields is still editable:true — see
+   applyDialogueEdits' per-line patch path — but comes back with
+   lineOpsBlocked:true, because adding or removing a line only makes sense
+   as a POSITION-matched patch (line i in, line i out); a genuinely new
+   line has no flags to preserve, and deleting a flagged line deletes its
+   flags right along with it. Only who/text edits to EXISTING lines are
+   safe there, so the UI must not offer add/remove for it. */
 function dialogueEditability(entry) {
   if (!entry.present) return { editable: false, reason: 'no such beat for this boss' };
   if (entry.sharedWith) return { editable: false, reason: 'shares its array with "' + entry.sharedWith + '" — edit that key instead' };
   var ex = entry.extraction;
   if (!ex || !ex.found) return { editable: false, reason: 'variable not found in source' };
   if (!ex.isPlainLiteral) return { editable: false, reason: 'not a plain literal — dynamically built, cannot be edited' };
-  if (hasUnrepresentableFields(ex.value)) return { editable: false, reason: 'contains fields this editor cannot represent (e.g. slamBefore/revealBefore) — see bespoke mechanics' };
-  return { editable: true, reason: null };
+  var flagged = hasUnrepresentableFields(ex.value);
+  return {
+    editable: true,
+    reason: null,
+    lineOpsBlocked: flagged,
+    lineOpsBlockedReason: flagged
+      ? 'one or more lines carry fields this editor can\'t construct (e.g. slamBefore/revealBefore) — you can edit existing lines\' name/text, but adding or removing a line is disabled here so a flag can\'t be silently gained or lost'
+      : null
+  };
 }
 
 /* Matches serve.js's own q() (single-quoted, backslash/quote/newline
@@ -292,6 +306,73 @@ function _linesEqual(a, b) {
   return true;
 }
 
+/* Splits an array literal's OWN text (e.g. findVarSpan's span.text, still
+   including the outer [ and ]) into each top-level `{ ... }` item's span,
+   as ABSOLUTE offsets into `src` (arrayStart/arrayEnd are span.valueStart/
+   valueEnd from the caller). Tracks {}-depth and quoted-string state the
+   same way _bracketSpan does for []/{} — deliberately only counts curly
+   braces here, since a dialogue object never contains a nested array, so
+   there is nothing else at this level to confuse it. */
+function findObjectItemSpans(src, arrayStart, arrayEnd) {
+  var items = [];
+  var i = arrayStart + 1, depth = 0, inStr = null, itemStart = -1;
+  for (; i < arrayEnd - 1; i++) {
+    var c = src[i];
+    if (inStr) { if (c === '\\') { i++; continue; } if (c === inStr) inStr = null; continue; }
+    if (c === "'" || c === '"') { inStr = c; continue; }
+    if (c === '{') { if (depth === 0) itemStart = i; depth++; }
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) { items.push({ start: itemStart, end: i + 1, text: src.slice(itemStart, i + 1) }); itemStart = -1; }
+    }
+  }
+  return items;
+}
+
+/* Finds one field's quoted-string value within a single object's OWN text
+   (e.g. one findObjectItemSpans entry's .text) — returns the span INCLUDING
+   the quotes, so the caller can splice a new _q()-quoted string in verbatim.
+   who/text are always quoted strings in this codebase (never bare
+   identifiers or numbers), so this doesn't need to handle other value
+   shapes — a field that isn't found, or whose value isn't quoted, returns
+   null and the caller leaves that line untouched for that field. */
+function findQuotedFieldSpan(objText, fieldName) {
+  var re = new RegExp('\\b' + fieldName + '\\s*:\\s*');
+  var m = re.exec(objText);
+  if (!m) return null;
+  var valueStart = m.index + m[0].length;
+  var qc = objText[valueStart];
+  if (qc !== "'" && qc !== '"') return null;
+  var i = valueStart + 1;
+  for (; i < objText.length; i++) {
+    var c = objText[i];
+    if (c === '\\') { i++; continue; }
+    if (c === qc) { i++; break; }
+  }
+  return { start: valueStart, end: i, text: objText.slice(valueStart, i) };
+}
+
+/* Patches who/text IN PLACE within one line's own object text — every other
+   byte of that object (any other field, its value, spacing, an inline
+   comment that isn't literally between a field name and its value) comes
+   through untouched, because this only ever replaces the exact quoted-
+   value span findQuotedFieldSpan finds, never regenerates the object. Only
+   fields present in `updates` are touched. Spans are re-found against the
+   CURRENT (possibly already-patched-once-this-call) text rather than
+   computed up front, same reasoning as applyDialogueEdits' own multi-var
+   handling — patching `who` shifts `text`'s offset if `who` comes first
+   in the object and changed length. */
+function rewriteDialogueLineText(objText, updates) {
+  var out = objText;
+  ['who', 'text'].forEach(function (field) {
+    if (!(field in updates)) return;
+    var span = findQuotedFieldSpan(out, field);
+    if (!span) return;
+    out = out.slice(0, span.start) + _q(updates[field]) + out.slice(span.end);
+  });
+  return out;
+}
+
 /* The write-back itself. `edits` is [{varName, lines}], already narrowed by
    the caller to vars this boss's dialogue schema actually maps to — but
    this function re-validates every one independently against the file
@@ -312,6 +393,67 @@ function _linesEqual(a, b) {
    no edits, save" reproduces the file byte-for-byte — regeneration (and
    the comment loss that comes with it) only happens for a var whose lines
    actually changed. */
+/* Per-line patch path for an array with at least one line carrying extra
+   fields (slamBefore/revealBefore etc.) — used only when edit.lines is the
+   SAME LENGTH as what's currently on disk (add/remove is refused earlier,
+   in applyDialogueEdits, before this is ever called). Walks items in
+   REVERSE index order so a length-changing replacement earlier in the
+   array (who/text is almost always a different length than the original)
+   never invalidates a later item's span — later items are always patched
+   (or left alone) BEFORE the text before them shifts.
+
+   A line whose who/text is unchanged is left completely untouched, not
+   just "regenerated to the same value" — same no-op guarantee
+   applyDialogueEdits already gives whole arrays, now per line. */
+function _patchLinesInPlace(text, itemSpans, current, newLines) {
+  var anyChanged = false;
+  var commentTouched = false;
+  for (var i = itemSpans.length - 1; i >= 0; i--) {
+    var was = current[i], now = newLines[i];
+    if (was.who === now.who && was.text === now.text) continue;
+    if (hasComments(itemSpans[i].text)) commentTouched = true;
+    var updates = {};
+    if (was.who !== now.who) updates.who = now.who;
+    if (was.text !== now.text) updates.text = now.text;
+    var newItemText = rewriteDialogueLineText(itemSpans[i].text, updates);
+    text = text.slice(0, itemSpans[i].start) + newItemText + text.slice(itemSpans[i].end);
+    anyChanged = true;
+  }
+  return { text: text, changed: anyChanged, hadComments: commentTouched };
+}
+
+/* The write-back itself. `edits` is [{varName, lines}], already narrowed by
+   the caller to vars this boss's dialogue schema actually maps to — but
+   this function re-validates every one independently against the file
+   text AS GIVEN (never trusts that a var was editable when some earlier
+   request loaded the preview; the file may have changed since).
+
+   Spans are re-found with findVarSpan against `text` AFTER each prior
+   replacement in this same call, never against offsets computed up front
+   — replacing one var shifts every byte after it, so a second var's
+   original offsets would point at the wrong bytes once the first write
+   lands. Re-finding fresh each time sidesteps that entirely.
+
+   The hard guarantee this exists to satisfy: a var whose CURRENT on-disk
+   value already deep-equals the submitted lines is left COMPLETELY
+   untouched — not re-serialized, not even re-sliced-and-reassembled with
+   identical content. If every edit in the batch is a no-op this way, the
+   returned fileText is the exact same string as the input, so "load with
+   no edits, save" reproduces the file byte-for-byte.
+
+   Two write strategies, chosen per array:
+   - No line has extra fields (the common case): whole-array regeneration
+     via serializeDialogueArray, unchanged from before this comment was
+     updated — same behavior, same tests, for all 49 arrays that already
+     worked this way.
+   - At least one line has extra fields (currently only Hammurabi's
+     OPENING_DIALOGUE): _patchLinesInPlace instead — who/text edited in
+     place per line, every other field (and any comment that isn't inside
+     a line actually being touched) preserved byte for byte. Only valid
+     when the line COUNT is unchanged; add/remove is refused below,
+     before either path runs, because a position-matched patch has no
+     sound answer for "which flags does a brand-new line 3 inherit" or
+     "where do line 2's flags go when it's deleted". */
 function applyDialogueEdits(fileText, edits) {
   var text = fileText;
   var results = [];
@@ -322,18 +464,37 @@ function applyDialogueEdits(fileText, edits) {
     var current;
     try { current = evalLiteral(span.text); }
     catch (e) { results.push({ varName: edit.varName, changed: false, error: 'could not evaluate current value: ' + e.message }); return; }
-    if (hasUnrepresentableFields(current) || hasUnrepresentableFields(edit.lines)) {
-      results.push({ varName: edit.varName, changed: false, error: 'array contains fields this editor cannot represent — refusing to write' });
+
+    var flagged = hasUnrepresentableFields(current);
+    if (flagged && edit.lines.length !== current.length) {
+      results.push({ varName: edit.varName, changed: false, error: 'one or more lines carry fields this editor can\'t represent — adding or removing lines is refused, only who/text edits to existing lines are allowed' });
       return;
     }
-    if (_linesEqual(current, edit.lines)) {
-      results.push({ varName: edit.varName, changed: false, hadComments: hasComments(span.text) });
+
+    if (!flagged) {
+      if (_linesEqual(current, edit.lines)) {
+        results.push({ varName: edit.varName, changed: false, hadComments: hasComments(span.text) });
+        return;
+      }
+      var hadComments = hasComments(span.text);
+      var newLiteral = serializeDialogueArray(edit.lines);
+      text = text.slice(0, span.valueStart) + newLiteral + text.slice(span.valueEnd);
+      results.push({ varName: edit.varName, changed: true, hadComments: hadComments });
       return;
     }
-    var hadComments = hasComments(span.text);
-    var newLiteral = serializeDialogueArray(edit.lines);
-    text = text.slice(0, span.valueStart) + newLiteral + text.slice(span.valueEnd);
-    results.push({ varName: edit.varName, changed: true, hadComments: hadComments });
+
+    // Flagged, same length: patch in place. itemSpans are found against
+    // `text` (this call's running copy) using THIS var's freshly-found
+    // span — correct even if an earlier edit in this same batch already
+    // shifted bytes before this var's declaration.
+    var itemSpans = findObjectItemSpans(text, span.valueStart, span.valueEnd);
+    if (itemSpans.length !== current.length) {
+      results.push({ varName: edit.varName, changed: false, error: 'internal: line-span count did not match evaluated line count — refusing to guess' });
+      return;
+    }
+    var patched = _patchLinesInPlace(text, itemSpans, current, edit.lines);
+    text = patched.text;
+    results.push({ varName: edit.varName, changed: patched.changed, hadComments: patched.hadComments });
   });
   return { fileText: text, results: results };
 }
@@ -537,6 +698,8 @@ function buildBossPreview(key) {
     var gate = dialogueEditability(dialogue[schemaKey]);
     dialogue[schemaKey].editable = gate.editable;
     dialogue[schemaKey].editBlockedReason = gate.reason;
+    dialogue[schemaKey].lineOpsBlocked = !!gate.lineOpsBlocked;
+    dialogue[schemaKey].lineOpsBlockedReason = gate.lineOpsBlockedReason || null;
   });
 
   var locations = extractWithResolution(fileText, src.locationsFn, true);
@@ -627,5 +790,8 @@ module.exports = {
   dialogueEditability: dialogueEditability,
   serializeDialogueLine: serializeDialogueLine,
   serializeDialogueArray: serializeDialogueArray,
+  findObjectItemSpans: findObjectItemSpans,
+  findQuotedFieldSpan: findQuotedFieldSpan,
+  rewriteDialogueLineText: rewriteDialogueLineText,
   applyDialogueEdits: applyDialogueEdits
 };
