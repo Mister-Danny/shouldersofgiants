@@ -183,40 +183,6 @@ var Overworld = (function () {
     { who: 'gilgamesh', text: 'You will be.'                                       }
   ];
 
-  /* ── Phase D3a — Gilgamesh "challenge again" + post-loss Farmer/Cuneiform ──
-     The pre-battle Farmer 5-card-grant + Deck Builder sequence was removed in
-     D3a; the candle + Farmer dialogue helpers are reused. The post-loss Cuneiform
-     intervention now lives in the Gilgamesh battle module (_runCuneiformIntervention
-     in sog-adventure-gilgamesh.js).                                          */
-  var D3_GILGAMESH_CHALLENGE_AGAIN = [
-    { who: 'gilgamesh', text: 'You dare to challenge me again?!' },
-    { who: 'explorer',  text: "I'm not the same kid you beat last time." },
-    { who: 'explorer',  text: "I've been reading." },
-    { who: 'gilgamesh', text: 'You naive little puppet.' },
-    { who: 'gilgamesh', text: 'Prepare to be swept into the dustbin of history.' }
-  ];
-  // Post-loss intervention dialogue, split around the Cuneiform card grant.
-  var D3_FARMER_POSTLOSS_A = [
-    { who: 'farmer',   text: 'Hey. That was a tough battle.' },
-    { who: 'explorer', text: 'His cards were so much more advanced than mine.' },
-    { who: 'farmer',   text: 'Of course they were. You were playing in Prehistory.' },
-    { who: 'farmer',   text: "You didn't stand a chance." },
-    { who: 'explorer', text: "Then what do I do? I can't get stuck here!" },
-    { who: 'farmer',   text: 'You need to bring your cards up to date.' }
-  ];
-  // [Cuneiform card acquisition fires here]
-  var D3_FARMER_POSTLOSS_B = [
-    { who: 'explorer', text: "What's Cuneiform?" },
-    { who: 'farmer',   text: 'The first written language.' },
-    { who: 'explorer', text: 'Oh, how does it work?' },
-    { who: 'farmer',   text: 'You should read it, obviously.' },
-    { who: 'explorer', text: 'Oh, right.' },
-    { who: 'farmer',   text: 'But in effect, it will empower those old prehistoric cards you have.' },
-    { who: 'explorer', text: 'Thank you.' },
-    { who: 'farmer',   text: "Don't mention it." },
-    { who: 'farmer',   text: "Seriously, he'll kill me." }
-  ];
-
   /* ── Phase D4 — Sargon encounter (DRAFT dialogue; edit freely) ────────────
      Lines are plain { who, text } entries. who maps to a HUD CHARACTERS entry
      ('sargon' already exists with sargonportrait.jpg). The reveal plays once on
@@ -477,11 +443,6 @@ var Overworld = (function () {
     { who: 'explorer', text: "I'm starting to sense that history does like to repeat itself." },
     { who: 'explorer', text: "But I hope I never have to repeat those battles again." },
     { who: 'explorer', text: 'Now is probably a good time to find a permanent way to save my progress.' }
-  ];
-  // One-time, on the FIRST return from the marketplace — un-greys the deck builder.
-  var DECKBUILDER_UNLOCK_DIALOGUE = [
-    { who: 'explorer', text: 'I’m starting to build quite a collection.' },
-    { who: 'explorer', text: 'Let’s see if I can build a deck.'          }
   ];
   // One-time, first click of the To Egypt box — plays before the walk-off.
   var TOEGYPT_GOODBYE_DIALOGUE = [
