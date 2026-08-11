@@ -91,7 +91,11 @@ test('a genuine edit changes only the targeted var, leaves every other byte unto
   assert.ok(out.fileText.endsWith(suffix), 'bytes after the edited var must be untouched');
 });
 
-test('editing an array that has a trailing comment reports hadComments and actually drops it', () => {
+test('a same-length text edit preserves a trailing comment (per-line patch, not regeneration)', () => {
+  // SARGON_SERF_WIN_A's comment (`// -> [GOLD - 15]`) sits AFTER the last
+  // item, outside every line's own {...} span — per-line patching never
+  // touches that region at all, so editing any line's text, even the
+  // last one, must leave it exactly where it was.
   const abs = path.join(ROOT, 'js/sog-adventure-sargon.js');
   const original = fs.readFileSync(abs, 'utf8');
   const span = boss.findVarSpan(original, 'SARGON_SERF_WIN_A');
@@ -102,9 +106,24 @@ test('editing an array that has a trailing comment reports hadComments and actua
   const out = boss.applyDialogueEdits(original, [{ varName: 'SARGON_SERF_WIN_A', lines: edited }]);
 
   assert.equal(out.results[0].changed, true);
-  assert.equal(out.results[0].hadComments, true);
+  assert.equal(out.results[0].hadComments, false, 'a same-length patch does not touch the trailing comment');
   const newSpan = boss.findVarSpan(out.fileText, 'SARGON_SERF_WIN_A');
-  assert.doesNotMatch(newSpan.text, /GOLD/, 'the reward comment should be gone after regeneration');
+  assert.match(newSpan.text, /GOLD/, 'the reward comment must survive a same-length edit');
+});
+
+test('adding a line to a commented array falls back to regeneration and reports the comment loss', () => {
+  const abs = path.join(ROOT, 'js/sog-adventure-sargon.js');
+  const original = fs.readFileSync(abs, 'utf8');
+  const span = boss.findVarSpan(original, 'SARGON_SERF_WIN_A');
+  const current = boss.evalLiteral(span.text);
+
+  const withExtra = [...current, { who: 'explorer', text: 'one more line' }];
+  const out = boss.applyDialogueEdits(original, [{ varName: 'SARGON_SERF_WIN_A', lines: withExtra }]);
+
+  assert.equal(out.results[0].changed, true);
+  assert.equal(out.results[0].hadComments, true, 'a length-changing edit regenerates the whole array, losing the comment');
+  const newSpan = boss.findVarSpan(out.fileText, 'SARGON_SERF_WIN_A');
+  assert.doesNotMatch(newSpan.text, /GOLD/, 'the reward comment is gone after regeneration');
 });
 
 test('multiple vars in one call are each found correctly despite earlier edits shifting offsets', () => {

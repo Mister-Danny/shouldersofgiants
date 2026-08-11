@@ -441,19 +441,18 @@ function _patchLinesInPlace(text, itemSpans, current, newLines) {
    returned fileText is the exact same string as the input, so "load with
    no edits, save" reproduces the file byte-for-byte.
 
-   Two write strategies, chosen per array:
-   - No line has extra fields (the common case): whole-array regeneration
-     via serializeDialogueArray, unchanged from before this comment was
-     updated — same behavior, same tests, for all 49 arrays that already
-     worked this way.
-   - At least one line has extra fields (currently only Hammurabi's
-     OPENING_DIALOGUE): _patchLinesInPlace instead — who/text edited in
-     place per line, every other field (and any comment that isn't inside
-     a line actually being touched) preserved byte for byte. Only valid
-     when the line COUNT is unchanged; add/remove is refused below,
-     before either path runs, because a position-matched patch has no
-     sound answer for "which flags does a brand-new line 3 inherit" or
-     "where do line 2's flags go when it's deleted". */
+   Two write strategies, chosen by whether the line COUNT changed — not by
+   whether the array has flagged (extra-field) lines, which used to be the
+   split. A pure text/who edit to any array, flagged or not, now goes
+   through _patchLinesInPlace: only the touched lines' own who/text spans
+   are rewritten, everything else (other lines' exact formatting, any
+   comment that isn't inside a touched line's own braces, unflagged lines
+   sitting next to a flagged one) survives untouched. Whole-array
+   regeneration (serializeDialogueArray) only fires when the line count
+   actually changes — reformats every line, same as before, because add/
+   remove has no other sound option (and for a flagged array, is refused
+   outright: a position-matched patch has no answer for what flags a new
+   line 3 should inherit or where line 2's flags go when it's deleted). */
 function applyDialogueEdits(fileText, edits) {
   var text = fileText;
   var results = [];
@@ -465,17 +464,21 @@ function applyDialogueEdits(fileText, edits) {
     try { current = evalLiteral(span.text); }
     catch (e) { results.push({ varName: edit.varName, changed: false, error: 'could not evaluate current value: ' + e.message }); return; }
 
+    if (_linesEqual(current, edit.lines)) {
+      results.push({ varName: edit.varName, changed: false, hadComments: hasComments(span.text) });
+      return;
+    }
+
     var flagged = hasUnrepresentableFields(current);
-    if (flagged && edit.lines.length !== current.length) {
+    var lengthChanged = edit.lines.length !== current.length;
+
+    if (flagged && lengthChanged) {
       results.push({ varName: edit.varName, changed: false, error: 'one or more lines carry fields this editor can\'t represent — adding or removing lines is refused, only who/text edits to existing lines are allowed' });
       return;
     }
 
-    if (!flagged) {
-      if (_linesEqual(current, edit.lines)) {
-        results.push({ varName: edit.varName, changed: false, hadComments: hasComments(span.text) });
-        return;
-      }
+    if (lengthChanged) {
+      // Add/remove — no per-line mapping makes sense, whole array regenerates.
       var hadComments = hasComments(span.text);
       var newLiteral = serializeDialogueArray(edit.lines);
       text = text.slice(0, span.valueStart) + newLiteral + text.slice(span.valueEnd);
@@ -483,10 +486,10 @@ function applyDialogueEdits(fileText, edits) {
       return;
     }
 
-    // Flagged, same length: patch in place. itemSpans are found against
-    // `text` (this call's running copy) using THIS var's freshly-found
-    // span — correct even if an earlier edit in this same batch already
-    // shifted bytes before this var's declaration.
+    // Same length — patch in place, flagged or not. itemSpans are found
+    // against `text` (this call's running copy) using THIS var's freshly-
+    // found span — correct even if an earlier edit in this same batch
+    // already shifted bytes before this var's declaration.
     var itemSpans = findObjectItemSpans(text, span.valueStart, span.valueEnd);
     if (itemSpans.length !== current.length) {
       results.push({ varName: edit.varName, changed: false, error: 'internal: line-span count did not match evaluated line count — refusing to guess' });

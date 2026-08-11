@@ -97,13 +97,16 @@ test('a genuine edit to one array changes only that array, whole file still pars
   });
 });
 
-test('D5_HANGING_GARDENS_REFLECT comment is detected and flagged, not silently dropped', () => {
+test('D5_HANGING_GARDENS_REFLECT: same-length edit preserves its trailing comment; add/remove loses it', () => {
   // NOT D5_HANGING_GARDENS_CLICK_A — CLICK_A has no comment at all (verified
   // directly against source). REFLECT is the one with the trailing
   // `// -> [HANGING GARDENS node rise animation]` comment; CLICK_A got
   // implicated by an ambiguous inventory table row that bundled REFLECT/
   // REACTION/CLICK_A/CLICK_B/NEB_WIN_A/NEB_WIN_B together under one "A has
-  // a trailing comment" note.
+  // a trailing comment" note. The comment sits AFTER the last item, outside
+  // any line's own {...} span, so a same-length per-line patch never
+  // touches it — only a length-changing edit (forced to whole-array
+  // regeneration) actually loses it.
   const original = fs.readFileSync(OVERWORLD_ABS, 'utf8');
   const preview = owExtract.buildOverworldPreview();
   const group = preview.groups.find((g) => g.group.startsWith('Hanging Gardens'));
@@ -114,9 +117,15 @@ test('D5_HANGING_GARDENS_REFLECT comment is detected and flagged, not silently d
   const reflect = group.arrays.find((a) => a.varName === 'D5_HANGING_GARDENS_REFLECT');
   assert.equal(reflect.extraction.hasComments, true, 'fixture assumption: REFLECT currently has a comment');
 
-  const edited = reflect.extraction.value.map((l, i) => i === 0 ? { ...l, text: 'edited' } : l);
-  const out = boss.applyDialogueEdits(original, [{ varName: 'D5_HANGING_GARDENS_REFLECT', lines: edited }]);
-  assert.equal(out.results[0].hadComments, true, 'editing this array must report the comment loss');
+  const editedSameLength = reflect.extraction.value.map((l, i) => i === 0 ? { ...l, text: 'edited' } : l);
+  const outPatch = boss.applyDialogueEdits(original, [{ varName: 'D5_HANGING_GARDENS_REFLECT', lines: editedSameLength }]);
+  assert.equal(outPatch.results[0].hadComments, false, 'a same-length patch must not report comment loss');
+  assert.match(boss.findVarSpan(outPatch.fileText, 'D5_HANGING_GARDENS_REFLECT').text, /HANGING GARDENS node rise/, 'comment must survive');
+
+  const editedLonger = [...reflect.extraction.value, { who: 'explorer', text: 'one more line' }];
+  const outRegen = boss.applyDialogueEdits(original, [{ varName: 'D5_HANGING_GARDENS_REFLECT', lines: editedLonger }]);
+  assert.equal(outRegen.results[0].hadComments, true, 'a length-changing edit regenerates the array, losing the comment');
+  assert.doesNotMatch(boss.findVarSpan(outRegen.fileText, 'D5_HANGING_GARDENS_REFLECT').text, /HANGING GARDENS node rise/, 'comment must be gone after regeneration');
 });
 
 test('isKnownArray whitelists only the 39 registered names', () => {
