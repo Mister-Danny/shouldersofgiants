@@ -1629,7 +1629,7 @@ var Overworld = (function () {
     //    battle. FIRST click plays the encounter dialogue → battle at Narmer's
     //    first-encounter tier (Serf); afterwards the shared _routeBossTier rule
     //    applies (Serf → Giant automatically, picker only when fully cleared). ──
-    if (node.id === 'double-crown' && currentMapId === 'egypt') {
+    if (node.id === 'narmer' && currentMapId === 'egypt') {
       isDialogueLocked = true;
       cancelIdle();
       walkPath(_routeTo(node.id), function () {
@@ -3221,7 +3221,7 @@ var Overworld = (function () {
      The battle's script (scriptHook 'narmer') fades the wipe cover out in
      onBattleStart to reveal the board. */
   function _launchNarmerBattle() {
-    _fireWipeFromNode('double-crown', function () {
+    _fireWipeFromNode('narmer', function () {
       var nb = window.SOG && window.SOG.NarmerBattle;
       if (nb && typeof nb.start === 'function') {
         nb.start();

@@ -174,7 +174,7 @@ function bindGates(o) {
    yet, so pairing one would be a dead end the level form can't save. */
 const WIRED_NODES = new Set([
   'walls-of-uruk', 'market', 'sargon', 'hammurabi', 'hanging-gardens',
-  'double-crown', 'egypt-market', 'prehistory', 'egypt-signpost'
+  'narmer', 'egypt-market', 'prehistory', 'egypt-signpost'
 ]);
 function src2(n) {
   const hasLevel = n.kind === 'battle' && !!(levelState.levels && levelState.levels[n.id]);
