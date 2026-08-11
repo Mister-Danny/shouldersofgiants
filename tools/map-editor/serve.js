@@ -26,7 +26,23 @@
 var http = require('http');
 var fs   = require('fs');
 var path = require('path');
-var bossExtract = require('./boss-extract.js');
+var BOSS_EXTRACT_PATH = require.resolve('./boss-extract.js');
+
+/* boss-extract.js is hand-edited directly, the same way the 5 boss .js
+   files it reads are — but unlike those (read fresh via fs.readFileSync on
+   every request, see /api/boss-previews), a plain top-level require() here
+   would be cached by Node for the lifetime of THIS process. Every edit to
+   boss-extract.js would then silently need a server restart to take
+   effect, which bit us twice in one session (once as "no editable fields
+   anywhere" that was actually a stale process, not a real bug — see the
+   commit this comment landed in). Busting the require cache on every call
+   costs nothing (boss-extract.js has no side effects at load time, just
+   function/const definitions) and makes this editor behave like the rest
+   of itself: always reflects what's on disk right now. */
+function bossExtract() {
+  delete require.cache[BOSS_EXTRACT_PATH];
+  return require('./boss-extract.js');
+}
 
 var ROOT = path.resolve(__dirname, '..', '..');
 var PORT = Number(process.env.PORT) || 8750;
@@ -880,7 +896,7 @@ function handleSaveLevel(req, res) {
 
    Body shape: { bossKey: '<nodeId>', dialogue: { <schemaKey>: [{who,text}] } }
    bossKey is the client's nodeId (viewBoss()'s key, e.g. 'walls-of-uruk' for
-   Gilgamesh) — resolved server-side via bossExtract.bossSourceByNodeId,
+   Gilgamesh) — resolved server-side via bossSourceByNodeId,
    NEVER a client-supplied file path. That resolution, plus BOSS_SOURCES'
    own hand-curated dialogue-key → varName map, is what makes this endpoint
    structurally unable to touch any file or variable outside the 5 boss
@@ -900,7 +916,8 @@ function handleSaveBossDialogue(req, res) {
       return sendJson(res, 400, { ok: false, error: 'bad JSON: ' + e.message });
     }
 
-    var src = payload && payload.bossKey ? bossExtract.bossSourceByNodeId(payload.bossKey) : null;
+    var be = bossExtract();
+    var src = payload && payload.bossKey ? be.bossSourceByNodeId(payload.bossKey) : null;
     if (!src) return sendJson(res, 400, { ok: false, error: 'unknown bossKey: ' + (payload && payload.bossKey) });
 
     var dialogue = payload.dialogue || {};
@@ -933,7 +950,7 @@ function handleSaveBossDialogue(req, res) {
 
     var result;
     try {
-      result = bossExtract.applyDialogueEdits(original, edits);
+      result = be.applyDialogueEdits(original, edits);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: 'write-back failed: ' + e.message });
     }
@@ -1010,10 +1027,12 @@ var server = http.createServer(function (req, res) {
     // Phase 1, read-only: the 5 hand-authored bosses, extracted fresh from
     // their own .js files on every request (no caching — these files are
     // hand-edited directly, not through this tool, so a stale cache here
-    // would show the wrong thing after any edit). See boss-extract.js.
+    // would show the wrong thing after any edit). See boss-extract.js and,
+    // for why bossExtract() is a function call here rather than a plain
+    // module reference, that function's own docstring above.
     var previews;
     try {
-      previews = bossExtract.buildAllBossPreviews();
+      previews = bossExtract().buildAllBossPreviews();
     } catch (e) {
       return sendJson(res, 500, { error: 'boss extraction failed: ' + e.message });
     }
