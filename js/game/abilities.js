@@ -581,6 +581,107 @@
 
     });
 
+    /* ── Pi-Ramses / Karnak Temple / Abu Simbel (Ramses battle locations) ────────
+       All three recompute FRESH every evaluateContinuous pass (never a one-time
+       accumulator) — the underlying condition (highest IP here / all slots filled)
+       is itself derived from board state each time, same as ALL_MINUS_ONE_IP /
+       Sargon / Narmer above. Positioned AFTER the main per-location loop (not
+       inside it) so every other continuous card modifier at these locations is
+       already baked into contMod before "highest IP here" is measured — mirroring
+       Narmer's own "final pass" placement immediately below. */
+    G.locations.forEach(function (loc) {
+      // Pi-Ramses (+2 IP) / Karnak Temple (double IP): applies to whichever
+      // revealed card(s) — EITHER side — currently hold the highest effective IP
+      // here. Neither ability's text says "your"/"the owner's", so this compares
+      // BOTH sides' cards together (the same both-sides convention as
+      // ALL_MINUS_ONE_IP), not each side's own top card independently. Ties: ALL
+      // tied cards get the bonus — explicit in Karnak's own text; Pi-Ramses'
+      // text doesn't specify a tie rule, so the same tie-inclusive approach
+      // applies there too, for consistency rather than picking one card
+      // arbitrarily among ties.
+      //
+      // TRANSFER CUE — this is the only ability in the game that compares across
+      // both sides for a single winner, so a card can silently LOSE this bonus
+      // because of something the OPPONENT played, with no other on-screen change
+      // to explain why. `_ramsesWinner` is a flag stored directly on the slot
+      // object (untouched by the contMod/contModSources reset above, so it
+      // survives across passes) — "was this card winning the contest here last
+      // time we checked." We fire a cue ONLY on an actual gain/loss transition
+      // this pass, never on every recompute, and the sound fires at most once per
+      // location per pass (not once per card) so a tie broken by one bigger
+      // arrival doesn't stutter.
+      if (loc.abilityKey === 'HIGHEST_IP_PLUS_2_HERE' || loc.abilityKey === 'DOUBLE_HIGHEST_IP_HERE') {
+        var locName = loc.name || 'this location';
+        var allHere = [];
+        ['player', 'opp'].forEach(function (own) {
+          var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+          sl[loc.id].forEach(function (s, si) { if (s && s.revealed) allHere.push({ s: s, own: own, si: si }); });
+        });
+        var winners = [];
+        if (allHere.length) {
+          var maxIP = allHere.reduce(function (m, e) { return Math.max(m, effectiveIP(e.s)); }, -Infinity);
+          winners = allHere.filter(function (e) { return effectiveIP(e.s) === maxIP; });
+          winners.forEach(function (e) {
+            var delta = (loc.abilityKey === 'DOUBLE_HIGHEST_IP_HERE') ? effectiveIP(e.s) : 2;
+            e.delta = delta;
+            if (delta !== 0) {
+              e.s.contMod = (e.s.contMod || 0) + delta;
+              e.s.contModSources.push({ source: locName, delta: delta });
+              addBonus(e.s, delta, 'location', loc.id, nextEventId(), 'A', true);
+            }
+          });
+        }
+        var transferred = false;
+        allHere.forEach(function (e) {
+          var isWinnerNow = winners.indexOf(e) !== -1;
+          var wasWinner   = !!e.s._ramsesWinner;
+          if (isWinnerNow !== wasWinner) {
+            transferred = true;
+            var slotEl = getSlotEl(e.own, loc.id, e.si);
+            if (slotEl && typeof Anim !== 'undefined') {
+              if (isWinnerNow) {
+                Anim.pulseYellow(slotEl);
+                Anim.floatNumber(slotEl, e.delta);
+              } else {
+                Anim.pulseRed(slotEl);
+                Anim.floatNumber(slotEl, -(e.s._ramsesDelta || 0));
+              }
+            }
+          }
+          e.s._ramsesWinner = isWinnerNow;
+          if (isWinnerNow) e.s._ramsesDelta = e.delta;
+        });
+        if (transferred && typeof SOG !== 'undefined' && SOG.sfx && typeof SOG.sfx.play === 'function') {
+          SOG.sfx.play('sfx/yoink.mp3');
+        }
+      }
+
+      // Abu Simbel: +6 IP to the LOCATION TOTAL (not any one card — "fill all 4
+      // slots ... gain IP here" rewards the location, not a card), per side that
+      // has every slot here filled. Written to G.locationBoosts (same table
+      // Sargon/Narmer use), re-derived fresh each pass rather than granted once —
+      // G.locationBoosts is rebuilt from scratch every evaluateContinuous call
+      // (see comment at the top of this function), so a one-time push would be
+      // wiped by the very next pass. Re-deriving "is full" each time is both
+      // simpler and correct here: once slots are revealed they don't become
+      // unrevealed in normal play, so this reads as permanent without needing a
+      // separate once-per-turn trigger the way CAPITAL_WHEN_FULL needs one for
+      // its NEXT-TURN capital grant (that one really is a one-shot accumulator
+      // credit; this one is a recomputed location-total addend). "Filled" means
+      // occupied (a card is played there), matching CAPITAL_WHEN_FULL's own
+      // check — it does not require the card be revealed yet.
+      if (loc.abilityKey === 'FULL_SLOTS_PLUS_6_HERE') {
+        ['player', 'opp'].forEach(function (own) {
+          var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+          if (sl[loc.id].length && sl[loc.id].indexOf(null) === -1 && G.locationBoosts[loc.id]) {
+            G.locationBoosts[loc.id][own].push({
+              sourceCardId: null, sourceOwner: own, sourceLocId: loc.id, amount: 6
+            });
+          }
+        });
+      }
+    });
+
     /* ── Narmer (id 51) "The Unifier" — total-IP averaging (FINAL PASS) ──────────
        Runs AFTER every other continuous mod + location boost, so it averages the
        FINAL computed totals. For NARMER'S OWNER ONLY (opponent untouched): take
@@ -674,22 +775,6 @@
     if (canalsNewBoost && typeof SFX !== 'undefined' && typeof SFX.waterflowSound === 'function') {
       SFX.waterflowSound();
     }
-
-    // Ramses II (53) buff cue: glow a revealed Ramses whose owner has an ACTIVE
-    // CULTURAL_2X next-turn effect this turn (the turn the doubling is live), so
-    // the player can see the buff is armed. Derived from the same pass; cleared
-    // automatically once the effect expires. Inert when no Ramses is on the board.
-    G.locations.forEach(function (loc) {
-      ['player', 'opp'].forEach(function (own) {
-        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        var live = nextTurnEffectActive(own, 'CULTURAL_2X');
-        sl[loc.id].forEach(function (s, si) {
-          if (!s || s.cardId !== 53) return;
-          var el = getSlotEl(own, loc.id, si);
-          if (el) el.classList.toggle('ramses-buff-active', live && s.revealed);
-        });
-      });
-    });
 
     // Update continuous glow on all revealed slots
     if (typeof Anim !== 'undefined') {
@@ -2339,11 +2424,12 @@
      the dispatcher's contract already is the rule. Each reactor is invoked
      exactly once per landing, so the Merchant reacts exactly once.
 
-     EITHER SIDE'S Economic play counts. The spec says "an Economic card is
-     played at this Merchant's location" without qualifying whose, so this
-     deliberately does NOT gate on ctx.landedOwner (contrast Tribe below,
-     which is explicitly same-owner). Note the cross-side consequence: an
-     opponent's Economic card played here gets the different-civ +1 too.
+     OWNER-SCOPED. The Merchant reacts ONLY to Economic cards played by its OWN
+     controller — "When YOU play an Economic card here". An opponent playing an
+     Economic card at this location triggers nothing at all: no IP, no move, and
+     no different-civilization bonus. (This replaces an earlier reading where
+     either side's play counted, which let a player's Economic card move the
+     AI's Merchant.) Same-owner gating matches Tribe below.
 
      [PROVISIONAL DATA — see cards.js id 900] The card entry, its id, and the
      Punt/Thebes move-here bonuses are placeholders pending the real card set.
@@ -2367,16 +2453,68 @@
     return card.civilization || card.civ || card.era || null;
   }
 
-  /* Location "when a card MOVES here" bonus. INERT TODAY — no location defines
-     these keys yet, so this is a no-op lookup. It exists so the Merchant's move
-     already routes through the seam: when Punt and Thebes land, give them
-     abilityKey 'MOVE_HERE_IP' (+1 IP to the arriving card) or
-     'MOVE_HERE_CAPITAL' (+1 capital next turn) and this starts paying out with
-     no change here.
-     FOLLOW-UP when those locations exist: call this from the shared move
-     pipeline (executeMoveAnimated's completion) instead of only here, so
-     Chariot and Ötzi moves trigger it too. It is called only from the Merchant
-     for now because that is the only mover the spec covers. */
+  /* Pick a RANDOM location, other than `excludeLocId`, that has an open slot on
+     `owner`'s side — or null if there is none (the caller's fizzle case).
+
+     SHARED ON PURPOSE: this is the Merchant's own move rule, and Hatshepsut's
+     spawn has to place a Merchant by the SAME rule ("another location that has
+     an open spot"). Extracted so the two can never drift — change the selection
+     policy here and both the move and the spawn follow. Mirrors the shape Ötzi's
+     flee uses to choose its destination. */
+  function randomOtherOpenLoc(owner, excludeLocId) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var candidates = G.locations.filter(function (loc) {
+      return loc.id !== excludeLocId && slots[loc.id] && slots[loc.id].indexOf(null) !== -1;
+    });
+    if (!candidates.length) return null;
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  /* Put a NEW, already-revealed card into the first open slot at a location.
+     Returns false (no-op) if the location is full.
+
+     REUSES THE EXISTING SPAWN PATTERN — this is createMummy's mechanism,
+     generalised: find the open slot index, write a slot record, sync that
+     location's DOM (syncPlayerSlots / syncOppSlots), then recompute
+     continuous/IP/score. createMummy stays as-is because it carries
+     resurrection-specific state (resurrectionIP, wasResurrected,
+     resurrectedFrom); this is the plain-card equivalent for abilities that
+     summon a standard card.
+
+     The spawned card is a FULL citizen of the board, not a decoration: the
+     reveal dispatcher resolves reactors by looking up CARD_ABILITIES[sd.cardId]
+     at fire time, so a spawned Merchant reacts to later Economic plays with no
+     registration step. revealed:true is what makes it eligible. */
+  function spawnCardAt(owner, locId, cardId) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var si    = (slots[locId] || []).indexOf(null);
+    if (si === -1) return false;                       // no room → caller fizzles
+    var card = CARDS.find(function (c) { return c.id === cardId; });
+    slots[locId][si] = {
+      cardId: cardId,
+      ip:     card ? card.ip : 0,
+      cc:     card ? card.cc : 0,
+      revealed: true,
+      ipMod: 0, contMod: 0, ipModSources: [], contModSources: [],
+      bonuses: [], turnPlayed: G.turn, wasSpawned: true
+    };
+    if (owner === 'player') syncPlayerSlots(locId); else syncOppSlots(locId);
+    evaluateContinuous();
+    refreshSlotIPDisplays();
+    updateScores();
+    return true;
+  }
+
+  /* Location "when a card MOVES here" bonus — LIVE as of Hatshepsut's battle.
+       'MOVE_HERE_IP'      (Punt)   → the arriving card gains +1 IP
+       'MOVE_HERE_CAPITAL' (Thebes) → the mover's owner gains +1 capital next turn
+
+     NOW CALLED FROM THE SHARED MOVE PIPELINE (game.js applyMove), not from any
+     one ability — so EVERY move triggers it: Chariot (48/69), Lucy, Magellan,
+     Columbus, Ötzi's flee, the Merchant's own trade move, and any future mover.
+     That was the follow-up noted when this seam was first added; Punt and Thebes
+     existing is what made it real. A location without one of these keys is an
+     inert lookup, so every other battle is untouched. */
   function fireMoveHereBonus(owner, destLocId, movedSlot) {
     var loc = G.locations.find(function (l) { return l.id === destLocId; });
     if (!loc || !loc.abilityKey) return;
@@ -2396,19 +2534,20 @@
     var fromLoc = ctx.locId;
     var landed  = CARDS.find(function (c) { return c.id === ctx.landedCardId; });
 
-    // Type gate is the ONLY test left — the dispatcher already guaranteed
-    // "landed at my location" and "not my own reveal".
+    // OWNER gate: only MY controller's plays count. The dispatcher fires reactors
+    // on BOTH sides of the location, so without this an opponent's Economic card
+    // moved this Merchant.
+    if (ctx.landedOwner !== owner) { done(); return; }
+    // Type gate. The dispatcher already guaranteed "landed at my location" and
+    // "not my own reveal".
     if (!landed || landed.type !== 'Economic') { done(); return; }
 
-    // FIZZLE CHECK FIRST — see the header. Open spots are counted on the
-    // MERCHANT'S OWN side (a move relocates it within its owner's slots),
-    // matching how Ötzi's flee picks its destination.
-    var ownerSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var candidates = G.locations.filter(function (loc) {
-      return loc.id !== fromLoc && ownerSlots[loc.id] && ownerSlots[loc.id].indexOf(null) !== -1;
-    });
-    if (!candidates.length) { done(); return; }   // whole trigger fizzles
-    var dest = candidates[Math.floor(Math.random() * candidates.length)];
+    // FIZZLE CHECK FIRST — see the header. Destination comes from the SHARED
+    // randomOtherOpenLoc (open spots counted on the MERCHANT'S OWN side, since a
+    // move relocates it within its owner's slots), so Hatshepsut's spawn places a
+    // Merchant by exactly this rule.
+    var dest = randomOtherOpenLoc(owner, fromLoc);
+    if (!dest) { done(); return; }                // whole trigger fizzles
 
     // 1. Merchant's own +1 IP — UNCONDITIONAL, banked at the CURRENT location
     //    before the move.
@@ -2418,9 +2557,10 @@
     }
 
     // 2. DIFFERENT-CIVILIZATION BONUS → +1 IP to THE PLAYED CARD (not the
-    //    Merchant). Resolve the played card's own slot on ITS owner's side: the
-    //    landed card may belong to either side, so it is NOT necessarily in
-    //    ownerSlots. Same-civ (or unknown civ on either card) → no bonus.
+    //    Merchant). Same-civ (or unknown civ on either card) → no bonus. The
+    //    owner gate above means the played card is always on the Merchant's own
+    //    side now; the lookup still goes through ctx.landedOwner so the slot
+    //    resolution stays explicit rather than assuming.
     var merchantCard = CARDS.find(function (c) { return c.id === MERCHANT_ID; });
     var myCiv        = civOf(merchantCard);
     var theirCiv     = civOf(landed);
@@ -2453,8 +2593,9 @@
       if (advanced) return;
       advanced = true;
       if (!SOG.game || typeof SOG.game.executeMoveAnimated !== 'function') { done(); return; }
+      // No fireMoveHereBonus call here any more — applyMove fires it for EVERY
+      // move, so doing it here too would double-pay Punt/Thebes.
       SOG.game.executeMoveAnimated(owner, MERCHANT_ID, fromLoc, dest.id, { sd: ctx.slot }, function () {
-        fireMoveHereBonus(owner, dest.id, ctx.slot);
         if (window.SOG_DEBUG && typeof console !== 'undefined') {
           console.log('[Merchant] traded on ' + landed.name + ' (' + theirCiv + ' vs ' + myCiv +
                       (differentCiv ? ', different civ → played card +1 IP' : ', same civ → no bonus') +
@@ -2464,6 +2605,95 @@
       });
     };
     doMove();
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     NATURAL RESOURCES (74 Papyrus-Econ, 75 Purple Dye) — AT ONCE type buff.
+     ───────────────────────────────────────────────────────────────
+     "At Once: <Type> cards here gain +2 IP". One-time (addIPMod), not
+     Continuous — so the buff sticks even if the resource later leaves.
+
+     OWNER'S CARDS ONLY. The card text says "cards here" without naming a side;
+     this reads it as the owner's, matching Scribe (40) — "+1 IP to the OWNER's
+     other revealed cards at this location". A buff that also pumped the
+     opponent's board would be a drawback card, which these plainly are not.
+     Neither resource can buff itself: both are Economic, and they buff
+     Scientific / Political respectively.
+
+     They are otherwise ORDINARY Economic cards — the Merchant reacts to them
+     as it does to any Economic play (single reaction, no At-Once re-fire). */
+  function _atOnceTypeBuffHere(owner, locId, type, amount, sourceName, done) {
+    done = typeof done === 'function' ? done : function () {};
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var hits = 0;
+    forEachRevealedAt(slots, locId, function (s) {
+      var c = CARDS.find(function (x) { return x.id === s.cardId; });
+      if (!c || c.type !== type) return;
+      addIPMod(s, amount, sourceName);
+      hits++;
+      if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
+        SOG.ui.showIPFloat(owner, s.cardId, amount);
+      }
+    });
+    if (hits) {                       // no matching cards here → clean no-op
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+    }
+    if (window.SOG_DEBUG && typeof console !== 'undefined') {
+      console.log('[' + sourceName + '] +' + amount + ' IP to ' + hits + ' ' + type + ' card(s) at loc ' + locId);
+    }
+    done();
+  }
+
+  /* Papyrus — ECONOMIC (74). Note the type string is 'Scientific'; the card text
+     says "Science cards" in player-facing language. */
+  function abilityPapyrusEconomic(owner, locId, done) {
+    _atOnceTypeBuffHere(owner, locId, 'Scientific', 2, 'Papyrus', done);
+  }
+  /* Purple Dye (75). */
+  function abilityPurpleDye(owner, locId, done) {
+    _atOnceTypeBuffHere(owner, locId, 'Political', 2, 'Purple Dye', done);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     HATSHEPSUT (52) — "Trading Queen". AT ONCE.
+     ───────────────────────────────────────────────────────────────
+     Card text: "At Once: Send a Merchant to another location."
+
+     REPLACES the earlier give/receive SWAP implementation of this same card
+     (the card was still carrying "Trade one of your cards with an adjacent
+     location. (Not yet wired.)"). That version is deleted, not disabled — the
+     ability below is the final Trading Queen.
+
+     On reveal she spawns a standard Ancient-Egypt MERCHANT at a random OTHER
+     location with an open spot on her own side. No other location has room →
+     the ability fizzles (no Merchant spawned), the same fizzle shape the
+     Merchant's own move uses — because it is literally the same function:
+     randomOtherOpenLoc. Her location is excluded, so she never spawns on top
+     of herself.
+
+     THE SPAWNED MERCHANT IS A REAL MERCHANT, not an inert copy. spawnCardAt
+     writes a normal revealed slot with cardId MERCHANT_ID, and the reveal
+     dispatcher resolves reactors by looking up CARD_ABILITIES[sd.cardId] when a
+     card lands — so from the next Economic play onward it runs Trade Route like
+     any hand-played Merchant: +1 IP, the different-civilization bonus (it
+     carries the Merchant card's era 'Egypt', so non-Egyptian Economic cards
+     trigger it), and its own random move.
+
+     NO REACTION ON SPAWN. She places it and stops; it sits until an Economic
+     card is played at its location. This is automatic rather than suppressed —
+     onCardLandedHere fires for cards that LAND at a location, and spawning is
+     not a landing, so nothing re-enters the Merchant's own trigger here. */
+  function abilityHatshepsut(owner, locId, done) {
+    done = typeof done === 'function' ? done : function () {};
+    var dest = randomOtherOpenLoc(owner, locId);
+    if (!dest) { done(); return; }                  // nowhere to send her → fizzle
+    spawnCardAt(owner, dest.id, MERCHANT_ID);
+    if (window.SOG_DEBUG && typeof console !== 'undefined') {
+      console.log('[Hatshepsut] sent a Merchant from loc ' + locId + ' to loc ' + dest.id);
+    }
+    done();
   }
 
   /* Tribe (id 36) — REACTIVE PRESENTATION ONLY (no IP/state/timing change).
@@ -2741,52 +2971,6 @@
     setTimeout(done, 300);
   }
 
-  /* Hatshepsut (id 52) — "Trading Queen": At Once on reveal, the owner GIVES one of
-     their OWN revealed cards here (player: chosen via the shared picker; AI: its
-     lowest-value card) and RECEIVES a RANDOM revealed opponent card here — the two
-     swap sides/owners. Fizzles (no-op) if the owner has no other revealed card here
-     OR the opponent has none. */
-  function abilityHatshepsut(owner, locId, done) {
-    var oppSide  = owner === 'player' ? 'opp' : 'player';
-    var mySlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
-    var mine = [];
-    (mySlots[locId] || []).forEach(function (s, i) { if (s && s.revealed && s.cardId !== 52) mine.push({ sd: s, idx: i }); });
-    var theirs = [];
-    (oppSlots[locId] || []).forEach(function (s, i) { if (s && s.revealed) theirs.push({ sd: s, idx: i }); });
-    if (!mine.length || !theirs.length) { done(); return; }   // fizzle
-
-    var recv = theirs[Math.floor(Math.random() * theirs.length)];   // random opponent card returns
-
-    function doSwap(give) {
-      // Remove both, compact/re-render, then drop each into the other side's open slot.
-      mySlots[locId][give.idx]  = null; clearSlotDOM(owner,   locId, give.idx);
-      oppSlots[locId][recv.idx] = null; clearSlotDOM(oppSide, locId, recv.idx);
-      if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); } else { compactOppSlots(locId); syncOppSlots(locId); }
-      if (oppSide === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); } else { compactOppSlots(locId); syncOppSlots(locId); }
-      var myOpen = mySlots[locId].indexOf(null);  if (myOpen !== -1) mySlots[locId][myOpen] = recv.sd;
-      var opOpen = oppSlots[locId].indexOf(null); if (opOpen !== -1) oppSlots[locId][opOpen] = give.sd;
-      if (owner === 'player') { syncPlayerSlots(locId); } else { syncOppSlots(locId); }
-      if (oppSide === 'player') { syncPlayerSlots(locId); } else { syncOppSlots(locId); }
-      if (typeof SFX !== 'undefined' && SFX.cardDiscarded) SFX.cardDiscarded();
-      evaluateContinuous();
-      refreshSlotIPDisplays();
-      updateScores();
-      setTimeout(done, 300);
-    }
-
-    if (owner === 'player') {
-      if (mine.length === 1) { doSwap(mine[0]); return; }
-      showDiscardChooser('Choose a card to give', mine.map(function (m) { return m.sd.cardId; }), function (chosenId) {
-        var picked = mine.filter(function (m) { return m.sd.cardId === chosenId; })[0] || mine[0];
-        doSwap(picked);
-      });
-    } else {
-      var lowest = mine[0];
-      mine.forEach(function (m) { if (effectiveIP(m.sd) < effectiveIP(lowest.sd)) lowest = m; });
-      doSwap(lowest);
-    }
-  }
 
   /* NUBIAN_GOLD_ON_PLAY location key — reveal-end hook (mirrors applyRiverAtOnce /
      applyCapitalWhenFull; called ONCE per turn from revealNext). For each card
@@ -2912,21 +3096,51 @@
     done();
   }
 
-  /* Ramses II (53) — "Monuments Man". Declares a NEXT-TURN effect: during the
-     OWNER's next turn only, Cultural cards the owner REVEALS get 2x their base IP.
-     Uses the general next-turn-effects queue (G.nextTurnEffects) — the structural
-     cousin of the bonusCapitalNextTurn accumulator, but data-driven so future
-     "Next Turn:" cards can add their own keys. Consumed at each card's reveal by
-     applyNextTurnRevealEffects; pruned after its active turn in game.js nextTurn. */
+  /* Ramses II (53) — "Ozymandias": At Once, reduce the owner's in-hand Egypt cards
+     by -1 CC. Symmetric with Nebuchadnezzar (id 50) — same one-time in-hand stamp
+     mechanism (G.ramsesCCDiscount[side][cardId]), same shimmer reuse, just keyed on
+     era "Egypt" instead of "Mesopotamia". See abilityNebuchadnezzar above for the
+     full rationale (one-time stamp, not a continuous aura, not applied to
+     later-drawn cards). Read by the player cost path (board.js effectiveCost +
+     input.js refreshHandCostDisplays) and the Giant AI cost path (ai.js). */
   function abilityRamses(owner, locId, done) {
-    if (!G.nextTurnEffects) G.nextTurnEffects = [];
-    G.nextTurnEffects.push({ owner: owner, key: 'CULTURAL_2X', turnDeclared: G.turn });
-    done();
+    var ramsesEl = findSlotEl(owner, 53);
+    var ownerHand = (owner === 'player') ? (G.playerHand || []) : (G.aiHand || []);
+    var affectedIds = ownerHand.filter(function (cardId) {
+      var card = CARDS.find(function (c) { return c.id === cardId; });
+      return card && card.era === 'Egypt';
+    });
+    var handEls = [];
+    if (owner === 'player') {
+      var handRoot = document.getElementById('battle-player-hand');
+      if (handRoot) {
+        affectedIds.forEach(function (cardId) {
+          var el = handRoot.querySelector('.battle-hand-card[data-id="' + cardId + '"]');
+          if (el) handEls.push(el);
+        });
+      }
+    }
+    function onDrop() {
+      if (!G.ramsesCCDiscount) G.ramsesCCDiscount = { player: {}, opp: {} };
+      var bag = G.ramsesCCDiscount[owner] || (G.ramsesCCDiscount[owner] = {});
+      affectedIds.forEach(function (cardId) { bag[cardId] = 1; });
+      if (window.SOG && SOG.input && typeof SOG.input.refreshHandCostDisplays === 'function') {
+        SOG.input.refreshHandCostDisplays();
+      }
+    }
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.nebuchadnezzarShimmer === 'function') {
+      rfx.nebuchadnezzarShimmer(ramsesEl, handEls, { sfx: 'sfx/magicshimmer.m4a', onDrop: onDrop }, done);
+    } else {
+      onDrop();
+      done();
+    }
   }
 
   /* True if a next-turn effect with `key` is ACTIVE for `owner` THIS turn (i.e.
      declared on the owner's previous turn). Active window = exactly the turn after
-     the declaring turn. */
+     the declaring turn. Kept as general infrastructure for future "Next Turn:"
+     cards, even though nothing currently pushes onto G.nextTurnEffects. */
   function nextTurnEffectActive(owner, key) {
     if (!G.nextTurnEffects) return false;
     return G.nextTurnEffects.some(function (e) {
@@ -2936,21 +3150,12 @@
 
   /* Called from the reveal pipeline for EACH card as it reveals (after its own
      At-Once). Applies any active next-turn reveal effects to the just-revealed
-     card. Currently: Ramses' CULTURAL_2X — a Cultural card revealed during the
-     buffed turn gets +baseIP baked in via addIPMod (permanent doubling, survives
-     into scoring; applies only to cards revealed THIS turn, never retroactively).
-     Idempotent per card via sd._ramsesDoubledTurn. Inert when no effect is live. */
+     card, keyed by G.nextTurnEffects entries (see nextTurnEffectActive above).
+     Currently a no-op — nothing pushes an entry since Ramses II's old CULTURAL_2X
+     ability was replaced — kept as the reveal-pipeline hook for future
+     "Next Turn:" cards. */
   function applyNextTurnRevealEffects(owner, cardId, sd, locId) {
     if (!sd || !G.nextTurnEffects || !G.nextTurnEffects.length) return;
-    if (nextTurnEffectActive(owner, 'CULTURAL_2X')) {
-      var c = CARDS.find(function (x) { return x.id === cardId; });
-      if (c && c.type === 'Cultural' && sd._ramsesDoubledTurn !== G.turn) {
-        sd._ramsesDoubledTurn = G.turn;
-        addIPMod(sd, c.ip, 'Ramses II');                   // +base IP → doubles the base
-        refreshSlotIPDisplays();
-        updateScores();
-      }
-    }
   }
 
   /* Rosetta Stone (58) — "Decipher The Past". At Once: ADOPT the ability of the
@@ -3143,6 +3348,8 @@
     31: { endOfTurn: megalithEndOfTurn      },  // Megalith — End of turn: gain +1 IP (permanent, cumulative)
     35: { onCardLandedHere: abilityOtziFlee },  // Ötzi — reactive flee (any card lands at his loc after he's revealed)
     36: { onCardLandedHere: tribeReactBounce },  // Tribe — reactive bounce+sfx (presentation only; IP stays in evaluateContinuous)
+    74: { onAtOnce: abilityPapyrusEconomic },         // Papyrus (Economic) — Natural Resource: +2 IP to Scientific cards here
+    75: { onAtOnce: abilityPurpleDye },               // Purple Dye — Natural Resource: +2 IP to Political cards here
     900: { onCardLandedHere: abilityMerchantTrade },  // Merchant — PROVISIONAL ID. Economic played here → +1 IP, then random move (fizzles if nowhere to go)
 
     /* ── Mesopotamia era ───────────────────────────────────────────
@@ -3167,8 +3374,8 @@
        evaluateContinuous / effectiveCost / the strike guard. NOT-YET-WIRED Egypt
        cards have NO entry here (and are never decked). ── */
     51: { onAtOnce: function (o, l, done) { done(); } },  // Narmer — Continuous (IP averaging)
-    52: { onAtOnce: abilityHatshepsut      },             // Hatshepsut — give/receive swap at this loc
-    53: { onAtOnce: abilityRamses          },             // Ramses II — Next Turn: 2x IP to next turn's Cultural plays
+    52: { onAtOnce: abilityHatshepsut      },             // Hatshepsut — At Once: send a Merchant to another location
+    53: { onAtOnce: abilityRamses          },             // Ramses II — At Once: -1 CC to Egypt cards in your hand
     54: { onAtOnce: abilityPapyrus         },             // Papyrus — At Once: copy last-played card (with its permanent buffed state) to hand
     55: { onAtOnce: abilityFarmer          },             // Farmer (EGY) — +1 capital next turn (reuses Meso Farmer)
     56: { onAtOnce: abilityScribeEgypt     },             // Scribe (EGY) — capital per other card here
@@ -3356,6 +3563,7 @@
     /* Helpers */
     getAdjacentLocIds:              getAdjacentLocIds,
     chariotArrival:                 chariotArrival,
+    fireMoveHereBonus:              fireMoveHereBonus,   // called by game.js applyMove for EVERY move
     /* The registry itself — exposed so future passes / pro devs can
        extend it without touching this file. */
     CARD_ABILITIES:            CARD_ABILITIES

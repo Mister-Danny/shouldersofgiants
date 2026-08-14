@@ -316,11 +316,13 @@
     // hand, keyed per side by cardId; consumed (deleted) when the copy is played.
     G.copyIPBonus            = { player: {}, opp: {} };
     G.nebCCDiscount          = { player: {}, opp: {} };  // Nebuchadnezzar one-time in-hand -1 CC stamps
+    G.ramsesCCDiscount       = { player: {}, opp: {} };  // Ramses II one-time in-hand -1 CC stamps
     G.destroyedIPTotal       = 0;
     G.aiDestroyedIPTotal     = 0;
     G.columbusMoved          = false;
     G.aiColumbusMoved        = false;
     G.movedThisTurn          = {};
+    G.locMoveUsedThisTurn    = {};
     G.aiMovedThisTurn        = {};
     G.moveLog                = [];
     G.playerActionLog        = [];
@@ -937,6 +939,15 @@
       if (cardId === 24) {
         SOG.ui.showIPFloat(owner, cardId, 1);
         refreshSlotIPDisplays();
+      }
+
+      // Destination "when a card moves here" bonus (Punt: +1 IP to the arriving
+      // card; Thebes: +1 capital next turn). Fired HERE — the single commit point
+      // every move passes through — so it applies uniformly to Chariot, Lucy,
+      // Magellan, Columbus, Ötzi's flee and the Merchant's trade move, instead of
+      // each mover remembering to call it. Inert at locations without the key.
+      if (SOG.abilities && typeof SOG.abilities.fireMoveHereBonus === 'function') {
+        SOG.abilities.fireMoveHereBonus(owner, toLocId, sd);
       }
 
       refreshMoveableCards();
@@ -1564,6 +1575,7 @@
     G.playerFirst       = !G.playerFirst;
     showRevealFirstHighlight(G.playerFirst);
     G.movedThisTurn          = {};
+    G.locMoveUsedThisTurn    = {};
     G.aiMovedThisTurn        = {};
     G.moveLog                = [];
     G.playerActionLog        = [];

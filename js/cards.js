@@ -391,7 +391,7 @@ const CARDS = [
     id: 50, name: "Nebuchadnezzar", cc: 5, ip: 5,
     type: "Political", type2: null, era: "Mesopotamia",
     abilityName: "Builder of Babylon",
-    ability: "At Once:\nReduce your in-hand Mesopotamian cards by -1 CC.",
+    ability: "At Once:\nReduce the cost of Mesopotamia cards in your hand by -1 CC.",
     image: "images/cards/mesopotamiacards/nebuchadnezzar@0.5x.jpg", locked: true
   },
 
@@ -413,18 +413,18 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/narmer@0.3x.jpg", locked: true
   },
   {
-    id: 52, name: "Hatshepsut", cc: 5, ip: 5,                   // TODO (Egypt): NOT YET WIRED — trade/movement
-    type: "Political", type2: null, era: "Egypt",
+    id: 52, name: "Hatshepsut", cc: 5, ip: 5,                   // WIRED (At Once: spawns a Merchant at a random other location with an open spot; fizzles if none)
+    type: "Political", type2: null, era: "Egypt",               // era doubles as the CIVILIZATION tag — the spawned Merchant is an EGYPT Merchant
     abilityName: "Trading Queen",
-    ability: "Trade one of your cards with an adjacent location.\n(Not yet wired.)",
+    ability: "At Once: Send a Merchant to another location.",
     image:   "images/cards/egyptcards/hatshepsut@0.5x.jpg",
     imageSm: "images/cards/egyptcards/hatshepsut@0.3x.jpg", locked: true
   },
   {
-    id: 53, name: "Ramses II", cc: 5, ip: 4,                    // WIRED (Next Turn: 2x IP to next turn's Cultural plays)
+    id: 53, name: "Ramses II", cc: 4, ip: 4,                    // WIRED (At Once: -1 CC to Egypt cards in your hand)
     type: "Political", type2: null, era: "Egypt",
-    abilityName: "Monuments Man",
-    ability: "Next Turn:\nDouble the IP of Cultural cards you play.",
+    abilityName: "Ozymandias",
+    ability: "At Once:\nReduce the cost of Egypt cards in your hand by -1 CC.",
     image:   "images/cards/egyptcards/ramsesii@0.5x.jpg",
     imageSm: "images/cards/egyptcards/ramsesii@0.3x.jpg", locked: true
   },
@@ -595,6 +595,33 @@ const CARDS = [
     image:   "images/cards/egyptcards/nubiangold@0.5x.jpg",
     imageSm: "images/cards/egyptcards/nubiangold@0.3x.jpg", locked: true, token: true
   },
+
+  // ─── NATURAL RESOURCES (Economic) ─────────────────────────────────────────
+  // Two "Natural Resource" Economic cards built for Hatshepsut's fight. Both are
+  // ordinary Economic cards with a single At Once — the Merchant reacts to them
+  // exactly as it reacts to any Economic play (no re-fire; that rule was dropped).
+  // Being Economic is what makes them Merchant fuel; the era tag is what decides
+  // whether the Merchant's different-civilization bonus applies.
+  {
+    id: 74, name: "Papyrus", cc: 1, ip: 1,                      // WIRED (At Once: +2 IP to the owner's Scientific cards here)
+    type: "Economic", type2: null, era: "Egypt",                // ECONOMIC Papyrus — distinct from the SCIENTIFIC Papyrus (id 54)
+    abilityName: "Natural Resource",
+    ability: "At Once: Science cards here gain +2 IP",
+    image:   "images/cards/egyptcards/papyrus_economic.jpg",
+    imageSm: "images/cards/egyptcards/papyrus_economic_sm.jpg", locked: true
+  },
+  {
+    id: 75, name: "Purple Dye", cc: 1, ip: 1,                   // WIRED (At Once: +2 IP to the owner's Political cards here)
+    type: "Economic", type2: null, era: "Mesopotamia",          // MESOPOTAMIAN — so an Egypt Merchant's different-civ bonus fires on it
+    abilityName: "Natural Resource",
+    ability: "At Once: Political cards here gain +2 IP",
+    // NOTE: this art uses a THIRD naming convention (.jpeg, _medium/_small) —
+    // neither the @0.3x/@0.5x Egypt pairs nor the @sm suffix. Harmless because
+    // imageSm is declared explicitly; buildCardImg only derives "@sm.jpg" when
+    // imageSm is absent.
+    image:   "images/cards/mesopotamiacards/mesopotamia_purple_dye_medium.jpeg",
+    imageSm: "images/cards/mesopotamiacards/mesopotamia_purple_dye_small.jpeg", locked: true
+  },
   {
     /* ─────────────────────────────────────────────────────────────────────
        MERCHANT — PROVISIONAL PLACEHOLDER ENTRY.
@@ -627,13 +654,18 @@ const CARDS = [
        locked: true keeps it out of the deck builder (ownership gates on
        SOG.collection), so this placeholder is invisible in normal play.
     ───────────────────────────────────────────────────────────────────────── */
-    id: 900, name: "Merchant", cc: 1, ip: 1,                    // PROVISIONAL DATA — ability WIRED (reactive: Economic played here → +1 IP, different-civ bonus, random move)
+    id: 900, name: "Merchant", cc: 1, ip: 1,                    // PROVISIONAL ID — ability + art WIRED (reactive: Economic played here → +1 IP, different-civ bonus, random move)
     type: "Economic", type2: null, era: "Egypt",                // era doubles as the CIVILIZATION tag (see civOf in abilities.js)
     abilityName: "Trade Route",
-    ability: "When an Economic card is played here, the Merchant gains +1 IP and moves. If the Economic card is from a different civilization, it also gains +1 IP.",
-    image:   "images/cards/egyptcards/trader@0.5x.jpg",
-    imageSm: "images/cards/egyptcards/trader@0.3x.jpg", locked: true
-  }
+    // TWO LINES on the card — the \n is load-bearing, do not collapse it.
+    ability: "When you play an Economic card here, gain +1 IP and move.\nIf that Economic card is from a different civilization, it gains +1 IP.",
+    // Real art. The _sm suffix does NOT match buildCardImg's derived "@sm.jpg"
+    // fallback, so the small variant MUST be declared explicitly here — which is
+    // the same mechanism every Egypt card already uses (they declare @0.3x pairs).
+    image:   "images/cards/egyptcards/egypt_merchant.jpg",
+    imageSm: "images/cards/egyptcards/egypt_merchant_sm.jpg", locked: true
+  },
+
 
 ];
 

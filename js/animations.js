@@ -8,6 +8,7 @@
  * Usage:
  *   Anim.cardReveal(slotEl)              — smooth scale-in on card flip
  *   Anim.pulseYellow(slotEl)             — bright gold flash on At Once trigger
+ *   Anim.pulseRed(slotEl)                — dim red flash — losing a contested location bonus
  *   Anim.ripple(slotEl)                  — white ring ripple on affected card
  *   Anim.shake(slotEl)                   — shake + shrink-fade on destroyed card
  *   Anim.cardDiscarded(handCardEl)       — slide up + fade on discarded hand card
@@ -174,6 +175,20 @@ var Anim = (function () {
       var flash = makeOverlay(el, 'background:rgba(255,215,0,0.75);opacity:0;');
       var tl = gsap.timeline({ onComplete: function () { removeEl(flash); } });
       tl.to(flash, { opacity: 0.85, duration: 0.08, ease: 'power2.in' })
+        .to(flash, { opacity: 0,    duration: 0.38, ease: 'power2.out' });
+    },
+
+    /**
+     * Dim red flash — a card LOSING a contested cross-side location bonus
+     * (e.g. Karnak/Pi-Ramses's doubling moving to a bigger opposing card).
+     * Same shape as pulseYellow, distinct color, so gain and loss read as
+     * opposite events rather than "something happened" twice.
+     */
+    pulseRed: function (el) {
+      if (!el || !hasGSAP()) return;
+      var flash = makeOverlay(el, 'background:rgba(190,50,40,0.65);opacity:0;');
+      var tl = gsap.timeline({ onComplete: function () { removeEl(flash); } });
+      tl.to(flash, { opacity: 0.75, duration: 0.08, ease: 'power2.in' })
         .to(flash, { opacity: 0,    duration: 0.38, ease: 'power2.out' });
     },
 

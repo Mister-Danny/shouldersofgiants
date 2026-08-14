@@ -507,6 +507,11 @@
     // stamped. (Not continuous — leaving the cheaper aura was too strong.)
     if (card.era === 'Mesopotamia' && G.nebCCDiscount && G.nebCCDiscount[nebSide] && G.nebCCDiscount[nebSide][card.id])
       cost = Math.max(0, cost - 1);
+    // Ramses II (id 53) — "Ozymandias": same one-time in-hand -1 CC stamp mechanism
+    // as Nebuchadnezzar above, keyed on era "Egypt" instead of "Mesopotamia".
+    // `nebSide` is just the owner-side key ('player'/'opp'), reused as-is.
+    if (card.era === 'Egypt' && G.ramsesCCDiscount && G.ramsesCCDiscount[nebSide] && G.ramsesCCDiscount[nebSide][card.id])
+      cost = Math.max(0, cost - 1);
     // Babylon (BABYLON_COST_5 location, Nebuchadnezzar battle): BASE-cost-5 cards cost
     // -1 while a Babylon location is present. Global (not at-Babylon-only). Keyed off
     // card.cc (base), so it STACKS with the Neb-50 discount above. Inert in battles

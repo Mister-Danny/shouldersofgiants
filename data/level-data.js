@@ -146,6 +146,67 @@ window.SOG_LEVEL_DATA = {
           { who: 'sargon', text: 'We settle this again.' }
         ]
       }
+    },
+
+    'ramses': {
+      kind:  'battle',
+      tiers: 2,   // Serf → Giant ladder, matching every other real boss
+
+      structure: {
+        turns:            5,
+        locationsCount:   3,
+        slotsPerLocation: 4,
+        handStart:        5,
+        maxHandSize:      7
+      },
+      // Rising curve, not the usual flat 5/turn — deliberately makes Abu
+      // Simbel's "fill all 4 slots" a real choice (cheap-now vs a big card
+      // saved for Karnak) rather than trivially affordable turn 1.
+      resource: { model: 'capital', capital: 6, resetEachTurn: true, capitalByTurn: [2, 3, 4, 5, 6] },
+      draw:     { model: 'replenish' },
+
+      decks: {
+        player: { source: 'active-deck', shuffle: true },
+        // id 900 = Merchant (Egypt) — PROVISIONAL placeholder id (see js/cards.js
+        // for the full note). When the real Egypt card set lands and 900 gets
+        // renumbered, update this id to match (also update MERCHANT_ID in
+        // abilities.js and the CARD_ABILITIES[900] key — see js/cards.js's
+        // comment on the Merchant entry for the full 3-step renumber).
+        ai: { source: 'explicit', ids: [53, 54, 55, 56, 57, 58, 59, 60, 62, 64, 65, 900, 70, 69, 74], shuffle: true }
+      },
+
+      locations: [
+        { id: 131, name: 'Pi-Ramses',    region: 'The New Capital', abilityText: '+2 IP to the card with the most IP',                               abilityKey: 'HIGHEST_IP_PLUS_2_HERE',  image: 'images/locations/piramses.jpg',     thumbnailCrop: null },
+        { id: 132, name: 'Karnak Temple', region: 'House of Amun',   abilityText: '2x IP to the card with the most IP',                               abilityKey: 'DOUBLE_HIGHEST_IP_HERE',  image: 'images/locations/karnaktemple.jpg', thumbnailCrop: null },
+        { id: 133, name: 'Abu Simbel',    region: 'Nubian Frontier', abilityText: 'Fill all 4 slots here to gain +6 IP.',                              abilityKey: 'FULL_SLOTS_PLUS_6_HERE',  image: 'images/locations/abusimbel.jpg',    thumbnailCrop: null }
+      ],
+      scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
+
+      presentation: {
+        bodyClass:              'ramses-battle',
+        allyAvatar:              'images/portraits/femaleexplorer%20portrait.jpeg',
+        opponentAvatar:          'images/portraits/ramsesIIportrait.jpeg',
+        opponentBubblePortrait:  'images/portraits/ramsesIIportrait.jpeg',
+        popAlly:                 true
+      },
+
+      rulesPopup: {
+        title: 'Ramses II',
+        body: [
+          '5 Turns',
+          'Each card costs Capital (CC) to play.',
+          'Capital increases each turn: 2, 3, 4, 5, 6.',
+          '<u>Win Condition</u> — Gain the most IP at the most locations.'
+        ]
+      },
+
+      // Beating the Giant tier unlocks Ramses II (id 53) into the player's
+      // collection, matching every other named boss (Sargon → 37, Narmer →
+      // 51, Hatshepsut → 52).
+      reward: { cardIdOnGiantWin: 53 },
+
+      // Dialogue intentionally left empty — drafted separately.
+      dialogue: { opening: [], serfWinA: [], serfWinB: [], loss: [], tie: [], giantIntro: [], giantWinA: [], giantWinB: [], giantLoss: [], giantDraw: [] }
     }
   }
 };

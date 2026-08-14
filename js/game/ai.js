@@ -420,18 +420,6 @@
         });
         return STRONG.indexOf(first.cardId) !== -1 ? 2 : 0.5;
       }
-      case 53: { // Ramses II (Egypt) — Next Turn: 2x IP to next turn's Cultural
-                 // plays; worth more when the AI holds Cultural cards AND a next
-                 // turn remains to spend them. Constant across locs (card nudge).
-        var hand = side === 'opp' ? G.aiHand : G.playerHand;
-        var turnsLeft = (G.config && G.config.structure)
-          ? (G.config.structure.turns - G.turn + 1) : 1;
-        if (turnsLeft < 2) return -1;       // no next turn → wasted
-        var culturalInHand = (hand || []).filter(function (id) {
-          return id !== 53 && typeOf(id) === 'Cultural';
-        }).length;
-        return Math.min(culturalInHand, 3) * 0.8;
-      }
       case 71: { // Priest (Egypt) — revive a discarded card as a Mummy HERE; worth
                  // more when the AI has discards to revive AND this location has room.
         var disc = side === 'opp' ? G.aiDiscard : G.playerDiscard;

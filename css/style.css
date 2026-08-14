@@ -2835,6 +2835,42 @@ body.hanging-gardens-battle .battle-col[data-loc-id="101"]::before { background:
 body.hanging-gardens-battle .battle-col[data-loc-id="102"]::before { background: url('../images/locations/babylon.jpg')   center / cover no-repeat; } /* Babylon */
 body.hanging-gardens-battle .battle-col[data-loc-id="103"]::before { background: url('../images/locations/tigris.jpg')    center / cover no-repeat; } /* Tigris River */
 
+/* ── HATSHEPSUT BATTLE location art (body.hatshepsut-battle) ──────────────
+   Custom loc ids 121-123 sit outside the base .battle-col[data-loc-id="1..8"]
+   ::before rules, so — exactly as the Hammurabi / Hanging Gardens blocks above
+   note — these must declare the FULL pseudo-element themselves, not just the
+   background. Same 0.5 dim so the cards stay legible over the art. */
+body.hatshepsut-battle .battle-col[data-loc-id="121"]::before,
+body.hatshepsut-battle .battle-col[data-loc-id="122"]::before,
+body.hatshepsut-battle .battle-col[data-loc-id="123"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.hatshepsut-battle .battle-col[data-loc-id="121"]::before { background: url('../images/locations/thebes.jpg') center / cover no-repeat; } /* Thebes  — MOVE_HERE_CAPITAL */
+body.hatshepsut-battle .battle-col[data-loc-id="122"]::before { background: url('../images/locations/redsea.jpg') center / cover no-repeat; } /* Red Sea — ANY_FREE_MOVE_AWAY */
+body.hatshepsut-battle .battle-col[data-loc-id="123"]::before { background: url('../images/locations/punt.jpg')   center / cover no-repeat; } /* Punt    — MOVE_HERE_IP */
+
+/* ── RAMSES BATTLE location art (body.ramses-battle) ───────────────────────
+   Custom loc ids 131-133 sit outside the base .battle-col[data-loc-id="1..8"]
+   ::before rules, so — exactly as the Hammurabi / Hanging Gardens / Hatshepsut
+   blocks above note — these must declare the FULL pseudo-element themselves,
+   not just the background. Same 0.5 dim so the cards stay legible over the art. */
+body.ramses-battle .battle-col[data-loc-id="131"]::before,
+body.ramses-battle .battle-col[data-loc-id="132"]::before,
+body.ramses-battle .battle-col[data-loc-id="133"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.ramses-battle .battle-col[data-loc-id="131"]::before { background: url('../images/locations/piramses.jpg')   center / cover no-repeat; } /* Pi-Ramses     — HIGHEST_IP_PLUS_2_HERE */
+body.ramses-battle .battle-col[data-loc-id="132"]::before { background: url('../images/locations/karnaktemple.jpg') center / cover no-repeat; } /* Karnak Temple — DOUBLE_HIGHEST_IP_HERE */
+body.ramses-battle .battle-col[data-loc-id="133"]::before { background: url('../images/locations/abusimbel.jpg')  center / cover no-repeat; } /* Abu Simbel    — FULL_SLOTS_PLUS_6_HERE */
+
 /* FLOOD crossfade layer (Stage 4c) — a ::after over the river art (101/103 only),
    opacity 0 normally, fading to the river ::before's 0.5 dim when JS adds .hg-flooded.
    ::after paints above the ::before river art (tree order) but stays behind the
@@ -3374,16 +3410,6 @@ body.hanging-gardens-battle .battle-col .hg-flood-tint {
 
 .battle-card-slot.moveable:active {
   cursor: grabbing;
-}
-
-/* Ramses II (53) buff-live cue — a warm gold pulse on Ramses during the turn his
-   "Next Turn: 2x Cultural" doubling is armed. Toggled by evaluateContinuous. */
-@keyframes ramses-buff-pulse {
-  0%, 100% { box-shadow: 0 0 4px 1px rgba(248,208,0,0.55), inset 0 0 0 1px rgba(248,208,0,0.8); }
-  50%      { box-shadow: 0 0 12px 4px rgba(248,208,0,0.85), inset 0 0 0 2px rgba(248,208,0,0.95); }
-}
-.battle-card-slot.ramses-buff-active {
-  animation: ramses-buff-pulse 1.5s ease-in-out infinite;
 }
 
 /* Trader (68, Egypt) barter affordance — its own cyan pulse, distinct from the
