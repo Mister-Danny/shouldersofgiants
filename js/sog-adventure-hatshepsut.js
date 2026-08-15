@@ -22,10 +22,14 @@
  * ANY_FREE_MOVE_AWAY is read by input.js's refreshMoveableCards. This module only
  * declares the locations; the rules live where every other battle can reuse them.
  *
- * SCOPE — MECHANIC + DECK + LOCATIONS ONLY. No encounter/win/loss dialogue and no
- * two-tier Serf/Giant track yet; both are a later pass. Outcomes fall through to
- * the engine's default scoreboard (proceed()), which is exactly what Narmer's
- * module did at the equivalent stage.
+ * SCOPE — MECHANIC + DECK + LOCATIONS + REWARD ECONOMY, DIALOGUE TEXT STILL
+ * EMPTY. The two-tier Serf/Giant reward gate (SOG.rewards, 20 gold Serf / 30
+ * gold + the Hatshepsut card on Giant) and all ten named dialogue arrays are
+ * wired; the arrays themselves have no lines in them yet — that, the overworld
+ * encounter, and the Narmer-transition/Merchant-intervention cutscenes are a
+ * later pass. Every outcome still ultimately calls proceed() so the engine's
+ * default scoreboard handles win/loss/tie, same as Narmer's module did at the
+ * equivalent stage.
  *
  * Entry: SOG.HatshepsutBattle.start() (dev panel / console). The overworld
  * 'hatshepsut' node is NOT wired to this yet — that needs map-data.js, which is
@@ -55,6 +59,16 @@ SOG.HatshepsutBattle = (function () {
         different-civilization bonus fires on it, but not on the Egyptian
         Papyrus, so the two resources play differently. ── */
   var AI_IDS = [52, 74, 75, 900, 56, 59, 62, 57, 64, 54, 65, 60, 55, 49, 41];
+
+  /* ── Two-tier reward economy — mirrors Narmer's richer-than-default scale
+        (his file's own comment: GOLD_SERF_WIN 20 / GOLD_GIANT_WIN 30 + card,
+        deliberately above every other boss's flat 15/15). SOG.rewards.consume
+        only decides WHETHER a reward fires (firstTierWin/grantCard) — the
+        AMOUNTS below are this boss's own, read by _grantGold's caller, not
+        SOG.rewards' generic GOLD_PER_TIER. ── */
+  var HATSHEPSUT_CARD_ID      = 52;
+  var HATSHEPSUT_GOLD_SERF_WIN  = 20;
+  var HATSHEPSUT_GOLD_GIANT_WIN = 30;
 
   /* ── The three locations. abilityKey is what activates the SHARED engine
         behaviour; abilityText is what the player reads on the board. ── */
@@ -197,6 +211,18 @@ SOG.HatshepsutBattle = (function () {
     return _tierBeatenLocal('hatshepsut', 'serf') && !_tierBeatenLocal('hatshepsut', 'giant');
   }
 
+  /* Generic localStorage flag helpers — same shape as every other boss's
+     private _has/_set (Narmer, Sargon, Otzi, ...), not shared, on purpose:
+     one file, one tiny wrapper, no cross-module dependency for two lines. */
+  function _has(key) { try { return localStorage.getItem(key) === 'true'; } catch (e) { return false; } }
+  function _set(key) { try { localStorage.setItem(key, 'true'); } catch (e) {} }
+
+  // In-battle intro: first-time only, same convention as
+  // KEY_HAMMURABI_OPENING_SEEN / KEY_OTZI_OPENING_SEEN. Without this, every
+  // Serf encounter (including replays after a loss) would replay the full
+  // OPENING_DIALOGUE from the top.
+  var KEY_HATSHEPSUT_OPENING_SEEN = 'sog_hatshepsut_opening_seen';
+
   function buildHatshepsutConfig() {
     var st = (window.SOG && SOG.state) || {};
     var _aiTier = _tierBeatenLocal('hatshepsut', 'serf') ? 'giant' : 'serf';
@@ -229,6 +255,63 @@ SOG.HatshepsutBattle = (function () {
       replay:   function () { start(); },
       scriptHook: 'hatshepsut'
     };
+  }
+
+  function _playSfx(src) { if (window.SOG && SOG.sfx) { SOG.sfx.play(src); return; } try { new Audio(src).play(); } catch (e) {} }
+
+  /* Grant Hatshepsut's card (52) via the SHARED acquisition reveal — FIRST WIN
+     ONLY (SOG.Cards.unlock returns truthy only on a new unlock). Mirrors
+     Narmer's _grantNarmerCard exactly. */
+  function _grantHatshepsutCard(done) {
+    var newly = false;
+    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') newly = !!SOG.Cards.unlock([HATSHEPSUT_CARD_ID]);
+    if (!newly) { if (done) done(); return; }
+    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === HATSHEPSUT_CARD_ID; });
+    var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
+    if (card && preh && typeof preh.showCardAcquisition === 'function') {
+      preh.showCardAcquisition(card, null, function () { if (done) done(); }, { autoDismissMs: 1500 });
+    } else if (done) { done(); }
+  }
+
+  /* Gold reward — amount is the CALLER's (HATSHEPSUT_GOLD_SERF_WIN/_GIANT_WIN
+     above), not SOG.rewards' own GOLD_PER_TIER. Coin-drop animation mirrors
+     Narmer's _runGoldRewardAnimation byte-for-byte except the overlay id. */
+  function _grantGold(amount, done) {
+    if (window.SOG && SOG.gold && typeof SOG.gold.add === 'function') SOG.gold.add(amount);
+    if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshGold === 'function') SOG.HUD.refreshGold();
+    _runGoldRewardAnimation(amount, function () { if (done) done(); });
+  }
+  function _runGoldRewardAnimation(amount, onDone) {
+    var overlay = document.createElement('div');
+    overlay.id = 'hatshepsut-gold-reward';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;pointer-events:none;';
+    var dim = document.createElement('div');
+    dim.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.80);transition:opacity 0.4s ease;';
+    var box = document.createElement('div');
+    box.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;opacity:0;' +
+      'transform:translateY(-110px);transition:opacity 0.45s ease, transform 0.7s cubic-bezier(0.2,0.9,0.3,1);';
+    var coin = document.createElement('img');
+    coin.src = 'images/ui_images/coin.png'; coin.alt = ''; coin.draggable = false;
+    coin.style.cssText = 'width:130px;height:130px;object-fit:contain;filter:drop-shadow(0 6px 10px rgba(0,0,0,0.6));';
+    var label = document.createElement('div');
+    label.textContent = amount + ' Gold';
+    label.style.cssText = 'font-family:var(--font, sans-serif);font-size:46px;font-weight:bold;color:#f3d574;' +
+      '-webkit-text-stroke:2px #1a0a04;' +
+      'text-shadow:-2px -2px 0 #1a0a04, 2px -2px 0 #1a0a04, -2px 2px 0 #1a0a04, 2px 2px 0 #1a0a04, 0 4px 6px rgba(0,0,0,0.55);';
+    box.appendChild(coin); box.appendChild(label);
+    overlay.appendChild(dim); overlay.appendChild(box);
+    (document.getElementById('sog-stage') || document.body).appendChild(overlay);
+    void box.offsetHeight;
+    box.style.opacity = '1'; box.style.transform = 'translateY(0)';
+    setTimeout(function () { _playSfx('sfx/demedici-money.mp3'); }, 300);
+    setTimeout(function () {
+      box.style.transition = 'opacity 0.4s ease';
+      box.style.opacity = '0'; dim.style.opacity = '0';
+      setTimeout(function () {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (onDone) onDone();
+      }, 420);
+    }, 1900);
   }
 
   /* Fade the overworld radial-wipe cover out to reveal the board (mirrors
@@ -278,6 +361,19 @@ SOG.HatshepsutBattle = (function () {
     if (lines && lines.length) runLines(lines, onDone); else onDone();
   }
 
+  /* First-time-only battle intro — mirrors Narmer's _runOpeningDialogue.
+     KEY_HATSHEPSUT_OPENING_SEEN gates it so a Serf replay (after a loss, or
+     after already winning) never re-plays OPENING_DIALOGUE; only the very
+     first Serf encounter does. Sets the flag right after the lines finish,
+     not before — so a page reload mid-dialogue doesn't skip it next time. */
+  function _runOpeningDialogue(onComplete) {
+    if (_has(KEY_HATSHEPSUT_OPENING_SEEN)) { if (onComplete) onComplete(); return; }
+    _runLinesIfAny(OPENING_DIALOGUE, function () {
+      _set(KEY_HATSHEPSUT_OPENING_SEEN);
+      if (onComplete) onComplete();
+    });
+  }
+
   // Captured once, at battle start, from _isGiantRematch() — NOT re-read
   // inside onWin/onLoss/onTie. game.js's endGame() stamps the tier-beaten
   // flag before those hooks fire, so re-querying _isGiantRematch() there
@@ -291,10 +387,11 @@ SOG.HatshepsutBattle = (function () {
 
   /* ══════════════════════════════════════════════════════════════
      SCRIPT — every outcome plays its tier-appropriate dialogue (today: all
-     ten arrays are empty, so this reduces to _teardown() + proceed(), same
-     as before) then calls proceed() so the ENGINE's default scoreboard
-     handles win/loss/tie. No reward grant here — rewards stays {} in
-     buildHatshepsutConfig, unchanged; this is dialogue wiring only.
+     ten arrays are empty, so this reduces to the reward grant, if any, plus
+     _teardown() + proceed()) then calls proceed() so the ENGINE's default
+     scoreboard handles win/loss/tie. onWin grants gold/card via SOG.rewards
+     (script-owned, like every other boss — buildHatshepsutConfig's own
+     `rewards: {}` stays empty and unused, same as Narmer's).
   ══════════════════════════════════════════════════════════════ */
   var HATSHEPSUT_SCRIPT = {
     onIntro: function (ctx, done) {
@@ -313,20 +410,53 @@ SOG.HatshepsutBattle = (function () {
         _dialogueActive = true;
         var finish = function () { _dialogueActive = false; done(); };
         // GIANT rematch → in-battle dominance intro instead of the Serf
-        // opening tutorial (mirrors every other two-tier boss).
+        // opening tutorial (mirrors every other two-tier boss). The Giant
+        // intro has no seen-gate of its own — same convention as every
+        // other boss's giantIntro, which plays once per Giant ENTRY
+        // (Giant is a single rematch, not a repeatable tutorial).
         if (_battleWasGiantRematch) _runLinesIfAny(HATSHEPSUT_GIANT_INTRO, finish);
-        else                        _runLinesIfAny(OPENING_DIALOGUE, finish);
+        else                        _runOpeningDialogue(finish);
       });
     },
 
     isInputBlocked: function () { return _dialogueActive; },
 
+    /* Two-tier reward gate (SOG.rewards): the one-shot snapshot game.js's
+       endGame() stages BEFORE stamping sog_node_hatshepsut_<tier>_beaten —
+       reading _tierBeatenLocal directly here would see the post-stamp value
+       and misread the actual first win. grantCard implies firstTierWin &&
+       tier==='giant' (SOG.rewards' own contract), so the three branches below
+       are mutually exclusive: first Giant win → card+gold; first Serf win →
+       gold only; anything else (a replay of an already-beaten tier) → dialogue
+       only, zero reward (anti-farming). Mirrors Narmer's _onWin exactly,
+       amounts are this boss's own (20/30, see HATSHEPSUT_GOLD_* above). */
     onWin: function (ctx, result, proceed) {
-      var linesA = _battleWasGiantRematch ? HATSHEPSUT_GIANT_WIN_A : HATSHEPSUT_SERF_WIN_A;
-      var linesB = _battleWasGiantRematch ? HATSHEPSUT_GIANT_WIN_B : HATSHEPSUT_SERF_WIN_B;
-      _runLinesIfAny(linesA, function () {
-        _runLinesIfAny(linesB, function () { _teardown(); proceed(); });
-      });
+      var r = (window.SOG && SOG.rewards)
+            ? SOG.rewards.consume('hatshepsut')
+            : { firstTierWin: true, tier: _battleWasGiantRematch ? 'giant' : 'serf', grantCard: _battleWasGiantRematch };
+      var finishToScoreboard = function () { _teardown(); proceed(); };
+      if (r.grantCard) {
+        // FIRST GIANT win — card, THEN gold, split around the "Take this" beat.
+        _runLinesIfAny(HATSHEPSUT_GIANT_WIN_A, function () {
+          _grantHatshepsutCard(function () {
+            _grantGold(HATSHEPSUT_GOLD_GIANT_WIN, function () {
+              _runLinesIfAny(HATSHEPSUT_GIANT_WIN_B, finishToScoreboard);
+            });
+          });
+        });
+      } else if (r.firstTierWin) {
+        // FIRST SERF win — gold only, no card.
+        _runLinesIfAny(HATSHEPSUT_SERF_WIN_A, function () {
+          _grantGold(HATSHEPSUT_GOLD_SERF_WIN, function () {
+            _runLinesIfAny(HATSHEPSUT_SERF_WIN_B, finishToScoreboard);
+          });
+        });
+      } else {
+        // Replay of an already-beaten tier — dialogue only, zero reward.
+        var linesA = _battleWasGiantRematch ? HATSHEPSUT_GIANT_WIN_A : HATSHEPSUT_SERF_WIN_A;
+        var linesB = _battleWasGiantRematch ? HATSHEPSUT_GIANT_WIN_B : HATSHEPSUT_SERF_WIN_B;
+        _runLinesIfAny(linesA, function () { _runLinesIfAny(linesB, finishToScoreboard); });
+      }
     },
     onLoss: function (ctx, result, proceed) {
       _runLinesIfAny(_battleWasGiantRematch ? HATSHEPSUT_GIANT_LOSS : LOSS_DIALOGUE, function () {

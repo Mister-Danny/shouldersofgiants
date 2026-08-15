@@ -986,13 +986,15 @@ SOG.GilgameshBattle = (function () {
        Gilgamesh re-challenges on the board → onDone (caller shakes + restarts
        into a fresh game with Cuneiform now shuffled in).
      The candle flame visual is reused from overworld.js (window.Overworld
-     .showCuneiformCandle / .fadeOutCuneiformCandle), which owns the flame in one
-     place. If unavailable, we fall back to the plain-black conversation. */
+     .showInterventionCandle / .fadeOutInterventionCandle — generic, not
+     Cuneiform-specific despite this function's own name), which owns the
+     flame in one place. If unavailable, we fall back to the plain-black
+     conversation. */
   function _runCuneiformIntervention(onDone) {
     var hud = window.SOG && SOG.HUD;
     var ow  = window.Overworld;
-    var hasCandle = !!(ow && typeof ow.showCuneiformCandle === 'function'
-                          && typeof ow.fadeOutCuneiformCandle === 'function');
+    var hasCandle = !!(ow && typeof ow.showInterventionCandle === 'function'
+                          && typeof ow.fadeOutInterventionCandle === 'function');
     // Keep the "shh" intervention SILENT: it borrows the overworld screen below
     // (so the HUD can render the Farmer dialogue), which would otherwise resume the
     // map music via the showScreen hook. Suppress + stop any music for the duration.
@@ -1025,7 +1027,7 @@ SOG.GilgameshBattle = (function () {
                   // candle out to reveal the battle board.
                   var f = document.getElementById('gilg-loss-fade');
                   if (f && f.parentNode) f.parentNode.removeChild(f);
-                  ow.fadeOutCuneiformCandle(revealChallenge);
+                  ow.fadeOutInterventionCandle(revealChallenge);
                 } else {
                   _gFadeFromBlack(revealChallenge);
                 }
@@ -1039,7 +1041,7 @@ SOG.GilgameshBattle = (function () {
 
       // MATCHSTRIKE + candle flame fills the black, THEN the conversation runs
       // over the candlelit backdrop. No candle helper → plain-black fallback.
-      if (hasCandle) ow.showCuneiformCandle(runConversation);
+      if (hasCandle) ow.showInterventionCandle(runConversation);
       else runConversation();
     });
   }

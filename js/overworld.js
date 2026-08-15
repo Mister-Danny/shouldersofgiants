@@ -2551,16 +2551,17 @@ var Overworld = (function () {
     });
   }
 
-  /* Standalone Cuneiform candle for the Gilgamesh post-loss intervention
-     (sog-adventure-gilgamesh.js drives it via window.Overworld). It's decoupled
-     from the overworld iris/wipe: the caller has
-     ALREADY faded the screen to black, so we just strike the match, bloom the
-     flame, and hand off to the persistent candlelit backdrop (z 100, below the
-     HUD 150) that carries the Farmer conversation. onLit() fires once the flame
-     has settled and the backdrop is up. Reuses _candleColor + _ensureCandleBackdrop
-     so the flame visual lives in exactly one place; pair with the exported
-     fadeOutCuneiformCandle() to dismiss it. */
-  function _runCuneiformCandle(onLit) {
+  /* Standalone intervention candle — generic; the Gilgamesh/Cuneiform post-loss
+     beat is its first caller (sog-adventure-gilgamesh.js drives it via
+     window.Overworld), not its namesake. It's decoupled from the overworld
+     iris/wipe: the caller has ALREADY faded the screen to black, so we just
+     strike the match, bloom the flame, and hand off to the persistent
+     candlelit backdrop (z 100, below the HUD 150) that carries the
+     conversation. onLit() fires once the flame has settled and the backdrop
+     is up. Reuses _candleColor + _ensureCandleBackdrop so the flame visual
+     lives in exactly one place; pair with the exported
+     fadeOutInterventionCandle() to dismiss it. */
+  function _runInterventionCandle(onLit) {
     SOG.sfx.play('sfx/matchstrike.m4a');
 
     var existing = document.getElementById('adv-candle');
@@ -4881,11 +4882,13 @@ var Overworld = (function () {
         });
       });
     },
-    // Reusable candle visual for the Gilgamesh post-loss intervention (the
-    // battle module fades to black itself, then drives these): bloom the flame
-    // over the black + raise the candlelit backdrop, then dismiss it.
-    showCuneiformCandle:    _runCuneiformCandle,
-    fadeOutCuneiformCandle: _fadeOutCandleBackdrop,
+    // Reusable candle visual for a post-loss intervention cutscene (Gilgamesh/
+    // Cuneiform today, Hatshepsut's Merchant intervention next — the battle
+    // module fades to black itself, then drives these): bloom the flame over
+    // the black + raise the candlelit backdrop, then dismiss it. Generic name;
+    // the visual itself has never been Cuneiform-specific, only its old name was.
+    showInterventionCandle:    _runInterventionCandle,
+    fadeOutInterventionCandle: _fadeOutCandleBackdrop,
     // Devtools helpers
     goToMap: function (mapId) {
       if (!MAPS[mapId]) { console.warn('No such map:', mapId); return; }
