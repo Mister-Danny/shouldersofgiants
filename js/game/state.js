@@ -72,6 +72,7 @@
     columbusMoved:          false,
     aiColumbusMoved:        false,
     movedThisTurn:          {},  // cardId → bool  (Magellan, per-turn reset)
+    locMoveUsedThisTurn:    {},  // locId  → bool  (ANY_FREE_MOVE_AWAY / Red Sea: one move per LOCATION per turn)
     aiMovedThisTurn:        {},
     moveLog:                [],  // player moves this turn [{cardId,fromLocId,toLocId,toSlotIndex,ipModAdded,isColumbus,queued}]
     playerActionLog:        [],  // ordered: {type:'play'|'move', cardId, fromLocId?, fromSlotIndex?, toLocId?}

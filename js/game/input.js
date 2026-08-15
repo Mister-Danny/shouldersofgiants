@@ -101,8 +101,12 @@
 
   function bindHandEvents() {
     // The hand is rebuilt from scratch on every render, so any panel anchored to
-    // an element that's about to be discarded must go with it.
-    if (SOG.cardHover) SOG.cardHover.hide();
+    // an element that's about to be discarded must go with it — AND any gesture
+    // suppression must be released. Playing a card by double-click suppresses and
+    // then destroys the element before mouseleave can fire, which left the latch
+    // stuck and killed hover for the rest of the battle. A rebuild means the
+    // gesture is over, so this is the correct release point.
+    if (SOG.cardHover) { SOG.cardHover.hide(); SOG.cardHover.unsuppress(); }
     playerHandEl.querySelectorAll('.battle-hand-card').forEach(function (el) {
       el.draggable = true;
       if (el.tabIndex < 0) el.tabIndex = 0;
@@ -746,13 +750,32 @@
     if (G.phase !== 'select') return false;
     if (fromLocId === toLocId) return false;
     if (!G.playerSlots[toLocId]) return false;
-    var availForMove = G.playerSlots[toLocId].filter(function (s) { return s === null; }).length
-                     - (G.reservedSlotsPerLoc[toLocId] || 0);
+    /* DESTINATION CAPACITY — reservations are deliberately NOT subtracted here.
+       reservedSlotsPerLoc[X] counts cards that have LEFT X this turn (queueMove
+       increments it for fromLocId), and each of those departures already emptied a
+       real slot, which the null-count below therefore includes. Subtracting the
+       reservation as well counted the same slot twice and made a visibly-open slot
+       unusable — the Red Sea bug: ferry a card off a full Red Sea using its own
+       "move one card from here each turn" ability, and nothing could move in for
+       the rest of the turn.
+
+       Safe because snapBack is ARRIVAL-FIRST: step 1 removes EVERY queued preview
+       from its destination, and only then does step 2 restore each origin from its
+       snapshot. So an arrival occupying a departure's slot is already gone before
+       that location is rebuilt, and the snapshot cannot overflow. Plays never
+       subtracted reservations either, so this brings moves in line with them. */
+    var availForMove = G.playerSlots[toLocId].filter(function (s) { return s === null; }).length;
     if (availForMove <= 0) return false;
     // CULTURAL_FREE_MOVE_HERE: Cultural cards (not Magellan/Columbus) can only move to Timbuktu
     var movingCard  = CARDS.find(function (c) { return c.id === cardId; });
     var timbuktuLoc = G.locations.find(function (l) { return l.abilityKey === 'CULTURAL_FREE_MOVE_HERE'; });
-    if (movingCard && movingCard.type === 'Cultural' && cardId !== 24 && cardId !== 25) {
+    // ...UNLESS the card is leaving an ANY_FREE_MOVE_AWAY location (Red Sea),
+    // whose whole point is "move one card from here each turn" — to ANYWHERE.
+    // Without this exemption a Cultural card could be flagged moveable on Red Sea
+    // and then have every destination refused, in a battle with no Timbuktu.
+    var fromLoc     = G.locations.find(function (l) { return l.id === fromLocId; });
+    var freeAway    = fromLoc && fromLoc.abilityKey === 'ANY_FREE_MOVE_AWAY';
+    if (!freeAway && movingCard && movingCard.type === 'Cultural' && cardId !== 24 && cardId !== 25) {
       if (!timbuktuLoc || toLocId !== timbuktuLoc.id) return false;
     }
     return true;
@@ -1009,6 +1032,12 @@
       if (mv.queued) {
         G.movedThisTurn[mv.cardId] = false;
         if (mv.isColumbus) G.columbusMoved = false;
+        // Red Sea's per-LOCATION budget is refunded too — the move is being
+        // snapped back, so the location's one move for this turn was not spent.
+        var _fl = G.locations.find(function (l) { return l.id === mv.fromLocId; });
+        if (_fl && _fl.abilityKey === 'ANY_FREE_MOVE_AWAY' && G.locMoveUsedThisTurn) {
+          G.locMoveUsedThisTurn[mv.fromLocId] = false;
+        }
         // Undoing the move also returns any once-per-BATTLE persistent move flag
         // the move SET this turn (Lucy 33 / Chariot 48), so the card regains its
         // move. Only mv.queued (this-turn, not-yet-resolved) moves reach here, and
@@ -1171,6 +1200,13 @@
     if (G.phase !== 'select') return;
     var scandinaviaLoc   = G.locations.find(function (l) { return l.abilityKey === 'MILITARY_FREE_MOVE_AWAY'; });
     var timbuktuLoc      = G.locations.find(function (l) { return l.abilityKey === 'CULTURAL_FREE_MOVE_HERE'; });
+    // Red Sea (ANY_FREE_MOVE_AWAY): "You can move one card from here each turn."
+    // Unlike Scandinavia/Timbuktu — which are per-CARD budgets keyed on
+    // G.movedThisTurn[cardId] — this is a per-LOCATION budget: ONE card total may
+    // leave, whichever it is. Tracked in G.locMoveUsedThisTurn[locId], reset with
+    // the rest of the per-turn state in game.js.
+    var freeMoveAwayLoc  = G.locations.find(function (l) { return l.abilityKey === 'ANY_FREE_MOVE_AWAY'; });
+    var freeMoveAwayOpen = freeMoveAwayLoc && !(G.locMoveUsedThisTurn || {})[freeMoveAwayLoc.id];
     var timbuktuHasSpace = timbuktuLoc && (
       G.playerSlots[timbuktuLoc.id].indexOf(null) !== -1
     );
@@ -1186,7 +1222,10 @@
                  // Scandinavia: Military cards can move away for free (once per turn)
                  (scandinaviaLoc && loc.id === scandinaviaLoc.id && card && card.type === 'Military' && !G.movedThisTurn[s.cardId]) ||
                  // Timbuktu: Cultural cards elsewhere can move to Timbuktu for free (once per turn)
-                 (timbuktuHasSpace && timbuktuLoc && loc.id !== timbuktuLoc.id && card && card.type === 'Cultural' && !G.movedThisTurn[s.cardId]);
+                 (timbuktuHasSpace && timbuktuLoc && loc.id !== timbuktuLoc.id && card && card.type === 'Cultural' && !G.movedThisTurn[s.cardId]) ||
+                 // Red Sea: ANY card sitting here may leave, but only one per turn
+                 // (the budget is the LOCATION's, so it is not keyed on the card).
+                 (freeMoveAwayOpen && loc.id === freeMoveAwayLoc.id);
         if (mv) {
           var el = getSlotEl('player', loc.id, si);
           if (el) { el.classList.add('moveable'); el.draggable = true; }
@@ -1303,9 +1342,10 @@
     var cardId = sd.cardId;
     var card   = CARDS.find(function (c) { return c.id === cardId; });
 
-    // Destination must have a non-reserved null slot
-    var toAvail = G.playerSlots[toLocId].filter(function (s) { return s === null; }).length
-                - (G.reservedSlotsPerLoc[toLocId] || 0);
+    // Destination must have a null slot. Reservations are NOT subtracted — see the
+    // full reasoning in isLegalMoveTarget; this is the same rule at the commit
+    // point, and the two must agree or the drag would preview a move it then refuses.
+    var toAvail = G.playerSlots[toLocId].filter(function (s) { return s === null; }).length;
     if (toAvail <= 0) return;
     clearSelection();  // any click/keyboard selection becomes stale after move
 
@@ -1344,6 +1384,14 @@
     }
 
     G.movedThisTurn[cardId] = true;
+    // Red Sea (ANY_FREE_MOVE_AWAY): spend the LOCATION's one move for this turn.
+    // Recorded at QUEUE time like movedThisTurn above, so resetTurn's snap-back
+    // restores it along with everything else.
+    var _fromLocDef = G.locations.find(function (l) { return l.id === fromLocId; });
+    if (_fromLocDef && _fromLocDef.abilityKey === 'ANY_FREE_MOVE_AWAY') {
+      if (!G.locMoveUsedThisTurn) G.locMoveUsedThisTurn = {};
+      G.locMoveUsedThisTurn[fromLocId] = true;
+    }
     if (cardId === 25) G.columbusMoved = true;
     if (cardId === 33) sd._advLucyMoved = true;   // Lucy: once per BATTLE — flag rides the slot data (mirrors Chariot's _advChariotMoved). Set at QUEUE time, so resetTurn clears it when it snaps this move back (the move never happened); it only persists once the move RESOLVES at reveal.
     if (cardId === 48 || cardId === 69) sd._advChariotMoved = true;   // Chariot (48) / Chariots (69, Egypt): once per BATTLE on its own — same persistent-slot-flag pattern as Lucy (resetTurn clears it on snap-back; persists once the move resolves)

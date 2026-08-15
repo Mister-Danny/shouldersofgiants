@@ -180,7 +180,14 @@ SOG.cardHover = (function () {
 
   /* Called on drag start / select-to-play so the panel can't reappear mid-gesture
      (the browser fires mouseenter again as the drag ghost detaches). Released on
-     drag end / mouseleave. */
+     drag end / mouseleave — AND on any hand rebuild, see below.
+
+     WHY THE REBUILD RELEASE MATTERS (this was a real bug): suppression is a latch,
+     and mouseleave is what normally clears it. But double-clicking a card to play
+     it suppresses, and then the card LEAVES the hand — the element is destroyed, so
+     mouseleave never fires and the latch stays set. Hover then appeared broken for
+     the rest of the battle. A hand rebuild means any in-flight gesture is over by
+     definition, so bindHandEvents releases it there. */
   function suppress()   { _suppressed = true;  hide(); }
   function unsuppress() { _suppressed = false; }
 
