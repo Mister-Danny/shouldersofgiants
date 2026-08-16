@@ -631,7 +631,9 @@ SOG.HatshepsutBattle = (function () {
     { who: 'merchant', text: 'And Purple dye from Mesopotamia.' },
     { who: 'merchant', text: 'Merchants live off of foreign goods.' },
     { who: 'explorer', text: 'Thank you!' },
-    { who: 'merchant', text: "Show the queen what you're worth." }
+    // Closing beat points straight at what happens next (the deck builder opens
+    // on this line), rather than at the rematch.
+    { who: 'merchant', text: 'Now put together a deck that can expand the trade network.' }
   ];
 
   var LOSS_FADE_ID = 'hatshepsut-loss-fade';
@@ -674,26 +676,41 @@ SOG.HatshepsutBattle = (function () {
       if (hud && typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'merchant' });
 
       var runConversation = function () {
-        var grantMerchant = (ow && ow.grantHatshepsutGiftMerchant) || function (cb) { cb(); };
-        var grantDye      = (ow && ow.grantHatshepsutGiftDye)      || function (cb) { cb(); };
+        // The fallbacks report `false` — no Overworld means no grant happened,
+        // so the delivery must stay re-armed rather than be marked complete.
+        var grantMerchant = (ow && ow.grantHatshepsutGiftMerchant) || function (cb) { cb(false); };
+        var grantDye      = (ow && ow.grantHatshepsutGiftDye)      || function (cb) { cb(false); };
         _hHudLines(MERCHANT_LOSS_A, function () {
-          grantMerchant(function () {
+          grantMerchant(function (okMerchant) {
             _hHudLines(MERCHANT_LOSS_B, function () {
-              grantDye(function () {
+              grantDye(function (okDye) {
                 _hHudLines(MERCHANT_LOSS_C, function () {
-                  _set(KEY_CARDS_DELIVERED);
+                  // Same rule as the win path: both cards, or no gate. The
+                  // player still gets the deck builder and the retry either
+                  // way — only the "already delivered" record is withheld.
+                  if (okMerchant && okDye) _set(KEY_CARDS_DELIVERED);
+                  else console.warn('[HatshepsutBattle] gift partially failed — merchant:',
+                                    okMerchant, 'dye:', okDye, '— delivery left re-armed');
+                  /* Swap to the destination BEHIND the cover, then lift the
+                     cover — the same order Gilgamesh's intervention uses to
+                     return to its board. Lifting first would reveal the
+                     overworld screen this sequence borrowed to render the HUD,
+                     flashing the map for the length of the candle fade before
+                     the deck builder appears. */
                   var toDeckBuilder = function () {
                     window._sogSuppressMapMusic = false;
                     _playSfx('sfx/shh.m4a');       // SHH as the candle is snuffed
+                    // Deck builder → RETRY THE BATTLE (not the map). Opened
+                    // while still covered, so it is what the fade reveals.
+                    var openThen = ow && ow.openDeckBuilderThen;
+                    if (openThen) openThen(function () { _restartBattle(); }, '&#8592; Back to Battle');
+                    // The candlelit backdrop sits above the plain-black cover,
+                    // so dropping the black now is invisible; the candle fade
+                    // is the only visible transition, and it uncovers the
+                    // deck builder directly.
                     _hRemoveBlack();
-                    var open = function () {
-                      // Deck builder → RETRY THE BATTLE (not the map).
-                      var openThen = ow && ow.openDeckBuilderThen;
-                      if (!openThen) { _restartBattle(); return; }
-                      openThen(function () { _restartBattle(); }, '&#8592; Back to Battle');
-                    };
-                    if (hasCandle) ow.fadeOutInterventionCandle(open);
-                    else open();
+                    if (hasCandle) ow.fadeOutInterventionCandle(null);
+                    if (!openThen) _restartBattle();   // no overworld → straight to the retry
                   };
                   if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(toDeckBuilder);
                   else toDeckBuilder();

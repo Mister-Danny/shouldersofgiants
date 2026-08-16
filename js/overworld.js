@@ -2806,13 +2806,27 @@ var Overworld = (function () {
   var HATSHEPSUT_GIFT_MERCHANT_ID = 900;
   var HATSHEPSUT_GIFT_DYE_ID      = 75;
 
+  /* done(ok) — `ok` reports whether the card is GENUINELY in the collection
+     afterwards: unlock returned true (newly granted) OR it was already owned
+     (a re-run, which is still a correct end state). The grant itself is
+     unchanged; this only observes it. Callers gate the delivered-flag on it,
+     so a silently-failed grant leaves the delivery re-armed instead of being
+     recorded as complete — the flag can never outrun the cards. */
   function _grantGiftCard(id, done) {
-    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') SOG.Cards.unlock([id]);
+    var newly = false;
+    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') {
+      newly = !!SOG.Cards.unlock([id]);
+    }
+    var owned = false;
+    if (window.SOG && SOG.collection && typeof SOG.collection.isUnlocked === 'function') {
+      owned = !!SOG.collection.isUnlocked(id);
+    }
+    var ok = newly || owned;
     var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === id; });
     var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
     if (card && preh && typeof preh.showCardAcquisition === 'function') {
-      preh.showCardAcquisition(card, null, function () { if (done) done(); }, { autoDismissMs: D2C_AUTO_DISMISS_MS });
-    } else if (done) { done(); }
+      preh.showCardAcquisition(card, null, function () { if (done) done(ok); }, { autoDismissMs: D2C_AUTO_DISMISS_MS });
+    } else if (done) { done(ok); }
   }
 
   /* Open the deck builder with an EXPLICIT return context. The builder's own
@@ -2842,11 +2856,20 @@ var Overworld = (function () {
     hud.enterDialogueMode(null, function () {
       if (typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'merchant' });
       _runLinesKeepOpen(D7_MERCHANT_WIN_DELIVERY_A, function () {
-        _grantGiftCard(HATSHEPSUT_GIFT_MERCHANT_ID, function () {
+        _grantGiftCard(HATSHEPSUT_GIFT_MERCHANT_ID, function (okMerchant) {
           _runLinesKeepOpen(D7_MERCHANT_WIN_DELIVERY_B, function () {
-            _grantGiftCard(HATSHEPSUT_GIFT_DYE_ID, function () {
+            _grantGiftCard(HATSHEPSUT_GIFT_DYE_ID, function (okDye) {
               _runLinesKeepOpen(D7_MERCHANT_WIN_DELIVERY_C, function () {
-                try { localStorage.setItem(KEY_HATSHEPSUT_CARDS, 'true'); } catch (e) {}
+                // Only record the delivery if BOTH cards actually landed. A
+                // partial grant leaves the gate open so the other path (or a
+                // later win) can complete it, rather than locking in a
+                // half-delivered state no amount of replaying can repair.
+                if (okMerchant && okDye) {
+                  try { localStorage.setItem(KEY_HATSHEPSUT_CARDS, 'true'); } catch (e) {}
+                } else {
+                  console.warn('[Overworld] Hatshepsut gift partially failed — merchant:',
+                               okMerchant, 'dye:', okDye, '— delivery left re-armed');
+                }
                 if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
                 // Deck builder → back to the map, right where she was standing.
                 openDeckBuilderThen(function () {
