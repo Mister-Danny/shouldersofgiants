@@ -556,11 +556,15 @@ SOG.HatshepsutBattle = (function () {
     }
     if (opts.firstWin) {
       // Shown right after a tier-win sequence (dialogue + gold [+ card]).
-      // CONTINUE just returns to the overworld — no Stage-B interstitial yet.
-      actions.appendChild(mkBtn('CONTINUE',   function () { _exitToOverworld(); }));
+      // CONTINUE's destination varies by tier: the SERF win routes through the
+      // overworld's Hatshepsut return so the Merchant can deliver his cards.
+      var _cont = opts.onContinue || _exitToOverworld;
+      actions.appendChild(mkBtn('CONTINUE',   function () { _cont(); }));
       actions.appendChild(mkBtn('GAME BOARD', function () { _hideResultForReview(); }));
     } else {
-      actions.appendChild(mkBtn('PLAY AGAIN',  function () { _restartBattle(); }));
+      // PLAY AGAIN routes through _onPlayAgain — on a first SERF loss that is
+      // the Merchant intervention (cards + deck builder) before the retry.
+      actions.appendChild(mkBtn('PLAY AGAIN',  function () { _onPlayAgain(); }));
       actions.appendChild(mkBtn('GAMEBOARD',   function () { _hideResultForReview(); }));
       actions.appendChild(mkBtn(won ? 'CONTINUE' : 'BACK TO MAP', function () { _exitToOverworld(); }));
     }
@@ -575,6 +579,142 @@ SOG.HatshepsutBattle = (function () {
     setTimeout(function () {
       if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') window.Overworld.resumeAfterBattle();
     }, 100);
+  }
+  /* SERF-win exit (Stage B): route through the overworld's Hatshepsut handler so
+     the Merchant's card delivery can fire on arrival. It self-gates on
+     KEY_CARDS_DELIVERED, so after a loss-path delivery this is just a plain
+     return. Falls back to the plain exit if the handler isn't present. */
+  function _exitToOverworldAfterSerfWin() {
+    _removeResultPopup(); _teardown();
+    if (window.Overworld && typeof window.Overworld.returnFromHatshepsutSerfWin === 'function') {
+      window.Overworld.returnFromHatshepsutSerfWin();
+    } else {
+      _exitToOverworld();
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     STAGE B — LOSS-PATH MERCHANT INTERVENTION
+     ────────────────────────────────────────────────────────────
+     Structurally identical to Gilgamesh's Cuneiform intervention (the proven
+     pattern): SHH → board fades to black → matchstrike + candle flame fills
+     the black → the Merchant's conversation runs in the lower HUD over the
+     candlelit backdrop, with the two card grants inline → deck builder → the
+     battle retry.
+
+     Differs from Gilgamesh's in exactly one way, and it is the important one:
+     his intervention returns to the INTACT board (he re-challenges on it),
+     while this one routes through the deck builder first — the whole point of
+     the gift is that she rebuilds her deck with it before retrying. So the
+     deck builder gets an explicit return context (Overworld.openDeckBuilderThen)
+     that relaunches the battle, rather than the builder's own map-or-home
+     inference. See deckbuilder.js's __deckBuilderReturn branch.
+
+     The candle visual is Overworld's generic showInterventionCandle /
+     fadeOutInterventionCandle — one owner for the flame, no copy here. */
+  var KEY_CARDS_DELIVERED = 'sog_hatshepsut_cards_delivered';
+
+  var MERCHANT_LOSS_A = [
+    { who: 'merchant', text: 'Shh. Over here.' },
+    { who: 'explorer', text: "Oh! It's you again." },
+    { who: 'merchant', text: 'She cleaned you out.' },
+    { who: 'explorer', text: 'She said I had empty hands.' },
+    { who: 'merchant', text: 'She was right. You came to the market with nothing to trade.' },
+    { who: 'merchant', text: "Let's fix that." }
+    // → [GRANT CARD — Merchant 900]
+  ];
+  var MERCHANT_LOSS_B = [
+    { who: 'merchant', text: 'A merchant of Egypt.' }
+    // → [GRANT CARD — Purple Dye 75]
+  ];
+  var MERCHANT_LOSS_C = [
+    { who: 'merchant', text: 'And Purple dye from Mesopotamia.' },
+    { who: 'merchant', text: 'Merchants live off of foreign goods.' },
+    { who: 'explorer', text: 'Thank you!' },
+    { who: 'merchant', text: "Show the queen what you're worth." }
+  ];
+
+  var LOSS_FADE_ID = 'hatshepsut-loss-fade';
+  function _hFadeToBlack(onDone) {
+    var prev = document.getElementById(LOSS_FADE_ID);
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+    var fade = document.createElement('div');
+    fade.id = LOSS_FADE_ID;
+    fade.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;z-index:100;pointer-events:none;transition:opacity 0.5s ease;';
+    (document.getElementById('sog-stage') || document.body).appendChild(fade);
+    void fade.offsetHeight;   // reflow so the transition animates from 0
+    fade.style.opacity = '1';
+    setTimeout(function () { if (onDone) onDone(); }, 540);
+  }
+  function _hRemoveBlack() {
+    var f = document.getElementById(LOSS_FADE_ID);
+    if (f && f.parentNode) f.parentNode.removeChild(f);
+  }
+  function _hHudLines(lines, cb) {
+    var hud = window.SOG && SOG.HUD;
+    if (hud && typeof hud.runLines === 'function') hud.runLines(lines, cb);
+    else if (cb) cb();
+  }
+
+  function _runMerchantLossIntervention() {
+    var hud = window.SOG && SOG.HUD;
+    var ow  = window.Overworld;
+    var hasCandle = !!(ow && typeof ow.showInterventionCandle === 'function'
+                          && typeof ow.fadeOutInterventionCandle === 'function');
+    // Same reason as Gilgamesh's: this borrows the overworld screen so the HUD
+    // can render, which would otherwise resume map music via the showScreen hook.
+    window._sogSuppressMapMusic = true;
+    if (window.SOG && SOG.ui && typeof SOG.ui.stopBgMusic === 'function') SOG.ui.stopBgMusic();
+    _playSfx('sfx/shh.m4a');
+
+    _removeResultPopup();
+    _hFadeToBlack(function () {
+      if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
+      if (hud && typeof hud.enterDialogueMode === 'function') hud.enterDialogueMode(null, function () {});
+      if (hud && typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'merchant' });
+
+      var runConversation = function () {
+        var grantMerchant = (ow && ow.grantHatshepsutGiftMerchant) || function (cb) { cb(); };
+        var grantDye      = (ow && ow.grantHatshepsutGiftDye)      || function (cb) { cb(); };
+        _hHudLines(MERCHANT_LOSS_A, function () {
+          grantMerchant(function () {
+            _hHudLines(MERCHANT_LOSS_B, function () {
+              grantDye(function () {
+                _hHudLines(MERCHANT_LOSS_C, function () {
+                  _set(KEY_CARDS_DELIVERED);
+                  var toDeckBuilder = function () {
+                    window._sogSuppressMapMusic = false;
+                    _playSfx('sfx/shh.m4a');       // SHH as the candle is snuffed
+                    _hRemoveBlack();
+                    var open = function () {
+                      // Deck builder → RETRY THE BATTLE (not the map).
+                      var openThen = ow && ow.openDeckBuilderThen;
+                      if (!openThen) { _restartBattle(); return; }
+                      openThen(function () { _restartBattle(); }, '&#8592; Back to Battle');
+                    };
+                    if (hasCandle) ow.fadeOutInterventionCandle(open);
+                    else open();
+                  };
+                  if (hud && typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(toDeckBuilder);
+                  else toDeckBuilder();
+                });
+              });
+            });
+          });
+        });
+      };
+
+      if (hasCandle) ow.showInterventionCandle(runConversation);
+      else runConversation();
+    });
+  }
+
+  /* PLAY AGAIN after a loss. The intervention is a SERF-loss beat only, and
+     only while the cards are undelivered — a Giant-rematch loss, or any loss
+     after either delivery path has run, restarts straight away. */
+  function _onPlayAgain() {
+    if (_battleWasGiantRematch || _has(KEY_CARDS_DELIVERED)) { _restartBattle(); return; }
+    _runMerchantLossIntervention();
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -651,7 +791,8 @@ SOG.HatshepsutBattle = (function () {
       _runLinesIfAny(HATSHEPSUT_SERF_WIN_A, function () {
         _grantGold(HATSHEPSUT_GOLD_SERF_WIN, function () {
           _runLinesIfAny(HATSHEPSUT_SERF_WIN_B, function () {
-            _showResultScoreboard(true, false, locResults, { firstWin: true });
+            _showResultScoreboard(true, false, locResults,
+              { firstWin: true, onContinue: _exitToOverworldAfterSerfWin });
           });
         });
       });

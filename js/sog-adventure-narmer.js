@@ -701,18 +701,30 @@ SOG.NarmerBattle = (function () {
     });
   }
 
+  /* GIANT-win exit (Stage B): the Giant flag still stamps via resumeAfterBattle,
+     but the return routes through the overworld's Narmer-Giant handler, which
+     chains the one-time Narmer→Hatshepsut journey south once the stamp settles.
+     Plain exit fallback if that handler isn't present. */
+  function _exitToOverworldAfterGiantWin() {
+    _removeResultPopup(); _teardown();
+    if (window.Overworld && typeof window.Overworld.returnFromNarmerGiantWin === 'function') {
+      window.Overworld.returnFromNarmerGiantWin();
+    } else {
+      _exitToOverworld();
+    }
+  }
+
   /* GIANT WIN — [source: NARMER_GIANT_WIN_A/_B]. Block A → Narmer card THEN 30 gold at
-     the "Take it." beat → block B → scoreboard. CONTINUE = plain exit (the Giant flag
-     stamps via resumeAfterBattle). The handoff is deliberately SOFT — no named next
-     boss, because the next Egypt node isn't built yet; "go find whatever you're
-     looking for / Home" is the intended open door. */
+     the "Take it." beat → block B → scoreboard. CONTINUE hands off to the Hatshepsut
+     journey (Stage B) — the soft "go find whatever you're looking for" handoff now has
+     a destination: the Merchant points her upriver and travels with her. */
   function _runGiantWinSequence(locResults) {
     _removeResultPopup();
     runLines(NARMER_GIANT_WIN_A, function () {
       _grantNarmerCard(function () {                             // card first
         _grantGold(GOLD_GIANT_WIN, function () {                 // then 30 gold
           runLines(NARMER_GIANT_WIN_B, function () {
-            _showResultScoreboard(true, false, locResults, { firstWin: true, onContinue: _exitToOverworld });
+            _showResultScoreboard(true, false, locResults, { firstWin: true, onContinue: _exitToOverworldAfterGiantWin });
           });
         });
       });

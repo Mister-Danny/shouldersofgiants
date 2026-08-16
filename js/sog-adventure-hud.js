@@ -52,7 +52,11 @@ SOG.HUD = (function () {
     nebuchadnezzar: { portrait: 'images/portraits/nebuchadnezzar.jpg', bleepHz: 200, side: 'npc', frame: 'neb' },
     narmer:      { portrait: 'images/portraits/narmerportrait.jpeg', bleepHz: 260, side: 'npc', frame: 'narmer' },
     hatshepsut:  { portrait: 'images/portraits/hatshepsutportrait.jpeg', bleepHz: 330, side: 'npc' },
-    trader:      { portrait: 'images/portraits/mesotrader@0.5x.jpg', bleepHz: 300, side: 'npc'   }
+    trader:      { portrait: 'images/portraits/mesotrader@0.5x.jpg', bleepHz: 300, side: 'npc'   },
+    // Egypt's travelling merchant — distinct character from `trader` (the
+    // Mesopotamia market stallholder), and the speaker for the Narmer→
+    // Hatshepsut journey + the Hatshepsut card delivery.
+    merchant:    { portrait: 'images/portraits/egyptmerchant.jpg', bleepHz: 300, side: 'npc'   }
   };
 
   /* ══════════════════════════════════════════════════════════════

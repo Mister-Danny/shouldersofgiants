@@ -45,6 +45,9 @@ var Overworld = (function () {
   var KEY_EGYPT_NODE_ARRIVAL        = 'sog_egypt_node_arrival_seen';    // one-time Egypt "funny hat" arrival beat (fires when reaching Egypt with the node live)
   var KEY_MET_NARMER                = 'sog_met_narmer';                 // set after the first Double Crown encounter → later clicks skip straight to the battle
   var KEY_MET_HATSHEPSUT            = 'sog_met_hatshepsut';             // set after the first Hatshepsut encounter → later clicks skip straight to the battle
+  // Stage B
+  var KEY_HATSHEPSUT_TRANSITION     = 'sog_hatshepsut_transition_seen'; // Narmer→Hatshepsut journey played (once, after the Narmer GIANT win)
+  var KEY_HATSHEPSUT_CARDS          = 'sog_hatshepsut_cards_delivered'; // Merchant(900)+Purple Dye(75) handed over — shared gate for BOTH delivery paths
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -279,6 +282,61 @@ var Overworld = (function () {
   ];
   var D6_NARMER_WIN_INTERSTITIAL_B = [
     { who: 'explorer', text: 'I better see what I can add to my collection before I go back.' }
+  ];
+
+  /* ── STAGE B — NARMER → HATSHEPSUT JOURNEY ────────────────────────────────
+     Fires once, automatically, after the Narmer GIANT win, and is what carries
+     the player from Lower Egypt to Upper Egypt. Three beats: the Merchant's
+     pitch on the Lower Egypt map, the scripted travel south (see
+     _startHatshepsutTransition), then his parting lines on arrival.
+     Gated by KEY_HATSHEPSUT_TRANSITION so a revisit never replays it.
+     [source: overworld.js → D7_HATSHEPSUT_TRANSITION / _PARTING] */
+  var D7_HATSHEPSUT_TRANSITION = [
+    { who: 'explorer', text: 'So… where to now?' },
+    { who: 'merchant', text: "Upriver, if you're wise." },
+    { who: 'explorer', text: 'Upriver? Really?' },
+    { who: 'merchant', text: 'I go where the trade goes. And right now, the trade goes south.' },
+    { who: 'explorer', text: 'South is up?' },
+    { who: 'merchant', text: "Upstream of the Nile is Upper Egypt. You'll learn." },
+    { who: 'merchant', text: "There's a new pharaoh up that way." },
+    { who: 'merchant', text: 'A queen.' },
+    { who: 'explorer', text: 'A queen! Is she nice?' },
+    { who: 'merchant', text: 'They say she is open for business.' },
+    { who: 'explorer', text: "I'm not getting home anytime soon. Let's go!" }
+    // → [TRAVEL SOUTH: lower Egypt → upper-egypt map]
+  ];
+  var D7_HATSHEPSUT_PARTING = [
+    { who: 'merchant', text: 'Here we part, traveler.' },
+    { who: 'explorer', text: 'Why so soon?' },
+    { who: 'merchant', text: 'My goods sell two markets over.' },
+    { who: 'explorer', text: 'Oh, okay.' },
+    { who: 'merchant', text: "You don't need me to hold your hand. The queen's just up the shore, by the water." },
+    { who: 'merchant', text: "A word, though: she trades hard. Don't expect a gift." }
+  ];
+
+  /* ── STAGE B — MERCHANT CARD DELIVERY (WIN PATH) ──────────────────────────
+     The first Hatshepsut SERF WIN, on the overworld return. Split around the
+     two card grants: block A → Merchant(900) → block B → Purple Dye(75) →
+     block C. Shares KEY_HATSHEPSUT_CARDS_DELIVERED with the loss-path
+     intervention in sog-adventure-hatshepsut.js — whichever fires first
+     delivers, and the other then never runs.
+     [source: overworld.js → D7_MERCHANT_WIN_DELIVERY_A/_B/_C] */
+  var D7_MERCHANT_WIN_DELIVERY_A = [
+    { who: 'merchant', text: 'Well, well. Still standing.' },
+    { who: 'explorer', text: 'I beat her! Sort of. She said I turned a profit.' },
+    { who: 'merchant', text: "From the queen, that's high praise. She doesn't hand those out." },
+    { who: 'merchant', text: "You did it with scraps, too. Which means you've got the instinct." },
+    { who: 'merchant', text: 'So here — a reward for the promising.' }
+    // → [GRANT CARD — Merchant 900]
+  ];
+  var D7_MERCHANT_WIN_DELIVERY_B = [
+    { who: 'merchant', text: 'A merchant of Egypt.' }
+    // → [GRANT CARD — Purple Dye 75]
+  ];
+  var D7_MERCHANT_WIN_DELIVERY_C = [
+    { who: 'merchant', text: 'And purple dye, from Mesopotamia. Merchants live off foreign goods.' },
+    { who: 'explorer', text: 'Thank you!' },
+    { who: 'merchant', text: "Go build them in. She'll be tougher next time — count on it." }
   ];
 
   /* HAMMURABI INTERSTITIAL — the post-Serf-win beat, bookending the Hanging
@@ -2734,6 +2792,115 @@ var Overworld = (function () {
     });
   }
 
+  /* ══════════════════════════════════════════════════════════════════════════
+     STAGE B — HATSHEPSUT ARC: the journey south + the Merchant's two cards
+     ════════════════════════════════════════════════════════════════════════ */
+
+  /* Hand over the Merchant(900) + Purple Dye(75) pair, split so a dialogue
+     block can land between them. Uses the SHARED acquisition reveal
+     (Prehistory.showCardAcquisition) every other grant in the game goes
+     through, and SOG.Cards.unlock for ownership. Idempotent: the
+     KEY_HATSHEPSUT_CARDS gate is the caller's job, but re-running this would
+     only re-show reveals, never double-grant. Exported so the battle module's
+     loss-path intervention grants exactly the same way. */
+  var HATSHEPSUT_GIFT_MERCHANT_ID = 900;
+  var HATSHEPSUT_GIFT_DYE_ID      = 75;
+
+  function _grantGiftCard(id, done) {
+    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') SOG.Cards.unlock([id]);
+    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === id; });
+    var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
+    if (card && preh && typeof preh.showCardAcquisition === 'function') {
+      preh.showCardAcquisition(card, null, function () { if (done) done(); }, { autoDismissMs: D2C_AUTO_DISMISS_MS });
+    } else if (done) { done(); }
+  }
+
+  /* Open the deck builder with an EXPLICIT return context. The builder's own
+     exit branches infer their destination from sticky mode flags, which can't
+     tell "opened from the map" from "opened mid-battle" — the two Stage-B
+     deliveries need opposite destinations, so they name theirs (see
+     deckbuilder.js's __deckBuilderReturn branch). */
+  function openDeckBuilderThen(onExit, label) {
+    window.__deckBuilderReturn      = onExit;
+    window.__deckBuilderReturnLabel = label || '&#8592; Back';
+    window.deckBuilderFromOverworld = false;
+    if (typeof showScreen === 'function') showScreen('screen-deckbuilder');
+    if (typeof window.initDeckBuilder === 'function') window.initDeckBuilder();
+    if (typeof window.playDeckMusic === 'function') window.playDeckMusic();
+  }
+
+  /* WIN-PATH delivery — the Merchant catches the Explorer on the Upper Egypt
+     map after her first Serf win. Dialogue → both cards → deck builder, which
+     returns to the OVERWORLD (contrast the loss path, which returns to the
+     battle). Sets the shared gate so the loss-path intervention can never
+     also fire. */
+  function _runMerchantWinDelivery(onDone) {
+    var hud = window.SOG && window.SOG.HUD;
+    if (!hud || typeof hud.enterDialogueMode !== 'function') { if (onDone) onDone(); return; }
+    isDialogueLocked = true;
+    cancelIdle();
+    hud.enterDialogueMode(null, function () {
+      if (typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'merchant' });
+      _runLinesKeepOpen(D7_MERCHANT_WIN_DELIVERY_A, function () {
+        _grantGiftCard(HATSHEPSUT_GIFT_MERCHANT_ID, function () {
+          _runLinesKeepOpen(D7_MERCHANT_WIN_DELIVERY_B, function () {
+            _grantGiftCard(HATSHEPSUT_GIFT_DYE_ID, function () {
+              _runLinesKeepOpen(D7_MERCHANT_WIN_DELIVERY_C, function () {
+                try { localStorage.setItem(KEY_HATSHEPSUT_CARDS, 'true'); } catch (e) {}
+                if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+                // Deck builder → back to the map, right where she was standing.
+                openDeckBuilderThen(function () {
+                  if (typeof showScreen === 'function') showScreen('screen-overworld');
+                  if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') {
+                    window.Overworld.resumeAfterBattle();
+                  }
+                }, '&#8592; Back to Map');
+                if (onDone) onDone();
+              });
+            });
+          });
+        });
+      });
+    });
+  }
+
+  /* The journey south. Beat 1 runs on whatever Egypt map the player is
+     standing on, then _d1TravelTo (the same "Traveling…" map-swap the
+     Otzi→Mesopotamia sequence uses) carries her to upper-egypt, then the
+     Merchant's parting lines play on arrival. The flag is set at the END so an
+     interrupted journey replays rather than stranding the player. */
+  function _startHatshepsutTransition(onDone) {
+    var hud = window.SOG && window.SOG.HUD;
+    var finish = function () {
+      try { localStorage.setItem(KEY_HATSHEPSUT_TRANSITION, 'true'); } catch (e) {}
+      isDialogueLocked = false;
+      scheduleIdle();
+      if (onDone) onDone();
+    };
+    if (!hud || typeof hud.enterDialogueMode !== 'function') { finish(); return; }
+
+    isDialogueLocked = true;
+    cancelIdle();
+    hud.enterDialogueMode(null, function () {
+      if (typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'merchant' });
+      _runLinesKeepOpen(D7_HATSHEPSUT_TRANSITION, function () {
+        if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+        // Walk off south, then swap maps behind the "Traveling…" curtain.
+        walkPath([{ x: currentPos.x, y: 115 }], function () {
+          _d1TravelTo('upper-egypt', MAPS['upper-egypt'] && MAPS['upper-egypt'].spawn, function () {
+            hud.enterDialogueMode(null, function () {
+              if (typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'merchant' });
+              _runLinesKeepOpen(D7_HATSHEPSUT_PARTING, function () {
+                if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+                finish();
+              });
+            });
+          });
+        });
+      });
+    });
+  }
+
   /* First-market interstitial — one-time, fired from _exitMarket on the FIRST market
      return (post-Serf-win shopping). Sargon does NOT appear here; the only forward path
      is back to Gilgamesh for the Giant rematch. Gated so it plays exactly once. */
@@ -4931,6 +5098,45 @@ var Overworld = (function () {
         });
       });
     },
+    /* Narmer GIANT-win return (Stage B) — the plain battle-exit return, then the
+       one-time journey south. Called by the Narmer module instead of its plain
+       _exitToOverworld so the transition fires straight off the Giant win, AFTER
+       resumeAfterBattle has stamped the Giant flag. Gated: once the journey has
+       played, this degrades to exactly the plain return. */
+    returnFromNarmerGiantWin: function () {
+      if (!mapImgEl) init();
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+      if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') {
+        window.Overworld.resumeAfterBattle();
+      }
+      var seen = false;
+      try { seen = localStorage.getItem(KEY_HATSHEPSUT_TRANSITION) === 'true'; } catch (e) {}
+      if (seen) return;
+      // Let the flag-stamp choreography in resumeAfterBattle settle first.
+      setTimeout(function () { _startHatshepsutTransition(null); }, 900);
+    },
+
+    /* Hatshepsut SERF-win return (Stage B) — plain return, then the Merchant's
+       card delivery if it hasn't already happened by the loss path. */
+    returnFromHatshepsutSerfWin: function () {
+      if (!mapImgEl) init();
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+      if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') {
+        window.Overworld.resumeAfterBattle();
+      }
+      var done = false;
+      try { done = localStorage.getItem(KEY_HATSHEPSUT_CARDS) === 'true'; } catch (e) {}
+      if (done) return;
+      setTimeout(function () { _runMerchantWinDelivery(null); }, 900);
+    },
+
+    /* Shared by the battle module's LOSS-path intervention: the same two-card
+       grant and the same explicit-return deck-builder open, so both delivery
+       paths hand over identical state and differ only in where they resume. */
+    grantHatshepsutGiftMerchant: function (done) { _grantGiftCard(HATSHEPSUT_GIFT_MERCHANT_ID, done); },
+    grantHatshepsutGiftDye:      function (done) { _grantGiftCard(HATSHEPSUT_GIFT_DYE_ID, done); },
+    openDeckBuilderThen:         openDeckBuilderThen,
+
     /* Narmer SERF-win return — IDENTICAL in shape to returnFromNebWin above, and for
        the same reason: Narmer is the last boss BUILT, so this raises the GIANT FLAG
        and nothing else. No node reveal (the next Egypt node doesn't exist yet) and no

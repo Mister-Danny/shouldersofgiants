@@ -121,9 +121,13 @@
     // collection (it just won't appear as a selectable tile in the grid).
     // Left button label follows context: "Back to Map" from the overworld HUD,
     // "← Home" from Arcadium / versus / multiplayer entries.
-    backBtn.innerHTML = window.deckBuilderFromOverworld
-      ? '&#8592; Back to Map'
-      : '&#8592; Home';
+    // A scripted return context names its own destination (the label matters:
+    // the loss-path delivery goes back to the BATTLE, not the map).
+    backBtn.innerHTML = window.__deckBuilderReturnLabel
+      ? window.__deckBuilderReturnLabel
+      : window.deckBuilderFromOverworld
+        ? '&#8592; Back to Map'
+        : '&#8592; Home';
     renderSlotRow();
     renderAllGroups();
     updateUI();
@@ -624,6 +628,25 @@
   backBtn.addEventListener('click', function () {
     if (window.DeckBuilderTutorial && typeof window.DeckBuilderTutorial.notifyExit === 'function') {
       window.DeckBuilderTutorial.notifyExit();
+    }
+    /* Explicit one-shot return context, checked FIRST because it is the only
+       caller-supplied destination — everything below infers where to go from
+       sticky mode flags, which cannot distinguish "opened mid-battle" from
+       "opened from the map". A scripted beat that opens the builder sets
+       window.__deckBuilderReturn to the function that resumes it (see
+       Overworld.openDeckBuilderThen). Cleared before invoking so an exception
+       in the callback can't strand the flag and hijack the next plain exit. */
+    if (typeof window.__deckBuilderReturn === 'function') {
+      var _resume = window.__deckBuilderReturn;
+      window.__deckBuilderReturn = null;
+      window.__deckBuilderReturnLabel = null;
+      window.deckBuilderFromOverworld = false;
+      stopDeckMusic();
+      if (window.SOG && window.SOG.HUD && typeof window.SOG.HUD.refreshDecks === 'function') {
+        window.SOG.HUD.refreshDecks();
+      }
+      _resume();
+      return;
     }
     // Adventure (overworld HUD) context: "Back to Map" returns the player to the
     // overworld where they were. The currently-open (active) deck is already the
