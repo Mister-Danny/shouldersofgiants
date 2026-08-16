@@ -10649,6 +10649,94 @@ body.narmer-battle .adv-bubble .adv-bubble-hint {
   margin-top: 6px;
 }
 
+/* ── Hatshepsut (Egypt) battle speech bubbles — same comic-book treatment as
+   Narmer / Hammurabi / Sargon / Hanging Gardens (its own body class, so the
+   default top-right .adv-bubble box + otzi-battle rules don't reach it).
+   Hatshepsut's in-battle dialogue (intro / win / loss / tie) all render
+   through the shared #adv-bubble-otzi (opponent) + #adv-bubble-explorer
+   bubbles, exactly like the other bosses — this block is what styles them as
+   bubbles rather than the raw top-right box. */
+body.hatshepsut-battle #adv-bubble-otzi {
+  top: 80px;
+  transform: translateY(-50%);
+  right: 152px;
+  left: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 270px;
+  gap: 0;
+  background: #f0ebe0;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: -4px 4px 0 #111;
+}
+body.hatshepsut-battle #adv-bubble-otzi::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-left-color: #111;
+}
+body.hatshepsut-battle #adv-bubble-otzi::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-left-color: #f0ebe0;
+}
+body.hatshepsut-battle #adv-bubble-explorer {
+  top: 624px;
+  transform: translateY(-50%);
+  left: 168px;
+  right: auto;
+  bottom: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 200px;
+  gap: 0;
+  background: #fffef5;
+  border: 3px solid #111;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  box-shadow: 4px 4px 0 #111;
+}
+body.hatshepsut-battle #adv-bubble-explorer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -21px;
+  transform: translateY(-50%);
+  border: 10px solid transparent;
+  border-right-color: #111;
+}
+body.hatshepsut-battle #adv-bubble-explorer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -14px;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-right-color: #fffef5;
+}
+body.hatshepsut-battle .adv-bubble .adv-bubble-portrait { display: none; }
+body.hatshepsut-battle .adv-bubble .adv-bubble-text {
+  font-size: 18px;
+  line-height: 1.45;
+  color: #111;
+  text-shadow: none;
+  min-height: 28px;
+}
+body.hatshepsut-battle .adv-bubble .adv-bubble-hint {
+  color: #666;
+  margin-top: 6px;
+}
+
 /* Radial wipe — fullscreen black, clipped to an expanding circle.
    Inline clip-path style is set by JS each frame during the GSAP
    tween. .active toggles visibility; opacity stays at 1 throughout

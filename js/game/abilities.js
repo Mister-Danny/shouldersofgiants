@@ -435,15 +435,18 @@
       });
 
       // Tribe (id 36): "Next Turn — Gain +1 IP for every card you play here."
-      // This is a delayed/continuous effect (NOT an At Once — its description no
-      // longer says "At Once", so Pacal's text-based At-Once trigger skips it; the
-      // grant was always computed here, never via an onAtOnce handler). Each slot
-      // carries turnPlayed (the turn it was
-      // committed). Tribe gains +1 for every OTHER same-owner card at this
-      // location played on the turn immediately after Tribe itself
-      // (turnPlayed === tribe.turnPlayed + 1). Recomputed continuously, so
-      // the bonus scales up as each next-turn card is revealed and stops
-      // counting plays from any later turn.
+      // Delayed/continuous effect (NOT an At Once — its description no longer says
+      // "At Once", so Pacal's text-based At-Once trigger skips it; the grant was
+      // always computed here, never via an onAtOnce handler). Starting the turn
+      // AFTER Tribe was played (turnPlayed >= tribe.turnPlayed + 1) — NOT just that
+      // one turn — Tribe gains +1 for every OTHER same-owner card revealed at
+      // Tribe's location. "This location" means wherever Tribe CURRENTLY sits: the
+      // whole block is scoped to sl[loc.id] for the location being evaluated THIS
+      // pass, so if Tribe moves, this same recompute (fresh every call — see the
+      // contMod/contModSources reset above) naturally re-finds it at its new
+      // location and counts THAT location's qualifying reveals — cards left behind
+      // at Tribe's old location stop counting the moment Tribe is no longer in
+      // that location's slot array, no separate move-tracking needed.
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (tribe, tribeIdx) {
@@ -452,7 +455,7 @@
           var nextTurn = tribe.turnPlayed + 1;
           var count = 0;
           sl[loc.id].forEach(function (s, si) {
-            if (s && s.revealed && si !== tribeIdx && s.turnPlayed === nextTurn) count++;
+            if (s && s.revealed && si !== tribeIdx && s.turnPlayed >= nextTurn) count++;
           });
           if (count > 0) {
             tribe.contMod = (tribe.contMod || 0) + count;
@@ -2702,9 +2705,12 @@
      fires once per card that LANDS at Tribe's location, AFTER that card's reveal +
      At Once have resolved (the fireOnCardLandedHere dispatcher runs post-reveal).
      We gate on the EXACT same condition evaluateContinuous uses for Tribe's bonus
-     — the landed card is same-owner as Tribe AND was played the turn right after
-     Tribe (turnPlayed === tribe.turnPlayed + 1) — so the bounce fires exactly when
-     Tribe gains bonus IP from that card. Visual/audio only via SOG.RevealFx. */
+     — the landed card is same-owner as Tribe AND was played on or after the turn
+     right after Tribe (turnPlayed >= tribe.turnPlayed + 1) — so the bounce fires
+     exactly when Tribe gains bonus IP from that card. ctx.locId is Tribe's
+     CURRENT location (wherever this dispatch is firing for), so a card landing
+     at Tribe's location after Tribe has moved there still bounces correctly.
+     Visual/audio only via SOG.RevealFx. */
   function tribeReactBounce(ctx, done) {
     done = typeof done === 'function' ? done : function () {};
     if (!ctx || ctx.landedOwner !== ctx.owner) { done(); return; }   // Tribe counts same-owner cards only
@@ -2716,7 +2722,7 @@
     for (var i = 0; i < slots.length; i++) {
       if (slots[i] && slots[i].cardId === ctx.landedCardId) { landed = slots[i]; break; }
     }
-    if (!landed || landed.turnPlayed !== tribe.turnPlayed + 1) { done(); return; }  // this card grants Tribe no bonus
+    if (!landed || landed.turnPlayed < tribe.turnPlayed + 1) { done(); return; }  // this card grants Tribe no bonus
     var el = getSlotEl(ctx.owner, ctx.locId, ctx.slotIndex);
     if (el && window.SOG && SOG.RevealFx && typeof SOG.RevealFx.reactBounce === 'function') {
       // AWAIT the bounce: hold the reveal pipeline until it finishes so the

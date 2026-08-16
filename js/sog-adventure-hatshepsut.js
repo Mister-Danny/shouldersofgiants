@@ -22,18 +22,21 @@
  * ANY_FREE_MOVE_AWAY is read by input.js's refreshMoveableCards. This module only
  * declares the locations; the rules live where every other battle can reuse them.
  *
- * SCOPE — MECHANIC + DECK + LOCATIONS + REWARD ECONOMY, DIALOGUE TEXT STILL
- * EMPTY. The two-tier Serf/Giant reward gate (SOG.rewards, 20 gold Serf / 30
- * gold + the Hatshepsut card on Giant) and all ten named dialogue arrays are
- * wired; the arrays themselves have no lines in them yet — that, the overworld
- * encounter, and the Narmer-transition/Merchant-intervention cutscenes are a
- * later pass. Every outcome still ultimately calls proceed() so the engine's
- * default scoreboard handles win/loss/tie, same as Narmer's module did at the
- * equivalent stage.
+ * SCOPE — MECHANIC + DECK + LOCATIONS + REWARD ECONOMY + BOSS DIALOGUE + OWN
+ * RESULT SCOREBOARD (Stage A — done). The Narmer→Hatshepsut scripted
+ * transition and the loss-path Merchant intervention (Stage B) are a later
+ * pass. onWin/onLoss/onTie play their tier-appropriate dialogue, grant the
+ * reward if any, then show this module's OWN result popup (CONTINUE/BACK TO
+ * MAP + GAMEBOARD — the overworld-boss button set, not the engine's generic
+ * Play Again/Home) and never call proceed() — mirrors Narmer exactly (see
+ * _showResultScoreboard/_exitToOverworld/_restartBattle).
+ * The overworld ENCOUNTER (played once, on the first node click, before the
+ * first Serf battle) is wired in overworld.js — see HATSHEPSUT_ENCOUNTER_DIALOGUE
+ * / _runHatshepsutEncounter, mirroring Narmer's NARMER_ENCOUNTER_DIALOGUE /
+ * _runNarmerEncounter exactly.
  *
- * Entry: SOG.HatshepsutBattle.start() (dev panel / console). The overworld
- * 'hatshepsut' node is NOT wired to this yet — that needs map-data.js, which is
- * out of scope here.
+ * Entry: SOG.HatshepsutBattle.start() (dev panel / console), or the overworld
+ * 'hatshepsut' node on the Upper Egypt map (now wired — see overworld.js).
  */
 window.SOG = window.SOG || {};
 SOG.HatshepsutBattle = (function () {
@@ -70,6 +73,14 @@ SOG.HatshepsutBattle = (function () {
   var HATSHEPSUT_GOLD_SERF_WIN  = 20;
   var HATSHEPSUT_GOLD_GIANT_WIN = 30;
 
+  /* ── Custom result scoreboard identifiers — the module owns the end screen
+        (mirrors Narmer/Hammurabi/Sargon), so it never calls the engine's
+        proceed()/generic scoreboard. ── */
+  var RESULT_ID       = 'adv-hatshepsut-result';
+  var SHOW_RESULTS_ID = 'adv-hatshepsut-show-results';
+  var OPP_NAME        = 'Hatshepsut';
+  var OPP_BADGE       = 'HATSHEPSUT';
+
   /* ── The three locations. abilityKey is what activates the SHARED engine
         behaviour; abilityText is what the player reads on the board. ── */
   function _hatshepsutLocations() {
@@ -96,29 +107,96 @@ SOG.HatshepsutBattle = (function () {
   }
 
   /* ══════════════════════════════════════════════════════════════
-     DIALOGUE — ten named arrays, empty for now (Phase 2 stub; text is
-     being drafted separately). Same shape and naming convention as
-     Hammurabi/Hanging Gardens (OPENING_DIALOGUE/LOSS_DIALOGUE/
+     DIALOGUE — ten named arrays, matching Hammurabi/Hanging Gardens'
+     shape and naming convention (OPENING_DIALOGUE/LOSS_DIALOGUE/
      TIE_DIALOGUE unprefixed, everything else HATSHEPSUT_-prefixed) —
      not Sargon's, whose LOSS_SMACK is shared between loss and tie; this
      battle gets the full ten distinct slots. Wired to the SCRIPT's
-     onBattleStart/onWin/onLoss/onTie below via _runLinesIfAny, which
-     no-ops instantly on an empty array (see js/game/dialogue-runner.js's
-     runLines: an empty lines array hits showLine's `if (!line)` on the
-     very first call and finishes synchronously) — so the battle is
-     fully playable turn-to-turn with every array still empty; filling
-     one in later needs no further wiring.
+     onBattleStart/onWin/onLoss/onTie below via _runLinesIfAny (see
+     js/game/dialogue-runner.js's runLines). who: 'hatshepsut' = her
+     portrait, 'explorer' = the player — mirrors Narmer's convention.
+     The overworld ENCOUNTER (node click, before the first battle) lives
+     in overworld.js's HATSHEPSUT_ENCOUNTER_DIALOGUE, not here — same
+     split as Narmer's NARMER_ENCOUNTER_DIALOGUE / OPENING_DIALOGUE.
   ══════════════════════════════════════════════════════════════ */
-  var OPENING_DIALOGUE      = [];
-  var HATSHEPSUT_SERF_WIN_A = [];
-  var HATSHEPSUT_SERF_WIN_B = [];
-  var LOSS_DIALOGUE         = [];
-  var TIE_DIALOGUE          = [];
-  var HATSHEPSUT_GIANT_INTRO = [];
-  var HATSHEPSUT_GIANT_WIN_A = [];
-  var HATSHEPSUT_GIANT_WIN_B = [];
-  var HATSHEPSUT_GIANT_LOSS  = [];
-  var HATSHEPSUT_GIANT_DRAW  = [];
+
+  // Serf battle intro — teaches the Thebes → Red Sea → Punt movement loop.
+  var OPENING_DIALOGUE = [
+    { who: 'hatshepsut', text: 'Behold my grand expedition.' },
+    { who: 'hatshepsut', text: 'From Thebes, my capital…' },
+    { who: 'hatshepsut', text: 'Through The Red Sea…' },
+    { who: 'hatshepsut', text: 'To Punt, a foreign land of wonders.' },
+    { who: 'explorer',   text: 'You sail all the way out there?' },
+    { who: 'hatshepsut', text: 'I send merchants.' },
+    { who: 'hatshepsut', text: 'This is how the wise grow rich.' },
+    { who: 'explorer',   text: 'I look to follow in your footsteps.' },
+    { who: 'hatshepsut', text: 'How charming.' },
+    { who: 'hatshepsut', text: 'Let us see.' }
+  ];
+
+  // SERF WIN — grants 20 gold at the "Take it." beat, NO card. Split around the gold.
+  var HATSHEPSUT_SERF_WIN_A = [
+    { who: 'hatshepsut', text: 'It seems you managed to turn a profit after all.' },
+    { who: 'explorer',   text: 'Does that mean I won?' },
+    { who: 'hatshepsut', text: 'You did.' },
+    { who: 'hatshepsut', text: 'I have misjudged your worth.' },
+    { who: 'hatshepsut', text: 'Take it.' }
+    // → [GOLD — 20]
+  ];
+  var HATSHEPSUT_SERF_WIN_B = [
+    { who: 'hatshepsut', text: "You'll need to come back stronger." },
+    { who: 'hatshepsut', text: "I'll be ready." }
+  ];
+
+  // SERF-tier loss / tie.
+  var LOSS_DIALOGUE = [
+    { who: 'hatshepsut', text: 'As expected. Empty hands.' },
+    { who: 'explorer',   text: 'I ran out of good moves.' },
+    { who: 'hatshepsut', text: 'You ran out of goods. There is a difference.' },
+    { who: 'hatshepsut', text: 'Go. Find something of value to bring me. Then return.' }
+  ];
+  var TIE_DIALOGUE = [
+    { who: 'hatshepsut', text: 'An even trade.' },
+    { who: 'hatshepsut', text: 'Fair, yet not enough.' },
+    { who: 'hatshepsut', text: 'Come again, and bring a better offer.' }
+  ];
+
+  // GIANT REMATCH INTRO — in-battle, before the Giant rematch (onBattleStart).
+  var HATSHEPSUT_GIANT_INTRO = [
+    { who: 'hatshepsut', text: 'You return. Laden this time.' },
+    { who: 'explorer',   text: "Yes? I'm not sure what laden means." },
+    { who: 'hatshepsut', text: 'Clearly.' },
+    { who: 'hatshepsut', text: 'Let us see whose caravan reaches Punt first.' }
+  ];
+
+  // GIANT WIN — grants the Hatshepsut card THEN 30 gold, after block A.
+  var HATSHEPSUT_GIANT_WIN_A = [
+    { who: 'hatshepsut', text: 'You have outtraded me again.' },
+    { who: 'explorer',   text: 'You taught me well.' },
+    { who: 'hatshepsut', text: 'There is no shame I would rather bear.' },
+    { who: 'hatshepsut', text: 'Weak rulers build monuments to themselves.' },
+    { who: 'hatshepsut', text: 'The wise build the wealth of their nation.' }
+    // → [CARD — Hatshepsut] THEN [GOLD — 30]
+  ];
+  var HATSHEPSUT_GIANT_WIN_B = [
+    { who: 'hatshepsut', text: 'You have earned your place on the ledger.' },
+    { who: 'explorer',   text: 'Thank you Trading Queen!' },
+    { who: 'hatshepsut', text: 'Go well, trader.' }
+  ];
+
+  // GIANT LOSS — dismissive, replayable (no grant).
+  var HATSHEPSUT_GIANT_LOSS = [
+    { who: 'hatshepsut', text: 'The ledger balances in my favor. As it does.' },
+    { who: 'explorer',   text: 'I thought I had it this time…' },
+    { who: 'hatshepsut', text: 'Close is not a currency I accept.' }
+  ];
+
+  // GIANT DRAW — a stalemate is not a win, replayable (no grant).
+  var HATSHEPSUT_GIANT_DRAW = [
+    { who: 'hatshepsut', text: 'Deadlocked. Two traders, each unwilling to give ground.' },
+    { who: 'hatshepsut', text: 'We will settle this.' },
+    { who: 'hatshepsut', text: 'Again.' }
+  ];
 
   /* ══════════════════════════════════════════════════════════════
      AI SELECTOR — the untiered fallback.
@@ -333,8 +411,15 @@ SOG.HatshepsutBattle = (function () {
     });
   }
 
+  /* Called ONLY when the player actually leaves the battle screen (PLAY AGAIN /
+     BACK TO MAP / CONTINUE on the result popup below) — NOT right when dialogue
+     finishes. Deferring this is what keeps her real portrait on screen behind
+     the result popup instead of flashing to the HTML baseline (Ötzi) the
+     instant the outcome dialogue ends; restoreBattleAvatars() only needs to
+     run once we're actually about to hide/replace the battle screen. */
   function _teardown() {
     document.body.classList.remove('hatshepsut-battle');
+    hideBubbles();
     if (window.SOG && SOG.HUD && typeof SOG.HUD.restoreBattleAvatars === 'function') SOG.HUD.restoreBattleAvatars();
     var wipeEl = document.getElementById('adv-radial-wipe');
     if (wipeEl) { wipeEl.classList.remove('active'); wipeEl.style.opacity = ''; wipeEl.style.clipPath = ''; }
@@ -357,6 +442,7 @@ SOG.HatshepsutBattle = (function () {
     typeSpeedMs:       32
   });
   function runLines(lines, onAllDone) { _runner.runLines(lines, onAllDone); }
+  function hideBubbles()              { _runner.hideBubbles(); }
   function _runLinesIfAny(lines, onDone) {
     if (lines && lines.length) runLines(lines, onDone); else onDone();
   }
@@ -385,13 +471,119 @@ SOG.HatshepsutBattle = (function () {
 
   var _dialogueActive = false;
 
+  /* ── Result scoreboard + exit routing — mirrors Narmer's byte-for-byte
+        (own the screen, never proceed()). Building this HERE rather than
+        depending on the engine's generic scoreboard is what fixes the
+        overworld-boss button set (Back to Map / Continue + Gameboard,
+        instead of Arcadium's Play Again / Home / Gameboard) — see the
+        outcome-routing block below. ── */
+  function _removeFloatingResultsBtn() {
+    var b = document.getElementById(SHOW_RESULTS_ID);
+    if (b && b.parentNode) b.parentNode.removeChild(b);
+  }
+  function _removeResultPopup() {
+    var el = document.getElementById(RESULT_ID);
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    _removeFloatingResultsBtn();
+  }
+  function _hideResultForReview() {
+    var el = document.getElementById(RESULT_ID);
+    if (el) el.style.display = 'none';
+    if (document.getElementById(SHOW_RESULTS_ID)) return;
+    var btn = document.createElement('button');
+    btn.id = SHOW_RESULTS_ID; btn.className = 'btn-primary'; btn.textContent = 'SHOW RESULTS';
+    btn.style.cssText = 'position:fixed;top:14px;right:14px;z-index:10060;';
+    btn.addEventListener('click', function () {
+      var r = document.getElementById(RESULT_ID); if (r) r.style.display = '';
+      _removeFloatingResultsBtn();
+    });
+    document.body.appendChild(btn);
+  }
+  function _buildLocRow(locName, pIP, aIP) {
+    var winner = pIP > aIP ? 'player' : aIP > pIP ? 'ai' : 'tie';
+    var row = document.createElement('div'); row.className = 'result-loc-row';
+    var nm  = document.createElement('div'); nm.className  = 'result-loc-name'; nm.textContent = locName;
+    var sc  = document.createElement('div'); sc.className  = 'result-loc-scores';
+    var yu  = document.createElement('span');
+    yu.className = 'result-loc-you' + (winner === 'player' ? ' result-loc-winner' : ''); yu.textContent = 'You: ' + pIP;
+    var vs  = document.createElement('span'); vs.className = 'result-loc-vs'; vs.textContent = 'vs';
+    var op  = document.createElement('span');
+    op.className = 'result-loc-opp' + (winner === 'ai' ? ' result-loc-winner' : ''); op.textContent = OPP_NAME + ': ' + aIP;
+    sc.appendChild(yu); sc.appendChild(vs); sc.appendChild(op);
+    var bd = document.createElement('div');
+    bd.className = 'result-loc-badge result-loc-badge-' + winner;
+    bd.textContent = winner === 'player' ? 'YOU' : winner === 'ai' ? OPP_BADGE : 'TIE';
+    row.appendChild(nm); row.appendChild(sc); row.appendChild(bd);
+    return row;
+  }
+  /* Repeat-win flourish: VICTORY pops in with the chime, holds, fades → scoreboard.
+     Only reached on a replay win (already-beaten tier — zero reward, see _onWin). */
+  function _victoryFlourish(onDone) {
+    if (typeof SFX !== 'undefined' && typeof SFX.gameWon === 'function') SFX.gameWon();
+    var overlay = document.createElement('div');
+    overlay.id = 'hatshepsut-victory-flourish';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10045;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:1;transition:opacity 0.3s ease;';
+    var txt = document.createElement('div');
+    txt.className = 'result-headline result-player'; txt.textContent = 'VICTORY';
+    txt.style.cssText = 'opacity:0;transform:scale(0.7);transition:opacity 0.3s ease, transform 0.45s cubic-bezier(0.2,0.9,0.3,1);';
+    overlay.appendChild(txt);
+    (document.getElementById('sog-stage') || document.body).appendChild(overlay);
+    void txt.offsetHeight;
+    txt.style.opacity = '1'; txt.style.transform = 'scale(1)';
+    setTimeout(function () {
+      overlay.style.opacity = '0';
+      setTimeout(function () {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (onDone) onDone();
+      }, 300);
+    }, 2500);
+  }
+  function _showResultScoreboard(won, isTie, locResults, opts) {
+    opts = opts || {};
+    _removeResultPopup();
+    var overlay = document.createElement('div');
+    overlay.id = RESULT_ID; overlay.className = 'adv-result';
+    var wrap = document.createElement('div'); wrap.className = 'result-wrap';
+    var headline = document.createElement('div');
+    headline.className = 'result-headline ' + (won ? 'result-player' : isTie ? 'result-tie' : 'result-ai');
+    headline.textContent = won ? 'VICTORY' : isTie ? 'A TIE' : 'DEFEAT';
+    var locs = document.createElement('div'); locs.className = 'result-locs';
+    (locResults || []).forEach(function (r) { locs.appendChild(_buildLocRow(r.loc.name, r.playerIP, r.aiIP)); });
+    var actions = document.createElement('div'); actions.className = 'result-actions';
+    function mkBtn(label, cb) {
+      var b = document.createElement('button'); b.className = 'btn-primary'; b.textContent = label;
+      b.addEventListener('click', cb); return b;
+    }
+    if (opts.firstWin) {
+      // Shown right after a tier-win sequence (dialogue + gold [+ card]).
+      // CONTINUE just returns to the overworld — no Stage-B interstitial yet.
+      actions.appendChild(mkBtn('CONTINUE',   function () { _exitToOverworld(); }));
+      actions.appendChild(mkBtn('GAME BOARD', function () { _hideResultForReview(); }));
+    } else {
+      actions.appendChild(mkBtn('PLAY AGAIN',  function () { _restartBattle(); }));
+      actions.appendChild(mkBtn('GAMEBOARD',   function () { _hideResultForReview(); }));
+      actions.appendChild(mkBtn(won ? 'CONTINUE' : 'BACK TO MAP', function () { _exitToOverworld(); }));
+    }
+    wrap.appendChild(headline); wrap.appendChild(locs); wrap.appendChild(actions);
+    overlay.appendChild(wrap);
+    document.body.appendChild(overlay);
+  }
+  function _restartBattle() { _removeResultPopup(); _teardown(); start(); }
+  function _exitToOverworld() {
+    _removeResultPopup(); _teardown();
+    if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
+    setTimeout(function () {
+      if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') window.Overworld.resumeAfterBattle();
+    }, 100);
+  }
+
   /* ══════════════════════════════════════════════════════════════
-     SCRIPT — every outcome plays its tier-appropriate dialogue (today: all
-     ten arrays are empty, so this reduces to the reward grant, if any, plus
-     _teardown() + proceed()) then calls proceed() so the ENGINE's default
-     scoreboard handles win/loss/tie. onWin grants gold/card via SOG.rewards
-     (script-owned, like every other boss — buildHatshepsutConfig's own
-     `rewards: {}` stays empty and unused, same as Narmer's).
+     SCRIPT — every outcome plays its tier-appropriate dialogue, then the
+     reward grant if any, then the CUSTOM result scoreboard above (never the
+     engine's generic proceed() — see _showResultScoreboard). onWin grants
+     gold/card via SOG.rewards (script-owned, like every other boss —
+     buildHatshepsutConfig's own `rewards: {}` stays empty and unused, same
+     as Narmer's).
   ══════════════════════════════════════════════════════════════ */
   var HATSHEPSUT_SCRIPT = {
     onIntro: function (ctx, done) {
@@ -421,54 +613,65 @@ SOG.HatshepsutBattle = (function () {
 
     isInputBlocked: function () { return _dialogueActive; },
 
-    /* Two-tier reward gate (SOG.rewards): the one-shot snapshot game.js's
-       endGame() stages BEFORE stamping sog_node_hatshepsut_<tier>_beaten —
-       reading _tierBeatenLocal directly here would see the post-stamp value
-       and misread the actual first win. grantCard implies firstTierWin &&
-       tier==='giant' (SOG.rewards' own contract), so the three branches below
-       are mutually exclusive: first Giant win → card+gold; first Serf win →
-       gold only; anything else (a replay of an already-beaten tier) → dialogue
-       only, zero reward (anti-farming). Mirrors Narmer's _onWin exactly,
-       amounts are this boss's own (20/30, see HATSHEPSUT_GOLD_* above). */
-    onWin: function (ctx, result, proceed) {
-      var r = (window.SOG && SOG.rewards)
-            ? SOG.rewards.consume('hatshepsut')
-            : { firstTierWin: true, tier: _battleWasGiantRematch ? 'giant' : 'serf', grantCard: _battleWasGiantRematch };
-      var finishToScoreboard = function () { _teardown(); proceed(); };
-      if (r.grantCard) {
-        // FIRST GIANT win — card, THEN gold, split around the "Take this" beat.
-        _runLinesIfAny(HATSHEPSUT_GIANT_WIN_A, function () {
-          _grantHatshepsutCard(function () {
-            _grantGold(HATSHEPSUT_GOLD_GIANT_WIN, function () {
-              _runLinesIfAny(HATSHEPSUT_GIANT_WIN_B, finishToScoreboard);
+    /* Outcome routing — the module OWNS the screen (never proceed()); see
+       _showResultScoreboard/_exitToOverworld/_restartBattle above. */
+    onWin:  function (ctx, result, proceed) { _onWin(result.locResults); },
+    onLoss: function (ctx, result, proceed) { _onLoss(result.locResults); },
+    onTie:  function (ctx, result, proceed) { _onTie(result.locResults); }
+  };
+
+  /* Two-tier reward gate (SOG.rewards): the one-shot snapshot game.js's
+     endGame() stages BEFORE stamping sog_node_hatshepsut_<tier>_beaten —
+     reading _tierBeatenLocal directly here would see the post-stamp value
+     and misread the actual first win. grantCard implies firstTierWin &&
+     tier==='giant' (SOG.rewards' own contract), so the three branches below
+     are mutually exclusive: first Giant win → card+gold; first Serf win →
+     gold only; anything else (a replay of an already-beaten tier) → flourish
+     only, zero reward (anti-farming). Mirrors Narmer's _onWin exactly,
+     amounts are this boss's own (20/30, see HATSHEPSUT_GOLD_* above). */
+  function _onWin(locResults) {
+    var r = (window.SOG && SOG.rewards)
+          ? SOG.rewards.consume('hatshepsut')
+          : { firstTierWin: true, tier: _battleWasGiantRematch ? 'giant' : 'serf', grantCard: _battleWasGiantRematch };
+    if (r.grantCard) {
+      // FIRST GIANT win — card, THEN gold, split around the "Take it" beat.
+      _removeResultPopup();
+      _runLinesIfAny(HATSHEPSUT_GIANT_WIN_A, function () {
+        _grantHatshepsutCard(function () {
+          _grantGold(HATSHEPSUT_GOLD_GIANT_WIN, function () {
+            _runLinesIfAny(HATSHEPSUT_GIANT_WIN_B, function () {
+              _showResultScoreboard(true, false, locResults, { firstWin: true });
             });
           });
         });
-      } else if (r.firstTierWin) {
-        // FIRST SERF win — gold only, no card.
-        _runLinesIfAny(HATSHEPSUT_SERF_WIN_A, function () {
-          _grantGold(HATSHEPSUT_GOLD_SERF_WIN, function () {
-            _runLinesIfAny(HATSHEPSUT_SERF_WIN_B, finishToScoreboard);
+      });
+    } else if (r.firstTierWin) {
+      // FIRST SERF win — gold only, no card.
+      _removeResultPopup();
+      _runLinesIfAny(HATSHEPSUT_SERF_WIN_A, function () {
+        _grantGold(HATSHEPSUT_GOLD_SERF_WIN, function () {
+          _runLinesIfAny(HATSHEPSUT_SERF_WIN_B, function () {
+            _showResultScoreboard(true, false, locResults, { firstWin: true });
           });
         });
-      } else {
-        // Replay of an already-beaten tier — dialogue only, zero reward.
-        var linesA = _battleWasGiantRematch ? HATSHEPSUT_GIANT_WIN_A : HATSHEPSUT_SERF_WIN_A;
-        var linesB = _battleWasGiantRematch ? HATSHEPSUT_GIANT_WIN_B : HATSHEPSUT_SERF_WIN_B;
-        _runLinesIfAny(linesA, function () { _runLinesIfAny(linesB, finishToScoreboard); });
-      }
-    },
-    onLoss: function (ctx, result, proceed) {
-      _runLinesIfAny(_battleWasGiantRematch ? HATSHEPSUT_GIANT_LOSS : LOSS_DIALOGUE, function () {
-        _teardown(); proceed();
       });
-    },
-    onTie: function (ctx, result, proceed) {
-      _runLinesIfAny(_battleWasGiantRematch ? HATSHEPSUT_GIANT_DRAW : TIE_DIALOGUE, function () {
-        _teardown(); proceed();
+    } else {
+      // Replay of an already-beaten tier — flourish only, zero reward.
+      _victoryFlourish(function () {
+        _showResultScoreboard(true, false, locResults, {});
       });
     }
-  };
+  }
+  function _onLoss(locResults) { _onDefeatOrTie(false, locResults); }
+  function _onTie(locResults)  { _onDefeatOrTie(true,  locResults); }
+  function _onDefeatOrTie(isTie, locResults) {
+    var lines = _battleWasGiantRematch
+      ? (isTie ? HATSHEPSUT_GIANT_DRAW : HATSHEPSUT_GIANT_LOSS)
+      : (isTie ? TIE_DIALOGUE : LOSS_DIALOGUE);
+    _runLinesIfAny(lines, function () {
+      _showResultScoreboard(false, isTie, locResults, {});
+    });
+  }
 
   if (window.SOG && SOG.BattleHooks && typeof SOG.BattleHooks.register === 'function') {
     SOG.BattleHooks.register('hatshepsut', HATSHEPSUT_SCRIPT);

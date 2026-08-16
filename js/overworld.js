@@ -44,6 +44,7 @@ var Overworld = (function () {
   var KEY_EGYPT_NODE_LIVE           = 'sog_egypt_node_live';            // post-Neb: Egypt Double Crown node is active + post-Neb beat has played (set once, at end of the beat)
   var KEY_EGYPT_NODE_ARRIVAL        = 'sog_egypt_node_arrival_seen';    // one-time Egypt "funny hat" arrival beat (fires when reaching Egypt with the node live)
   var KEY_MET_NARMER                = 'sog_met_narmer';                 // set after the first Double Crown encounter → later clicks skip straight to the battle
+  var KEY_MET_HATSHEPSUT            = 'sog_met_hatshepsut';             // set after the first Hatshepsut encounter → later clicks skip straight to the battle
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -359,6 +360,26 @@ var Overworld = (function () {
     { who: 'narmer',   text: 'Unity does not exist unless we are all as one.' },
     { who: 'explorer', text: 'Gulp.' },
     { who: 'narmer',   text: 'And you are not one of us.' }
+  ];
+
+  // Hatshepsut (Upper Egypt) encounter — plays on the first Hatshepsut node
+  // click (walk up first), then hands off to the Serf battle. EDITABLE.
+  var HATSHEPSUT_ENCOUNTER_DIALOGUE = [
+    { who: 'hatshepsut', text: 'Hello traveler. Welcome to my shore.' },
+    { who: 'explorer',   text: 'Whoa! Are you the queen?' },
+    { who: 'hatshepsut', text: 'I am Hatshepsut. Pharaoh of Egypt.' },
+    { who: 'explorer',   text: "But you're a lady pharaoh, right?" },
+    { who: 'explorer',   text: "You have that beard thing, but I'm pretty sure you're a girl." },
+    { who: 'hatshepsut', text: 'A pharaoh is a pharaoh.' },
+    { who: 'hatshepsut', text: 'And I play the role.' },
+    { who: 'explorer',   text: 'And you play it very well.' },
+    { who: 'hatshepsut', text: 'You flatter me with your words.' },
+    { who: 'explorer',   text: "You're welcome." },
+    { who: 'hatshepsut', text: 'Yet, you arrive with empty hands.' },
+    { who: 'explorer',   text: 'Empty hands?' },
+    { who: 'hatshepsut', text: 'Visitors must bring something to trade.' },
+    { who: 'explorer',   text: 'Umm… I have some cards?' },
+    { who: 'hatshepsut', text: 'Then we shall see what they are worth.' }
   ];
 
   // Hammurabi (Babylon) encounter — plays on node click when the active deck has
@@ -1199,7 +1220,8 @@ var Overworld = (function () {
     'sargon':          'serf',
     'hammurabi':       'serf',
     'hanging-gardens': 'serf',
-    'narmer':          'serf'
+    'narmer':          'serf',
+    'hatshepsut':      'serf'
   };
   function _firstEncounterTier(key) { return FIRST_ENCOUNTER_TIER[key] || 'serf'; }
 
@@ -1598,6 +1620,24 @@ var Overworld = (function () {
         _routeBossTier('narmer', _launchNarmerBattle, function () {
           _runNarmerEncounter(NARMER_ENCOUNTER_DIALOGUE, function () {
             _launchAtTier(_firstEncounterTier('narmer'), _launchNarmerBattle);
+          });
+        });
+      });
+      return;
+    }
+
+    // ── Hatshepsut (Upper Egypt) — walk up to the node, then her trade
+    //    battle. FIRST click plays the encounter dialogue → battle at her
+    //    first-encounter tier (Serf); afterwards the shared _routeBossTier
+    //    rule applies (Serf → Giant automatically, picker only when fully
+    //    cleared). Mirrors the Narmer block above exactly. ──
+    if (node.id === 'hatshepsut' && currentMapId === 'upper-egypt') {
+      isDialogueLocked = true;
+      cancelIdle();
+      walkPath(_routeTo(node.id), function () {
+        _routeBossTier('hatshepsut', _launchHatshepsutBattle, function () {
+          _runHatshepsutEncounter(HATSHEPSUT_ENCOUNTER_DIALOGUE, function () {
+            _launchAtTier(_firstEncounterTier('hatshepsut'), _launchHatshepsutBattle);
           });
         });
       });
@@ -2673,6 +2713,27 @@ var Overworld = (function () {
     });
   }
 
+  /* Hatshepsut (Upper Egypt) encounter — mirrors _runNarmerEncounter. Sets
+     KEY_MET_HATSHEPSUT on completion so later node clicks skip straight into
+     the battle. */
+  function _runHatshepsutEncounter(lines, onDone) {
+    var hud = window.SOG && window.SOG.HUD;
+    if (!hud || typeof hud.enterDialogueMode !== 'function') { if (onDone) onDone(); return; }
+    // Mark Hatshepsut ENGAGED at the encounter start and reveal her Serf flag
+    // now — it's held off the map until this beat (see _renderNodeFlags's
+    // engagement gate), so it ERECTS as the walk-up conversation begins.
+    try { localStorage.setItem('sog_node_encountered_hatshepsut', 'true'); } catch (e) {}
+    _refreshNodeFlags();
+    _erectSerfFlagFor('hatshepsut');
+    hud.enterDialogueMode(null, function () {
+      _runLinesKeepOpen(lines, function () {
+        try { localStorage.setItem(KEY_MET_HATSHEPSUT, 'true'); } catch (e) {}
+        if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+        if (onDone) onDone();
+      });
+    });
+  }
+
   /* First-market interstitial — one-time, fired from _exitMarket on the FIRST market
      return (post-Serf-win shopping). Sargon does NOT appear here; the only forward path
      is back to Gilgamesh for the Giant rematch. Gated so it plays exactly once. */
@@ -3189,6 +3250,24 @@ var Overworld = (function () {
         nb.start();
       } else {
         console.warn('[Overworld] SOG.NarmerBattle not found — battle not built yet');
+        _clearWipe();
+        isDialogueLocked = false;
+        scheduleIdle();
+      }
+    });
+  }
+
+  /* Hatshepsut Battle — fire the radial wipe from her node, then start
+     SOG.HatshepsutBattle. Mirrors _launchNarmerBattle. The battle's script
+     (scriptHook 'hatshepsut') fades the wipe cover out in onBattleStart to
+     reveal the board. */
+  function _launchHatshepsutBattle() {
+    _fireWipeFromNode('hatshepsut', function () {
+      var hb = window.SOG && window.SOG.HatshepsutBattle;
+      if (hb && typeof hb.start === 'function') {
+        hb.start();
+      } else {
+        console.warn('[Overworld] SOG.HatshepsutBattle not found — battle not built yet');
         _clearWipe();
         isDialogueLocked = false;
         scheduleIdle();
