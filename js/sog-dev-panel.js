@@ -73,30 +73,6 @@ SOG.DevPanel = (function () {
     { hook: 'narmer',          label: 'Narmer (Egypt)',        module: 'NarmerBattle',         skipFlag: 'sog_narmer_battle_opening_seen' }
   ];
 
-  var FLAG_GROUPS = [
-    { title: 'Milestones', flags: [
-      { key: 'sog_adventure_intro_complete',            label: 'Adventure intro done' },
-      { key: 'sog_battle_neanderthal_complete',         label: 'Neanderthal beaten' },
-      { key: 'sog_post_neanderthal_overworld_complete', label: 'Post-Neanderthal beat done' },
-      { key: 'sog_battle_otzi_complete',                label: 'Ötzi beaten' },
-      { key: 'sog_mesopotamia_arrival_complete',        label: 'Mesopotamia arrival done' },
-      { key: 'sog_cuneiform_granted',                   label: 'Cuneiform granted' },
-      { key: 'sog_deckbuilder_unlocked',                label: 'Deck builder unlocked' }
-    ]},
-    { title: 'Node reveals', flags: [
-      { key: 'sog_sargon_node_revealed',     label: 'Sargon node revealed' },
-      { key: 'sog_hammurabi_node_revealed',  label: 'Hammurabi node revealed' },
-      { key: 'sog_hanging_gardens_revealed', label: 'Hanging Gardens revealed' },
-      { key: 'sog_egypt_node_live',          label: 'Egypt / Double Crown live' }
-    ]},
-    { title: 'Encounter + misc', flags: [
-      { key: 'sog_met_gilgamesh',                  label: 'Met Gilgamesh' },
-      { key: 'sog_met_narmer',                     label: 'Met Narmer' },
-      { key: 'sog_first_market_interstitial_seen', label: 'First-market beat seen' },
-      { key: 'sog_dev_unlock_all',                 label: 'DEV: deck builder shows ALL cards (view-only)' }
-    ]}
-  ];
-
   var MAPS = [
     { id: 'eastafrica',  label: 'East Africa' },
     { id: 'mesopotamia', label: 'Mesopotamia' },
@@ -186,9 +162,20 @@ SOG.DevPanel = (function () {
     } catch (e) {}
   }
 
-  /* THE single write path. Everything staged lands here. */
+  /* THE single write path. Everything staged lands here.
+
+     The progression scrub's card delta is folded in ON TOP of the Cards
+     section's staged list rather than written separately: _applyCards sets
+     the collection to EXACTLY what it's handed, so a second pass would just
+     undo the first. The scrub wins on conflict — it is the more specific
+     intent (you moved the story to a point that either includes that card or
+     doesn't). */
   function _applyAll() {
-    if (_stagedCards) _applyCards(_stagedCards);
+    if (_stagedCards) {
+      var ids = _stagedCards.filter(function (id) { return _stagedCardDrop.indexOf(id) === -1; });
+      _stagedCardAdd.forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); });
+      _applyCards(ids);
+    }
     if (_stagedGold != null) _applyGold(_stagedGold);
     if (_stagedFlags) _applyFlags(_stagedFlags);
     _refreshHud();
@@ -550,65 +537,381 @@ SOG.DevPanel = (function () {
     frag.appendChild(row);
   }
 
-  /* ── SECTION 3 · PROGRESSION ───────────────────────────────────────── */
+  /* ── SECTION 3 · PROGRESSION — battle-tier scrubber ─────────────────────
+     Deliberately does NOT read window.SOG_MAP_DATA.milestones — that list is
+     node-REVEAL granularity ("Babylon revealed"), the wrong unit for
+     battle-state testing, and the map editor's own Story-point slider still
+     owns it; this panel must never write to it. Each stop here is one
+     battle TIER instead: most bosses get two stops ("<Boss> — Serf" /
+     "— Giant"), a handful get one (no Serf/Giant split).
+
+     BATTLE_ORDER below is the only hand-curated part — a flat list of which
+     node, on which map, comes next. It has to be curated: the underlying
+     showFrom gates mix boss-beaten flags, node-REVEAL flags (sog_sargon_
+     node_revealed, ...) and region-"complete" flags (egypt-complete, ...) in
+     ways that don't reduce to one mechanical rule off a single node's own
+     fields — e.g. Jesus/Paul sit in the 'levant' map's node array but their
+     showFrom chain places them after Rome's Augustus. Traced by hand once
+     by walking every battle node's showFrom back to its origin and
+     cross-checked against every existing milestones.js "-complete" entry.
+
+     Everything ELSE about a stop is read LIVE off the node object — name,
+     hook, tiers, victoryFlag — nothing about an individual boss is
+     duplicated here. A new TWO-TIER boss slotted into an existing map needs
+     one [mapId, nodeId] line added below; its label/tiers/flags are then
+     pulled fresh every time the panel opens, same as every other boss.
+     Single- vs two-tier is the tiers:2 check in _battleStops — purely
+     generic, no boss name hardcoded as "the exception": Darius and Hannibal
+     read as single-tier today because their OWN node data says tiers:1, and
+     a future Attila (or anyone else) would read the same way the moment his
+     node exists — nothing here needs to change. The two Prehistory nodes
+     are the one true exception: they carry no `hook` field at all (their
+     battle modules use bespoke completion flags, not the
+     sog_node_<hook>_<tier>_beaten pattern), so NO_HOOK_FLAGS below is the
+     only per-boss hardcoding in this file. */
+  var BATTLE_ORDER = [
+    ['eastafrica',  'prehistory'],
+    ['eastafrica',  'egypt-signpost'],
+    ['mesopotamia', 'walls-of-uruk'],
+    ['mesopotamia', 'sargon'],
+    ['mesopotamia', 'hammurabi'],
+    ['mesopotamia', 'hanging-gardens'],
+    ['egypt',       'narmer'],
+    ['upper-egypt', 'hatshepsut'],
+    ['upper-egypt', 'ramses'],
+    ['upper-egypt', 'akhenaten'],
+    ['upper-egypt', 'kush'],
+    ['india',       'greatbath'],
+    ['india',       'siddhartha'],
+    ['india',       'ashoka'],
+    ['china',       'confucius'],
+    ['china',       'shihuangdi'],
+    ['china',       'zhangqian'],
+    ['persia',      'darius'],
+    ['levant',      'abraham'],
+    ['levant',      'moses'],
+    ['levant',      'david'],
+    ['greece',      'leonidas'],
+    ['greece',      'pericles'],
+    ['greece',      'socrates'],
+    ['greece',      'alexander'],
+    ['rome',        'romulus'],
+    ['rome',        'cincinnatus'],
+    ['rome',        'hannibal'],
+    ['rome',        'julius'],
+    ['rome',        'augustus'],
+    ['levant',      'jesus'],
+    ['levant',      'paul'],
+    ['rome',        'constantine']
+  ];
+  var NO_HOOK_FLAGS = {
+    'prehistory':     'sog_battle_neanderthal_complete',
+    'egypt-signpost': 'sog_battle_otzi_complete'
+  };
+  /* node.name is a MAP label, not the boss identity — it's "Akkad"/"Babylon"/
+     "The Hanging Gardens" for the three Mesopotamia Giants, and "To Egypt"/
+     "Prehistory" for the two structural nodes (Otzi's node has no label at
+     all: see its own note in map-data.js). Override with the boss's actual
+     name — same names already shown elsewhere in this panel's own BOSSES
+     list and in the shipped card names (cards.js #34/#35) — everywhere else
+     node.name already IS the boss name, so this stays a short exception
+     table, not a parallel name database. */
+  var NAME_OVERRIDES = {
+    'egypt-signpost':  'Otzi',
+    'prehistory':      'Neanderthal',
+    'walls-of-uruk':   'Gilgamesh',
+    'sargon':          'Sargon',
+    'hammurabi':       'Hammurabi',
+    'hanging-gardens': 'Nebuchadnezzar'
+  };
+
+  /* Build the ordered stop list fresh every call — reads LIVE node data, so
+     a renamed/retiered boss (or one BATTLE_ORDER references that's since
+     been removed) always reflects current data/map-data.js, not a snapshot. */
+  function _battleStops() {
+    var maps = (window.SOG_MAP_DATA && window.SOG_MAP_DATA.maps) || {};
+    var stops = [];
+    BATTLE_ORDER.forEach(function (ref) {
+      var mapId = ref[0], nodeId = ref[1];
+      var nodes = (maps[mapId] && maps[mapId].nodes) || [];
+      var node = null;
+      for (var i = 0; i < nodes.length; i++) { if (nodes[i].id === nodeId) { node = nodes[i]; break; } }
+      if (!node) return;   // renamed/removed out from under this order entry — skip, don't throw
+      var label = NAME_OVERRIDES[node.id] || node.name || node.id;
+      var noHookFlag = NO_HOOK_FLAGS[nodeId];
+      if (noHookFlag) { stops.push({ label: label, flag: noHookFlag, nar: _narrative(nodeId, 'single') }); return; }
+      if (!node.hook) return;
+      if (node.tiers === 2) {
+        stops.push({ label: label + ' — Serf',  flag: 'sog_node_' + node.hook + '_serf_beaten',
+                     nar: _narrative(nodeId, 'serf',  node.hook) });
+        stops.push({ label: label + ' — Giant', flag: 'sog_node_' + node.hook + '_giant_beaten',
+                     nar: _narrative(nodeId, 'giant', node.hook) });
+      } else {
+        stops.push({ label: label, flag: 'sog_node_' + node.hook + '_giant_beaten',
+                     nar: _narrative(nodeId, 'single', node.hook) });
+      }
+    });
+    return stops;
+  }
+
+  /* ── NARRATIVE / "SEEN" STATE PER STOP ─────────────────────────────────
+     Beaten flags alone are NOT the game's state. Two separate problems:
+
+     BACKWARD — the one-time "seen" flags (battle openings, overworld
+     encounters, arrival beats) survive a rewind, so scrubbing back and
+     re-beating a boss skips every piece of dialogue: the state says beaten
+     is false but met/opening/encountered are still true.
+
+     FORWARD — worse, and non-obvious: the early game's node VISIBILITY does
+     not key off beaten flags at all. data/map-data.js's showFrom chain runs
+     through milestones whose flags are narrative (see its `milestones`
+     array): mesopotamia-arrival → sog_mesopotamia_arrival_complete,
+     gilgamesh-beaten → sog_battle_gilgamesh_complete, sargon-revealed →
+     sog_sargon_node_revealed, neb-beaten → sog_egypt_node_live. Setting only
+     sog_node_*_beaten leaves every stop up to Narmer cosmetic — flags
+     stamped, nodes still invisible. Both directions are handled here.
+
+     This table is hand-written because the flags genuinely do not reduce to
+     a pattern — confirmed by reading every setter:
+       · opening-seen is sog_<hook>_opening_seen for gilgamesh/sargon/
+         hammurabi/hatshepsut/otzi, but narmer and hanging-gardens insert an
+         extra _battle_, and hanging-gardens ALSO spells its hook with
+         underscores (its beaten flag keeps the hyphen:
+         sog_node_hanging-gardens_giant_beaten). Prehistory has none at all.
+       · only 3 of 8 bosses have a sog_met_* flag (gilgamesh/narmer/
+         hatshepsut); sargon and hammurabi gate on the generic encountered
+         stamp alone.
+       · the legacy sog_battle_*_complete fallbacks (overworld.js
+         LEGACY_ENCOUNTERED) rename two bosses outright — hanging-gardens →
+         _nebuchadnezzar_, prehistory → _neanderthal_.
+       · transition/arrival/reveal flags are per-beat one-offs with no
+         relation to any hook name.
+     sog_node_encountered_<hook> is the ONE genuinely generic key (game.js
+     endGame writes it from the raw hook), so it is derived below, not listed.
+
+     Each transition attaches to the stop that PRECEDES it — the reveal that
+     fires on a Giant win lives on that Giant stop, so stepping one stop back
+     from it re-hides the node it revealed.
+
+     `set`   — bidirectional: true at/before this stop, cleared after it.
+     `cards` — a card DELIVERED at this stop, {id, flag}: bidirectional, with
+               the collection kept in sync so the flag and the card never
+               disagree (the whole point of tracking them together).
+     `clear` — cleared after this stop but never set going forward, for
+               CONDITIONAL beats that aren't part of linear progress.
+               Cuneiform is the only one: it's granted by the Farmer
+               intervention after LOSING to Gilgamesh, so scrubbing forward
+               must not fabricate it, while scrubbing back must undo it.
+
+     The six BOSS cards (Sargon 37, Gilgamesh 43, Hammurabi 47, Neb 50,
+     Narmer 51, Hatshepsut 52) are deliberately absent: they have no
+     delivered-flag, gating instead on sog_node_<hook>_giant_beaten through
+     SOG.rewards.consume — clearing the beaten flag already re-arms the
+     grant, so the card is re-won on the replay rather than confiscated. */
+  var NARRATIVE = {
+    'prehistory': { single: {
+      // The intro gates the whole map; beating Neanderthal implies it ran.
+      set: ['sog_adventure_intro_complete', 'sog_post_neanderthal_overworld_complete'],
+      cards: [{ id: 33, flag: 'sog_card_lucy_unlocked' }]     // Lucy — post-victory goodbye
+    } },
+    'egypt-signpost': { single: {
+      set: ['sog_otzi_opening_seen',
+            'sog_eastafrica_postotzi_dialogue_seen',           // East Africa return beat
+            'sog_toegypt_goodbye_seen',                        // Hunter's goodbye on the To Egypt click
+            'sog_mesopotamia_arrival_complete'],               // gates walls-of-uruk (mesopotamia-arrival)
+      cards: [{ id: 35, flag: 'sog_card_otzi_unlocked' }]
+    } },
+    'walls-of-uruk': {
+      serf: {
+        set: ['sog_met_gilgamesh', 'sog_gilgamesh_opening_seen',
+              'sog_battle_gilgamesh_complete',                 // gilgamesh-beaten milestone
+              'sog_gilgamesh_phase1_complete',
+              // First market return is the post-Serf-win shopping trip.
+              'sog_market_first_visit_done', 'sog_market_intro_seen',
+              'sog_first_market_interstitial_seen', 'sog_deckbuilder_unlocked'],
+        clear: [{ flag: 'sog_cuneiform_granted', card: 46 }]
+      },
+      giant: { set: ['sog_sargon_node_revealed'] }             // dust-storm reveal fires on the Giant win
+    },
+    'sargon': {
+      serf:  { set: ['sog_sargon_opening_seen', 'sog_battle_sargon_complete'] },
+      giant: { set: ['sog_hammurabi_node_revealed'] }
+    },
+    'hammurabi': {
+      serf:  { set: ['sog_hammurabi_opening_seen', 'sog_battle_hammurabi_complete'] },
+      giant: { set: ['sog_hanging_gardens_revealed'] }
+    },
+    'hanging-gardens': {
+      serf:  { set: ['sog_hanging_gardens_battle_opening_seen',   // NOT sog_hanging-gardens_opening_seen
+                     'sog_hanging_gardens_flood_intro_seen',
+                     'sog_battle_nebuchadnezzar_complete'] },     // legacy key renames the boss
+      giant: { set: ['sog_egypt_node_live',                       // neb-beaten → opens Egypt + Narmer
+                     'sog_egypt_arrival_seen', 'sog_egypt_node_arrival_seen',
+                     'sog_egypt_market_intro_seen'] }
+    },
+    'narmer': {
+      serf:  { set: ['sog_met_narmer', 'sog_narmer_battle_opening_seen',  // extra _battle_
+                     'sog_battle_narmer_complete'] },
+      giant: { set: [] }
+    },
+    'hatshepsut': {
+      serf:  { set: ['sog_met_hatshepsut', 'sog_hatshepsut_opening_seen'] },
+      giant: { set: [] }
+    }
+  };
+
+  /* Resolve one stop's narrative payload: the table entry (if any) plus the
+     generic encountered stamp. The stamp belongs on the FIRST stop of a boss
+     — it means "this node's battle has been completed at least once", which
+     is exactly what the Serf (or single) stop represents. */
+  function _narrative(nodeId, tier, hook) {
+    var e = (NARRATIVE[nodeId] && NARRATIVE[nodeId][tier]) || {};
+    var set = (e.set || []).slice();
+    if (hook && tier !== 'giant') set.push('sog_node_encountered_' + hook);
+    return { set: set, cards: e.cards || [], clear: e.clear || [] };
+  }
+
+  /* Reflect real state on open: the furthest-along stop whose beaten flag is
+     already set. Assumes normal (monotonic) progression. */
+  function _currentBattleIdx(stops) {
+    var idx = 0;
+    stops.forEach(function (s, i) { if (_getFlag(s.flag)) idx = i; });
+    return idx;
+  }
+
+  /* Staged card delta from the progression scrub, folded into the card set at
+     apply time (see _applyAll). Kept separate from _stagedCards so the Cards
+     section's own checkboxes stay independent of the scrub. */
+  var _stagedCardAdd = [], _stagedCardDrop = [];
+
+  /* Stage the FULL state for stop `idx` — beaten + narrative + delivered
+     cards, in both directions. Two passes so a flag listed on more than one
+     stop can never be cleared by a later stop's pass: collect every flag this
+     scrubber owns as false, then turn on everything at/before idx. */
+  function _stageBattle(stops, idx) {
+    var flags = {};
+    _stagedCardAdd = []; _stagedCardDrop = [];
+    stops.forEach(function (s) {
+      flags[s.flag] = false;
+      s.nar.set.forEach(function (f) { flags[f] = false; });
+      s.nar.cards.forEach(function (c) { flags[c.flag] = false; });
+      s.nar.clear.forEach(function (c) { flags[c.flag] = false; });
+    });
+    stops.forEach(function (s, i) {
+      if (i > idx) {
+        // After the scrub point: the conditional beats get undone too.
+        s.nar.clear.forEach(function (c) {
+          if (c.card != null && _stagedCardDrop.indexOf(c.card) === -1) _stagedCardDrop.push(c.card);
+        });
+        s.nar.cards.forEach(function (c) {
+          if (_stagedCardDrop.indexOf(c.id) === -1) _stagedCardDrop.push(c.id);
+        });
+        return;
+      }
+      flags[s.flag] = true;
+      s.nar.set.forEach(function (f) { flags[f] = true; });
+      s.nar.cards.forEach(function (c) {
+        flags[c.flag] = true;
+        if (_stagedCardAdd.indexOf(c.id) === -1) _stagedCardAdd.push(c.id);
+      });
+      // `clear` entries are left exactly as the save already has them.
+      s.nar.clear.forEach(function (c) { delete flags[c.flag]; });
+    });
+    _stagedFlags = flags;
+  }
+
+  /* What APPLY is about to do, in the player's terms — surfaced under the
+     slider and again in the confirm() when cards would actually be taken
+     away, so a rewind can never quietly shrink the collection. */
+  function _scrubSummary() {
+    var set = 0, cleared = 0;
+    Object.keys(_stagedFlags || {}).forEach(function (k) {
+      var want = !!_stagedFlags[k], now = _getFlag(k);
+      if (want && !now) set++;
+      else if (!want && now) cleared++;
+    });
+    var owned = _readOwnedCardIds();
+    var starters = _starters();
+    var drop = _stagedCardDrop.filter(function (id) {
+      return owned.indexOf(id) !== -1 && starters.indexOf(id) === -1;
+    });
+    var add = _stagedCardAdd.filter(function (id) { return owned.indexOf(id) === -1; });
+    return { set: set, cleared: cleared, drop: drop, add: add };
+  }
+
+  function _cardName(id) {
+    var c = _allCards().filter(function (x) { return x.id === id; })[0];
+    return c ? c.name : ('#' + id);
+  }
+
   function _buildProgressionSection(frag) {
-    frag.appendChild(_sec('3 · Progression — beaten state & flags'));
-    frag.appendChild(_note('Serf/Giant write sog_node_<boss>_<tier>_beaten; “Encountered” writes ' +
-      'sog_node_encountered_<boss>. These drive flag stamps, node visibility and the replay ' +
-      'picker (picker shows only when BOTH tiers are beaten).'));
+    frag.appendChild(_sec('3 · Progression — battle-tier scrubber'));
 
-    _stagedFlags = {};
+    var stops = _battleStops();
+    if (!stops.length) {
+      frag.appendChild(_note('No battle stops resolved — is data/map-data.js loaded?'));
+      _stagedFlags = {};
+      return;
+    }
 
-    var tbl = _el('table', 'dp-bosstbl');
-    var hr = document.createElement('tr');
-    ['Boss', 'Serf beaten', 'Giant beaten', 'Encountered'].forEach(function (h) {
-      hr.appendChild(_el('th', null, h));
-    });
-    tbl.appendChild(hr);
-    BOSSES.forEach(function (b) {
-      var tr = document.createElement('tr');
-      tr.appendChild(_el('td', null, b.label));
-      [['serf', 'sog_node_' + b.hook + '_serf_beaten'],
-       ['giant', 'sog_node_' + b.hook + '_giant_beaten'],
-       ['enc',  'sog_node_encountered_' + b.hook]].forEach(function (pair) {
-        var key = pair[1];
-        var td  = document.createElement('td');
-        var cb  = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = _getFlag(key);
-        _stagedFlags[key] = cb.checked;
-        cb.addEventListener('change', function () { _stagedFlags[key] = cb.checked; _markDirty(); });
-        td.appendChild(cb);
-        tr.appendChild(td);
-      });
-      tbl.appendChild(tr);
-    });
-    frag.appendChild(tbl);
+    frag.appendChild(_note('One stop per battle TIER (Serf/Giant split where the boss has one), in ' +
+      'game order. Drag or step ◀▶ to a stop, then APPLY: the save is rewritten to that exact point — ' +
+      'beaten flags AND narrative state (openings, encounters, arrivals, node reveals) both directions, ' +
+      'so nodes actually appear going forward and dialogue replays going back.'));
 
-    FLAG_GROUPS.forEach(function (grp) {
-      frag.appendChild(_el('div', 'dp-eragrp', grp.title));
-      var grid = _el('div', 'dp-grid');
-      grp.flags.forEach(function (f) {
-        var lab = _el('label', 'dp-chk');
-        var cb  = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = _getFlag(f.key);
-        _stagedFlags[f.key] = cb.checked;
-        cb.addEventListener('change', function () { _stagedFlags[f.key] = cb.checked; _markDirty(); });
-        lab.appendChild(cb);
-        lab.appendChild(_el('span', null, f.label));
-        grid.appendChild(lab);
-      });
-      frag.appendChild(grid);
-    });
+    var idx = Math.min(_currentBattleIdx(stops), stops.length - 1);
+    _stageBattle(stops, idx);
+
+    var slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min  = '0';
+    slider.max  = String(stops.length - 1);
+    slider.step = '1';
+    slider.value = String(idx);
+    slider.style.flex = '1';
+
+    var labelEl = _el('div', 'dp-cur', stops[idx].label);
+    var sumEl   = _el('div', 'dp-note');
+
+    function _sync() {
+      slider.value = String(idx);
+      labelEl.textContent = stops[idx] ? stops[idx].label : '—';
+      prevBtn.disabled = idx <= 0;
+      nextBtn.disabled = idx >= stops.length - 1;
+      prevBtn.style.opacity = prevBtn.disabled ? '.35' : '1';
+      nextBtn.style.opacity = nextBtn.disabled ? '.35' : '1';
+      var s = _scrubSummary();
+      var bits = [];
+      if (s.set)     bits.push(s.set + ' flag' + (s.set === 1 ? '' : 's') + ' set');
+      if (s.cleared) bits.push(s.cleared + ' cleared');
+      if (s.add.length)  bits.push('grant ' + s.add.map(_cardName).join(', '));
+      if (s.drop.length) bits.push('REMOVE ' + s.drop.map(_cardName).join(', '));
+      sumEl.textContent = bits.length ? ('On apply: ' + bits.join(' · ')) : 'On apply: no change.';
+      sumEl.style.color = s.drop.length ? '#ffb4a8' : '';
+    }
+    /* Stepping only moves the staged selection (same _stageBattle as a drag)
+       — it never touches localStorage itself. APPLY ALL CHANGES is still the
+       only write path, so free-stepping to a target can't thrash game state. */
+    function _setIdx(i) {
+      idx = Math.max(0, Math.min(stops.length - 1, i));
+      _stageBattle(stops, idx);
+      _sync();
+      _markDirty();
+    }
+
+    var prevBtn = _btn('◀', null, function () { _setIdx(idx - 1); });
+    var nextBtn = _btn('▶', null, function () { _setIdx(idx + 1); });
+    _sync();   // initial disabled state — idx is already staged above, so no _markDirty here
 
     var row = _el('div', 'dp-row');
-    row.appendChild(_btn('Untick all progression', null, function () {
-      Object.keys(_stagedFlags).forEach(function (k) { _stagedFlags[k] = false; });
-      _bodyEl.querySelectorAll('.dp-bosstbl input, .dp-grid input').forEach(function (cb) { cb.checked = false; });
-      _markDirty();
-    }));
+    row.appendChild(prevBtn);
+    row.appendChild(slider);
+    row.appendChild(nextBtn);
     frag.appendChild(row);
+    frag.appendChild(labelEl);
+    frag.appendChild(sumEl);
+
+    slider.addEventListener('input', function () { _setIdx(Number(slider.value)); });
   }
 
   /* ── SECTION 4 · LAUNCH ────────────────────────────────────────────── */
@@ -682,8 +985,13 @@ SOG.DevPanel = (function () {
       flags['sog_node_' + b.hook + '_giant_beaten'] = _getFlag('sog_node_' + b.hook + '_giant_beaten');
       flags['sog_node_encountered_' + b.hook]       = _getFlag('sog_node_encountered_' + b.hook);
     });
-    FLAG_GROUPS.forEach(function (g) {
-      g.flags.forEach(function (f) { flags[f.key] = _getFlag(f.key); });
+    // Every key the scrubber owns — beaten AND narrative — so a snapshot
+    // round-trips the same state an APPLY writes, not just the beaten half.
+    _battleStops().forEach(function (s) {
+      flags[s.flag] = _getFlag(s.flag);
+      s.nar.set.forEach(function (f) { flags[f] = _getFlag(f); });
+      s.nar.cards.forEach(function (c) { flags[c.flag] = _getFlag(c.flag); });
+      s.nar.clear.forEach(function (c) { flags[c.flag] = _getFlag(c.flag); });
     });
     return { cards: _readOwnedCardIds(), gold: _readGold(), flags: flags };
   }
@@ -725,6 +1033,19 @@ SOG.DevPanel = (function () {
     _applyBtn.type = 'button';
     _applyBtn.addEventListener('click', function (e) {
       e.stopPropagation();
+      /* Losing a card is the one thing here that can't be undone by scrubbing
+         back, so it is the one thing that stops and asks. Everything else the
+         panel does is a flag write the next apply can reverse. */
+      var s = _scrubSummary();
+      if (s.drop.length) {
+        var msg = 'Rewinding the story removes ' + s.drop.length + ' card' +
+                  (s.drop.length === 1 ? '' : 's') + ' from your collection:\n\n  ' +
+                  s.drop.map(_cardName).join('\n  ') + '\n\n' +
+                  'Flags: ' + s.set + ' set, ' + s.cleared + ' cleared' +
+                  (s.add.length ? '\nAlso granting: ' + s.add.map(_cardName).join(', ') : '') +
+                  '\n\nApply?';
+        if (!window.confirm(msg)) return;
+      }
       _applyAll();
       _flash('Applied — ' + _readOwnedCardIds().length + ' cards, ' + _readGold() + ' gold');
       _render();                      // re-read real state
