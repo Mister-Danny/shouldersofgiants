@@ -321,7 +321,11 @@ export async function saveBossDialogue(bossKey) {
 
     delete State.bossDialogueEdits[bossKey];
     const res2 = await fetch('/api/boss-previews');
-    if (res2.ok) State.bossPreviews = await res2.json();
+    if (res2.ok) {
+      const meta2 = await res2.json();
+      State.bossPreviews = meta2.previews;
+      State.unregisteredBossFiles = meta2.unregistered || [];
+    }
 
     if (!out.changed.length) {
       toast('No changes — already matched what was on disk');

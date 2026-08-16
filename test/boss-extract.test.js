@@ -80,3 +80,27 @@ test('isPlainLiteral rejects an identifier used as a value (not just concatenati
 test('isPlainLiteral accepts true/false/null and numbers alongside strings', () => {
   assert.equal(boss.isPlainLiteral("[{ who: 'a', text: 'b', slamBefore: true, x: null, n: -3.5 }]"), true);
 });
+
+// findUnregisteredBossFiles() regression guard — this is the check that
+// would have caught Hatshepsut (and otzi/prehistory) automatically: every
+// js/sog-adventure-*.js file that calls SOG.BattleHooks.register(...) but
+// never appears as a BOSS_SOURCES[key].file value is a real battle the
+// Level Editor can't show dialogue for. Asserting it's currently empty
+// means the registry and the filesystem agree RIGHT NOW — the guard rail
+// is this test going red the next time they don't, not a synthetic replay
+// of the bug that's already fixed.
+test('every js/sog-adventure-*.js file that registers a BattleHooks key is in BOSS_SOURCES', () => {
+  const gaps = boss.findUnregisteredBossFiles();
+  assert.deepEqual(gaps, [], `unregistered boss file(s): ${JSON.stringify(gaps)}`);
+});
+
+test('findUnregisteredBossFiles ignores non-battle sog-adventure-*.js files (no BattleHooks.register at all)', () => {
+  // sog-adventure-hud.js (SOG.HUD) and sog-adventure-egypt.js (SOG.Egypt,
+  // a placeholder screen) both exist and match the filename pattern but
+  // register nothing — confirms the scan doesn't flag every file in the
+  // directory, only ones that actually register a battle.
+  const gaps = boss.findUnregisteredBossFiles();
+  const flaggedFiles = gaps.map((g) => g.file);
+  assert.ok(!flaggedFiles.includes('js/sog-adventure-hud.js'));
+  assert.ok(!flaggedFiles.includes('js/sog-adventure-egypt.js'));
+});

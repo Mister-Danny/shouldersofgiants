@@ -31,6 +31,13 @@ export const State = {
   // dialogue[key].editable is true.
   bossPreviews: {},
 
+  // Also from GET /api/boss-previews — js/sog-adventure-*.js files that
+  // register a real battle (SOG.BattleHooks.register) but have no
+  // BOSS_SOURCES entry, so bossPreviews above has nothing for them. This
+  // is the existence-check half of "don't let a boss file go unnoticed";
+  // see boss-extract.js's findUnregisteredBossFiles(). [{file, hooks}]
+  unregisteredBossFiles: [],
+
   // Which boss is being VIEWED — mutually exclusive with levelId (selecting
   // one clears the other; see commands.js's selectLevel/viewBoss).
   bossKey: null,

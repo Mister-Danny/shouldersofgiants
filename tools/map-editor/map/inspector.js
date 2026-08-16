@@ -165,20 +165,19 @@ function bindGates(o) {
 
 /* Whether the game has a click handler for this node id. The editor cannot make
    a node DO anything by itself — onNodeClick dispatches on literal id — so
-   saying so per-node is more useful than a blanket warning. As of the level
-   editor, "wired" has two independent sources: this hand-maintained set of
-   ids overworld.js's if-chain still handles directly, OR a data-driven entry
-   in level-data.js (onNodeClick checks that FIRST, unconditionally, before
-   ever reaching this list — see js/overworld.js). Only 'battle' offers the
-   Configure/Edit path: 'market' levels aren't wired in js/level-runtime.js
-   yet, so pairing one would be a dead end the level form can't save. */
-const WIRED_NODES = new Set([
-  'walls-of-uruk', 'market', 'sargon', 'hammurabi', 'hanging-gardens',
-  'narmer', 'egypt-market', 'prehistory', 'egypt-signpost'
-]);
+   saying so per-node is more useful than a blanket warning. "wired" has two
+   independent sources: State.wiredNodeIds (scanned server-side from
+   js/overworld.js's onNodeClick on every /api/level-meta request — see
+   tools/map-editor/wired-nodes-extract.js, loaded at boot in map/app.js —
+   NOT hand-maintained, so it cannot drift the way the old hardcoded Set
+   did), OR a data-driven entry in level-data.js (onNodeClick checks that
+   FIRST, unconditionally, before ever reaching a hand-authored branch —
+   see js/overworld.js). Only 'battle' offers the Configure/Edit path:
+   'market' levels aren't wired in js/level-runtime.js yet, so pairing one
+   would be a dead end the level form can't save. */
 function src2(n) {
   const hasLevel = n.kind === 'battle' && !!(levelState.levels && levelState.levels[n.id]);
-  const wired = WIRED_NODES.has(n.id) || hasLevel;
+  const wired = (State.wiredNodeIds || []).includes(n.id) || hasLevel;
   let html = wired ? '' : `<p class="warn"><b>Nothing happens when this node is clicked.</b>
     The game dispatches clicks on literal node id in <code>onNodeClick</code>, and
     there is no branch for <code>${esc(n.id)}</code> yet. Position it here, then ask

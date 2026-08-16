@@ -73,6 +73,26 @@ function renderBossList() {
       <span>${esc(nodeId)}</span><span class="k">boss</span>
     </li>`).join('') || '<li class="note">None loaded.</li>';
   $$('#boss-list li[data-id]').forEach(li => { li.onclick = () => viewBoss(li.dataset.id); });
+
+  renderUnregisteredBossWarning();
+}
+
+/* The existence-check half of "don't let a boss file drift out of
+   BOSS_SOURCES unnoticed" (boss-extract.js's findUnregisteredBossFiles(),
+   scanned server-side on every /api/boss-previews request — see
+   level/app.js's boot() and commands.js's saveBossDialogue()). Hidden
+   entirely when the list is empty — this is a warning, not a status line;
+   the common, correct state is nothing to show. */
+function renderUnregisteredBossWarning() {
+  const section = $('#unregistered-boss-section');
+  const files = State.unregisteredBossFiles || [];
+  if (!section) return;
+  section.hidden = files.length === 0;
+  if (!files.length) return;
+  const box = $('#unregistered-boss-warning');
+  box.innerHTML = `<b>${files.length} boss file${files.length === 1 ? '' : 's'} not in BOSS_SOURCES.</b>
+    Reachable and playable, but their dialogue can't be edited here yet:<br>` +
+    files.map(f => `${esc(f.file)} — registers <code>${f.hooks.map(esc).join(', ')}</code>`).join('<br>');
 }
 
 /* Phase 3: one entry — there's only one overworld.js, unlike the 5 bosses —

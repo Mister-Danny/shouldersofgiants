@@ -18,7 +18,7 @@
      GET  /api/art                       → the map + node art on disk, for the picker
      POST /api/save                       → overwrite data/map-data.js
      POST /api/save-level                 → overwrite data/level-data.js
-     GET  /api/boss-previews              → read-only extraction of the 5 boss files
+     GET  /api/boss-previews              → read-only extraction of the registered boss files, plus any unregistered ones found
      POST /api/save-boss-dialogue         → surgical dialogue rewrite in ONE boss file
      GET  /api/overworld-dialogue-preview → read-only extraction, 39 approved arrays in overworld.js
      POST /api/save-overworld-dialogue    → surgical dialogue rewrite in overworld.js
@@ -57,6 +57,16 @@ function overworldExtract() {
   delete require.cache[BOSS_EXTRACT_PATH];
   delete require.cache[OVERWORLD_EXTRACT_PATH];
   return require('./overworld-extract.js');
+}
+
+var WIRED_NODES_EXTRACT_PATH = require.resolve('./wired-nodes-extract.js');
+/* Same reasoning as overworldExtract() above — wired-nodes-extract.js
+   requires boss-extract.js at its own module-load time (for
+   findFunctionBodySpan), so both cache entries have to go together. */
+function wiredNodesExtract() {
+  delete require.cache[BOSS_EXTRACT_PATH];
+  delete require.cache[WIRED_NODES_EXTRACT_PATH];
+  return require('./wired-nodes-extract.js');
 }
 
 var ROOT = path.resolve(__dirname, '..', '..');
@@ -1157,22 +1167,48 @@ var server = http.createServer(function (req, res) {
     } catch (e) {
       return sendJson(res, 500, { error: 'could not read js/cards.js: ' + e.message });
     }
+    // wiredNodeIds replaces the old hand-maintained WIRED_NODES Set in
+    // map/inspector.js — scanned fresh from js/overworld.js's onNodeClick
+    // on every request (see wired-nodes-extract.js). Failure here is soft
+    // (empty list + error string) rather than failing the whole meta
+    // payload — cards/abilityKeys are needed far more broadly than this
+    // one warning, and a parse hiccup in overworld.js shouldn't take
+    // down the level form.
+    try {
+      var wn = wiredNodesExtract().scanWiredNodeIds();
+      meta.wiredNodeIds = wn.ids;
+      if (!wn.found) meta.wiredNodeIdsError = wn.error;
+    } catch (e) {
+      meta.wiredNodeIds = [];
+      meta.wiredNodeIdsError = e.message;
+    }
     return sendJson(res, 200, meta);
   }
   if (url === '/api/boss-previews') {
-    // Phase 1, read-only: the 5 hand-authored bosses, extracted fresh from
-    // their own .js files on every request (no caching — these files are
-    // hand-edited directly, not through this tool, so a stale cache here
-    // would show the wrong thing after any edit). See boss-extract.js and,
-    // for why bossExtract() is a function call here rather than a plain
-    // module reference, that function's own docstring above.
-    var previews;
+    // Phase 1, read-only: every hand-authored boss REGISTERED in
+    // BOSS_SOURCES, extracted fresh from their own .js files on every
+    // request (no caching — these files are hand-edited directly, not
+    // through this tool, so a stale cache here would show the wrong thing
+    // after any edit). See boss-extract.js and, for why bossExtract() is a
+    // function call here rather than a plain module reference, that
+    // function's own docstring above.
+    //
+    // `unregistered` rides the same response — findUnregisteredBossFiles()
+    // scans js/sog-adventure-*.js for battles that exist and register a
+    // BattleHooks key but never made it into BOSS_SOURCES (the class of
+    // gap that let Hatshepsut/otzi/prehistory sit unnoticed). Response
+    // shape is `{ previews, unregistered }`, not the previews object
+    // directly — see level/app.js's loadBossPreviews() for the client side
+    // of this contract.
+    var previews, unregistered;
     try {
-      previews = bossExtract().buildAllBossPreviews();
+      var be = bossExtract();
+      previews = be.buildAllBossPreviews();
+      unregistered = be.findUnregisteredBossFiles();
     } catch (e) {
       return sendJson(res, 500, { error: 'boss extraction failed: ' + e.message });
     }
-    return sendJson(res, 200, previews);
+    return sendJson(res, 200, { previews: previews, unregistered: unregistered });
   }
   if (url === '/api/save-boss-dialogue' && req.method === 'POST') {
     return handleSaveBossDialogue(req, res);

@@ -37,6 +37,12 @@ async function boot() {
     State.doc  = await loadMapData();
     State.maps = State.doc.maps;
     State.art  = await fetch('/api/art').then(r => r.json());
+    // wiredNodeIds rides /api/level-meta (the level editor's own endpoint —
+    // see wired-nodes-extract.js on the server side) purely because that's
+    // where the scan already lives; only this one field is used here, the
+    // rest of that payload (cards/abilityKeys) is the level editor's.
+    const meta = await fetch('/api/level-meta').then(r => r.json());
+    State.wiredNodeIds = meta.wiredNodeIds || [];
   } catch (e) {
     return toast('Could not load map data: ' + e.message, true);
   }

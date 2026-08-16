@@ -21,6 +21,11 @@ export const State = {
   sel:       null,      // { type:'node'|'exit'|'prop'|'spawn'|'wp', id|index, wpIndex? }
   dirty:     false,
   art:       { maps: [], nodes: [], topo: [] },
+  // Node ids onNodeClick actually dispatches to, scanned server-side from
+  // js/overworld.js on every /api/level-meta request — see
+  // tools/map-editor/wired-nodes-extract.js. Loaded once at boot, same as
+  // art. Replaces a hand-maintained Set that had already drifted once.
+  wiredNodeIds: [],
   scrubIdx:  0,          // which story beat the stage is previewing
   routeSel:  null,       // { from, to } — the route being edited
   routePick: null,       // first endpoint clicked, waiting for the second

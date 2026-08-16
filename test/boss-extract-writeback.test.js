@@ -18,18 +18,25 @@ const boss = require('../tools/map-editor/boss-extract.js');
 
 const ROOT = path.resolve(__dirname, '..');
 
-test('no-edit round trip is byte-identical for every editable dialogue array, all 5 bosses', () => {
+test('no-edit round trip is byte-identical for every editable dialogue array, every registered boss', () => {
   Object.keys(boss.BOSS_SOURCES).forEach((key) => {
     const preview = boss.buildBossPreview(key);
     const abs = path.join(ROOT, preview.file);
     const original = fs.readFileSync(abs, 'utf8');
 
-    const edits = Object.keys(preview.dialogue)
-      .map((k) => preview.dialogue[k])
+    const dialogueValues = Object.keys(preview.dialogue).map((k) => preview.dialogue[k]);
+    const hasAnyDialogue = dialogueValues.some((d) => d.present);
+    const edits = dialogueValues
       .filter((d) => d.editable)
       .map((d) => ({ varName: d.varName, lines: d.extraction.value }));
 
-    assert.ok(edits.length > 0, `${key} has no editable dialogue arrays — did BOSS_SOURCES change?`);
+    // A boss with real dialogue arrays but zero editable ones means
+    // extraction broke — that's the failure this guard exists to catch.
+    // A boss with NO dialogue at all (hatshepsut: every key present:false,
+    // confirmed by grep — the file has none) is a different, legitimate
+    // case: nothing to round-trip, so skip it rather than fail it.
+    if (!hasAnyDialogue) return;
+    assert.ok(edits.length > 0, `${key} has dialogue but no editable arrays — did BOSS_SOURCES change?`);
 
     const out = boss.applyDialogueEdits(original, edits);
     assert.equal(out.fileText, original, `${key}: no-op save must not change a single byte`);

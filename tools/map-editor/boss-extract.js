@@ -770,6 +770,129 @@ var BOSS_SOURCES = {
         description: 'On the FIRST loss only (before Cuneiform is ever granted): the board fades to black, a candle-lighting animation plays, the overworld HUD (not the battle dialogue system) runs a Farmer/Explorer conversation split around a card-acquisition reveal (Cuneiform, id 46) mid-conversation, then fades back and restarts the battle with Cuneiform now in the deck. Every subsequent loss skips straight to a normal restart. This whole flow — the screen-fade, the HUD-borrowed dialogue engine, the mid-conversation card grant — has no schema equivalent; a level-editor level has no comeback-card mechanic at all.'
       }
     ]
+  },
+  hatshepsut: {
+    nodeId: 'hatshepsut', file: 'js/sog-adventure-hatshepsut.js', hook: 'hatshepsut',
+    // Ten named, empty arrays as of this pass (lines 98-107) — all real,
+    // findable, plain-literal vars, so every slot is editable exactly like
+    // the other bosses'; there is simply no text in them yet. Naming
+    // matches Hammurabi/Hanging Gardens (OPENING_DIALOGUE/LOSS_DIALOGUE/
+    // TIE_DIALOGUE unprefixed, HATSHEPSUT_-prefixed everything else), not
+    // Sargon's shared LOSS_SMACK. Wired to HATSHEPSUT_SCRIPT's
+    // onBattleStart/onWin/onLoss/onTie (~line 270+), tier-gated the same
+    // way every other two-tier boss is — see _isGiantRematch/
+    // _battleWasGiantRematch in the file itself.
+    dialogue: {
+      opening: 'OPENING_DIALOGUE', serfWinA: 'HATSHEPSUT_SERF_WIN_A', serfWinB: 'HATSHEPSUT_SERF_WIN_B',
+      loss: 'LOSS_DIALOGUE', tie: 'TIE_DIALOGUE',
+      giantIntro: 'HATSHEPSUT_GIANT_INTRO', giantWinA: 'HATSHEPSUT_GIANT_WIN_A', giantWinB: 'HATSHEPSUT_GIANT_WIN_B',
+      giantLoss: 'HATSHEPSUT_GIANT_LOSS', giantDraw: 'HATSHEPSUT_GIANT_DRAW'
+    },
+    locationsFn: '_hatshepsutLocations', aiIdsVar: 'AI_IDS',
+    presentationInline: true,   // no named var — inline object literal in buildHatshepsutConfig
+    // no bubblePortraitVar — her presentation object has no
+    // opponentBubblePortrait field at all (only bodyClass/allyAvatar/
+    // opponentAvatar/popAlly); nothing to extract.
+    // no rulesTitleVar/rulesBodyVar — buildHatshepsutConfig sets no
+    // rules-popup-equivalent fields; there is no RULES_TITLE/RULES_BODY
+    // in this file, and this pass didn't add one (out of scope — only the
+    // 10 dialogue slots were asked for).
+    structure: { turns: 5, locationsCount: 3, slotsPerLocation: 4, handStart: 5, maxHandSize: 7 },
+    resource: { model: 'capital', capital: 5, resetEachTurn: true },
+    scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
+    notes: [
+      'STILL NOT REACHABLE FROM THE MAP — js/overworld.js\'s onNodeClick still has no branch for node id \'hatshepsut\' (unchanged by this pass, deliberately: the node stays unwired until the dialogue is actually written). The map node exists (upper-egypt, tiers:2) and the script self-registers via BattleHooks, but nothing currently calls start() except the console/dev path. hatshepsut is still NOT in WIRED_NODES in map/inspector.js for the same reason as before — that set means "onNodeClick actually does something for this id," and for this id it still does not.',
+      'The tier MECHANIC (AI-difficulty flag switch) was already implemented before this pass; this pass added the DIALOGUE layer (10 named arrays + tier-gated wiring in the SCRIPT\'s onBattleStart/onWin/onLoss/onTie) on top of it, all still empty. Verified live: the battle boots, plays a full turn, and reaches win/loss/tie correctly with every array empty (runLines([], cb) finishes synchronously — see js/game/dialogue-runner.js) — filling one in later needs no further wiring changes.',
+      'reward is still NOT read from a `reward` config field — `rewards: {}` stays empty and there is still no onWin card/gold grant anywhere in this file, unlike every other boss. Not in scope for this pass.',
+      'slotsPerLocation/handStart/maxHandSize are written as `st.SLOTS_PER_LOC || 4` / `st.HAND_START || 5` / `st.MAX_HAND_SIZE || 7` (buildHatshepsutConfig, ~line 207-209), resolved here against SOG.state\'s actual defaults (js/game/state.js:29-31), same pattern as every other boss.'
+    ],
+    bespokeMechanics: []
+  },
+  otzi: {
+    // No dedicated map node — reached via the 'egypt-signpost' node
+    // (js/overworld.js's "Egypt signpost → Otzi encounter / replay"
+    // branch, already in WIRED_NODES). nodeId here is that REAL node id,
+    // not 'otzi' — same pattern as gilgamesh below (BOSS_SOURCES key
+    // 'gilgamesh', nodeId 'walls-of-uruk'). hook/scriptHook is 'otzi'.
+    nodeId: 'egypt-signpost', file: 'js/sog-adventure-otzi.js', hook: 'otzi',
+    // Single-tier battle (map node tiers:1) — only win/loss/tie map to
+    // schema slots; the other 7 (including giant* and serfWinB) are null
+    // because there is no second tier at all, not because anything is
+    // missing. Win maps to serfWinA (the first/only win slot).
+    dialogue: {
+      opening: null,
+      serfWinA: 'WIN_DIALOGUE', serfWinB: null,
+      loss: 'LOSS_DIALOGUE', tie: 'TIE_DIALOGUE',
+      giantIntro: null, giantWinA: null, giantWinB: null,
+      giantLoss: null, giantDraw: null
+    },
+    locationsFn: '_otziLocations', aiIdsVar: 'OTZI_DECK_IDS',
+    presentationInline: true,   // inline object literal in OTZI_CONFIG (line 234)
+    structure: { turns: 4, locationsCount: 3, slotsPerLocation: 4, handStart: 4, maxHandSize: 4 },
+    resource: { model: 'none', capital: 0 },
+    scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
+    notes: [
+      'OPENING DIALOGUE EXISTS BUT IS DELIBERATELY LEFT UNMAPPED (null) — PRE_SHAKE_LINES (line 40) and POST_SHAKE_LINES (line 48) are real, named, plain-literal arrays split around a mid-intro screen-shake beat (same shape as Gilgamesh\'s OPENING_PRE/tutorial-pause split). Left null here per explicit instruction when this entry was added, not because they can\'t be extracted — they can, the same way serfWinA/loss/tie were. Add opening: {varName: \'PRE_SHAKE_LINES\', note: \'...POST_SHAKE_LINES continues after a screen-shake beat, see bespokeMechanics\'} if/when this should be editable too.',
+      '_otziLocations (line 109) extracts as NOT FOUND, not merely impure — confirmed against the live extractor, not assumed. findFunctionReturnSpan finds the FIRST `return` in the function body via a plain regex scan, and this function\'s body contains THREE earlier ones first: `locs.find(function (l) { return l.id === 7; })` and its two siblings (lines 111, 113, 115), each a nested callback with its own return, before the function\'s own `return [desert, savannah, grvCopy];` (line 118). The scan latches onto the first nested `return l.id === 7;`, whose value isn\'t a [ or { at all, so _bracketSpan bails and the whole extraction reports found:false. The UI shows "Not found in source," not "not a plain literal." Separately, even a fixed scanner would still report this impure — the function also calls LOCATIONS.find() three times and Object.assign()s an override onto the Great Rift Valley copy (stripping FIRST_CARD_HERE) rather than returning a literal array. The actual resolved locations are Desert(8)/Savannah(7)/Great Rift Valley(2, abilityKey forced null) per js/locations.js\'s base entries.',
+      'structure also sets cardsPerTurn: 2 (line 224) — same as Gilgamesh, caps plays per turn independent of capital (resource.model is \'none\' here too).',
+      'reward is NOT read from a `reward` config field — `rewards: { onWin: { cards: [35], completionFlag: KEY_BATTLE_OTZI_COMPLETE, acquisitionFlag: KEY_CARD_OTZI_UNLOCKED } }` (line 241) uses its own shape, closer to Gilgamesh\'s rewards.onWin than Sargon/Hammurabi\'s script-owned grants.'
+    ],
+    bespokeMechanics: [
+      {
+        name: 'Win-token line (second dialogue phase after the card reveal)',
+        file: 'js/sog-adventure-otzi.js',
+        lines: '69 (WIN_TOKEN_LINE), 520-554 (_routePostBattle)',
+        description: 'A win plays WIN_DIALOGUE, THEN a card-acquisition reveal for Otzi\'s own card (id 35, skipped on a repeat win), THEN WIN_TOKEN_LINE ("A token of me frozen in time."), THEN the scoreboard. WIN_TOKEN_LINE is a real plain-literal array but has no schema slot to map to — the schema\'s single serfWinA covers only the first phase.'
+      },
+      {
+        name: 'Screen-shake mid-intro (2-card-per-turn reveal)',
+        file: 'js/sog-adventure-otzi.js',
+        lines: '40 (PRE_SHAKE_LINES), 48 (POST_SHAKE_LINES), 878-885 (the shake sequencing)',
+        description: 'PRE_SHAKE_LINES plays, then a screen-shake animation reveals that the player can now play 2 cards/turn, then POST_SHAKE_LINES continues. See the note above on why this is left unmapped for now.'
+      }
+    ]
+  },
+  prehistory: {
+    nodeId: 'prehistory', file: 'js/sog-adventure-prehistory.js', hook: 'prehistory',
+    // Single-tier (map node tiers:1), same shape as otzi above.
+    dialogue: {
+      opening: null,
+      serfWinA: 'WIN_DIALOGUE', serfWinB: null,
+      loss: 'LOSS_DIALOGUE', tie: 'TIE_DIALOGUE',
+      giantIntro: null, giantWinA: null, giantWinB: null,
+      giantLoss: null, giantDraw: null
+    },
+    // No locationsFn/aiIdsVar — neither is a named var or function here at
+    // all (see notes). Nothing to point extraction at.
+    presentationInline: true,   // inline object literal in BATTLE_CONFIG (line 387)
+    structure: { turns: 4, locationsCount: 1, slotsPerLocation: 4, handStart: 4, maxHandSize: 4 },
+    resource: { model: 'none', capital: 0, resetEachTurn: false },
+    // NOT the most-locations shape every other boss (including otzi) uses —
+    // a genuinely different scoring RULE, not a smaller version of the same
+    // template. winThreshold/tiebreaker/exactTie will render as "—" in the
+    // UI (correctly: they don't exist on this object).
+    scoring: { rule: 'single-location', metric: 'player-ip-vs-ai-ip', outcomes: { win: 'pIP>aIP', loss: 'pIP<aIP', tie: 'pIP===aIP' }, tie: 'loss' },
+    notes: [
+      'OPENING DIALOGUE EXISTS BUT CANNOT BE EXTRACTED AT ALL, by tool or by hand-adding a varName — it is an unnamed INLINE array literal passed directly as the first argument to Overworld.runPreBattleLines([...]) (lines 222-229), not assigned to any `var`. There is no identifier to point findVarSpan at. This is the same category as Hanging Gardens\' flood-intro line and Gilgamesh\'s "Thank you!" line — a genuine string-literal-with-no-name case, not an oversight.',
+      'decks.ai is `{ source: \'scripted\' }`, not `{ source: \'explicit\', ids: [...] }` like every other boss — there is no AI "deck" of ids to extract (no aiIdsVar/aiIdsExpr set here). The AI\'s actual cards come from `ai.settings.playOrder: [27, 28, 31, 34]` (a fixed reveal sequence, face-down) plus `handPadding: [29, 30, 32, 36, 26]` (cosmetic filler, faces never shown, purely so the opponent hand/deck counts match the player\'s) — hand-typed here since it is a scripted sequence, not deck ids in the normal sense.',
+      'locations is a single inline object, `{ id: 100, name: \'The Camp\', region: \'\', abilityText: \'\', abilityKey: null }` (line 378), embedded directly in BATTLE_CONFIG.locationAbilities.select.locations — not a separate var or function, so — like the opening dialogue above — there is nothing for locationsFn to point at. Hand-typed here rather than extracted.',
+      'structure also sets cardsPerTurn: 1 (line 367). draw is `{ model: \'flat\', perTurn: 1, softCapExceptionCardId: 26 }` — a flat +1/turn draw (not \'replenish\'), with Tool (id 26) as a documented exception that can push the hand above the soft cap on its own reveal-phase draw.',
+      'reward: `{ onWin: { cards: [34], completionFlag: \'sog_battle_neanderthal_complete\' } }` (line 386) — same shape as otzi\'s, not a config field named `reward` (singular) like the schema\'s cardIdOnGiantWin.'
+    ],
+    bespokeMechanics: [
+      {
+        name: 'Scripted AI reveal sequence, not a shuffled deck',
+        file: 'js/sog-adventure-prehistory.js',
+        lines: '365-399 (BATTLE_CONFIG.ai), 393-395 (playOrder/handPadding)',
+        description: 'The AI profile is \'scriptedSequence\', not \'heuristic\' — Hunter(27) then Gatherer(28) then Megalith(31) then Neanderthal(34) reveal in that exact order every time, face-down, regardless of what the player does. No schema field expresses a fixed opponent script; a level-editor level always uses the shared adaptive AI brain.'
+      },
+      {
+        name: 'Single-location scoring (not most-locations)',
+        file: 'js/sog-adventure-prehistory.js',
+        lines: '381-385 (BATTLE_CONFIG.scoring)',
+        description: 'This is a ONE-location battle (\'The Camp\', id 100) scored by direct player-IP-vs-AI-IP comparison, not the 3-location most-locations/tiebreaker rule every other boss (including otzi) uses. A tie is explicitly treated as a loss for progression purposes. The level schema\'s scoring section has no `rule: \'single-location\'` equivalent.'
+      }
+    ]
   }
 };
 
@@ -865,6 +988,51 @@ function buildAllBossPreviews() {
   return out;
 }
 
+/* Existence check, not content extraction — the half of "boss files drift
+   out of BOSS_SOURCES" that CAN be automated (which files exist and
+   register a battle) versus the half that can't (which variable maps to
+   which of the 10 dialogue slots — no naming convention to exploit, see
+   the per-boss `notes` above for how much that mapping varies file to
+   file). Scans every js/sog-adventure-*.js file for
+   SOG.BattleHooks.register('<hook>', ...) calls and reports any file that
+   registers a hook but never appears as a `file:` value anywhere in
+   BOSS_SOURCES. This is exactly the class of gap that let Hatshepsut
+   (and, before this pass, otzi/prehistory) sit unnoticed — surfaced here
+   instead of found by hand three weeks later. */
+function findUnregisteredBossFiles() {
+  var jsDir = path.join(__dirname, '..', '..', 'js');
+  var registeredFiles = {};
+  Object.keys(BOSS_SOURCES).forEach(function (key) {
+    registeredFiles[BOSS_SOURCES[key].file] = true;
+  });
+
+  var entries;
+  try { entries = fs.readdirSync(jsDir); }
+  catch (e) { return [{ file: null, hooks: [], error: 'could not list js/: ' + e.message }]; }
+
+  var out = [];
+  entries.forEach(function (name) {
+    if (!/^sog-adventure-.*\.js$/.test(name)) return;
+    var rel = 'js/' + name;
+    if (registeredFiles[rel]) return;   // already in BOSS_SOURCES — not a gap
+
+    var text;
+    try { text = fs.readFileSync(path.join(jsDir, name), 'utf8'); }
+    catch (e) { return; }
+
+    var re = /BattleHooks\.register\(\s*'([^']+)'/g;
+    var hooks = [];
+    var m;
+    while ((m = re.exec(text))) {
+      if (hooks.indexOf(m[1]) === -1) hooks.push(m[1]);
+    }
+    // No BattleHooks.register at all → not a battle (sog-adventure-hud.js,
+    // sog-adventure-egypt.js) — nothing to flag, this file was never a gap.
+    if (hooks.length) out.push({ file: rel, hooks: hooks });
+  });
+  return out;
+}
+
 /* Previews are keyed by nodeId (matches State.bossKey / viewBoss() client-
    side, same keying as authored levels). BOSS_SOURCES itself is keyed by a
    separate internal name — 'gilgamesh' whose nodeId is 'walls-of-uruk',
@@ -891,6 +1059,7 @@ module.exports = {
   BOSS_SOURCES: BOSS_SOURCES,
   buildBossPreview: buildBossPreview,
   buildAllBossPreviews: buildAllBossPreviews,
+  findUnregisteredBossFiles: findUnregisteredBossFiles,
   bossSourceByNodeId: bossSourceByNodeId,
   hasUnrepresentableFields: hasUnrepresentableFields,
   dialogueEditability: dialogueEditability,
