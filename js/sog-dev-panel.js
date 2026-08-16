@@ -752,10 +752,18 @@ SOG.DevPanel = (function () {
     'narmer': {
       serf:  { set: ['sog_met_narmer', 'sog_narmer_battle_opening_seen',  // extra _battle_
                      'sog_battle_narmer_complete'] },
-      giant: { set: [] }
+      // The journey south fires off the GIANT win, so it belongs to that stop —
+      // rewinding one stop back re-arms it, same rule as the node reveals above.
+      giant: { set: ['sog_hatshepsut_transition_seen'] }
     },
     'hatshepsut': {
-      serf:  { set: ['sog_met_hatshepsut', 'sog_hatshepsut_opening_seen'] },
+      // The Merchant's two cards are delivered on the first SERF result (win or
+      // loss). Declared as `cards` rather than a plain flag so the gate and the
+      // cards move together: a rewind that re-arms the delivery also takes the
+      // gift back, instead of leaving a cleared flag beside cards you still own.
+      serf:  { set: ['sog_met_hatshepsut', 'sog_hatshepsut_opening_seen'],
+               cards: [{ id: 900, flag: 'sog_hatshepsut_cards_delivered' },
+                       { id: 75,  flag: 'sog_hatshepsut_cards_delivered' }] },
       giant: { set: [] }
     }
   };
