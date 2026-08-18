@@ -762,7 +762,7 @@ SOG.DevPanel = (function () {
       // cards move together: a rewind that re-arms the delivery also takes the
       // gift back, instead of leaving a cleared flag beside cards you still own.
       serf:  { set: ['sog_met_hatshepsut', 'sog_hatshepsut_opening_seen'],
-               cards: [{ id: 900, flag: 'sog_hatshepsut_cards_delivered' },
+               cards: [{ id: 76,  flag: 'sog_hatshepsut_cards_delivered' },
                        { id: 75,  flag: 'sog_hatshepsut_cards_delivered' }] },
       giant: { set: [] }
     }

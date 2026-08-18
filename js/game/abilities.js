@@ -2404,7 +2404,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     MERCHANT (900) — "Trade Route". REACTIVE, LOCAL.
+     MERCHANT (76) — "Trade Route". REACTIVE, LOCAL.
      ───────────────────────────────────────────────────────────────
      When an ECONOMIC card is played at THIS Merchant's location:
        1. the Merchant gains +1 IP (at its current location), THEN
@@ -2434,10 +2434,9 @@
      either side's play counted, which let a player's Economic card move the
      AI's Merchant.) Same-owner gating matches Tribe below.
 
-     [PROVISIONAL DATA — see cards.js id 900] The card entry, its id, and the
-     Punt/Thebes move-here bonuses are placeholders pending the real card set.
-     The LOGIC below is final and data-driven; only the numbers move. */
-  var MERCHANT_ID = 900;   // PROVISIONAL — renumber with the real card set
+     The card is real now (cards.js id 76, promoted from the old id-900
+     placeholder), as are the Punt/Thebes move-here bonuses it plays into. */
+  var MERCHANT_ID = 76;
 
   /* A card's CIVILIZATION. Prefers an explicit `civilization` / `civ` field and
      falls back to `era`, which every card already carries and which gameplay
@@ -3356,7 +3355,7 @@
     36: { onCardLandedHere: tribeReactBounce },  // Tribe — reactive bounce+sfx (presentation only; IP stays in evaluateContinuous)
     74: { onAtOnce: abilityPapyrusEconomic },         // Papyrus (Economic) — Natural Resource: +2 IP to Scientific cards here
     75: { onAtOnce: abilityPurpleDye },               // Purple Dye — Natural Resource: +2 IP to Political cards here
-    900: { onCardLandedHere: abilityMerchantTrade },  // Merchant — PROVISIONAL ID. Economic played here → +1 IP, then random move (fizzles if nowhere to go)
+    76: { onCardLandedHere: abilityMerchantTrade },   // Merchant (Egypt) — Economic played here → +1 IP, then random move (fizzles if nowhere to go)
 
     /* ── Mesopotamia era ───────────────────────────────────────────
        Phase C cards (37 Sargon, 43 Gilgamesh) remain stubbed.      */

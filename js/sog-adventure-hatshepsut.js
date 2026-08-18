@@ -52,16 +52,16 @@ SOG.HatshepsutBattle = (function () {
 
   /* ── Hatshepsut's 15. Every id below already existed EXCEPT 74/75, the two
         Natural Resources built for this fight:
-          52 Hatshepsut · 74 Papyrus(Econ) · 75 Purple Dye · 900 Merchant ·
+          52 Hatshepsut · 74 Papyrus(Econ) · 75 Purple Dye · 76 Merchant ·
           56 Scribe(Egypt/Econ) · 59 Obelisk · 62 Hieroglyphics · 57 Pyramid ·
           64 Sphinx · 54 Papyrus(Scientific) · 65 Imhotep · 60 Khufu ·
           55 Farmer(Egypt) · 49 The Phoenicians(Meso) · 41 Canals(Meso)
         The deck is deliberately Economic-heavy: five Economic cards (74, 75,
-        900, 56 and Hatshepsut's spawned Merchants) keep the Merchant trigger
+        76, 56 and Hatshepsut's spawned Merchants) keep the Merchant trigger
         firing. Purple Dye is MESOPOTAMIAN on purpose — an Egypt Merchant's
         different-civilization bonus fires on it, but not on the Egyptian
         Papyrus, so the two resources play differently. ── */
-  var AI_IDS = [52, 74, 75, 900, 56, 59, 62, 57, 64, 54, 65, 60, 55, 49, 41];
+  var AI_IDS = [52, 74, 75, 76, 56, 59, 62, 57, 64, 54, 65, 60, 55, 49, 41];
 
   /* ── Two-tier reward economy — mirrors Narmer's richer-than-default scale
         (his file's own comment: GOLD_SERF_WIN 20 / GOLD_GIANT_WIN 30 + card,
@@ -254,7 +254,7 @@ SOG.HatshepsutBattle = (function () {
         var s = c.ip - c.cc * 0.1;
         if (RESOURCE_IDS[c.id]) s += 2 + count[locId];   // resources want company → play early, where cards already stand
         if (PREMIUM_IDS[c.id])  s += 1;
-        if (c.id === 900)       s += 1.5;                // a Merchant on the board is a recurring engine
+        if (c.id === 76)        s += 1.5;                // a Merchant on the board is a recurring engine
         if (s > bestScore) { bestScore = s; best = c; }
       }
       if (!best) break;
@@ -621,7 +621,7 @@ SOG.HatshepsutBattle = (function () {
     { who: 'explorer', text: 'She said I had empty hands.' },
     { who: 'merchant', text: 'She was right. You came to the market with nothing to trade.' },
     { who: 'merchant', text: "Let's fix that." }
-    // → [GRANT CARD — Merchant 900]
+    // → [GRANT CARD — Merchant 76]
   ];
   var MERCHANT_LOSS_B = [
     { who: 'merchant', text: 'A merchant of Egypt.' }

@@ -47,7 +47,7 @@ var Overworld = (function () {
   var KEY_MET_HATSHEPSUT            = 'sog_met_hatshepsut';             // set after the first Hatshepsut encounter → later clicks skip straight to the battle
   // Stage B
   var KEY_HATSHEPSUT_TRANSITION     = 'sog_hatshepsut_transition_seen'; // Narmer→Hatshepsut journey played (once, after the Narmer GIANT win)
-  var KEY_HATSHEPSUT_CARDS          = 'sog_hatshepsut_cards_delivered'; // Merchant(900)+Purple Dye(75) handed over — shared gate for BOTH delivery paths
+  var KEY_HATSHEPSUT_CARDS          = 'sog_hatshepsut_cards_delivered'; // Merchant(76)+Purple Dye(75) handed over — shared gate for BOTH delivery paths
 
   /* ════════════════════════════════════════════════════════════
      ADVENTURE MODE INTRO — two separate dialogue phases
@@ -316,7 +316,7 @@ var Overworld = (function () {
 
   /* ── STAGE B — MERCHANT CARD DELIVERY (WIN PATH) ──────────────────────────
      The first Hatshepsut SERF WIN, on the overworld return. Split around the
-     two card grants: block A → Merchant(900) → block B → Purple Dye(75) →
+     two card grants: block A → Merchant(76) → block B → Purple Dye(75) →
      block C. Shares KEY_HATSHEPSUT_CARDS_DELIVERED with the loss-path
      intervention in sog-adventure-hatshepsut.js — whichever fires first
      delivers, and the other then never runs.
@@ -327,7 +327,7 @@ var Overworld = (function () {
     { who: 'merchant', text: "From the queen, that's high praise. She doesn't hand those out." },
     { who: 'merchant', text: "You did it with scraps, too. Which means you've got the instinct." },
     { who: 'merchant', text: 'So here — a reward for the promising.' }
-    // → [GRANT CARD — Merchant 900]
+    // → [GRANT CARD — Merchant 76]
   ];
   var D7_MERCHANT_WIN_DELIVERY_B = [
     { who: 'merchant', text: 'A merchant of Egypt.' }
@@ -2796,14 +2796,14 @@ var Overworld = (function () {
      STAGE B — HATSHEPSUT ARC: the journey south + the Merchant's two cards
      ════════════════════════════════════════════════════════════════════════ */
 
-  /* Hand over the Merchant(900) + Purple Dye(75) pair, split so a dialogue
+  /* Hand over the Merchant(76) + Purple Dye(75) pair, split so a dialogue
      block can land between them. Uses the SHARED acquisition reveal
      (Prehistory.showCardAcquisition) every other grant in the game goes
      through, and SOG.Cards.unlock for ownership. Idempotent: the
      KEY_HATSHEPSUT_CARDS gate is the caller's job, but re-running this would
      only re-show reveals, never double-grant. Exported so the battle module's
      loss-path intervention grants exactly the same way. */
-  var HATSHEPSUT_GIFT_MERCHANT_ID = 900;
+  var HATSHEPSUT_GIFT_MERCHANT_ID = 76;
   var HATSHEPSUT_GIFT_DYE_ID      = 75;
 
   /* done(ok) — `ok` reports whether the card is GENUINELY in the collection

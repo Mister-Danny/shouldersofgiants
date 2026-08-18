@@ -167,12 +167,9 @@ window.SOG_LEVEL_DATA = {
 
       decks: {
         player: { source: 'active-deck', shuffle: true },
-        // id 900 = Merchant (Egypt) — PROVISIONAL placeholder id (see js/cards.js
-        // for the full note). When the real Egypt card set lands and 900 gets
-        // renumbered, update this id to match (also update MERCHANT_ID in
-        // abilities.js and the CARD_ABILITIES[900] key — see js/cards.js's
-        // comment on the Merchant entry for the full 3-step renumber).
-        ai: { source: 'explicit', ids: [53, 54, 55, 56, 57, 58, 59, 60, 62, 64, 65, 900, 70, 69, 74], shuffle: true }
+        // id 76 = Merchant (Egypt) — the real card (promoted from the old id-900
+        // placeholder along with MERCHANT_ID and the CARD_ABILITIES key).
+        ai: { source: 'explicit', ids: [53, 54, 55, 56, 57, 58, 59, 60, 62, 64, 65, 76, 70, 69, 74], shuffle: true }
       },
 
       locations: [

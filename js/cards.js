@@ -624,22 +624,11 @@ const CARDS = [
   },
   {
     /* ─────────────────────────────────────────────────────────────────────
-       MERCHANT — PROVISIONAL PLACEHOLDER ENTRY.
-
-       The ABILITY IS FULLY WIRED (abilities.js → abilityMerchantTrade); it is
-       the DATA here that is provisional. id 900 sits far outside the real card
-       band (1–73 today) precisely so the incoming card set can number itself
-       from 74 upward without colliding. Nothing in the codebase assumes
-       contiguous ids — checked — so a gap is safe.
-
-       WHEN THE REAL CARD SET LANDS, change three things and nothing else:
-         1. this id  →  its real id
-         2. MERCHANT_ID in abilities.js  →  the same value
-         3. the CARD_ABILITIES key (900)  →  the same value
-       cc / ip / art below are guesses in the shape of the other Egypt
-       Economic cards (Trader 1/1, Nubian Gold 0/1) — replace with the real
-       values. Art paths are intentionally the Trader's: buildCardImg has an
-       onerror fallback, so a wrong path degrades to hidden rather than broken.
+       MERCHANT (Egypt) — the real card. Replaces the id-900 placeholder that
+       stood in while the Egypt set was numbered; 76 continues the contiguous
+       band after Purple Dye (75). The ability was always real
+       (abilities.js → abilityMerchantTrade); only the id and the data were
+       provisional. MERCHANT_ID and the CARD_ABILITIES key moved with it.
 
        ONE MERCHANT PER CIVILIZATION: the text and the wiring are identical for
        every copy — only the civ tag differs. The ability reads the civ off the
@@ -647,21 +636,23 @@ const CARDS = [
        e.g. a Mesopotamia Merchant means copying this entry and changing the
        era/civilization value. No code change.
 
-       DEPENDENCIES NOT YET BUILT (the ability degrades safely without them):
-         • Punt / Thebes locations + their MOVE_HERE_IP / MOVE_HERE_CAPITAL
-           keys — the move-here bonus seam is inert until they exist.
-
-       locked: true keeps it out of the deck builder (ownership gates on
-       SOG.collection), so this placeholder is invisible in normal play.
+       locked: true is the NORMAL state for a collectible card, not a way of
+       hiding it — every non-starter carries it, and SOG.collection._applyOwned
+       flips it to false the moment the card is earned (boot re-applies it for
+       everything already owned). Omitting it would make an unearned Merchant
+       read as owned to the pool builders that filter on !c.locked
+       (progression.js), so it stays, exactly as on Papyrus (74) and Purple
+       Dye (75). Deck-builder visibility gates on SOG.collection.isUnlocked,
+       not on this field.
     ───────────────────────────────────────────────────────────────────────── */
-    id: 900, name: "Merchant", cc: 1, ip: 1,                    // PROVISIONAL ID — ability + art WIRED (reactive: Economic played here → +1 IP, different-civ bonus, random move)
+    id: 76, name: "Merchant", cc: 1, ip: 2,                     // WIRED (reactive: Economic played here → +1 IP, different-civ bonus, random move)
     type: "Economic", type2: null, era: "Egypt",                // era doubles as the CIVILIZATION tag (see civOf in abilities.js)
     abilityName: "Trade Route",
     // TWO LINES on the card — the \n is load-bearing, do not collapse it.
     ability: "When you play an Economic card here, gain +1 IP and move.\nIf that Economic card is from a different civilization, it gains +1 IP.",
-    // Real art. The _sm suffix does NOT match buildCardImg's derived "@sm.jpg"
-    // fallback, so the small variant MUST be declared explicitly here — which is
-    // the same mechanism every Egypt card already uses (they declare @0.3x pairs).
+    // The _sm suffix does NOT match buildCardImg's derived "@sm.jpg" fallback,
+    // so the small variant MUST be declared explicitly here — the same
+    // mechanism every Egypt card already uses (they declare @0.3x pairs).
     image:   "images/cards/egyptcards/egypt_merchant.jpg",
     imageSm: "images/cards/egyptcards/egypt_merchant_sm.jpg", locked: true
   },
