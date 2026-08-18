@@ -1371,7 +1371,20 @@
       if (G.config && G.config.ai && G.config.ai.movement === 'adventure'
           && G.config.ai.tier !== 'serf'   // Serf leaves movers in place; Giant repositions them
           && SOG.ai && typeof SOG.ai.runAdventureMovements === 'function') {
-        SOG.ai.runAdventureMovements(_afterAiMove);
+        /* Giant movement is TWO passes: the card-driven one (Chariot/Trader,
+           which knows nothing about locations) and then the LOCATION-driven
+           free-move-away, which is the only thing that uses Red Sea. Chained
+           rather than merged because they answer different questions — "does
+           this mover want to reposition" vs "does this board hand me a free
+           move" — and a board can offer both. */
+        SOG.ai.runAdventureMovements(function () {
+          if (typeof SOG.ai.runGiantFreeMoveAway === 'function'
+              && G.locations.some(function (l) { return l.abilityKey === 'ANY_FREE_MOVE_AWAY'; })) {
+            SOG.ai.runGiantFreeMoveAway(_afterAiMove);
+          } else {
+            _afterAiMove();
+          }
+        });
       /* Serf still gets ONE relocation, but only the free one a location hands
          out: an ANY_FREE_MOVE_AWAY board (Red Sea) lets a card leave each turn,
          and the Serf used to ignore it entirely. Random card, random open

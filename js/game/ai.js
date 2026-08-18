@@ -1472,6 +1472,79 @@
     return (c && c.type === preferType) ? 0.25 : 0;
   }
 
+  /* ── MERCHANT TRADE-ENGINE MODEL (shared helper) ──────────────────────────
+     The evaluator (_serfValue) hand-models synergies as a whitelist of
+     if(has(id)) clauses and has no concept of a REACTIVE trigger, of card
+     TYPE beyond the few it names, or of CIVILIZATION. So the Merchant combo
+     is invisible to it. Rather than teach _serfValue — which the Serf shares,
+     and which we want to stay simple — the value is computed here and fed in
+     through the Giant-only sig.playBias seam.
+
+     Faithful to abilityMerchantTrade, in its order:
+       0. FIZZLE FIRST. The real ability resolves randomOtherOpenLoc BEFORE
+          awarding anything; with no other open slot on our side the entire
+          trigger aborts — no +1, no cross-civ. So the combo is worth ZERO on
+          a sealed board, and this guard has to come first here too.
+       1. +1 IP to the Merchant, unconditional once past the fizzle.
+       2. +1 IP to the PLAYED CARD, only when the civs differ
+          (civOf = civilization || civ || era). Merchant is Egypt, so among
+          her Economic cards only Purple Dye (75, Mesopotamia) pays this.
+       3. The Merchant then MOVES to a RANDOM open location — we cannot pick
+          it, so the destination bonus is modelled as an EXPECTATION over the
+          open locations (Punt MOVE_HERE_IP +1 now; Thebes MOVE_HERE_CAPITAL
+          +1 capital next turn, worth ~nothing on the final turn).
+
+     Returns 0 for any board/card that isn't the combo, so it is safe to add
+     unconditionally to a play's score. */
+  var MERCHANT_CARD_ID = 76;
+  function _aiCivOf(card) {
+    if (!card) return null;
+    return card.civilization || card.civ || card.era || null;
+  }
+  function _aiMerchantAt(locId) {
+    return (G.aiSlots[locId] || []).some(function (s) {
+      return s && s.cardId === MERCHANT_CARD_ID;
+    });
+  }
+  /* Open AI slot at some location OTHER than locId — the real fizzle test. */
+  function _aiHasOpenElsewhere(locId) {
+    for (var i = 0; i < G.locations.length; i++) {
+      var lid = G.locations[i].id;
+      if (lid === locId) continue;
+      if (_giantHasOpen(lid)) return true;
+    }
+    return false;
+  }
+  function _merchantComboValue(cardId, locId, turnsLeft) {
+    var card = _serfCardOf(cardId);
+    if (!card || card.type !== 'Economic') return 0;      // only Economic plays trigger it
+    if (cardId === MERCHANT_CARD_ID) return 0;            // the Merchant landing is not itself a trigger
+    if (!_aiMerchantAt(locId)) return 0;                  // no Merchant here → nothing to trigger
+    if (!_aiHasOpenElsewhere(locId)) return 0;            // FIZZLE — the ability aborts before paying out
+
+    var v = 1;                                            // (1) Merchant's own +1
+    var mCard = _serfCardOf(MERCHANT_CARD_ID);
+    var myCiv = _aiCivOf(mCard), theirCiv = _aiCivOf(card);
+    if (myCiv && theirCiv && myCiv !== theirCiv) v += 1;   // (2) cross-civ → +1 to the played card
+
+    // (3) expected value of the Merchant's forced random relocation.
+    var opens = [], i;
+    for (i = 0; i < G.locations.length; i++) {
+      var l = G.locations[i];
+      if (l.id === locId || !_giantHasOpen(l.id)) continue;
+      opens.push(l);
+    }
+    if (opens.length) {
+      var sum = 0;
+      for (i = 0; i < opens.length; i++) {
+        if (opens[i].abilityKey === 'MOVE_HERE_IP') sum += 1;
+        else if (opens[i].abilityKey === 'MOVE_HERE_CAPITAL') sum += (turnsLeft > 1 ? 0.5 : 0);  // capital next turn is worthless on the last turn
+      }
+      v += sum / opens.length;
+    }
+    return v;
+  }
+
   /* Reveal-order key (lower = revealed earlier). Discounts + type-auras fire
      first so the cards they boost are cheaper / bigger when they land; grabbers
      (Papyrus 54 / Pyramid 57, which read the LAST-played card here) go last so
@@ -1592,6 +1665,98 @@
         }
         return null;
       }
+    },
+
+    /* HATSHEPSUT — the TRADE ENGINE. Her deck is not a pile of bodies; it is
+       Merchants plus Economic payloads, and the audit showed the generic Giant
+       played it backwards (Hatshepsut on turn 4, Economic cards down BEFORE the
+       Merchant, engine triggered zero times in a whole battle).
+
+       Three jobs, in dependency order:
+         1. Get a Merchant onto the board — Hatshepsut herself is the cheapest
+            route because her At Once SPAWNS one free.
+         2. Never play the payload before the engine — the trigger is
+            onCardLandedHere, so the Merchant must already be standing there.
+         3. Feed Economic cards onto Merchant locations, preferring the
+            different-civilization one (Purple Dye 75 is her ONLY non-Egypt
+            Economic card, so it is the single best payload she owns).
+       The value math lives in _merchantComboValue so it stays faithful to the
+       real ability (fizzle-first, cross-civ, random relocation). */
+    hatshepsut: {
+      /* 8%, against the Serf's 15%. Lower on purpose: hers is the closest thing
+         to a COMBO deck — Merchant, then Economic onto it, then cross-civ, then
+         the movement payoff, each step depending on the last — so a single
+         careless pick derails a chain rather than costing one card's points.
+         The felt disruption of 8% here is about the same as 15% on the other
+         bosses' linear "put up points" decks. */
+      carelessness: 0.08,
+
+      cardBias: function (cardId, ctx) {
+        var t = (typeof ctx.turn === 'number') ? ctx.turn : G.turn;
+        var turns = (G.config && G.config.structure && G.config.structure.turns) || 5;
+        var hand = ctx.hand || [];
+
+        // (1) Hatshepsut ASAP — a free Merchant is worth more than any body she
+        //     could play instead, and every turn she waits is a turn the engine
+        //     is not running. Only while she is not already down.
+        if (cardId === 52 && _giantFindAiCardLoc(52) == null) return 5;
+
+        // (2) A Merchant is worth playing in PROPORTION to the payloads still
+        //     in hand — it is a converter, worthless with nothing to convert.
+        if (cardId === MERCHANT_CARD_ID) {
+          var payloads = 0;
+          hand.forEach(function (id) {
+            var c = _serfCardOf(id);
+            if (c && c.type === 'Economic' && id !== MERCHANT_CARD_ID) payloads++;
+          });
+          if (!payloads) return 0;
+          // Late Merchants have no turns left to be fed — taper with the clock.
+          return Math.min(payloads, 3) * (t < turns ? 1.5 : 0.5);
+        }
+        return 0;
+      },
+
+      /* Per-(card, location): the actual combo value of landing THIS Economic
+         card at THIS location. Zero everywhere it is not the combo, so it only
+         ever breaks ties toward the engine. */
+      playBias: function (cardId, locId, ctx) {
+        var t = (typeof ctx.turn === 'number') ? ctx.turn : G.turn;
+        var turns = (G.config && G.config.structure && G.config.structure.turns) || 5;
+        return _merchantComboValue(cardId, locId, Math.max(0, turns - t + 1));
+      },
+
+      /* playBias steers WHICH card is picked, but the shared default placement
+         ranks locations by marginal board value alone and would happily drop the
+         payload somewhere with no Merchant. So the placement has to agree with
+         the scoring: send Economic cards to the Merchant, and put Merchants
+         where a payload can still follow them. */
+      choosePlacement: function (cardId, legalLocs, ctx) {
+        var t = (typeof ctx.turn === 'number') ? ctx.turn : G.turn;
+        var turns = (G.config && G.config.structure && G.config.structure.turns) || 5;
+        var turnsLeft = Math.max(0, turns - t + 1);
+        var card = _serfCardOf(cardId);
+        if (!card) return null;
+
+        // Economic payload → the legal location where the combo pays most.
+        if (card.type === 'Economic' && cardId !== MERCHANT_CARD_ID) {
+          var best = null, bestV = 0;
+          legalLocs.forEach(function (lid) {
+            var v = _merchantComboValue(cardId, lid, turnsLeft);
+            if (v > bestV) { bestV = v; best = lid; }
+          });
+          if (best != null) return best;
+        }
+
+        // A Merchant wants a location that will still have ROOM for a payload
+        // after it lands — otherwise the engine has nowhere to be fed.
+        if (cardId === MERCHANT_CARD_ID) {
+          var roomy = legalLocs.filter(function (lid) {
+            return (G.aiSlots[lid] || []).filter(function (s) { return s === null; }).length >= 2;
+          });
+          if (roomy.length) return _giantLeastAheadLoc(roomy);
+        }
+        return null;
+      }
     }
   };
 
@@ -1655,16 +1820,35 @@
         var idx = _serfStage(o.cardId, o.locId);
         var marginal = _serfValue() - baseVal;
         _serfUnstage(o.locId, idx);
+        /* sig.playBias is per-(card, LOCATION), unlike cardBias which is
+           per-card. Needed for combos whose value depends on WHERE the card
+           lands (the Merchant trigger: "Purple Dye is worth more at Thebes
+           because my Merchant is standing there"). Signatures without it add
+           +0, so every other boss is byte-identical. */
         var adj = marginal
                 + _giantSetupBonus(o.cardId, turnsLeft, positional)
                 + _giantTypeBias(o.cardId, sig.preferType)
-                + (typeof sig.cardBias === 'function' ? (sig.cardBias(o.cardId, ctx) || 0) : 0);
+                + (typeof sig.cardBias === 'function' ? (sig.cardBias(o.cardId, ctx) || 0) : 0)
+                + (typeof sig.playBias === 'function' ? (sig.playBias(o.cardId, o.locId, ctx) || 0) : 0);
         var cur = byCard[o.cardId];
         if (!cur || adj > cur.adj) byCard[o.cardId] = { cardId: o.cardId, adj: adj, marginal: marginal, cost: o.cost, card: o.card };
       });
       var cards = Object.keys(byCard).map(function (k) { return byCard[k]; });
       cards.sort(function (a, b) { return b.adj - a.adj; });
       var pick = cards[0];
+      /* SIGNATURE CARELESSNESS — identical mechanism to the Serf's roll (see
+         serfSelectPlays): at each card-pick decision point, replace the greedy
+         best with a UNIFORMLY RANDOM affordable card. Not a skip — the Giant
+         still commits a play, just not the right one.
+
+         Opt-in per boss via sig.carelessness, so a signature that omits it is
+         byte-identical to before (the other four Giants keep their own tuning
+         and stay at full strength). Applied uniformly, deliberately NOT weighted
+         to protect setup plays: fumbling a setup play occasionally is the point,
+         and on a combo deck that is exactly where the softness should land. */
+      if (sig.carelessness && cards.length > 1 && Math.random() < sig.carelessness) {
+        pick = cards[rng(cards.length)];
+      }
       // UPGRADE 1: the Giant always commits (no marginal<=0 early-stop) — it fills
       // the board every turn. (costFree bosses like Gilgamesh have no capital gate.)
 
@@ -1837,6 +2021,76 @@
     );
   }
 
+  /* ── GIANT FREE-MOVE-AWAY (Red Sea) — the SCORED counterpart to the Serf's
+     random one. Same legality rules (ANY_FREE_MOVE_AWAY source, one move per
+     turn, _aiSlotMovableNow so a card played this turn can't move), but the
+     Giant CHOOSES rather than rolling:
+
+       destination — score the location's arrival bonus, not just its emptiness:
+                       MOVE_HERE_IP       (Punt)   → +1 IP, banked immediately
+                       MOVE_HERE_CAPITAL  (Thebes) → +1 capital NEXT turn, so
+                                                     worth nothing on the last
+                                                     turn and discounted before
+                     plus a contest term: a move that flips or defends a
+                     location is worth more than one into a runaway win.
+       mover       — the card that gains most by leaving. Prefer moving a card
+                     OUT of a location the AI already wins comfortably and INTO
+                     one it is losing, so the move buys a location rather than
+                     padding a lead.
+
+     Keyed on the ability, not the boss, so any future Giant board with these
+     keys inherits it. Serf keeps runSerfFreeMoveAway (random) — the tiers are
+     meant to differ exactly here. */
+  function runGiantFreeMoveAway(done) {
+    done = done || function () {};
+    var fromLoc = G.locations.find(function (l) { return l.abilityKey === 'ANY_FREE_MOVE_AWAY'; });
+    if (!fromLoc) { done(); return; }
+
+    var movers = [];
+    (G.aiSlots[fromLoc.id] || []).forEach(function (sd, si) {
+      if (_aiSlotMovableNow(G, sd)) movers.push({ sd: sd, slotIndex: si });
+    });
+    if (!movers.length) { done(); return; }
+
+    var turns     = (G.config && G.config.structure && G.config.structure.turns) || 5;
+    var lastTurn  = G.turn >= turns;
+
+    var dests = [];
+    G.locations.forEach(function (l) {
+      if (l.id === fromLoc.id || !_giantHasOpen(l.id)) return;
+      var score = 0;
+      if (l.abilityKey === 'MOVE_HERE_IP') score += 1;
+      if (l.abilityKey === 'MOVE_HERE_CAPITAL') score += lastTurn ? 0 : 0.5;
+      // Contest term: margin < 0 means we are LOSING there — a body helps most.
+      var margin = _giantLocMargin(l.id);
+      if (margin < 0) score += Math.min(-margin, 3) * 0.4;
+      else            score += Math.max(0, 1.5 - margin * 0.2) * 0.1;   // runaway wins are near-worthless
+      dests.push({ id: l.id, score: score });
+    });
+    if (!dests.length) { done(); return; }                 // nowhere to go → fizzle
+    dests.sort(function (a, b) { return b.score - a.score; });
+    var dest = dests[0];
+
+    // Leaving is cheapest for the card whose absence costs the source least —
+    // but never strip a location we would then lose. Approximate: prefer the
+    // LOWEST-IP mover when the source is comfortably won, the HIGHEST when the
+    // source is already lost (salvage the body).
+    var srcMargin = _giantLocMargin(fromLoc.id);
+    movers.sort(function (a, b) {
+      var ea = _serfEffIP(a.sd), eb = _serfEffIP(b.sd);
+      return srcMargin < 0 ? eb - ea : ea - eb;
+    });
+    var mover = movers[0];
+
+    if (!(SOG.game && typeof SOG.game.executeMoveAnimated === 'function')) { done(); return; }
+    // 'opp' (not 'ai') — the DOM is keyed data-owner="opp"; see runSerfFreeMoveAway.
+    SOG.game.executeMoveAnimated(
+      'opp', mover.sd.cardId, fromLoc.id, dest.id,
+      { sd: mover.sd, fromSlotIndex: mover.slotIndex },
+      done
+    );
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      PUBLIC EXPORTS
   ═══════════════════════════════════════════════════════════════ */
@@ -1845,6 +2099,7 @@
     runAiMovements: runAiMovements,
     runAdventureMovements: runAdventureMovements,
     runSerfFreeMoveAway: runSerfFreeMoveAway,
+    runGiantFreeMoveAway: runGiantFreeMoveAway,
     // Shared card-placement heuristics (also used by the per-battle selectors).
     cardTurnBias: cardTurnBias,
     cardLocBias:  cardLocBias,
