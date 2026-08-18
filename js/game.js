@@ -1363,14 +1363,24 @@
          then Chariot move, then turn advance). Re-tally after the strike, then
          proceed. Config-gated; inert for Arcadium/Prehistory/Ötzi (none sets
          ai.movement 'adventure', and none has a move-capable AI card here). */
+      var _afterAiMove = function () {
+        evaluateContinuous();
+        updateScores();
+        _proceedAfterReveal();
+      };
       if (G.config && G.config.ai && G.config.ai.movement === 'adventure'
           && G.config.ai.tier !== 'serf'   // Serf leaves movers in place; Giant repositions them
           && SOG.ai && typeof SOG.ai.runAdventureMovements === 'function') {
-        SOG.ai.runAdventureMovements(function () {
-          evaluateContinuous();
-          updateScores();
-          _proceedAfterReveal();
-        });
+        SOG.ai.runAdventureMovements(_afterAiMove);
+      /* Serf still gets ONE relocation, but only the free one a location hands
+         out: an ANY_FREE_MOVE_AWAY board (Red Sea) lets a card leave each turn,
+         and the Serf used to ignore it entirely. Random card, random open
+         destination — see runSerfFreeMoveAway. Inert on every other battle,
+         since no other location carries that ability key. */
+      } else if (G.config && G.config.ai && G.config.ai.tier === 'serf'
+          && SOG.ai && typeof SOG.ai.runSerfFreeMoveAway === 'function'
+          && G.locations.some(function (l) { return l.abilityKey === 'ANY_FREE_MOVE_AWAY'; })) {
+        SOG.ai.runSerfFreeMoveAway(_afterAiMove);
       } else {
         _proceedAfterReveal();
       }

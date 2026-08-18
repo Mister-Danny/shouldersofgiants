@@ -871,6 +871,30 @@
     if (any) { G.locationSnapshots = {}; G.reservedSlotsPerLoc = {}; }
   }
 
+  /* Is this slot's card legally movable RIGHT NOW, in a post-reveal pass?
+     Two conditions, and the second is the one that is easy to lose:
+
+       revealed  — face-up on the board at all.
+       settled   — NOT the turn it entered play. A card may only be selected to
+                   move on a turn AFTER it arrives. turnPlayed is the play turn,
+                   and during/after the reveal pass G.turn is STILL that turn,
+                   so the test is G.turn > turnPlayed.
+
+     Why this needs to be shared rather than re-derived per caller: in the
+     SELECT phase (input.js refreshMoveableCards) `revealed` alone is already
+     sufficient, because cards played this turn have not been revealed yet — so
+     "revealed" silently means "settled" there. That equivalence BREAKS in a
+     post-reveal pass, where this turn's cards are now revealed too. Any
+     post-reveal mover that copies the select-phase test therefore grabs
+     same-turn cards and performs an illegal move. Both post-reveal movers now
+     go through here so the rule is stated once.
+
+     turnPlayed == null → treat as settled (legacy/serialised slot data). */
+  function _aiSlotMovableNow(G, sd) {
+    if (!sd || !sd.revealed) return false;
+    return sd.turnPlayed == null || G.turn > sd.turnPlayed;
+  }
+
   function runAdventureMovements(onDone) {
     onDone = onDone || function () {};
     var G = SOG.state.G;
@@ -884,9 +908,8 @@
     // Find the AI's revealed Chariot eligible to move:
     //  • once per BATTLE, not per turn — guard via _advChariotMoved, a flag on
     //    the card's slot data (travels with the card when it moves);
-    //  • NOT on the turn it was revealed — a card can only be selected to move
-    //    on a turn AFTER it enters play. turnPlayed is the play turn; during the
-    //    reveal pass G.turn is still that turn, so require G.turn > turnPlayed.
+    //  • revealed AND settled (not the turn it entered play) — see
+    //    _aiSlotMovableNow, which now owns that rule for both post-reveal movers.
     // Gather ALL eligible Chariots (both twins if a Papyrus copy exists), in
     // location order. We move the FIRST whose decision resolves to a destination
     // — a Chariot that decides to HOLD must NOT block another one that would move
@@ -894,9 +917,8 @@
     var eligible = [];
     G.locations.forEach(function (loc) {
       (G.aiSlots[loc.id] || []).forEach(function (s) {
-        if (!s || !s.revealed) return;
-        if ((s.cardId === 48 || s.cardId === 69) && !s._advChariotMoved &&
-            (s.turnPlayed == null || G.turn > s.turnPlayed)) {
+        if (!_aiSlotMovableNow(G, s)) return;
+        if ((s.cardId === 48 || s.cardId === 69) && !s._advChariotMoved) {
           eligible.push({ locId: loc.id, sd: s, cardId: s.cardId });
         }
       });
@@ -1177,6 +1199,24 @@
     return scored.slice(0, 2).map(function (s) { return s.id; });
   }
 
+  /* PER-BOSS SERF PRIORITY CARDS — the Serf equivalent of _GIANT_SIGNATURES,
+     kept deliberately thinner: just "get this card down as soon as you can
+     afford it", no placement or tempo logic. Keyed by scriptHook, so a boss
+     without an entry is completely unaffected.
+
+     Hatshepsut (52) is the whole reason this exists: her Trading Queen At Once
+     spawns a Merchant, which is her engine — a Serf that sat on her until the
+     marginal-IP score happened to favour her was leaving the entire deck's
+     point unplayed. Serf gets 5 capital/turn and she costs 5, so this makes
+     turn 1 the normal case whenever she is in the opening hand. */
+  var _SERF_PRIORITY_CARDS = {
+    hatshepsut: { 52: true }
+  };
+  function _serfPriorityIds() {
+    var hook = G.config && G.config.scriptHook;
+    return (hook && _SERF_PRIORITY_CARDS[hook]) || null;
+  }
+
   function serfSelectPlays(ctx) {
     var G_ = ctx.G || G;
     if (G_ !== G) return [];   // module-scoped G is canonical
@@ -1223,6 +1263,16 @@
       // little dumber / less predictable. (Placement is already random on turns 1..N-1;
       // this adds randomness to WHICH card is played.) Bump the 0.15 to tune.
       if (cards.length > 1 && Math.random() < 0.15) pick = cards[rng(cards.length)];
+      /* Priority card jumps the queue — including past the carelessness roll
+         above, which would otherwise skip her ~15% of the time. `cards` only
+         holds AFFORDABLE options (built from _serfLegalOptions), so reaching
+         here at all means she can be paid for right now. */
+      var _prio = _serfPriorityIds();
+      if (_prio) {
+        for (var pi = 0; pi < cards.length; pi++) {
+          if (_prio[cards[pi].cardId]) { pick = cards[pi]; break; }
+        }
+      }
       // 33% path: stop once the best play no longer improves net IP (may leave capital).
       if (!spendAll && pick.marginal <= 0) break;
 
@@ -1713,12 +1763,88 @@
   SOG.aiLog = _aiLog;
 
   /* ═══════════════════════════════════════════════════════════════
+     SERF FREE-MOVE-AWAY (Red Sea) — one random relocation per turn
+     ───────────────────────────────────────────────────────────────
+     A location with abilityKey 'ANY_FREE_MOVE_AWAY' lets one card leave it
+     each turn. The player has used this since Hatshepsut shipped (input.js
+     refreshMoveableCards); the AI never did, so a Serf just parked cards on
+     the Red Sea and left the payoffs — Punt's +1 IP and Thebes' +1 capital —
+     permanently on the table.
+
+     Deliberately DUMB, because this is the easy tier: pick a random own card
+     that is there, pick a random other location that has room, move it. No
+     evaluation of which destination is worth more, no check on whether the
+     move helps. That is the intended Serf texture (it matches the 15%
+     carelessness knob in serfSelectPlays) and it still converts the free
+     value the tier was ignoring entirely.
+
+     Runs POST-REVEAL from the same seam as runAdventureMovements, so it moves
+     from a settled board with every card revealed. Routed through
+     executeMoveAnimated — the shared pipeline — so applyMove fires
+     fireMoveHereBonus and the destination's MOVE_HERE_IP / MOVE_HERE_CAPITAL
+     bonus lands exactly as it would for a player move.
+
+     Keyed on the ability, not on the boss: any future Serf battle that places
+     an ANY_FREE_MOVE_AWAY location inherits this with no new code. Giant is
+     untouched — it keeps routing through runAdventureMovements.
+
+     NOTE: G.locMoveUsedThisTurn is deliberately NOT written here. That flag is
+     the PLAYER's per-location move budget, read by input.js to grey out the
+     card; the AI spending it would silently cost the player their own Red Sea
+     move. One-move-per-turn for the AI is enforced by this function moving at
+     most once per call, and it is called once per turn. */
+  function runSerfFreeMoveAway(done) {
+    done = done || function () {};
+    var fromLoc = G.locations.find(function (l) { return l.abilityKey === 'ANY_FREE_MOVE_AWAY'; });
+    if (!fromLoc) { done(); return; }
+
+    /* The AI's OWN LEGALLY-MOVABLE cards sitting there (never the player's).
+       "Present and revealed" is NOT the eligibility rule — this pass runs
+       post-reveal, so cards played this very turn are revealed too, and moving
+       one is an illegal same-turn move. _aiSlotMovableNow adds the settled
+       requirement. */
+    var movers = [];
+    (G.aiSlots[fromLoc.id] || []).forEach(function (sd, si) {
+      if (_aiSlotMovableNow(G, sd)) movers.push({ sd: sd, slotIndex: si });
+    });
+    if (!movers.length) { done(); return; }   // nothing settled here → fizzle
+
+    // Destinations = the other locations with an open AI slot. No room
+    // anywhere → fizzle for the turn, same as the Merchant's own move does.
+    var dests = G.locations.filter(function (l) {
+      if (l.id === fromLoc.id) return false;
+      return (G.aiSlots[l.id] || []).some(function (s) { return s === null; });
+    });
+    if (!dests.length) { done(); return; }
+
+    var mover = movers[Math.floor(Math.random() * movers.length)];
+    var dest  = dests[Math.floor(Math.random() * dests.length)];
+
+    if (!(SOG.game && typeof SOG.game.executeMoveAnimated === 'function')) { done(); return; }
+    /* Owner string MUST be 'opp', not 'ai'. The two are not interchangeable:
+       executeMoveAnimated picks the STATE array with `owner === 'player' ? ... :
+       G.aiSlots`, so 'ai' silently works there — but the DOM is keyed
+       data-owner="opp", so getSlotEl('ai', ...) returns null and the
+       `if (finalSlotEl && card)` render block is skipped entirely. The card
+       then lands in state and scores while never being drawn: a phantom.
+       The source location still looked right because syncOppSlots(fromLocId)
+       re-renders it wholesale, which is what made this hard to see.
+       runAdventureMovements passes 'opp' for the same reason. */
+    SOG.game.executeMoveAnimated(
+      'opp', mover.sd.cardId, fromLoc.id, dest.id,
+      { sd: mover.sd, fromSlotIndex: mover.slotIndex },   // exact slot — duplicate-cardId safe
+      done
+    );
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      PUBLIC EXPORTS
   ═══════════════════════════════════════════════════════════════ */
   SOG.ai = {
     runAiSelection: runAiSelection,
     runAiMovements: runAiMovements,
     runAdventureMovements: runAdventureMovements,
+    runSerfFreeMoveAway: runSerfFreeMoveAway,
     // Shared card-placement heuristics (also used by the per-battle selectors).
     cardTurnBias: cardTurnBias,
     cardLocBias:  cardLocBias,
