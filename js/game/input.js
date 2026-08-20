@@ -1143,6 +1143,12 @@
     // one-time -1 CC stamp (G.nebCCDiscount, set in abilities.js). Read per-card below
     // (not a board scan) — only cards stamped at Neb's reveal display the discount.
     var nebDiscount = (G.nebCCDiscount && G.nebCCDiscount.player) || {};
+    // Ramses II (id 53): the SAME one-time in-hand -1 CC stamp mechanism as
+    // Nebuchadnezzar above, keyed on era "Egypt" (G.ramsesCCDiscount). This clause was
+    // MISSING while board.js effectiveCost had it, so a Ramses-stamped Egypt card
+    // displayed its full cost and was then charged one less — the badge disagreed with
+    // the charge. Mirrors effectiveCost so the in-hand number is the truth.
+    var ramsesDiscount = (G.ramsesCCDiscount && G.ramsesCCDiscount.player) || {};
     // Babylon location (BABYLON_COST_5) present → base-cost-5 cards display -1. Keyed
     // off the LOCATION (present its whole battle), not a card. Stacks with the Neb-50
     // Mesopotamia discount. Inert in battles with no Babylon location. Mirrors
@@ -1165,6 +1171,7 @@
       if (card.type === 'Exploration' && henryOnBoard)           displayCC = Math.max(0, displayCC - 1);
       if (card.type === 'Cultural'    && cosimoOnBoard)          displayCC = Math.max(0, displayCC - 1);
       if (card.era  === 'Mesopotamia' && nebDiscount[cardId])    displayCC = Math.max(0, displayCC - 1);
+      if (card.era  === 'Egypt'        && ramsesDiscount[cardId]) displayCC = Math.max(0, displayCC - 1);
       if (card.cc   === 5             && babylonOnBoard)         displayCC = Math.max(0, displayCC - 1);
       if (card.type === 'Scientific'  && imhotepOnBoard)         displayCC = Math.max(0, displayCC - 1);
       var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"] .db-overlay-cc');
