@@ -77,6 +77,7 @@
   var compactOppSlots       = SOG.board.compactOppSlots;
   var syncOppSlots          = SOG.board.syncOppSlots;
   var effectiveIP           = SOG.board.effectiveIP;
+  var effectiveCost         = SOG.board.effectiveCost;
   var addIPMod              = SOG.board.addIPMod;
   var nextEventId           = SOG.board.nextEventId;
   var addBonus              = SOG.board.addBonus;
@@ -199,6 +200,23 @@
   function isKenteProtected(locId) {
     return G.playerSlots[locId].some(function (s) { return s && s.revealed && abilityIdOf(s) === 17; }) ||
            G.aiSlots[locId].some(    function (s) { return s && s.revealed && abilityIdOf(s) === 17; });
+  }
+
+  /* ── CAN `owner`'S CARDS AT locId BE DESTROYED? ───────────────────────────
+     The SINGLE gate every destruction path consults, so the rule is stated once
+     instead of re-derived per ability. Two protections feed it, with different
+     scopes — both LOCATION-WIDE (they shield every card there, not just the
+     protector itself):
+       • Kente (17)  — SYMMETRIC: either side's Kente freezes the whole location.
+       • Sphinx (64) — PER-SIDE: it shields its OWNER's cards there ("Your cards
+         here"), which is the same scope its IP-reduction protection already uses.
+     Consulted by destroyCard (covering Wu Zetian, Hammurabi, the Egypt Soldier)
+     and by the two abilities that destroy WITHOUT going through destroyCard —
+     Cortes, which inlines its own sweep, and Hammurabi, which must call off the
+     whole trade rather than half of it. Egypt-only for the Sphinx half, so this is
+     identical to the old Kente-only behaviour in every non-Egypt battle. */
+  function isDestroyProtected(owner, locId) {
+    return isKenteProtected(locId) || isSphinxProtected(owner, locId);
   }
 
   /* Update the persistent orange Kente glow on each location tile.
@@ -802,15 +820,42 @@
      Joan of Arc) and accumulate William's destruction counter.
   ═══════════════════════════════════════════════════════════════ */
 
-  /* Batch C — DESTROYED-CARD pile (infrastructure; NO consumer yet). Every card
-     destroyed on the board records an identifying entry in the DESTROYED owner's
-     pile — STRICTLY SEPARATE from the discard pile (Ra/Book discards). Destroyed
-     cards never enter the discard pile, and Priest/Book never read this pile. Stores
-     effective stats at destruction so a destroyed token (Mummy) keeps its inherited
-     IP/CC. Cleared per battle (game.js). Distinct from G.destroyedCards (William's
-     IP accumulator), which this does not touch. */
+  /* ── DOES A CARD THAT LEAVES PLAY STAY GONE? ─────────────────────────────
+     The SINGLE source of truth for BOTH piles (destroyed + discard). A card may
+     enter a pile only if it does NOT bring itself back:
+       • Jesus (10)   — discarded  → +3 IP and RETURNS TO YOUR HAND.
+       • Samurai (12) — destroyed  → +2 IP and RETURNS TO THE SAME LOCATION.
+     Everything else STAYS DEAD and is revivable — including cards that early-return
+     from discardFromHand/destroyCard for animation reasons but never come back:
+     Jan Hus (7) fires his boost-to-cards-in-play on the way out and is gone for
+     good; Joan of Arc (14) summons a DIFFERENT card from hand and stays destroyed.
+     The test is "does THIS card return to play or hand?", NEVER "does the call site
+     early-return?".
+     The rule is keyed by EXIT, because both returns are exit-specific: Samurai's
+     revival fires only from destroyCard, Jesus's only from discardFromHand. So a
+     Jesus DESTROYED on the board (Cortes, Hammurabi, Soldier) and a Samurai
+     DISCARDED from hand both stay dead, and both are correctly revivable. Still one
+     table consulted by both piles — never call-site ordering. An unknown exit is
+     treated conservatively (not piled).
+     WHY IT MATTERS: the Priest (71) revives from both piles. Without this gate a
+     Samurai would leave a destroyed-pile entry, be revived as a Mummy, and still be
+     standing on the board — a duplication exploit. */
+  var RETURNS_TO_PLAY = { 10: 'discard', 12: 'destroy' };
+  function staysDead(cardId, exit) {
+    var back = RETURNS_TO_PLAY[cardId];
+    if (!back) return true;                 // never comes back by any exit
+    return exit ? back !== exit : false;    // no exit given → assume it comes back
+  }
+
+  /* Batch C — DESTROYED-CARD pile. Every card destroyed on the board records an
+     entry in the DESTROYED owner's pile, unless it revives itself (staysDead).
+     Stores effective stats at destruction so a destroyed token (Mummy) keeps its
+     inherited IP/CC and a buffed card revives with the buff. Consumed by the Priest
+     (71), which merges this pile with the discard pile. Cleared per battle
+     (game.js). Distinct from G.destroyedCards (William's IP accumulator), which
+     this does not touch. */
   function pushDestroyed(owner, sd, dIP) {
-    if (!sd) return;
+    if (!sd || !staysDead(sd.cardId, 'destroy')) return;
     var entry = { cardId: sd.cardId, ip: dIP, cc: effectiveCC(sd) };
     if (owner === 'player') { (G.playerDestroyed = G.playerDestroyed || []).push(entry); }
     else                    { (G.aiDestroyed     = G.aiDestroyed     || []).push(entry); }
@@ -821,7 +866,9 @@
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var sd    = slots[locId][slotIndex];
     if (!sd) return;
-    if (!opts.skipKente && isKenteProtected(locId)) return;
+    // Protection gate (Kente + Sphinx) — checked BEFORE any state changes, so a
+    // protected card leaves no destroyed-pile entry and fires no death trigger.
+    if (!opts.skipProtection && isDestroyProtected(owner, locId)) return;
 
     var dIP    = effectiveIP(sd);
     var cardId = sd.cardId;
@@ -884,10 +931,14 @@
 
   /**
    * Discard a card from an owner's hand.
-   * Removes from hand state/DOM and fires If/When-discarded triggers.
+   * Removes from hand state/DOM, records the discard in the owner's resurrection
+   * pile, and fires If/When-discarded triggers.
    */
   function discardFromHand(owner, cardId, callback, opts) {
     opts = opts || {};
+    /* Snapshot the card's in-hand stats BEFORE anything mutates them (Jesus's
+       +3 is stamped by his own trigger below). */
+    var discardStats = handStats(owner, cardId);
     // Discard sound: a caller-supplied sfx (e.g. Priest's priest.m4a) replaces the
     // generic whoosh for THAT discard only; every other caller keeps the whoosh.
     if (opts.sfx) { SOG.sfx.play(opts.sfx); }
@@ -919,6 +970,15 @@
         if (backs && backs.length) Anim.cardDiscarded(backs[backs.length - 1], opts.riseSec);
       }
     }
+    /* THE discard-pile entry point — every hand discard in the game funnels
+       through here, so no caller pushes its own (that is how Ra/Book used to
+       double up). It runs BEFORE the trigger dispatch below because two of those
+       triggers early-return; staysDead(), not the call-site shape, decides who is
+       piled. So Jan Hus (7) — who early-returns yet is gone for good — IS
+       revivable, while Jesus (10) — who early-returns AND flies back to hand — is
+       filtered out inside pushDiscard. */
+    pushDiscard(owner, cardId, discardStats);
+
     if (cardId === 7) {
       triggerJanHus(owner, janHusEl, function () {
         if (janHusEl) removeEl(janHusEl);
@@ -1019,9 +1079,48 @@
 
   /* Farmer (39) — "Harvest". At Once: grant the OWNER +1 capital next turn via
      the shared accumulator above. No board reads, so nothing to animate beyond
-     the standard At-Once pulse/chime; harmlessly no-ops where capital is off. */
+     the standard At-Once pulse/chime; harmlessly no-ops where capital is off.
+     Also used by the Nubian Gold token (73). NOT the Egypt Farmer (55) — that one
+     buffs the next card played, see abilityFarmerEgypt. */
   function abilityFarmer(owner, locId, done) {
     grantCapitalNextTurn(owner, 1);
+    done();
+  }
+
+  /* ── Farmer — Egypt (55) "Harvest": +1 IP to the NEXT card you play ──────────
+     A PENDING ONE-SHOT buff, per side, held in G.pendingIPBuff — deliberately not
+     G.cardIPBonus (which is a permanent per-cardId in-hand accumulator) and not the
+     next-turn capital accumulator (which nextTurn clears). Semantics:
+       • armed by the Farmer's At Once;
+       • consumed by the NEXT card that card's owner reveals, wherever it is played;
+       • the +1 it grants is PERMANENT on that card (addIPMod);
+       • it PERSISTS ACROSS TURNS until something is played to consume it;
+       • it is a FLAG, not a counter — two Farmers do not stack into +2. A second
+         Farmer played while a buff is pending consumes it (taking the +1 itself,
+         since the consume hook runs BEFORE At Once) and re-arms a fresh one.
+     The Farmer never buffs itself: the consume hook reads the flag before this
+     ability sets it. */
+  function armPendingIPBuff(owner) {
+    if (!G.pendingIPBuff) G.pendingIPBuff = { player: false, opp: false };
+    G.pendingIPBuff[owner === 'player' ? 'player' : 'opp'] = true;
+  }
+
+  /* Consume the pending Farmer buff for `owner` onto the slot that is revealing.
+     Called from the reveal pipeline (game.js revealNext) IMMEDIATELY BEFORE the
+     card's own At Once fires — that ordering is what lets an Egypt Farmer take the
+     pending +1 and then arm the next one. Returns true if a buff was spent. */
+  function consumePendingIPBuff(owner, sd) {
+    if (!sd || !G.pendingIPBuff) return false;
+    var side = owner === 'player' ? 'player' : 'opp';
+    if (!G.pendingIPBuff[side]) return false;
+    G.pendingIPBuff[side] = false;
+    addIPMod(sd, 1, 'Farmer');
+    return true;
+  }
+
+  function abilityFarmerEgypt(owner, locId, done) {
+    armPendingIPBuff(owner);
+    if (typeof SFX !== 'undefined' && SFX.ipGained) SFX.ipGained();
     done();
   }
 
@@ -1381,8 +1480,11 @@
     var slots    = owner === 'player' ? G.playerSlots : G.aiSlots;
     var cortesEl = findSlotEl(owner, 13);
 
-    // ── Blocked: Kente is protecting ──────────────────────────────
-    if (isKenteProtected(locId)) {
+    // ── Blocked: Kente or the owner's own Sphinx is protecting ────
+    // Cortes inlines its own destruction (it never calls destroyCard), so the
+    // shared gate has to be consulted here explicitly. He destroys the OWNER's
+    // cards, so it is the OWNER's side that Sphinx shields.
+    if (isDestroyProtected(owner, locId)) {
       if (!cortesEl || typeof gsap === 'undefined') { done(); return; }
       if (typeof SFX !== 'undefined') SFX.mute(true);
       if (typeof SFX !== 'undefined') SFX.cortesDeflate();
@@ -1716,7 +1818,57 @@
     applyStrike(target);
   }
   function abilitySoldier(owner, locId, done)      { _soldierStrike(owner, locId, done, 42); }  // Mesopotamia
-  function abilitySoldierEgypt(owner, locId, done) { _soldierStrike(owner, locId, done, 70); }  // Egypt
+
+  /* Soldier — Egypt (70) "Military Service": At Once, DESTROY one of the opponent's
+     1-CC cards here. Distinct from the Mesopotamia Soldier's -1 IP strike above, so
+     it does NOT go through _soldierStrike.
+       • Targets read LIVE CC via effectiveCC, so a Mummy that inherited CC 1 from
+         its source card is a legal target (its card definition says 0).
+       • The target is picked at RANDOM among the eligible cards, for both sides —
+         same no-chooser rule as the Meso Soldier.
+       • FIZZLES (no-op) when the opponent has no 1-CC card here.
+       • Destruction is the engine's standard destroyCard, so everything that hangs
+         off a destroy still fires: Kente protection, Samurai's revival, Joan's
+         summon, William's counter, and the destroyed pile.
+     Presentation reuses the Soldier charge: the spear flies at the chosen card and
+     the destroy lands on the impact beat, so the reveal pipeline waits for it. */
+  function abilitySoldierEgypt(owner, locId, done) {
+    var oppSide  = owner === 'player' ? 'opp' : 'player';
+    var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
+    // Protection is LOCATION-WIDE, so it removes every candidate at once: zero valid
+    // targets → FIZZLE outright, no spear. Checked before the scan rather than left
+    // to destroyCard's gate, which would fly the spear at a card it cannot kill.
+    if (isDestroyProtected(oppSide, locId)) { done(); return; }
+    var targets  = [];
+    forEachRevealedAt(oppSlots, locId, function (s, i) {
+      if (effectiveCC(s) === 1) targets.push({ sd: s, idx: i });
+    });
+    if (targets.length === 0) { done(); return; }   // no 1-CC card here → fizzle
+
+    var t         = targets[Math.floor(Math.random() * targets.length)];
+    var targetEl  = getSlotEl(oppSide, locId, t.idx);
+    var soldierEl = findSlotEl(owner, 70);
+
+    function strike() {
+      // Re-resolve the slot index at impact: the board may have shifted between
+      // the pick and the landing (compaction after another destroy).
+      var idx = (oppSlots[locId] || []).indexOf(t.sd);
+      if (idx === -1) return;                        // target already gone
+      destroyCard(oppSide, locId, idx);   // standard destroy presentation + side effects
+      evaluateContinuous();
+      refreshSlotIPDisplays();
+      updateScores();
+    }
+
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.soldierCharge === 'function') {
+      rfx.soldierCharge(soldierEl, targetEl, { sfx: 'sfx/hit.m4a', onImpact: strike }, done);
+    } else {
+      // Defensive fallback (no animation available): apply instantly, still correct.
+      strike();
+      setTimeout(done, 400);
+    }
+  }
 
   // Hammurabi (id 47) — At Once: "Destroy your lowest CC card here in order to
   // destroy your opponent's lowest CC card." A SACRIFICE / trade, symmetric for
@@ -1751,6 +1903,13 @@
 
     // No sacrifice, or nothing to take → destroy nothing, no strike.
     if (sacIdx === -1 || oppIdx === -1) { done(); return; }
+
+    // Protection makes at least one half of the trade impossible → call the WHOLE
+    // trade off. Guarantee 2 ("no sacrifice → no kill") has to hold in both
+    // directions: with only the central destroyCard gate, an owner-side Sphinx
+    // would shield the sacrifice while the opponent's card still died — a free
+    // kill — and an opponent-side Sphinx would take the sacrifice for nothing.
+    if (isDestroyProtected(owner, locId) || isDestroyProtected(oppSide, locId)) { done(); return; }
 
     // Capture the EXACT slot elements the strike will destroy, so the animation
     // splits the same two cards the logic removes (same-target integrity).
@@ -2216,7 +2375,10 @@
      DISCARD CHOOSER UI  (Erasmus + Francis of Assisi)
   ═══════════════════════════════════════════════════════════════ */
 
-  function buildChooserCard(card, cardId) {
+  /* `stats` (optional) pins the numbers on the badges — used by pile choosers,
+     whose entries carry stats FROZEN at the moment the card left play. Omitted
+     (hand choosers) → the live card definition plus the in-hand IP accumulator. */
+  function buildChooserCard(card, cardId, stats) {
     var bonus = G.cardIPBonus[cardId] || 0;
     var el = document.createElement('div');
     el.className = 'discard-card-option';
@@ -2235,11 +2397,11 @@
 
     var ccEl = document.createElement('div');
     ccEl.className   = 'db-overlay-cc';
-    ccEl.textContent = card.cc;
+    ccEl.textContent = (stats && stats.cc != null) ? stats.cc : card.cc;
 
     var ipEl = document.createElement('div');
     ipEl.className   = 'db-overlay-ip';
-    ipEl.textContent = card.ip + bonus;
+    ipEl.textContent = (stats && stats.ip != null) ? stats.ip : (card.ip + bonus);
 
     el.appendChild(imgWrap);
     el.appendChild(ccEl);
@@ -2248,10 +2410,15 @@
   }
 
   /**
-   * Erasmus chooser — shows all hand cards as clickable images.
-   * callback(cardId) fires with the chosen card id.
+   * Shared card chooser — shows a list of options as clickable images.
+   * `options` entries are EITHER a bare card id (hand choosers: Erasmus, Book,
+   * Phoenicians, Trader) OR a pile entry object { cardId, ip, cc, … } whose frozen
+   * stats are shown on the badges (Priest's merged discard+destroyed chooser).
+   * callback fires with the chosen ENTRY — the same value that was passed in, so
+   * bare-id callers keep receiving a bare id.
    */
-  function showDiscardChooser(title, cardIds, callback) {
+  function showDiscardChooser(title, options, callback) {
+    var cardIds = options;
     var backdrop = document.createElement('div');
     backdrop.className = 'discard-backdrop';
 
@@ -2292,11 +2459,13 @@
     var row = document.createElement('div');
     row.className = 'discard-card-row';
 
-    cardIds.forEach(function (cardId) {
+    cardIds.forEach(function (opt) {
+      var isEntry = (opt !== null && typeof opt === 'object');
+      var cardId  = isEntry ? opt.cardId : opt;
       var card = CARDS.find(function (c) { return c.id === cardId; });
       if (!card) return;
-      var cardEl = buildChooserCard(card, cardId);
-      cardEl.addEventListener('click', function () { resolve(cardId); });
+      var cardEl = buildChooserCard(card, cardId, isEntry ? opt : null);
+      cardEl.addEventListener('click', function () { resolve(opt); });
       row.appendChild(cardEl);
     });
 
@@ -2893,7 +3062,7 @@
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var raSd  = null;
     (slots[locId] || []).forEach(function (s) { if (s && s.cardId === 63) raSd = s; });
-    pushDiscard(owner, lowestId);   // Ra's discard feeds the resurrection pile (Batch C)
+    // No manual pile push here — discardFromHand records every discard itself.
     discardFromHand(owner, lowestId, function () {
       if (raSd && gain !== 0) {
         addIPMod(raSd, gain, 'Ra');
@@ -2935,9 +3104,14 @@
   }
 
   /* Sphinx (id 64) — "Monumental Guardian": Kente-style protection (see
-     isKenteProtected). True if OWNER has a revealed Sphinx at locId → that owner's
-     cards there can't have their IP reduced. Enforced in _soldierStrike. Egypt-only
-     → returns false (inert) in every current battle. */
+     isKenteProtected), but PER-SIDE rather than symmetric. True if OWNER has a
+     revealed Sphinx at locId → that owner's cards there can neither be DESTROYED
+     nor have their IP REDUCED. Location-wide: it shields every card the owner has
+     there, not just the Sphinx.
+       • Reduction is enforced at the two strike sites that reduce IP —
+         _soldierStrike (Meso Soldier 42) and the Chariot arrival strike (69).
+       • Destruction is enforced through the shared isDestroyProtected gate.
+     Egypt-only → returns false (inert) in every non-Egypt battle. */
   function isSphinxProtected(owner, locId) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     return (slots[locId] || []).some(function (s) { return s && s.revealed && abilityIdOf(s) === 64; });
@@ -3209,54 +3383,137 @@
   /* ═══════════════════════════════════════════════════════════════
      BATCH C — RESURRECTION (discard pile + Mummy creation)
      ───────────────────────────────────────────────────────────────
-     Two systems: a per-side DISCARD PILE (G.playerDiscard / G.aiDiscard —
-     plain arrays of source card ids) fed ONLY by Ra (63) and Book of the
-     Dead (66); and MUMMY creation (id 72 token) which inherits a revived
-     card's IP/CC. Priest (71) revives from the pile; Book weighs & may
-     revive immediately. Board-DESTROYED cards never enter the pile
-     (destroyCard is untouched). Piles reset at battle start (game.js).
+     Two per-side piles, BOTH holding SNAPSHOT ENTRIES of the same shape
+     { cardId, ip, cc } — the card's stats FROZEN at the moment it left play:
+       • DISCARD  (G.playerDiscard / G.aiDiscard)  — fed by discardFromHand, so
+         EVERY hand discard lands here (Ra 63, Book 66, Meso Priest 38, Francis,
+         Erasmus, …), snapshotting the card's in-hand stats.
+       • DESTROYED (G.playerDestroyed / G.aiDestroyed) — fed by destroyCard,
+         snapshotting the board slot's effective stats.
+     Both piles gate on staysDead(), so a card that revives itself (Samurai) or
+     returns to hand (Jesus) never enters either one.
+     MUMMY creation (id 72 token) takes those frozen stats verbatim, so a buffed
+     card revives buffed. Priest (71) revives from the MERGED piles; Book (66)
+     weighs its own discard and may revive it immediately. Piles reset at battle
+     start (game.js).
   ═══════════════════════════════════════════════════════════════ */
 
-  /* Append a discarded card's id to the owner's discard pile. */
-  function pushDiscard(owner, cardId) {
-    if (cardId == null) return;
-    if (owner === 'player') { (G.playerDiscard = G.playerDiscard || []).push(cardId); }
-    else                    { (G.aiDiscard     = G.aiDiscard     || []).push(cardId); }
+  /* Stats of a card SITTING IN HAND for `owner` — the in-hand counterpart of
+     effectiveIP/effectiveCC, used to snapshot a discard. Mirrors the hand display
+     math (input.js refreshHandIPDisplays / buildHandCard): base IP + the per-side
+     in-hand accumulator (Cuneiform's hand boost, resurrection bonuses) + any
+     Papyrus copy bonus riding on the card, with William (15) reading the
+     destroyed-IP total instead of the accumulator.
+     CC is the card's EFFECTIVE COST — the discounted number shown on the in-hand CC
+     badge, not the printed card.cc — via the same board.effectiveCost the play-charge
+     uses, so Henry/Cosimo/Nebuchadnezzar/Babylon/Imhotep/Ramses discounts all count.
+     locId is null deliberately: a card in hand is at no location, so the only
+     location-scoped clause (the Levant's RELIGIOUS_DISCOUNT) correctly sits this out —
+     effectiveCost guards it with `loc &&`. The owner key must be 'player'/'ai' here,
+     NOT the 'player'/'opp' used elsewhere in this file, or the discount would be read
+     off the wrong side's board.
+     This one number feeds BOTH the discard-pile entry and Book of the Dead's weighing,
+     so "what the card was worth in hand" stays a single definition — and the Mummy a
+     Book spawns now is identical to the one a Priest revives from the same entry
+     later. */
+  function handStats(owner, cardId) {
+    var c = CARDS.find(function (x) { return x.id === cardId; });
+    if (!c) return null;
+    var side  = owner === 'player' ? 'player' : 'opp';
+    var bonus = (cardId === 15)
+      ? ((owner === 'player' ? G.destroyedIPTotal : G.aiDestroyedIPTotal) || 0)
+      : ((owner === 'player' ? G.cardIPBonus : G.aiCardIPBonus)[cardId] || 0);
+    var copy  = (G.copyIPBonus && G.copyIPBonus[side] && G.copyIPBonus[side][cardId]) || 0;
+    return {
+      ip: c.ip + bonus + copy,
+      cc: effectiveCost(c, null, owner === 'player' ? 'player' : 'ai')
+    };
   }
 
-  /* Remove ONE occurrence of cardId from the owner's discard pile (consume on revive). */
-  function popDiscard(owner, cardId) {
+  /* Append a discarded card's SNAPSHOT to the owner's discard pile. Called from
+     ONE place — discardFromHand — so every discard is piled exactly once (no
+     per-caller pushes to double up). Gated by the shared staysDead() predicate,
+     so Jesus (who returns to hand) never lands here. */
+  function pushDiscard(owner, cardId, stats) {
+    if (cardId == null || !staysDead(cardId, 'discard')) return;
+    var st    = stats || handStats(owner, cardId) || { ip: 0, cc: 0 };
+    var entry = { cardId: cardId, ip: st.ip, cc: st.cc };
+    if (owner === 'player') { (G.playerDiscard = G.playerDiscard || []).push(entry); }
+    else                    { (G.aiDiscard     = G.aiDiscard     || []).push(entry); }
+  }
+
+  /* The MOST RECENT discard-pile entry for cardId (null if it never landed there —
+     e.g. Jesus, who returned to hand). Book of the Dead uses this to weigh and
+     revive the exact entry its own discard just created. */
+  function findDiscardEntry(owner, cardId) {
     var pile = owner === 'player' ? G.playerDiscard : G.aiDiscard;
-    if (!pile) return;
-    var i = pile.indexOf(cardId);
+    if (!pile) return null;
+    for (var i = pile.length - 1; i >= 0; i--) {
+      if (pile[i] && pile[i].cardId === cardId) return pile[i];
+    }
+    return null;
+  }
+
+  /* Consume ONE entry from the owner's discard pile. Takes the ENTRY OBJECT
+     (spliced by identity, so two discards of the same card with different frozen
+     IP can never be confused) or, for convenience, a bare cardId. */
+  function popDiscard(owner, ref) {
+    var pile = owner === 'player' ? G.playerDiscard : G.aiDiscard;
+    if (!pile || ref == null) return;
+    var i = (typeof ref === 'object')
+      ? pile.indexOf(ref)
+      : pile.findIndex(function (e) { return e && e.cardId === ref; });
     if (i !== -1) pile.splice(i, 1);
   }
 
-  /* IP a Mummy inherits when reviving `sourceId`. Keyed per-source-card rule set
-     (Tut-only for now, structured for future additions): King Tutankhamen (61)
-     "Sacred Tomb" → the revived Mummy gets DOUBLE IP. Realized here at creation
-     because the Mummy carries the stats, not Tut's ability. */
-  function resurrectionIP(sourceId) {
-    var c  = CARDS.find(function (x) { return x.id === sourceId; });
-    var ip = c ? c.ip : 0;
+  /* Consume ONE entry from the owner's DESTROYED pile (same contract as popDiscard). */
+  function popDestroyed(owner, ref) {
+    var pile = owner === 'player' ? G.playerDestroyed : G.aiDestroyed;
+    if (!pile || ref == null) return;
+    var i = (typeof ref === 'object')
+      ? pile.indexOf(ref)
+      : pile.findIndex(function (e) { return e && e.cardId === ref; });
+    if (i !== -1) pile.splice(i, 1);
+  }
+
+  /* IP a Mummy inherits when reviving `sourceId` from a pile entry whose frozen IP
+     is `baseIP`. Keyed per-source-card rule set (Tut-only for now, structured for
+     future additions): King Tutankhamen (61) "Sacred Tomb" → the revived Mummy gets
+     DOUBLE IP. Realized here at creation because the Mummy carries the stats, not
+     Tut's ability. `baseIP` omitted → falls back to the card definition's IP (used
+     by AI scoring when it is ranking a card rather than a pile entry). */
+  function resurrectionIP(sourceId, baseIP) {
+    var ip = baseIP;
+    if (ip == null) {
+      var c = CARDS.find(function (x) { return x.id === sourceId; });
+      ip = c ? c.ip : 0;
+    }
     if (sourceId === 61) ip *= 2;   // Tutankhamen — Sacred Tomb: 2x IP on resurrection
     return ip;
   }
 
-  /* Create a revealed Mummy (id 72 token) at locId for owner, inheriting sourceId's
-     stats. Returns false (FIZZLE) if the location has no open slot. Stats live on the
-     slot data — sd.ip drives scoring everywhere (effectiveIP), and sd.cc is honored
-     by ALL CC reads via effectiveCC(sd) (Juvenal's CC≥4, Hammurabi's lowest-CC, AI
-     CC scoring) plus the CC badge (board._faceCard). NO playTime stamp: a Mummy is
-     created, not played, so reveal-order abilities (Papyrus/Pyramid/Rosetta) ignore
-     it. wasResurrected is a general flag for any "if resurrected" card. */
-  function createMummy(owner, locId, sourceId) {
+  /* Create a revealed Mummy (id 72 token) at locId for owner, inheriting the FROZEN
+     stats of the pile entry being revived: `ip` / `cc` are the values the source card
+     carried when it left play, so a buffed card revives buffed and a destroyed Mummy
+     revives with its own inherited stats (its card definition is 0/0 — deriving from
+     CARDS would silently zero it). Both default to the card definition when omitted.
+     Tut's Sacred Tomb doubling is applied on top by resurrectionIP.
+     Returns false (FIZZLE) if the location has no open slot. Stats live on the slot
+     data — sd.ip drives scoring everywhere (effectiveIP), and sd.cc is honored by ALL
+     CC reads via effectiveCC(sd) (Juvenal's CC≥4, Hammurabi's lowest-CC, the Egypt
+     Soldier's CC-1 destroy, AI CC scoring) plus the CC badge (board._faceCard). NO
+     playTime stamp: a Mummy is created, not played, so reveal-order abilities
+     (Papyrus/Pyramid/Rosetta) ignore it. wasResurrected is a general flag for any
+     "if resurrected" card. */
+  function createMummy(owner, locId, sourceId, ip, cc) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var si    = (slots[locId] || []).indexOf(null);
     if (si === -1) return false;                        // no room → fizzle
-    var src = CARDS.find(function (x) { return x.id === sourceId; });
+    var src     = CARDS.find(function (x) { return x.id === sourceId; });
+    var frozenIP = (ip != null) ? ip : (src ? src.ip : 0);
+    var frozenCC = (cc != null) ? cc : (src ? src.cc : 0);
     var sd  = {
-      cardId: 72, ip: resurrectionIP(sourceId), cc: (src ? src.cc : 0),
+      cardId: 72, ip: resurrectionIP(sourceId, frozenIP), cc: frozenCC,
       revealed: true, ipMod: 0, contMod: 0, ipModSources: [], contModSources: [],
       bonuses: [], turnPlayed: G.turn, wasResurrected: true, resurrectedFrom: sourceId
     };
@@ -3269,75 +3526,91 @@
     return true;
   }
 
-  /* Priest — Egypt (id 71) "Embalming": At Once, revive one of the OWNER'S own
-     discarded cards as a Mummy at Priest's location. Player picks via the shared
-     chooser; AI revives its highest-IP discard. FIZZLES (no-op) if the discard pile
-     is empty OR Priest's location is full. The revived entry is consumed. */
+  /* Priest — Egypt (id 71) "Embalming": At Once, revive one of the OWNER'S OWN
+     discarded OR destroyed cards as a Mummy at Priest's location. The two piles are
+     MERGED for the choice and the chosen entry is consumed from whichever pile it
+     came from (each candidate carries its own `pile` tag, so identical cardIds in
+     both piles stay distinguishable). The Mummy inherits the entry's FROZEN stats.
+     Player picks via the shared chooser; the AI takes the entry producing the best
+     Mummy. FIZZLES (no-op) if BOTH piles are empty OR Priest's location is full.
+     Own piles only — never the opponent's. */
+  function priestCandidates(owner) {
+    var disc = (owner === 'player' ? G.playerDiscard   : G.aiDiscard)   || [];
+    var dest = (owner === 'player' ? G.playerDestroyed : G.aiDestroyed) || [];
+    var out  = [];
+    disc.forEach(function (e) { if (e) out.push({ cardId: e.cardId, ip: e.ip, cc: e.cc, pile: 'discard',   entry: e }); });
+    dest.forEach(function (e) { if (e) out.push({ cardId: e.cardId, ip: e.ip, cc: e.cc, pile: 'destroyed', entry: e }); });
+    return out;
+  }
+
   function abilityPriestEgypt(owner, locId, done) {
-    var pile  = owner === 'player' ? G.playerDiscard : G.aiDiscard;
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    if (!pile || !pile.length || (slots[locId] || []).indexOf(null) === -1) { done(); return; }  // fizzle
-    function revive(cardId) {
-      if (createMummy(owner, locId, cardId)) popDiscard(owner, cardId);
+    var cands = priestCandidates(owner);
+    if (!cands.length || (slots[locId] || []).indexOf(null) === -1) { done(); return; }  // fizzle
+    function revive(cand) {
+      if (!cand) { done(); return; }
+      if (createMummy(owner, locId, cand.cardId, cand.ip, cand.cc)) {
+        if (cand.pile === 'destroyed') popDestroyed(owner, cand.entry);
+        else                           popDiscard(owner, cand.entry);
+      }
       done();
     }
     if (owner === 'player') {
-      showDiscardChooser('Revive a discarded card', pile.slice(), function (chosenId) { revive(chosenId); });
+      showDiscardChooser('Revive a discarded or destroyed card', cands, function (chosen) { revive(chosen); });
     } else {
-      var best = pile[0];
-      pile.forEach(function (id) {
-        // Rank by the MUMMY the revive would produce (resurrectionIP honors
-        // Tut's doubling), not the card's base IP.
-        if (resurrectionIP(id) > resurrectionIP(best)) best = id;
+      // Rank by the MUMMY the revive would produce — the entry's FROZEN IP with
+      // Tut's doubling applied, not the card definition's base IP.
+      var best = cands[0];
+      cands.forEach(function (c) {
+        if (resurrectionIP(c.cardId, c.ip) > resurrectionIP(best.cardId, best.ip)) best = c;
       });
       revive(best);
     }
   }
 
-  /* Book of the Dead (id 66) "Weighing of the Heart": At Once, the owner discards a
-     hand card (player picks; AI sheds a low card, preferring an IP==CC one for a free
-     revive). The card enters the discard pile. THEN the weighing: if IP == CC it
-     resurrects immediately as a Mummy at a RANDOM location that has room (consumed
-     from the pile); if all locations are full the resurrection fizzles but the card
-     STAYS discarded (Priest-revivable later); if IP != CC it simply stays discarded. */
+  /* Book of the Dead (id 66) "Weighing of the Heart": At Once, the owner discards ONE
+     card from hand AT RANDOM — no chooser, no AI preference, symmetric for both sides.
+     The randomness IS the card: picking your own IP==CC card on demand was far too
+     strong. The discard ALWAYS happens; the resurrection is the gamble.
+
+     THE WEIGHING reads the DISCARD-PILE ENTRY that discardFromHand just created,
+     rather than re-deriving anything. That single choice buys four behaviours for
+     free, which is why this ability is now almost pure composition:
+       • EFFECTIVE stats — the entry is handStats()'s frozen snapshot, so in-hand
+         buffs (Cuneiform's hand boost, a Papyrus copy's inherited IP, William's
+         destroyed-IP total) are already folded in. A card buffed to IP==CC qualifies.
+       • CONSISTENCY — the Mummy Book spawns now and the Mummy a Priest revives from
+         the same pile entry later are identical, because both read the same frozen
+         numbers.
+       • JESUS — a randomly-discarded Jesus (5/5, so he WOULD weigh) flies back to
+         hand instead, and staysDead keeps him out of the pile. No entry → no
+         weighing → no Mummy. Without that gate he would sit in hand and on the board
+         at once.
+       • NO DOUBLE-PUSH — discardFromHand owns the pile write; this ability never
+         pushes its own.
+     On a balanced weighing the Mummy spawns at BOOK'S OWN LOCATION ("here"), carrying
+     the entry's frozen IP/CC, and the entry is consumed. If that location is FULL the
+     resurrection fizzles but the discard still stands — the card stays in the pile,
+     revivable by a Priest later. If IP != CC it simply stays discarded.
+     Empty hand (including "Book was the only card you held") → nothing to discard and
+     no effect at all. */
   function abilityBookOfDead(owner, locId, done) {
     var hand = owner === 'player' ? G.playerHand : G.aiHand;
     if (!hand.length) { done(); return; }              // nothing to discard → no-op
+
+    var pick = hand[Math.floor(Math.random() * hand.length)];
+
     function afterDiscard(discardedId) {
-      pushDiscard(owner, discardedId);
-      var c = CARDS.find(function (x) { return x.id === discardedId; });
-      if (c && c.ip === c.cc) {                         // weighing balances → resurrect now
-        var roomLocs = G.locations.filter(function (l) {
-          if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(l.id)) return false;  // no reviving into a flooded river
-          return ((owner === 'player' ? G.playerSlots : G.aiSlots)[l.id] || []).indexOf(null) !== -1;
-        }).map(function (l) { return l.id; });
-        if (roomLocs.length) {
-          var target = roomLocs[Math.floor(Math.random() * roomLocs.length)];
-          if (createMummy(owner, target, discardedId)) popDiscard(owner, discardedId);
-        }
-        // all full → resurrection fizzles; card remains in the discard pile
+      // No entry → the card came BACK (Jesus) and was never really discarded.
+      var entry = findDiscardEntry(owner, discardedId);
+      if (entry && entry.ip === entry.cc) {            // the heart balances → resurrect HERE
+        if (createMummy(owner, locId, discardedId, entry.ip, entry.cc)) popDiscard(owner, entry);
+        // location full → resurrection fizzles; the card remains in the discard pile
       }
       done();
     }
-    if (owner === 'player') {
-      showDiscardChooser('Discard a card — Weighing of the Heart', hand.slice(), function (chosenId) {
-        discardFromHand(owner, chosenId, function () { afterDiscard(chosenId); }, { animate: true });
-      });
-    } else {
-      // AI: prefer an IP==CC card (free resurrection), highest-IP among those (best
-      // Mummy — e.g. Tut → 6-IP); otherwise shed the lowest-IP card.
-      var eq = hand.filter(function (id) { var c = CARDS.find(function (x) { return x.id === id; }); return c && c.ip === c.cc; });
-      var pick;
-      if (eq.length) {
-        pick = eq[0];
-        // Rank IP==CC candidates by the Mummy they'd produce (Tut 3/3 → 6-IP).
-        eq.forEach(function (id) { if (resurrectionIP(id) > resurrectionIP(pick)) pick = id; });
-      } else {
-        pick = hand[0];
-        hand.forEach(function (id) { var c = CARDS.find(function (x) { return x.id === id; }); var p = CARDS.find(function (x) { return x.id === pick; }); if (c && p && c.ip < p.ip) pick = id; });
-      }
-      discardFromHand(owner, pick, function () { afterDiscard(pick); }, { animate: true });
-    }
+
+    discardFromHand(owner, pick, function () { afterDiscard(pick); }, { animate: true });
   }
 
   var CARD_ABILITIES = {
@@ -3382,7 +3655,7 @@
     52: { onAtOnce: abilityHatshepsut      },             // Hatshepsut — At Once: send a Merchant to another location
     53: { onAtOnce: abilityRamses          },             // Ramses II — At Once: -1 CC to Egypt cards in your hand
     54: { onAtOnce: abilityPapyrus         },             // Papyrus — At Once: copy last-played card (with its permanent buffed state) to hand
-    55: { onAtOnce: abilityFarmer          },             // Farmer (EGY) — +1 capital next turn (reuses Meso Farmer)
+    55: { onAtOnce: abilityFarmerEgypt     },             // Farmer (EGY) — arms +1 IP for the NEXT card played (own fn; Meso Farmer 39 untouched)
     56: { onAtOnce: abilityScribeEgypt     },             // Scribe (EGY) — capital per other card here
     57: { onAtOnce: abilityPyramid         },             // Pyramid — At Once: gain the IP of the last card played here
     58: { onAtOnce: abilityRosetta         },             // Rosetta Stone — adopt first-here card's ability
@@ -3390,13 +3663,13 @@
     60: { onAtOnce: abilityKhufu           },             // Khufu — draw a Scientific card
     62: { onAtOnce: function (o, l, done) { done(); } },  // Hieroglyphics — Continuous (+2 Religious/Political)
     63: { onAtOnce: abilityRa              },             // Ra — discard lowest → permanent +IP
-    64: { onAtOnce: function (o, l, done) { done(); } },  // Sphinx — Continuous protection (enforced in _soldierStrike)
+    64: { onAtOnce: function (o, l, done) { done(); } },  // Sphinx — Continuous protection: no destroy (isDestroyProtected) + no IP reduction (_soldierStrike / Chariot strike)
     65: { onAtOnce: function (o, l, done) { done(); } },  // Imhotep — Continuous (effectiveCost -1 Scientific)
     66: { onAtOnce: abilityBookOfDead      },             // Book of the Dead — discard + weigh (IP==CC → revive now)
     67: { onAtOnce: abilityHyksos          },             // Hyksos — transfer to opponent's side (stuck if full)
     69: { onAtOnce: function (o, l, done) { done(); } },  // Chariots — movement card; arrival -2 strike in executeMoveAnimated
-    70: { onAtOnce: abilitySoldierEgypt    },             // Soldier (EGY) — strike -1 IP
-    71: { onAtOnce: abilityPriestEgypt     },             // Priest (EGY) — revive a discarded card as a Mummy here
+    70: { onAtOnce: abilitySoldierEgypt    },             // Soldier (EGY) — destroy an opponent 1-CC card here
+    71: { onAtOnce: abilityPriestEgypt     },             // Priest (EGY) — revive a discarded OR destroyed card as a Mummy here
     73: { onAtOnce: abilityFarmer          }              // Nubian Gold (token) — +1 capital next turn (Farmer machinery)
   };
 
@@ -3552,9 +3825,17 @@
     applyNextTurnRevealEffects: applyNextTurnRevealEffects,
     createMummy:               createMummy,       // Batch C — resurrection
     pushDiscard:               pushDiscard,
+    popDiscard:                popDiscard,
+    popDestroyed:              popDestroyed,
+    priestCandidates:          priestCandidates,  // merged discard ∪ destroyed (Priest 71 / AI scoring)
+    resurrectionIP:            resurrectionIP,
+    staysDead:                 staysDead,         // shared pile-eligibility predicate
+    consumePendingIPBuff:      consumePendingIPBuff,  // Egypt Farmer (55) — reveal-pipeline hook
     effectiveCC:               effectiveCC,       // CC honoring a Mummy's inherited sd.cc
     /* Shared ability helpers (callable from game.js if needed) */
     isKenteProtected:          isKenteProtected,
+    isSphinxProtected:         isSphinxProtected,
+    isDestroyProtected:        isDestroyProtected,   // shared Kente+Sphinx destroy gate
     destroyCard:               destroyCard,
     discardFromHand:           discardFromHand,
     updateWilliamDisplay:      updateWilliamDisplay,

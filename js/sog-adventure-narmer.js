@@ -151,7 +151,7 @@ SOG.NarmerBattle = (function () {
         s = 10 - c.cc * 3 + c.ip * 0.5;
         if (PREMIUM_IDS[id]) s -= 8;      // hold the front-line pieces back…
         if (id === 69) s += 1;            // Chariots early → its once-per-battle move stays available
-        if (id === 55) s += 1.5;          // Farmer: next-turn capital compounds while walling up
+        if (id === 55) s += 1.5;          // Farmer: the pending +1 IP compounds while walling up
         if (id === 26) s += 1;            // Tool: draw keeps the fill going
       } else {
         s = c.ip - c.cc * 0.1;
@@ -160,7 +160,7 @@ SOG.NarmerBattle = (function () {
         if (id === 51) s += (locId === LOC_MEMPHIS ? 2 : 0);               // Narmer: center seat spans the whole board's averaging
         if (id === 56) s += 0.5 * count[locId];                            // Scribe: capital per prior card here
         if (id === 64) s += (ownIP[locId] >= 4 ? 2 : 0);                   // Sphinx: protect a stack worth protecting
-        if (id === 70) s += (playerRevealedAt(locId) ? 1 : 0);             // Soldier: a target to strike
+        if (id === 70) s += (playerRevealedAt(locId) ? 1 : 0);             // Soldier: a target to destroy (needs a 1-CC one to land)
       }
       return s;
     }

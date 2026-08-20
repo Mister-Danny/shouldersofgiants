@@ -420,23 +420,38 @@
         });
         return STRONG.indexOf(first.cardId) !== -1 ? 2 : 0.5;
       }
-      case 71: { // Priest (Egypt) — revive a discarded card as a Mummy HERE; worth
-                 // more when the AI has discards to revive AND this location has room.
-        var disc = side === 'opp' ? G.aiDiscard : G.playerDiscard;
-        if (!disc || !disc.length) return -1;              // nothing to revive → whiffs
+      case 71: { // Priest (Egypt) — revive a DISCARDED OR DESTROYED card as a Mummy
+                 // HERE; worth more when that side has pile entries to revive AND
+                 // this location has room. Both piles hold snapshot entries
+                 // { cardId, ip, cc }, so rank by the entry's FROZEN ip with Tut's
+                 // doubling applied — the actual Mummy the revive would produce.
+        var pOwner = side === 'opp' ? 'opp' : 'player';
+        var pool   = (SOG.abilities && typeof SOG.abilities.priestCandidates === 'function')
+          ? SOG.abilities.priestCandidates(pOwner) : [];
+        if (!pool.length) return -1;                       // nothing to revive → whiffs
         var here = (side === 'opp' ? G.aiSlots : G.playerSlots)[locId] || [];
         var tentHere = tentative.filter(function (p) { return p.locId === locId; }).length;
         // Priest occupies one slot HIMSELF and the revived Mummy needs another —
         // require TWO free slots or the revive is a guaranteed fizzle.
         if ((here.filter(function (s) { return s; }).length + tentHere) >= here.length - 1) return -1;
-        var bestDisc = disc.reduce(function (m, id) { var c = CARDS.find(function (x) { return x.id === id; }); return c ? Math.max(m, c.ip) : m; }, 0);
+        var revIP = SOG.abilities.resurrectionIP;
+        var bestDisc = pool.reduce(function (m, e) { return Math.max(m, revIP(e.cardId, e.ip)); }, 0);
         return 1 + Math.min(bestDisc, 6) * 0.4;            // scales with the best revive available
       }
-      case 66: { // Book of the Dead (Egypt) — discard + weigh; a free resurrection
-                 // when the AI holds an IP==CC card. Constant across locs (card nudge).
+      case 66: { // Book of the Dead (Egypt) — RANDOM discard + weigh. The discard is no
+                 // longer chosen, so holding one IP==CC card is only a 1-in-handSize
+                 // shot at the resurrection, not a guarantee: value it by the ODDS
+                 // rather than by mere presence (the old `hasEq ? 1.5 : 0` priced a
+                 // pick the AI can no longer make). Location matters now too — the
+                 // Mummy spawns at BOOK'S location, so a full one can only fizzle.
         var bhand = side === 'opp' ? G.aiHand : G.playerHand;
-        var hasEq = (bhand || []).some(function (id) { var c = CARDS.find(function (x) { return x.id === id; }); return c && c.ip === c.cc; });
-        return hasEq ? 1.5 : 0;
+        if (!bhand || !bhand.length) return 0;              // nothing to discard → inert
+        var bhere = (side === 'opp' ? G.aiSlots : G.playerSlots)[locId] || [];
+        var bTent = tentative.filter(function (p) { return p.locId === locId; }).length;
+        // Book occupies one slot itself; the Mummy needs another or it cannot land.
+        if ((bhere.filter(function (s) { return s; }).length + bTent) >= bhere.length - 1) return 0;
+        var eqCount = bhand.filter(function (id) { var c = CARDS.find(function (x) { return x.id === id; }); return c && c.ip === c.cc; }).length;
+        return 1.5 * (eqCount / bhand.length);              // expected value of a random pick
       }
       default:
         return 0;

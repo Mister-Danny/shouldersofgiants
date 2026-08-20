@@ -306,10 +306,14 @@
     G.bonusCapitalNextTurn   = 0;
     G.aiBonusCapitalNextTurn = 0;
     G.nextTurnEffects        = [];  // general "Next Turn:" effects queue (Ramses 53); pruned in nextTurn
-    G.playerDiscard          = [];  // Batch C resurrection pile (Ra/Book discards); per-battle, never board-destroyed cards
+    G.playerDiscard          = [];  // Batch C resurrection pile — snapshot entries { cardId, ip, cc }; fed by discardFromHand
     G.aiDiscard              = [];
-    G.playerDestroyed        = [];  // Batch C destroyed pile (fed by destroyCard); STRICTLY separate from discards; no consumer yet
+    G.playerDestroyed        = [];  // Batch C destroyed pile — same entry shape; fed by destroyCard. Priest (71) revives from BOTH
     G.aiDestroyed            = [];
+    // Egypt Farmer (55): one PENDING +1 IP per side for the next card that side
+    // plays. A flag, not a counter (Farmers don't stack), and deliberately NOT
+    // cleared by nextTurn — it waits across turns until a card consumes it.
+    G.pendingIPBuff          = { player: false, opp: false };
     G.cardIPBonus            = {};
     G.aiCardIPBonus          = {};
     // Papyrus (54) state-copy: PERMANENT ipMod inherited by a pending copy in
@@ -1488,6 +1492,17 @@
       // After the card's own At Once resolves, run the play-from-hand hooks
       // (in order): play-order metadata, Cultural counter.
       flipSlot(slotEl, function () {
+        /* Egypt Farmer (55) pending +1 IP: consume it onto THIS card BEFORE its own
+           At Once runs. That ordering is load-bearing — an Egypt Farmer revealing
+           here takes the pending +1 itself and only then arms the next one, instead
+           of buffing itself. No buff pending → no-op. */
+        if (SOG.abilities && typeof SOG.abilities.consumePendingIPBuff === 'function') {
+          if (SOG.abilities.consumePendingIPBuff(item.owner, rSd)) {
+            refreshSlotIPDisplays();
+            updateScores();
+            if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(item.owner, item.cardId, 1);
+          }
+        }
         fireAtOnce(item.owner, item.cardId, rLocId, function () {
           // (a) Per-slot play metadata (Scribe needs this on every revealed card)
           if (rSd && rLocId !== null) {

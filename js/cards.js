@@ -437,10 +437,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/papyrus@0.3x.jpg", locked: true
   },
   {
-    id: 55, name: "Farmer", cc: 1, ip: 1,                       // WIRED (grantCapitalNextTurn) — distinct from Meso Farmer(39)
+    id: 55, name: "Farmer", cc: 1, ip: 1,                       // WIRED (arms a pending +1 IP for the next card played) — distinct from Meso Farmer(39), which still grants capital
     type: "Labor", type2: null, era: "Egypt",
     abilityName: "Harvest",
-    ability: "At Once:\n+1 Capital next turn.",
+    ability: "At Once:\nProvides +1 IP to the next card you play.",
     image:   "images/cards/egyptcards/egyptfarmer@0.5x.jpg",
     imageSm: "images/cards/egyptcards/egyptfarmer@0.3x.jpg", locked: true
   },
@@ -493,7 +493,7 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/kingtut@0.3x.jpg", locked: true
   },
   {
-    id: 62, name: "Hieroglyphics", cc: 2, ip: 0,               // WIRED (continuous type-boost)
+    id: 62, name: "Hieroglyphics", cc: 2, ip: 1,               // WIRED (continuous type-boost)
     type: "Cultural", type2: null, era: "Egypt",
     abilityName: "Sacred Symbols",
     ability: "Continuous:\n+2 IP to your Religious and Political cards here.",
@@ -509,10 +509,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/ra@0.3x.jpg", locked: true
   },
   {
-    id: 64, name: "Sphinx", cc: 3, ip: 2,                       // WIRED (Kente-style protection)
+    id: 64, name: "Sphinx", cc: 3, ip: 2,                       // WIRED (Kente-style protection: location-wide, per-side — blocks destruction AND IP reduction)
     type: "Cultural", type2: null, era: "Egypt",
     abilityName: "Monumental Guardian",
-    ability: "Continuous:\nYour cards here cannot have their IP reduced.",
+    ability: "Continuous:\nYour cards here can't be destroyed or have their IP reduced.",
     image:   "images/cards/egyptcards/sphinx@0.5x.jpg",
     imageSm: "images/cards/egyptcards/sphinx@0.3x.jpg", locked: true
   },
@@ -525,10 +525,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/imhotep@0.3x.jpg", locked: true
   },
   {
-    id: 66, name: "Book of the Dead", cc: 3, ip: 3,            // WIRED (Batch C: discard + weigh → resurrect if IP==CC)
+    id: 66, name: "Book of the Dead", cc: 3, ip: 3,            // WIRED (Batch C: RANDOM discard + weigh → resurrect here if effective IP==CC)
     type: "Religious", type2: null, era: "Egypt",
     abilityName: "Weighing of the Heart",
-    ability: "At Once:\nDiscard a card from your hand. If its IP equals its CC, resurrect it now as a Mummy at a random location.",
+    ability: "At Once:\nRandomly discard a card in your hand. If its IP and CC are equal, it resurrects here.",
     image:   "images/cards/egyptcards/bookofthedead@0.5x.jpg",
     imageSm: "images/cards/egyptcards/bookofthedead@0.3x.jpg", locked: true
   },
@@ -557,18 +557,18 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/egyptchariot@0.3x.jpg", locked: true
   },
   {
-    id: 70, name: "Soldier", cc: 1, ip: 1,                      // WIRED (strike -1 IP) — distinct from Meso Soldier(42)
+    id: 70, name: "Soldier", cc: 1, ip: 1,                      // WIRED (destroy a random opponent 1-CC card here) — distinct from Meso Soldier(42), which still strikes for -1 IP
     type: "Military", type2: null, era: "Egypt",
     abilityName: "Military Service",
-    ability: "At Once:\nStrike an opponent's card here and reduce it by -1 IP.",
+    ability: "At Once:\nDestroy one of your opponent's 1 CC cards here.",
     image:   "images/cards/egyptcards/egyptsoldier@0.5x.jpg",
     imageSm: "images/cards/egyptcards/egyptsoldier@0.3x.jpg", locked: true
   },
   {
-    id: 71, name: "Priest", cc: 1, ip: 1,                       // WIRED (Batch C: revive a discarded card as a Mummy) — distinct from Meso Priest(38)
+    id: 71, name: "Priest", cc: 1, ip: 1,                       // WIRED (Batch C: revive from the MERGED discard + destroyed piles as a Mummy) — distinct from Meso Priest(38)
     type: "Religious", type2: null, era: "Egypt",
     abilityName: "Embalming",
-    ability: "At Once:\nRevive one of your discarded cards as a Mummy here.",
+    ability: "At Once:\nRevive a discarded or destroyed card as a Mummy here.",
     image:   "images/cards/egyptcards/egyptpriest@0.5x.jpg",
     imageSm: "images/cards/egyptcards/egyptpriest@0.3x.jpg", locked: true
   },

@@ -398,6 +398,10 @@
     'Megalith':              { type: 'card',     id: 31, pattern: 'A' },
     // Egypt (era) — bonus attributions for the wired Egypt abilities.
     'Ramses II':             { type: 'card',     id: 53, pattern: 'A' },
+    // Egypt Farmer (55) stamps +1 on ANOTHER card (the next one played), so it
+    // attributes like Zheng He — pattern 'D' (the source card's portrait on the
+    // target's breakdown), not 'A' (self).
+    'Farmer':                { type: 'card',     id: 55, pattern: 'D' },
     'Narmer':                { type: 'card',     id: 51, pattern: 'A' },
     'Pyramid':               { type: 'card',     id: 57, pattern: 'A' },
     'Obelisk':               { type: 'card',     id: 59, pattern: 'A' },
