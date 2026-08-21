@@ -418,19 +418,19 @@
         if (bestIP === 0) return -1;        // nothing to copy HERE → whiffs
         return Math.min(bestIP, 5) * 0.4;   // a 5-IP prior play here → +2
       }
-      case 58: { // Rosetta Stone (Egypt) — adopts the FIRST card the owner played
-                 // HERE; worth more when that card has a strong ability. Location-
-                 // dependent. STRONG = high-impact copy targets.
+      case 58: { // Rosetta Stone (Egypt) — transcribes the card in SLOT 0 here; worth
+                 // more when THAT card has a strong ability. RETARGETED: this used to
+                 // rank the earliest-PLAYED card here (lowest playTime) and had to be
+                 // rewritten with the ability, or it would keep valuing a card Rosetta
+                 // no longer copies — the two diverge as soon as anything moves into
+                 // slot 0 or a destroy compacts the column.
+                 // Reads slots[0] DIRECTLY, not "the first non-null": an empty slot 0
+                 // is a real fizzle, and dropping nulls would have hidden it.
+                 // STRONG = high-impact copy targets.
         var STRONG = [70, 62, 45, 59, 63, 51, 57, 56, 38, 43, 42, 2];
-        var here = (mine || []).filter(function (s) { return s && s.revealed && s.cardId !== 58; });
-        if (!here.length) return -1;        // nothing to decipher → whiffs
-        var first = here[0];
-        here.forEach(function (s) {
-          var t  = (typeof s.playTime === 'number') ? s.playTime : Infinity;
-          var ft = (typeof first.playTime === 'number') ? first.playTime : Infinity;
-          if (t < ft) first = s;
-        });
-        return STRONG.indexOf(first.cardId) !== -1 ? 2 : 0.5;
+        var slot0  = (mine || [])[0];
+        if (!slot0 || !slot0.revealed || slot0.cardId === 58) return -1;   // nothing to decipher → whiffs
+        return STRONG.indexOf(slot0.cardId) !== -1 ? 2 : 0.5;
       }
       case 71: { // Priest (Egypt) — revive a DISCARDED OR DESTROYED card as a Mummy
                  // HERE; worth more when that side has pile entries to revive AND
@@ -1594,6 +1594,7 @@
     if (cardId === 47) return 7;                                // Hammurabi — AFTER the bait body, so his destruction sacrifices it
     if (cardId === 57) return 8;                                // Pyramid — grabs the built board → late
     if (cardId === 54) return 9;                                // Papyrus — AFTER Pyramid, so it copies the buffed Pyramid
+    if (cardId === 58) return 10;                               // Rosetta — transcribes the SLOT-0 card, which must already be REVEALED; last of the grabbers
     return 4;
   }
 

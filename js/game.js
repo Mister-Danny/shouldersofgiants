@@ -1074,7 +1074,11 @@
       // wobble pivoting at her feet — reads as a deliberate waddle. The position
       // tween animates left/top; the wobble animates rotation (transform), so the
       // two run concurrently without conflict.
-      var slideDuration = (cardId === 33) ? 1.5 : (cardId === 48) ? 1.0 : (cardId === 35) ? 0.633 : 0.55;   // Chariot ~1s; Ötzi flee 15% slower than the 0.55s default
+      // Chariots (69, Egypt) travel at the SAME pace as Chariot (48) — the two share
+      // their whole presentation (chariot.mp3 on the roll, the arrival arrow via
+      // chariotArrival/chariotArrow); this duration was the last thing that differed,
+      // leaving the Egypt one visibly hurried at the default 0.55s.
+      var slideDuration = (cardId === 33) ? 1.5 : (cardId === 48 || cardId === 69) ? 1.0 : (cardId === 35) ? 0.633 : 0.55;   // Chariots ~1s; Ötzi flee 15% slower than the 0.55s default
       var wobbleTween   = null;
       if (cardId === 33) {
         gsap.set(clone, { transformOrigin: '50% 100%', rotation: -5 });

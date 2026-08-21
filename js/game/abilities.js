@@ -3516,7 +3516,7 @@
     if (!sd || !G.nextTurnEffects || !G.nextTurnEffects.length) return;
   }
 
-  /* Rosetta Stone (58) — "Decipher The Past". At Once: ADOPT the ability of the
+  /* Rosetta Stone (58) — "Decipher The Past" (RETARGETED). At Once: ADOPT the ability of the
      FIRST card the owner played at Rosetta's location (earliest playTime among the
      owner's OTHER cards there, excluding any Rosetta so there is no regress). The
      source id is stored on sd.transcribedFrom; from then on Rosetta behaves as if
@@ -3531,14 +3531,17 @@
   function abilityRosetta(owner, locId, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
 
-    var srcId = null, srcTime = Infinity;
-    forEachRevealedAt(slots, locId, function (s) {
-      if (s.cardId === 58) return;                         // exclude Rosetta(s) — no regress
-      var t = (typeof s.playTime === 'number') ? s.playTime : Infinity;
-      if (t < srcTime) { srcTime = t; srcId = s.cardId; }
-    });
-
-    if (srcId == null) { done(); return; }                 // first card here → fizzle (plain 3/3)
+    /* TARGET = THE CARD IN SLOT 0 AT THIS LOCATION — a POSITION, not a play order.
+       This was "the earliest-played card here" (lowest playTime); it is now simply
+       slots[locId][0]. The two differ whenever the board has been rearranged: a
+       card that MOVED into slot 0, or compaction after a destroy, changes who sits
+       first without changing who was played first.
+       Fizzles (plain 3/3, no animation) when slot 0 is EMPTY, holds an unrevealed
+       card, or holds a Rosetta — self-exclusion is kept so a Rosetta in slot 0
+       never transcribes itself into a regress. */
+    var arr0  = (slots[locId] || [])[0];
+    if (!arr0 || !arr0.revealed || arr0.cardId === 58) { done(); return; }
+    var srcId = arr0.cardId;
 
     // Stamp the adoption on Rosetta's slot data (persists like a real copy).
     // Prefer the UNSTAMPED Rosetta: with two copies at one location (Papyrus can
@@ -3837,7 +3840,7 @@
     55: { onAtOnce: abilityFarmerEgypt     },             // Farmer (EGY) — arms +1 IP for the NEXT card played (own fn; Meso Farmer 39 untouched)
     56: { endOfTurn: scribeEgyptEndOfTurn  },             // Scribe (EGY) — End of Turn: +1 IP to OTHER Economic cards here
     57: { onAtOnce: abilityPyramid         },             // Pyramid — At Once: gain the IP of the last card played here
-    58: { onAtOnce: abilityRosetta         },             // Rosetta Stone — adopt first-here card's ability
+    58: { onAtOnce: abilityRosetta         },             // Rosetta Stone — adopt the SLOT-0 card's ability here
     59: { endOfTurn: obeliskEndOfTurn      },             // Obelisk — End of turn: +1 IP (Megalith key)
     60: { onAtOnce: abilityKhufu           },             // Khufu — draw a Scientific card
     62: { onAtOnce: function (o, l, done) { done(); } },  // Hieroglyphics — Continuous (+2 Religious/Political)

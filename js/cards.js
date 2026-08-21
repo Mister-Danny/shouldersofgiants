@@ -461,10 +461,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/pyramid@0.3x.jpg", locked: true
   },
   {
-    id: 58, name: "Rosetta Stone", cc: 3, ip: 3,               // WIRED (adopts ability of the first card you played here)
+    id: 58, name: "Rosetta Stone", cc: 3, ip: 3,               // WIRED (adopts the ability of the card in SLOT 0 here)
     type: "Scientific", type2: null, era: "Egypt",
     abilityName: "Decipher The Past",
-    ability: "Adopt the ability of the first card you played at this location.",
+    ability: "At Once:\nTranscribes the text of the card in the first slot at this location to itself.",
     image:   "images/cards/egyptcards/rosettastone@0.5x.jpg",
     imageSm: "images/cards/egyptcards/rosettastone@0.3x.jpg", locked: true
   },
