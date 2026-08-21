@@ -932,6 +932,20 @@
       if (finalIdx === -1) { done(); return; }
       slots[toLocId][finalIdx] = sd;
 
+      /* A card may move only ONCE per turn. Stamped HERE because applyMove is the
+         single commit point every move passes through (queued player moves, the
+         Merchant's trade relocation, Chariot, Lucy, Magellan, Columbus, Ötzi's
+         flee, and the AI's own post-reveal movers). The stamp travels with the sd,
+         so it survives the card changing slots.
+         This exists because a card RELOCATED DURING THE REVEAL by another card's
+         ability was still eligible for the AI's post-reveal movement pass — e.g. an
+         Egypt Merchant traded from Thebes to the Red Sea mid-reveal, then picked up
+         again by the Red Sea free-move at end of turn. That second move is illegal:
+         the AI commits its movement choices in the SELECTION phase, before the
+         reveal, so it could not have chosen a card that was not there yet.
+         Read by ai.js _aiSlotMovableNow, the shared gate for the post-reveal movers. */
+      sd._movedOnTurn = G.turn;
+
       var finalSlotEl = getSlotEl(owner, toLocId, finalIdx);
       if (finalSlotEl && card) {
         finalSlotEl.dataset.cardId = cardId;
@@ -1134,6 +1148,11 @@
       // Real exchange: swap the two sd objects between their slots.
       slots[t.locId][t.idx] = p.sd;
       slots[p.locId][p.idx] = t.sd;
+      // A barter relocates BOTH cards, so both spend their move for the turn. This
+      // commit path swaps slots directly rather than going through applyMove, so
+      // the once-per-turn stamp has to be applied here too.
+      t.sd._movedOnTurn = G.turn;
+      p.sd._movedOnTurn = G.turn;
       t.sd._advTraderBartered = true;   // once per battle — set on real resolution
       G.traderBarter = null;
       syncLoc(t.locId);

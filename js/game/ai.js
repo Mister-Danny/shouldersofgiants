@@ -917,8 +917,19 @@
      go through here so the rule is stated once.
 
      turnPlayed == null → treat as settled (legacy/serialised slot data). */
+  /* Can this AI card be moved by a POST-REVEAL movement pass? Two rules, both
+     about the card having been committed to before this pass runs:
+       • it must be SETTLED — not played this very turn (moving a card the turn it
+         lands is an illegal same-turn move);
+       • it must not have ALREADY MOVED this turn (sd._movedOnTurn, stamped by
+         game.js applyMove / executeBarter). A card relocated during the REVEAL by
+         another card's ability — the Merchant's trade move being the live case —
+         was not at this location when the AI picked its movements in the selection
+         phase, so choosing it now would be a decision made with knowledge the AI
+         could not legally have had. One move per card per turn. */
   function _aiSlotMovableNow(G, sd) {
     if (!sd || !sd.revealed) return false;
+    if (sd._movedOnTurn === G.turn) return false;
     return sd.turnPlayed == null || G.turn > sd.turnPlayed;
   }
 
@@ -994,8 +1005,9 @@
     G.locations.forEach(function (loc) {
       (G.aiSlots[loc.id] || []).forEach(function (s, si) {
         if (trader || !s || !s.revealed) return;
-        if (s.cardId === 68 && !s._advTraderBartered &&
-            (s.turnPlayed == null || G.turn > s.turnPlayed)) {
+        // Same gate as the movers — a barter IS a relocation, so a Trader that has
+        // already moved this turn cannot barter on top of it.
+        if (s.cardId === 68 && !s._advTraderBartered && _aiSlotMovableNow(G, s)) {
           trader = { locId: loc.id, idx: si, sd: s };
         }
       });
