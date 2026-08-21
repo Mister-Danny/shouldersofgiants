@@ -48,6 +48,10 @@
   /* ── Board helper aliases (game/board.js, Pass 3b) ────────────── */
   var getSlotEl             = SOG.board.getSlotEl;
   var buildCardFace         = SOG.board.buildCardFace;
+  /* Renders a slot with the slot-data's OWN cc when it differs from the card
+     definition — a Mummy (72) is defined 0/0 but carries its source's frozen cc.
+     Every path that rebuilds a face must go through this or the badge regresses. */
+  var faceCard              = SOG.board.faceCard;
   var clearSlotDOM          = SOG.board.clearSlotDOM;
   var compactPlayerSlots    = SOG.board.compactPlayerSlots;
   var syncPlayerSlots       = SOG.board.syncPlayerSlots;
@@ -1387,7 +1391,7 @@
       destSlotEl.dataset.cardId = cardId;
       destSlotEl.className      = 'battle-card-slot occupied face-up queued-dest';
       destSlotEl.removeAttribute('draggable');
-      buildCardFace(destSlotEl, card, effectiveIP(sd));
+      buildCardFace(destSlotEl, faceCard(sd, card), effectiveIP(sd));
     }
 
     G.movedThisTurn[cardId] = true;

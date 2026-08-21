@@ -1765,9 +1765,13 @@ SOG.RevealFx = (function () {
       var yPct  = -6 + (112 / (n - 1)) * i;
       var tilt  = (i % 2 ? 1 : -1) * (Math.random() * STRAP_MAX_TILT);
       var thick = 13 + Math.random() * 5;               // % of card height
+      // NO transform here — GSAP owns it below. Setting translate(-50%,-50%) in
+      // cssText and then calling gsap.set(...) simply replaced it, which is what
+      // made the straps cover only the RIGHT half: the -50% X pull-back was lost,
+      // so a strap anchored at left:50% started at the slot's centre line and ran
+      // outward instead of straddling it.
       st.style.cssText =
-        'top:' + yPct.toFixed(2) + '%;height:' + thick.toFixed(2) + '%;' +
-        'transform:translate(-50%,-50%) rotate(' + tilt.toFixed(2) + 'deg);';
+        'top:' + yPct.toFixed(2) + '%;height:' + thick.toFixed(2) + '%;';
       st._tilt = tilt;
       st._from = (i % 2 ? 1 : -1);                      // slides in from alternating sides
       layer.appendChild(st);
@@ -1789,7 +1793,11 @@ SOG.RevealFx = (function () {
 
     // Straps land one after another, each swinging in from its own side.
     straps.forEach(function (st, i) {
-      gsap.set(st, { xPercent: 0, x: st._from * r.width * 0.9, opacity: 0, rotation: st._tilt });
+      // xPercent/yPercent -50 centre the strap on left:50%/top:N%, so its 190%
+      // width overhangs BOTH edges and the slot's overflow:hidden trims the two
+      // ends evenly — full-width coverage. x is the slide-in offset, tweened to 0.
+      gsap.set(st, { xPercent: -50, yPercent: -50, x: st._from * r.width * 0.9,
+                     opacity: 0, rotation: st._tilt });
       tl.to(st, {
         x: 0, opacity: 1, duration: 0.2, ease: 'power2.out'
       }, 0.26 + i * 0.06);
@@ -1842,26 +1850,60 @@ SOG.RevealFx = (function () {
     hand.src = SCRIBE_HAND_IMG;
     hand.draggable = false;
     hand.setAttribute('aria-hidden', 'true');
-    // Square source art; sized off the card so it reads as a hand ON the card.
-    var size = rRect.height * 1.15;
+    // Square source art. Sized off the card, but deliberately SMALL: the writing is
+    // a compact block at the TOP-CENTRE of the Stone, not a sweep across its whole
+    // face, so the hand must not dwarf the area it is inscribing.
+    var size = rRect.height * 0.72;
     hand.style.cssText =
       'position:fixed;margin:0;pointer-events:none;z-index:9997;' +
       'width:' + size + 'px;height:' + size + 'px;left:0;top:0;';
     document.body.appendChild(hand);
 
-    function cleanup() { if (hand.parentNode) hand.parentNode.removeChild(hand); }
+    function cleanup() {
+      if (hand.parentNode) hand.parentNode.removeChild(hand);
+      sourceEl.classList.remove('is-lit', 'reveal-fx-rosetta-source');
+    }
 
-    // Writing lines down the face of the Stone. The hand tracks left→right along
-    // each, stepping down between them — the shape of actually inscribing.
-    var lines   = opts.lines || 3;
-    var startX  = rRect.left - size * 0.16;
-    var endX    = rRect.left + rRect.width - size * 0.42;
-    var topY    = rRect.top  + rRect.height * 0.16 - size * 0.55;
-    var lineGap = (rRect.height * 0.5) / Math.max(1, lines - 1);
+    /* Writing lines, as a COMPACT BLOCK AT TOP-CENTRE. Same motion as before —
+       left→right per line, nib wobble, carriage return between lines — just scaled
+       down and lifted, so it reads as a short inscription at the head of the Stone
+       instead of a sweep over the whole card.
+       The block spans the middle BLOCK_W of the card's width and sits in its top
+       BLOCK_TOP..+BLOCK_H band; the -size*0.xx terms offset the image so the nib,
+       not the image's corner, tracks the line. */
+    var lines    = opts.lines || 3;
+    var BLOCK_W  = 0.46;                       // fraction of card width the text spans
+    var BLOCK_TOP = 0.16;                      // fraction of card height to the first line
+    var BLOCK_H  = 0.18;                       // fraction of card height the block occupies
+
+    var blockW   = rRect.width * BLOCK_W;
+    var blockL   = rRect.left + (rRect.width - blockW) / 2;
+    var startX   = blockL - size * 0.10;
+    var endX     = blockL + blockW - size * 0.34;
+    var topY     = rRect.top + rRect.height * BLOCK_TOP - size * 0.55;
+    var lineGap  = (rRect.height * BLOCK_H) / Math.max(1, lines - 1);
 
     gsap.set(hand, { x: startX, y: topY, opacity: 0, rotation: -6 });
 
+    /* The SOURCE card glows purplish-pink for exactly as long as the transcribe
+       runs — it is the card being copied, and nothing else on the board uses this
+       hue (Ramses gold, Narmer red, Kente orange, the continuous cyan ring, the
+       blue IP cues). Two classes rather than one: the base class carries the
+       transition and a fully-transparent shadow, `.is-lit` carries the lit values,
+       so adding and removing `.is-lit` fades the glow UP and DOWN through the same
+       interpolation instead of snapping off at the end. */
+    function glowOn() {
+      sourceEl.classList.add('reveal-fx-rosetta-source');
+      void sourceEl.offsetWidth;                       // commit the transparent base
+      sourceEl.classList.add('is-lit');
+    }
+    function glowOff() {
+      sourceEl.classList.remove('is-lit');
+      setTimeout(function () { sourceEl.classList.remove('reveal-fx-rosetta-source'); }, 340);
+    }
+
     var tl = gsap.timeline({ onComplete: function () { cleanup(); finish(); } });
+    tl.add(glowOn, 0);
 
     // Source card lifts 10% and holds while it is being read.
     tl.to(sourceEl, { y: '-10%', duration: 0.26, ease: 'power2.out' }, 0);
@@ -1885,6 +1927,7 @@ SOG.RevealFx = (function () {
     }
 
     var endAt = 0.28 + lines * 0.42;
+    tl.add(glowOff, endAt);
     tl.to(hand, { opacity: 0, duration: 0.2, ease: 'power1.in' }, endAt)
       .to(sourceEl, {
         y: '0%', duration: 0.26, ease: 'power2.inOut',

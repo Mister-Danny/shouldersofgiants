@@ -46,6 +46,10 @@
   var getCardLocId          = SOG.board.getCardLocId;
   var setSlotFaceDown       = SOG.board.setSlotFaceDown;
   var buildCardFace         = SOG.board.buildCardFace;
+  /* Renders a slot with the slot-data's OWN cc when it differs from the card
+     definition — a Mummy (72) is defined 0/0 but carries its source's frozen cc.
+     Every path that rebuilds a face must go through this or the badge regresses. */
+  var faceCard              = SOG.board.faceCard;
   var placeRevealedCard     = SOG.board.placeRevealedCard;
   var removeEl              = SOG.board.removeEl;
   var makeBoardGhost        = SOG.board.makeBoardGhost;
@@ -588,7 +592,7 @@
     slotEl.classList.remove('face-down', 'unplayed');
     slotEl.classList.add('face-up');
     var sd = slots[locId] && slots[locId][slotIndex];
-    buildCardFace(slotEl, card, sd ? effectiveIP(sd) : card.ip);
+    buildCardFace(slotEl, faceCard(sd, card), sd ? effectiveIP(sd) : card.ip);
     if (typeof Anim !== 'undefined') Anim.cardReveal(slotEl);
 
     // ── Per-card reveal SFX + animations ──────────────────────────
@@ -773,7 +777,7 @@
       toSlotEl.dataset.cardId = cardId;
       toSlotEl.className      = 'battle-card-slot occupied face-up';
       toSlotEl.removeAttribute('draggable');
-      buildCardFace(toSlotEl, card, effectiveIP(sd));
+      buildCardFace(toSlotEl, faceCard(sd, card), effectiveIP(sd));
     }
 
     // Magellan: +1 IP per move
@@ -967,7 +971,7 @@
         finalSlotEl.dataset.cardId = cardId;
         finalSlotEl.className      = 'battle-card-slot occupied face-up';
         finalSlotEl.removeAttribute('draggable');
-        buildCardFace(finalSlotEl, card, effectiveIP(sd));
+        buildCardFace(finalSlotEl, faceCard(sd, card), effectiveIP(sd));
       }
 
       if (cardId === 24) {

@@ -158,6 +158,10 @@
      the same sd.cc via abilities.effectiveCC(sd) (Juvenal, Hammurabi, AI scoring), and
      IP flows through effectiveIP(sd) everywhere — so inherited stats are honored in
      both rendering and rules. */
+  /* Exported as SOG.board.faceCard: the MOVE re-render paths (game.js executeMove /
+     applyMove, input.js queueMove) rebuild a slot's face from the card DEFINITION,
+     which for a Mummy (72) is 0/0 — so a moved Mummy's CC badge dropped to 0 while
+     its real sd.cc was untouched. Those paths now route through here too. */
   function _faceCard(sd, card) {
     if (card && sd && sd.cc != null && sd.cc !== card.cc) {
       return Object.assign({}, card, { cc: sd.cc });
@@ -202,7 +206,7 @@
       slotEl.dataset.cardId = cardId;
       slotEl.className      = 'battle-card-slot occupied face-up';
       slotEl.removeAttribute('draggable');
-      buildCardFace(slotEl, card, effectiveIP(sd));
+      buildCardFace(slotEl, _faceCard(sd, card), effectiveIP(sd));
     }
     return true;
   }
@@ -287,7 +291,7 @@
           slotEl.dataset.cardId = sd.cardId;
           slotEl.className      = 'battle-card-slot occupied face-up unplayed';
           slotEl.draggable      = true;
-          if (uCard) buildCardFace(slotEl, uCard, effectiveIP(sd));
+          if (uCard) buildCardFace(slotEl, _faceCard(sd, uCard), effectiveIP(sd));
         }
       } else {
         var card = CARDS.find(function (c) { return c.id === sd.cardId; });
@@ -363,7 +367,7 @@
     G.locations.forEach(function (l) {
       (G.playerSlots[l.id] || []).forEach(function (s) { if (s && s.cardId === showCardId) showSd = s; });
     });
-    buildCardFace(slotEl, showCard, showSd ? effectiveIP(showSd) : showCard.ip);
+    buildCardFace(slotEl, _faceCard(showSd, showCard), showSd ? effectiveIP(showSd) : showCard.ip);
     slotEl.classList.add('trader-preview');
     slotEl.dataset.cardId = atCardId;           // keep the REAL identity (interactions/scoring)
   }
@@ -664,6 +668,7 @@
     getCardLocId:          getCardLocId,
     setSlotFaceDown:       setSlotFaceDown,
     buildCardFace:         buildCardFace,
+    faceCard:              _faceCard,
     placeRevealedCard:     placeRevealedCard,
     removeEl:              removeEl,
     makeBoardGhost:        makeBoardGhost,

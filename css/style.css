@@ -12299,6 +12299,27 @@ body[data-screen="overworld"] #overworld-overlay {
   100% { transform: translate(-50%, -122%) scale(0.9);  opacity: 0; }   /* rise + dissipate */
 }
 
+/* Rosetta Stone (58): the SOURCE card — whatever sits in slot 0 — glows
+   purplish-pink while it is being transcribed, marking "this is the card being
+   copied". The hue is deliberately unused elsewhere: Ramses is gold, Narmer red,
+   Kente orange, the continuous-mod ring cyan, and the IP cues blue.
+
+   TWO CLASSES on purpose. The base class carries the transition and a FULLY
+   TRANSPARENT drop-shadow of the same structure; `.is-lit` carries the lit values.
+   Toggling `.is-lit` therefore fades the glow up and back down through one
+   interpolation — transitioning to `filter: none` instead would be relying on
+   none-interpolation and tends to snap. Duration is owned by the animation, which
+   adds `.is-lit` at its start and drops it at its end. */
+.battle-card-slot.reveal-fx-rosetta-source {
+  transition: filter 0.3s ease-out;
+  filter: drop-shadow(0 0 0 rgba(232, 121, 233, 0))
+          drop-shadow(0 0 0 rgba(168, 66, 208, 0));
+}
+.battle-card-slot.reveal-fx-rosetta-source.is-lit {
+  filter: drop-shadow(0 0 8px rgba(232, 121, 233, 0.95))
+          drop-shadow(0 0 20px rgba(168, 66, 208, 0.60));
+}
+
 /* Rosetta Stone (58): the scribe's hand that inscribes the transcribed text.
    Body-level fixed (a hand is larger than the card, and .battle-card-slot is
    overflow:hidden), so all positioning and motion belong to reveal-fx.js
