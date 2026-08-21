@@ -432,7 +432,7 @@ const CARDS = [
     id: 54, name: "Papyrus", cc: 2, ip: 2,                      // WIRED (At Once: copy last-played card — with its permanent buffed state — to hand)
     type: "Scientific", type2: null, era: "Egypt",             // (was "Technology" — dropped; Imhotep's Scientific discount now covers it)
     abilityName: "For the Record",
-    ability: "At Once:\nCreate a copy of the last card you played and add it to your hand.",
+    ability: "At Once:\nCreate a copy of the last card you played here and add it to your hand.",
     image:   "images/cards/egyptcards/papyrus@0.5x.jpg",
     imageSm: "images/cards/egyptcards/papyrus@0.3x.jpg", locked: true
   },
@@ -445,10 +445,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/egyptfarmer@0.3x.jpg", locked: true
   },
   {
-    id: 56, name: "Scribe", cc: 2, ip: 2,                       // WIRED (capital per prior card here) — distinct from Meso Scribe(40)
+    id: 56, name: "Scribe", cc: 2, ip: 2,                       // WIRED (End of Turn: +1 IP to OTHER Economic cards here) — distinct from Meso Scribe(40)
     type: "Economic", type2: null, era: "Egypt",               // Accounting is economic-administrative, not manual Labor (Batch C retype)
     abilityName: "Accounting",
-    ability: "At Once:\nFor every other card you have here, gain +1 Capital next turn.",
+    ability: "End of Turn:\nYour other Economic cards here gain +1 IP.",
     image:   "images/cards/egyptcards/egyptscribe@0.5x.jpg",
     imageSm: "images/cards/egyptcards/egyptscribe@0.3x.jpg", locked: true
   },

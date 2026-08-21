@@ -108,17 +108,21 @@ SOG.NarmerBattle = (function () {
     // polIP/polCount track Politicals per location so a later-queued Pyramid/
     // Hieroglyphics can score a Political queued EARLIER THIS TURN (both reveal
     // together, so the continuous boost realizes).
-    var free = {}, count = {}, ownIP = {}, polIP = {}, polCount = {}, topIP = {};
+    var free = {}, count = {}, ownIP = {}, polIP = {}, polCount = {}, topIP = {}, econCount = {};
     LOCS.forEach(function (id) {
       var s = (G.aiSlots && G.aiSlots[id]) || [];
       free[id]  = s.filter(function (x) { return x === null; }).length;
       count[id] = s.filter(Boolean).length;
-      ownIP[id] = 0; polIP[id] = 0; polCount[id] = 0; topIP[id] = 0;
+      ownIP[id] = 0; polIP[id] = 0; polCount[id] = 0; topIP[id] = 0; econCount[id] = 0;
       s.forEach(function (x) {
         if (!x) return;
         ownIP[id] += (x.ip || 0) + (x.ipMod || 0) + (x.contMod || 0);
         topIP[id] = Math.max(topIP[id], (x.ip || 0) + (x.ipMod || 0));   // new Pyramid grabs any type
         if (POLITICAL_IDS[x.cardId]) { polCount[id]++; polIP[id] = Math.max(polIP[id], x.ip || 0); }
+        // Economic count feeds the reworked Scribe (56), which pays out per
+        // Economic card here — read from the card def so it tracks any retype.
+        var xc = _cardOf(x.cardId);
+        if (xc && xc.type === 'Economic') econCount[id]++;
       });
     });
     function homeFull()  { return free[LOC_UPPER_EGYPT] === 0; }
@@ -158,7 +162,7 @@ SOG.NarmerBattle = (function () {
         if (id === 57) s += topIP[locId] > 0 ? topIP[locId] : -3;          // Pyramid (At Once): grabs the last-played card's IP here; dead alone
         if (id === 62) s += polCount[locId] > 0 ? 2 * polCount[locId] : -2; // Hieroglyphics: +2 per Political here; dead alone
         if (id === 51) s += (locId === LOC_MEMPHIS ? 2 : 0);               // Narmer: center seat spans the whole board's averaging
-        if (id === 56) s += 0.5 * count[locId];                            // Scribe: capital per prior card here
+        if (id === 56) s += econCount[locId] > 0 ? 1.5 * econCount[locId] : -2;  // Scribe (REWORKED): +1 IP to OTHER Economic cards here; dead alone
         if (id === 64) s += (ownIP[locId] >= 4 ? 2 : 0);                   // Sphinx: protect a stack worth protecting
         if (id === 70) s += (playerRevealedAt(locId) ? 1 : 0);             // Soldier: a target to destroy (needs a 1-CC one to land)
       }

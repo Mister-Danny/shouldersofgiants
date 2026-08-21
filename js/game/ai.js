@@ -377,34 +377,46 @@
       }
       case 38:  // Priest — Religious; wants a Ziggurat here (Ziggurat gives +1 to Religious).
         return ownIds.indexOf(45) !== -1 ? 1.5 : 0;
+      case 56: { // Scribe (Egypt) — End of Turn: +1 IP to the owner's OTHER ECONOMIC
+                 // cards HERE. Scored exactly like Ziggurat (45) below, the other
+                 // "+1 to my own matching type at this location" card: value scales
+                 // with how many Economic cards it would actually be paying out to.
+                 // A location with none is a guaranteed fizzle, so it WHIFFS (-1)
+                 // rather than scoring flat — the Papyrus lesson. (Its previous
+                 // ability granted Capital and had NO scorer here at all.)
+        var econ = ownIds.filter(function (id) { return typeOf(id) === 'Economic'; }).length;
+        if (!econ) return -1;                    // nothing Economic here → dead
+        return Math.min(econ, 3) * 1.5;
+      }
       case 45: { // Ziggurat — Continuous +1 to OTHER Religious cards here (e.g. Priest).
         var rel = ownIds.filter(function (id) { return typeOf(id) === 'Religious'; }).length;
         return Math.min(rel, 2) * 1.5;
       }
       case 40: // Scribe — stamps +1 on each of the owner's OTHER cards here: go where they are.
         return Math.min(ownIds.length, 3) * 1.5;
-      case 54: { // Papyrus (Egypt) — copies the LAST card played to hand; worth more
-                 // after the AI has already played something worthwhile. Board-wide
-                 // read (constant across locs → a card-priority nudge). Excludes self.
+      case 54: { // Papyrus (Egypt) — copies the last card the owner played HERE to
+                 // hand; worth more when a strong own card is already at THIS location.
+                 // LOCATION-SCOPED, tracking the ability itself. It used to read the
+                 // whole board, which scored every location identically and so let the
+                 // AI drop Papyrus somewhere it had played nothing — a guaranteed
+                 // fizzle. Now a location with no own prior play WHIFFS (-1), the same
+                 // way Rosetta (58) and Priest (71) below report a dead spot.
+                 // `mine` is the owner's slots at locId; tentative plays here count
+                 // because Papyrus reveals last (see _giantRevealOrder). Excludes self.
         var bestIP = 0;
-        ['opp', 'player'].forEach(function (sideKey) {
-          if (sideKey !== side) return;   // only the AI's own prior plays
-          var slots = sideKey === 'opp' ? G.aiSlots : G.playerSlots;
-          G.locations.forEach(function (l) {
-            (slots[l.id] || []).forEach(function (s) {
-              if (s && s.revealed && s.cardId !== 54) {
-                var cc = CARDS.find(function (x) { return x.id === s.cardId; });
-                if (cc && cc.ip > bestIP) bestIP = cc.ip;
-              }
-            });
-          });
+        (mine || []).forEach(function (s) {
+          if (s && s.revealed && s.cardId !== 54) {
+            var cc = CARDS.find(function (x) { return x.id === s.cardId; });
+            if (cc && cc.ip > bestIP) bestIP = cc.ip;
+          }
         });
         tentative.forEach(function (p) {
-          if (p.cardId === 54) return;
+          if (p.cardId === 54 || p.locId !== locId) return;
           var cc = CARDS.find(function (x) { return x.id === p.cardId; });
           if (cc && cc.ip > bestIP) bestIP = cc.ip;
         });
-        return Math.min(bestIP, 5) * 0.4;   // nothing good yet → ~0; a 5-IP prior play → +2
+        if (bestIP === 0) return -1;        // nothing to copy HERE → whiffs
+        return Math.min(bestIP, 5) * 0.4;   // a 5-IP prior play here → +2
       }
       case 58: { // Rosetta Stone (Egypt) — adopts the FIRST card the owner played
                  // HERE; worth more when that card has a strong ability. Location-

@@ -3029,20 +3029,56 @@
     else { tick(); done(); }
   }
 
-  /* Scribe — Egypt (id 56) — "Accounting": At Once, +1 Capital next turn for every
-     OTHER card the owner has at this location. Same next-turn-capital accumulator
-     as Scholar-Officials (2) / Farmer, via grantCapitalNextTurn. */
-  function abilityScribeEgypt(owner, locId, done) {
+  /* Scribe — Egypt (id 56) — "Accounting" (REWORKED). END OF TURN: the owner's
+     OTHER Economic cards at this location each gain +1 IP, permanently.
+     Replaces the old At-Once "+1 Capital next turn per other card here": this is
+     now an END-OF-TURN phase card (registry key `endOfTurn`), it grants IP rather
+     than Capital, and it targets ONLY Economic-type cards.
+
+     Scope, precisely: same owner, same location, type === 'Economic', excluding
+     the Scribe doing the firing. Self-exclusion is by SLOT-DATA IDENTITY (s !== sd)
+     rather than by id — a Papyrus-copied twin Scribe at the same location is a
+     genuinely different card and SHOULD be buffed by this one, which an
+     `cardId !== 56` test would have wrongly skipped. (The old Accounting hit the
+     mirror image of this bug and solved it by counting instead of id-matching.)
+
+     Firing in the end-of-turn phase means every card played this turn is already
+     revealed, so no reveal-ordering care is needed. The +1s land at the pop beat of
+     the animation — the visible pop and the real addIPMod are the same event. */
+  function scribeEgyptEndOfTurn(owner, locId, slotIndex, sd, done) {
+    done = typeof done === 'function' ? done : function () {};
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    // "Every OTHER card" = all revealed cards here minus THIS Scribe. Counting
-    // by id-exclusion (cardId !== 56) undercounted when a Papyrus-duplicated
-    // twin Scribe sat at the same location — a twin IS another card.
-    var total = 0;
-    forEachRevealedAt(slots, locId, function () { total++; });
-    var count = Math.max(0, total - 1);
-    grantCapitalNextTurn(owner, count);
-    if (count > 0 && typeof SFX !== 'undefined' && SFX.coinSound) SFX.coinSound();
-    done();
+
+    var targets = [];
+    forEachRevealedAt(slots, locId, function (s, i) {
+      if (s === sd) return;                                  // not the Scribe itself
+      var c = CARDS.find(function (x) { return x.id === s.cardId; });
+      if (!c || c.type !== 'Economic') return;               // Economic only
+      targets.push({
+        el: getSlotEl(owner, locId, i),
+        onLand: function () {
+          addIPMod(s, 1, 'Scribe');                          // permanent one-time +1 IP
+          evaluateContinuous();
+          refreshSlotIPDisplays();
+          updateScores();
+          if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
+            SOG.ui.showIPFloat(owner, s.cardId, 1);          // the now-BLUE +1 float
+          }
+        }
+      });
+    });
+    if (!targets.length) { done(); return; }                 // nothing Economic here → fizzle
+
+    var scribeEl = findSlotEl(owner, 56);
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.scribeAccountingSequence === 'function') {
+      rfx.scribeAccountingSequence(scribeEl, targets,
+        { sfx: 'sfx/scholar-officials-coin.mp3' }, done);
+    } else {
+      // No flourish available — still apply every +1, then advance.
+      targets.forEach(function (t) { t.onLand(); });
+      done();
+    }
   }
 
   /* Ra (id 63) — "Sun God": At Once, discard the owner's lowest-CC hand card; Ra
@@ -3188,28 +3224,30 @@
      The inherited amount rides G.copyIPBonus[side][cardId] until the copy is
      PLAYED, where commitPlay folds it into the new sd's ipMod (labelled
      'Papyrus') and CONSUMES the entry — once. Undo re-credits it.
-     "Last card you played" = highest playTime revealed card, board-wide,
-     excluding id 54 (a Papyrus can never copy a Papyrus — including copies —
-     which is the structural bound on the copy spiral: each Papyrus instance
-     creates at most ONE copy, ever). Fizzles if no prior play or hand full.
+     "Last card you played HERE" = highest playTime revealed card AT PAPYRUS'S OWN
+     LOCATION (locId), excluding id 54 (a Papyrus can never copy a Papyrus —
+     including copies — which is the structural bound on the copy spiral: each
+     Papyrus instance creates at most ONE copy, ever). This was a BOARD-WIDE read,
+     which contradicted the card's intent; it is now location-scoped, the same
+     shape abilityPyramid (57) already uses for "the last card you played here".
+     Fizzles if no prior play HERE, or hand full.
      Inherited amount defensively clamped to ±99 (overflow insurance). */
   function abilityPapyrus(owner, locId, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var hand  = owner === 'player' ? G.playerHand  : G.aiHand;
     var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
 
-    // Find the owner's most-recently-played card across the whole board.
-    var lastId = null, lastSd = null, lastTime = -Infinity;
-    G.locations.forEach(function (loc) {
-      (slots[loc.id] || []).forEach(function (s) {
-        if (!s || !s.revealed) return;
-        if (s.cardId === 54) return;                       // exclude Papyrus itself (and Papyrus copies)
-        var t = (typeof s.playTime === 'number') ? s.playTime : -1;
-        if (t > lastTime) { lastTime = t; lastId = s.cardId; lastSd = s; }
-      });
+    // Find the owner's most-recently-played card AT PAPYRUS'S OWN LOCATION.
+    // lastIdx is kept so the flourish can find that card's slot element to copy.
+    var lastId = null, lastSd = null, lastIdx = -1, lastTime = -Infinity;
+    (slots[locId] || []).forEach(function (s, si) {
+      if (!s || !s.revealed) return;
+      if (s.cardId === 54) return;                         // exclude Papyrus itself (and Papyrus copies)
+      var t = (typeof s.playTime === 'number') ? s.playTime : -1;
+      if (t > lastTime) { lastTime = t; lastId = s.cardId; lastSd = s; lastIdx = si; }
     });
 
-    if (lastId == null) { done(); return; }                // no prior play → fizzle
+    if (lastId == null) { done(); return; }                // no prior play here → fizzle
     if (hand.length >= maxHand) { done(); return; }        // hand full → fizzle (no copy)
 
     hand.push(lastId);                                     // the copy (same card id)
@@ -3656,7 +3694,7 @@
     53: { onAtOnce: abilityRamses          },             // Ramses II — At Once: -1 CC to Egypt cards in your hand
     54: { onAtOnce: abilityPapyrus         },             // Papyrus — At Once: copy last-played card (with its permanent buffed state) to hand
     55: { onAtOnce: abilityFarmerEgypt     },             // Farmer (EGY) — arms +1 IP for the NEXT card played (own fn; Meso Farmer 39 untouched)
-    56: { onAtOnce: abilityScribeEgypt     },             // Scribe (EGY) — capital per other card here
+    56: { endOfTurn: scribeEgyptEndOfTurn  },             // Scribe (EGY) — End of Turn: +1 IP to OTHER Economic cards here
     57: { onAtOnce: abilityPyramid         },             // Pyramid — At Once: gain the IP of the last card played here
     58: { onAtOnce: abilityRosetta         },             // Rosetta Stone — adopt first-here card's ability
     59: { endOfTurn: obeliskEndOfTurn      },             // Obelisk — End of turn: +1 IP (Megalith key)
