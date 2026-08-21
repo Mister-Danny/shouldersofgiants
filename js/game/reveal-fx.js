@@ -263,6 +263,27 @@ SOG.RevealFx = (function () {
       return holdFor(1400);   // onion pop + rise/fade ~1.4s
     },
 
+    /* Farmer — EGYPT (55): PHASE 1 of a two-phase effect. The same onion pop the
+       Meso Farmer (39) above uses — an <img> overlay on the slot, popped and
+       dissipated by CSS, self-removing — but with a boing instead of the coin
+       cha-ching, and no number: the "+1" belongs to the card this Farmer BUFFS,
+       not to the Farmer. Phase 2 (the onion descending onto that buffed card and
+       being bitten) is farmerOnionBite below, fired from the reveal pipeline once
+       the buffed card has finished its own reveal. */
+    55: function (ctx) {
+      playSfx('sfx/boingjump.mp3');
+      var onion = document.createElement('img');
+      onion.className = 'reveal-fx-onion';
+      onion.src = 'images/assets/onion@0.25x.png';
+      onion.draggable = false;
+      onion.setAttribute('aria-hidden', 'true');
+      ctx.slotEl.appendChild(onion);
+      setTimeout(function () {
+        if (onion.parentNode) onion.parentNode.removeChild(onion);
+      }, 1400);
+      return holdFor(1400);   // onion pop + rise/fade ~1.4s
+    },
+
     // Gilgamesh (43): the card grows and PULSES with a heartbeat throb for the
     // duration of gilgamesh.mp3, then DISSOLVES back to its resting size as the sfx
     // ends. Pure presentation overlay (no ability coupling): a CSS class drives the
@@ -332,6 +353,7 @@ SOG.RevealFx = (function () {
     32: 1850,   // Domesticated Animal howl
     34: 450,    // Neanderthal drop-in
     39: 1400,   // Farmer onion pop
+    55: 1400,   // Farmer (Egypt) onion pop
     43: 2530,   // Gilgamesh pulse
     44: 1850,   // Enkidu howl
     45: 1150    // Ziggurat ring-out
@@ -966,6 +988,11 @@ SOG.RevealFx = (function () {
     function finish() { if (typeof onComplete === 'function') onComplete(); }
     if (opts.sfx) playSfx(opts.sfx);
 
+    // Glow tint. Defaults to Neb's blue-white; callers reusing this flourish for
+    // another civ (Ramses 53 — Egypt) pass their own class for a related-but-
+    // distinct colour. Everything else about the flourish is identical.
+    var glowClass = opts.glowClass || 'reveal-fx-neb-glow';
+
     var layers = [];
     function burst(el, count, spreadX, spreadY) {
       if (!el) return;
@@ -994,13 +1021,13 @@ SOG.RevealFx = (function () {
 
     // Neb's own card — sparkle + glow (seen by BOTH sides).
     burst(nebEl, 26, 150, 200);
-    flashClass(nebEl, 'reveal-fx-neb-glow', 1200);
+    flashClass(nebEl, glowClass, 1200);
 
     // Affected in-hand Mesopotamia cards — sparkle + glow (player side only; the
     // caller passes an empty list when the opponent reveals Neb).
     (handEls || []).forEach(function (el) {
       burst(el, 14, 120, 170);
-      flashClass(el, 'reveal-fx-neb-glow', 1200);
+      flashClass(el, glowClass, 1200);
     });
 
     // CC tick-down IN SYNC with the sparkle peak (~grains reaching full opacity).
@@ -1017,6 +1044,516 @@ SOG.RevealFx = (function () {
       layers.forEach(function (l) { if (l.parentNode) l.parentNode.removeChild(l); });
       finish();
     }, 1500);
+  }
+
+  /* Water-splash droplets for the Merchant boat's LANDING impact (below).
+     Purely decorative: a handful of small pale droplets sprayed from one edge of
+     the boat, arcing outward+up and then falling back down under "gravity" while
+     they fade. Fires once, at the moment of landing — not during the teeter or the
+     glide. Self-cleaning (each droplet removes itself), and a no-op without GSAP,
+     so the boat launch degrades exactly as it does elsewhere.
+       x, y : the spray origin in viewport px
+       dir  : -1 sprays left, +1 sprays right */
+  function boatSplashBurst(x, y, dir, count) {
+    if (typeof gsap === 'undefined') return;
+    var n = count || 7;
+    for (var i = 0; i < n; i++) {
+      var drop = document.createElement('div');
+      drop.className = 'reveal-fx-splash-drop';
+      var size = (3 + Math.random() * 3.5).toFixed(1);
+      drop.style.cssText =
+        'position:fixed;left:' + x + 'px;top:' + y + 'px;' +
+        'width:' + size + 'px;height:' + size + 'px;' +
+        'margin:0;pointer-events:none;z-index:9998;';
+      document.body.appendChild(drop);
+
+      // Outward + up, then arc back down and fade — quick and light.
+      var outX  = dir * (14 + Math.random() * 42);
+      var upY   = -(8 + Math.random() * 26);
+      var upMs  = 0.16 + Math.random() * 0.11;
+      var fallY = 26 + Math.random() * 38;
+      var dnMs  = 0.26 + Math.random() * 0.16;
+
+      /* jshint loopfunc:true */
+      (function (d) {
+        gsap.timeline({ onComplete: function () { if (d.parentNode) d.parentNode.removeChild(d); } })
+          .to(d, { x: outX * 0.72, y: upY, opacity: 1, duration: upMs, ease: 'power2.out' })
+          .to(d, { x: outX, y: upY + fallY, opacity: 0, duration: dnMs, ease: 'power1.in' });
+      })(drop);
+    }
+  }
+
+  /* Hatshepsut (id 52) "Trading Queen" — the spawned Merchant launches as a BOAT.
+     PURELY PRESENTATIONAL. The Merchant is already in its real slot with its real
+     state before a single frame runs (abilityHatshepsut calls spawnCardAt first);
+     all this does is hide that card's FACE, fly a clone of it, and unhide the real
+     one on arrival. Every early-out below therefore just reveals the card where it
+     already is — identical to the old instant spawn.
+
+     Sequence: emerge from BEHIND Hatshepsut and pop out → land beside her and
+     TEETER (damped rocking tilt, decreasing amplitude, settling level) → glide
+     across to its destination slot, slower than a normal card move → rest.
+
+     THE Z-ORDER TRICK. The board lives inside a CSS scale()-transformed stage,
+     which is its own stacking context, so a body-level fixed flyer can NEVER paint
+     behind an in-stage card no matter its z-index. To make the Merchant emerge from
+     BEHIND Hatshepsut we drop a clone of HER card into that same body-level layer,
+     one z above the flyer and exactly over the real one. The Merchant starts hidden
+     behind that clone; the clone is removed the moment the pop clears her.
+       opts: { sfx, popMs, glideMs } */
+  function hatshepsutBoatLaunch(hatEl, merchEl, opts, onComplete) {
+    opts = opts || {};
+    var done = false;
+    function finish() { if (done) return; done = true; if (typeof onComplete === 'function') onComplete(); }
+
+    var hasGsap = (typeof gsap !== 'undefined');
+    if (!hatEl || !merchEl || !hasGsap) { finish(); return; }   // → instant spawn
+    var hRect = hatEl.getBoundingClientRect();
+    var mRect = merchEl.getBoundingClientRect();
+    if (!hRect.width || !mRect.width) { finish(); return; }     // → instant spawn
+
+    var popMs   = (opts.popMs   || 420) / 1000;
+    var glideMs = (opts.glideMs || 900) / 1000;
+
+    // Defer the real card's APPEARANCE (not its existence) until the boat lands.
+    var prevVis = merchEl.style.visibility;
+    merchEl.style.visibility = 'hidden';
+
+    var fly = merchEl.cloneNode(true);
+    fly.className = (merchEl.className || '') + ' reveal-fx-merchant-boat';
+    fly.style.position      = 'fixed';
+    fly.style.margin        = '0';
+    fly.style.width         = mRect.width  + 'px';
+    fly.style.height        = mRect.height + 'px';
+    fly.style.zIndex        = '9997';
+    fly.style.pointerEvents = 'none';
+    fly.style.visibility    = 'visible';
+
+    var hatClone = hatEl.cloneNode(true);
+    hatClone.style.position      = 'fixed';
+    hatClone.style.margin        = '0';
+    hatClone.style.left          = hRect.left + 'px';
+    hatClone.style.top           = hRect.top  + 'px';
+    hatClone.style.width         = hRect.width  + 'px';
+    hatClone.style.height        = hRect.height + 'px';
+    hatClone.style.zIndex        = '9998';         // one above the flyer
+    hatClone.style.pointerEvents = 'none';
+    hatClone.style.visibility    = 'visible';
+
+    document.body.appendChild(fly);
+    document.body.appendChild(hatClone);
+
+    function dropHatClone() { if (hatClone.parentNode) hatClone.parentNode.removeChild(hatClone); }
+    function cleanup() {
+      dropHatClone();
+      if (fly.parentNode) fly.parentNode.removeChild(fly);
+      merchEl.style.visibility = prevVis;
+    }
+
+    // Geometry: start dead-centre on her card, land just beside it on the side the
+    // destination lies toward (so the glide continues the launch rather than
+    // doubling back), and a touch low so the boat reads as sitting in FRONT of her.
+    var startX = hRect.left + hRect.width  / 2;
+    var startY = hRect.top  + hRect.height / 2;
+    var destX  = mRect.left + mRect.width  / 2;
+    var destY  = mRect.top  + mRect.height / 2;
+    var dir    = (destX >= startX) ? 1 : -1;
+    var landX  = startX + dir * hRect.width * 0.95;
+    var landY  = startY + hRect.height * 0.18;
+
+    gsap.set(fly, { left: startX, top: startY, xPercent: -50, yPercent: -50,
+                    scale: 0.55, rotation: 0, opacity: 0.95 });
+
+    if (opts.sfx) playSfx(opts.sfx);
+
+    gsap.timeline({ onComplete: function () { cleanup(); finish(); } })
+      // 1) out from behind her and pop.
+      .to(fly, { left: landX, top: landY, scale: 1, opacity: 1,
+                 duration: popMs, ease: 'back.out(1.7)' })
+      // she has been cleared — stop masking the flyer.
+      .add(dropHatClone)
+      // LANDING IMPACT: water sprays from BOTH edges of the hull. One burst only,
+      // right where the pop ends and the teeter begins.
+      .add(function () {
+        var half = mRect.width / 2;
+        var waterline = landY + mRect.height * 0.34;   // near the hull's bottom
+        boatSplashBurst(landX - half, waterline, -1);
+        boatSplashBurst(landX + half, waterline,  1);
+      })
+      // 2) damped teeter: rock one way, over-correct the other, smaller each
+      //    time, settling level — a boat finding its balance. ~0.66s, so pop +
+      //    teeter together land at ~1s.
+      .to(fly, { rotation:  9,   duration: 0.16, ease: 'sine.inOut' })
+      .to(fly, { rotation: -6,   duration: 0.15, ease: 'sine.inOut' })
+      .to(fly, { rotation:  3.5, duration: 0.13, ease: 'sine.inOut' })
+      .to(fly, { rotation: -2,   duration: 0.12, ease: 'sine.inOut' })
+      .to(fly, { rotation:  0,   duration: 0.10, ease: 'sine.inOut' })
+      // 3) laden glide to the real slot — stately, slower than a normal move.
+      .to(fly, { left: destX, top: destY, duration: glideMs, ease: 'power2.inOut' });
+  }
+
+  /* ── PAPYRUS (54) "For the Record" — the copy rolls up as a scroll ───────────
+     Two pieces: papyrusScrollRoll (the 3D roll itself) and papyrusCopyFlourish
+     (the sequence around it). PURELY PRESENTATIONAL — see papyrusCopyFlourish.
+
+     papyrusScrollRoll(el, card, progress)
+     ─────────────────────────────────────
+     Rolls `el` up like a scroll. progress 0 = flat card, 1 = fully rolled tube;
+     driving it 1 → 0 UNROLLS, which is how the same helper serves both beats.
+
+     CSS cannot curl a flat element into a cylinder — one element with rotateX just
+     tilts — so the card is rebuilt (once, lazily, cached on el._pap) as a STACK OF
+     HORIZONTAL STRIPS inside a preserve-3d container. Each strip carries its own
+     slice of the card via background-position, and each has a BACK layer holding
+     the matching slice of the real card-back texture, so when a strip rotates past
+     90 degrees the genuine card back is what turns toward the viewer.
+
+     Geometry. Let s = a strip's arc distance from the BOTTOM edge of the card, and
+     L = progress * H be how much length has been wound on so far. A strip with
+     s >= L has not reached the roll yet and stays flat. A strip with s < L has been
+     wound by angle theta = (L - s) / R about the roll axis, so relative to the
+     tangent point (which sits at the boundary y = H/2 - L) it lies at
+         dy = -R * sin(theta),  dz = R * (1 - cos(theta))
+     and is itself rotated by theta — tangent to the cylinder, exactly like real
+     material wrapping. The bottom strip winds furthest, so the roll grows upward
+     from the bottom edge and the flat remainder shrinks above it, which is what
+     rolling a scroll actually looks like. R grows slightly with progress because a
+     real roll fattens as more material winds onto it. */
+  /* Strip count. 12 was too coarse: adjacent strips differed by ~20 degrees of
+     arc and every facet was lit identically, so the curl read as VENETIAN BLINDS
+     rather than a rolling sheet. 24 halves the angular step, and the per-strip
+     shading below gives the facets a cylindrical falloff so they read as one
+     curved surface. */
+  var PAPYRUS_STRIPS   = 24;                                          // strip count (knob)
+  var PAPYRUS_BACK_IMG = 'images/cards/cardsmisc/SOG_Card_Back_Medium.jpeg';
+
+  function papyrusScrollRoll(el, card, progress) {
+    if (!el) return;
+    var W = el._papW, H = el._papH;
+
+    // Build once; every later call just re-drives the strips.
+    if (!el._pap) {
+      W = el.offsetWidth  || 90;
+      H = el.offsetHeight || 130;
+      el._papW = W; el._papH = H;
+
+      var face = (card && (card.image || card.imageSm)) || '';
+      var deck = document.createElement('div');
+      deck.className = 'reveal-fx-papyrus-deck';
+      deck.style.cssText = 'position:absolute;inset:0;transform-style:preserve-3d;';
+
+      var strips = [];
+      var h = H / PAPYRUS_STRIPS;
+      for (var i = 0; i < PAPYRUS_STRIPS; i++) {
+        var strip = document.createElement('div');
+        // +1.1px overlap closes the hairline seams that open between facets as the
+        // sheet curls — those gaps were a big part of the blinds impression.
+        strip.style.cssText =
+          'position:absolute;left:0;width:' + W + 'px;height:' + (h + 1.1) + 'px;' +
+          'top:' + (i * h) + 'px;transform-style:preserve-3d;will-change:transform;';
+
+        var front = document.createElement('div');
+        front.style.cssText =
+          'position:absolute;inset:0;backface-visibility:hidden;' +
+          'background-image:url(' + face + ');background-repeat:no-repeat;' +
+          'background-size:' + W + 'px ' + H + 'px;background-position:0 ' + (-i * h) + 'px;';
+
+        var back = document.createElement('div');
+        back.style.cssText =
+          'position:absolute;inset:0;backface-visibility:hidden;transform:rotateY(180deg);' +
+          'background-image:url(' + PAPYRUS_BACK_IMG + ');background-repeat:no-repeat;' +
+          'background-size:' + W + 'px ' + H + 'px;background-position:0 ' + (-i * h) + 'px;';
+
+        strip.appendChild(front);
+        strip.appendChild(back);
+        deck.appendChild(strip);
+        // front/back kept so shading can be applied to the FACES, never the strip:
+        // a filter on the strip itself would force its transform-style back to flat
+        // and kill the backface-visibility that reveals the card back.
+        strips.push({ el: strip, front: front, back: back });
+      }
+      el.appendChild(deck);
+      el._pap = { deck: deck, strips: strips, h: h };
+    }
+
+    var pap = el._pap;
+    var p   = Math.max(0, Math.min(1, progress || 0));
+    var h   = pap.h;
+    var L   = p * H;
+    var R   = (H / 5) * (1 + 0.45 * p);        // roll fattens as material winds on
+
+    for (var j = 0; j < pap.strips.length; j++) {
+      var st = pap.strips[j];
+      // Arc distance of this strip's CENTRE from the bottom edge.
+      var sDist = H - (j * h + h / 2);
+      if (sDist >= L) {                        // not reached the roll yet — still flat
+        st.el.style.transform  = 'translate3d(0,0,0)';
+        st.front.style.filter  = '';
+        st.back.style.filter   = '';
+        continue;
+      }
+      var theta = (L - sDist) / R;             // radians wound
+      /* dy has TWO terms and both matter:
+           -R*theta  the ARC CONTRACTION — material that has wound onto the roll no
+                     longer occupies its flat span, so the sheet gathers upward as
+                     it rolls. Omitting this was what made the roll read as venetian
+                     blinds: every strip stayed at its flat spacing and merely
+                     tilted in place, which is exactly what a blind does. More
+                     strips and shading could not fix it because the sheet was never
+                     actually contracting.
+           -R*sin    the strip's position around the cylinder from the tangent point.
+         Derivation: flat centre sits at y = H - sDist; the tangent point is at
+         y = H - L; a point wound by theta lies at y = (H - L) - R*sin(theta). The
+         difference is sDist - L - R*sin(theta), and since L - sDist = R*theta that
+         is -R*(theta + sin theta). At theta = 0 it is 0, so it joins the flat part
+         seamlessly. */
+      var dy    = -R * (theta + Math.sin(theta));
+      var dz    =  R * (1 - Math.cos(theta));
+      st.el.style.transform = 'translate3d(0,' + dy.toFixed(2) + 'px,' + dz.toFixed(2) + 'px) ' +
+                              'rotateX(' + (theta * 180 / Math.PI).toFixed(2) + 'deg)';
+
+      /* Cylindrical shading. Facets square-on to the viewer stay bright, facets
+         turning edge-on fall off toward dark — which is what stops a stack of flat
+         slats from reading as blinds and makes it read as one curved sheet. The
+         BACK (the inside of the curl) sits in its own shadow, so it is darker
+         throughout. Applied to the faces, never the strip — see the build above. */
+      var lit = Math.abs(Math.cos(theta));
+      st.front.style.filter = 'brightness(' + (0.56 + 0.44 * lit).toFixed(3) + ')';
+      st.back.style.filter  = 'brightness(' + (0.42 + 0.34 * lit).toFixed(3) + ')';
+    }
+  }
+
+  /* papyrusCopyFlourish(papyrusEl, targetEl, card, opts, onComplete)
+     ───────────────────────────────────────────────────────────────
+     PURELY PRESENTATIONAL. The copy is already in the owner's hand with its
+     G.copyIPBonus stamped before this runs (abilityPapyrus commits state first);
+     all this does is defer the new hand card's VISIBILITY until the scroll unrolls
+     into it. Every early-out below just reveals it immediately — i.e. exactly the
+     behaviour before this animation existed.
+
+     Sequence: a clone of Papyrus's face slides OVER the card it is copying →
+     cross-dissolves into that card's face → rolls up as a scroll (sfx) → travels to
+     the hand → unrolls into its slot (sfx).
+     OPPONENT SIDE: their hand is face-down, so there is no meaningful slot to
+     unroll into — the scroll rolls, travels toward the opponent's hand strip and
+     FADES. Same asymmetry nebuchadnezzarShimmer already uses for the hidden hand.
+       opts: { sfx, handEl, isPlayer } */
+  function papyrusCopyFlourish(papyrusEl, targetEl, card, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+
+    var handEl   = opts.handEl || null;
+    var isPlayer = !!opts.isPlayer;
+
+    function revealHandCard() { if (handEl) handEl.style.visibility = ''; }
+
+    if (!papyrusEl || !targetEl || !card || typeof gsap === 'undefined') { finish(); return; }
+    var pRect = papyrusEl.getBoundingClientRect();
+    var tRect = targetEl.getBoundingClientRect();
+    if (!pRect.width || !tRect.width) { finish(); return; }
+
+    // The destination card exists already — just hold its appearance back.
+    if (handEl) handEl.style.visibility = 'hidden';
+
+    // Flyer: starts as Papyrus's own face, at Papyrus's rect.
+    var fly = document.createElement('div');
+    fly.className = 'reveal-fx-papyrus-fly';
+    fly.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9997;' +
+      'left:' + pRect.left + 'px;top:' + pRect.top + 'px;' +
+      'width:' + tRect.width + 'px;height:' + tRect.height + 'px;' +
+      'perspective:900px;';
+
+    // Layer A — Papyrus's face. Layer B — the target card's face, dissolved in.
+    function faceLayer(srcEl, op) {
+      var l = srcEl.cloneNode(true);
+      l.className = (srcEl.className || '') + ' reveal-fx-papyrus-face';
+      l.style.cssText = 'position:absolute;inset:0;margin:0;width:100%;height:100%;' +
+                        'visibility:visible;opacity:' + op + ';';
+      return l;
+    }
+    var layerA = faceLayer(papyrusEl, 1);
+    var layerB = faceLayer(targetEl, 0);
+    fly.appendChild(layerA);
+    fly.appendChild(layerB);
+    document.body.appendChild(fly);
+
+    function cleanup() {
+      if (fly.parentNode) fly.parentNode.removeChild(fly);
+      revealHandCard();
+    }
+
+    var rollState = { p: 0 };
+    var tl = gsap.timeline({ onComplete: function () { cleanup(); finish(); } });
+
+    // 1) slide OVER the card being copied.
+    tl.to(fly, { left: tRect.left, top: tRect.top, duration: 0.38, ease: 'power2.inOut' })
+      // 2) cross-dissolve: Papyrus's face BECOMES the target card's face.
+      .to(layerB, { opacity: 1, duration: 0.32, ease: 'power1.inOut' }, '>-0.02')
+      .to(layerA, { opacity: 0, duration: 0.32, ease: 'power1.inOut' }, '<')
+      // 3) swap the flat faces for the strip cylinder and ROLL up.
+      .add(function () {
+        layerA.style.display = 'none';
+        layerB.style.display = 'none';
+        if (opts.sfx) playSfx(opts.sfx);
+        papyrusScrollRoll(fly, card, 0);
+      })
+      .to(rollState, {
+        p: 1, duration: 0.62, ease: 'power2.in',
+        onUpdate: function () { papyrusScrollRoll(fly, card, rollState.p); }
+      });
+
+    // 4/5/6) travel to the hand, then unroll into the slot (player only).
+    var hRect = handEl ? handEl.getBoundingClientRect() : null;
+    if (hRect && hRect.width) {
+      tl.to(fly, { left: hRect.left + (hRect.width - tRect.width) / 2,
+                   top:  hRect.top  + (hRect.height - tRect.height) / 2,
+                   duration: 0.70, ease: 'power2.inOut' });
+      if (isPlayer) {
+        tl.add(function () { if (opts.sfx) playSfx(opts.sfx); })
+          .to(rollState, {
+            p: 0, duration: 0.52, ease: 'power2.out',
+            onUpdate: function () { papyrusScrollRoll(fly, card, rollState.p); }
+          });
+      } else {
+        // Face-down hand — nothing to unroll INTO, so the scroll just fades out.
+        tl.to(fly, { opacity: 0, duration: 0.28, ease: 'power1.in' });
+      }
+    } else {
+      tl.to(fly, { opacity: 0, duration: 0.28, ease: 'power1.in' });
+    }
+  }
+
+  /* Farmer — EGYPT (55): PHASE 2. The onion the Farmer launched comes back DOWN
+     onto whichever card actually took the +1, and is eaten.
+
+     Deliberately NOT a reveal-fx handler: it does not belong to the buffed card's
+     own reveal, it has to happen AFTER it. The reveal pipeline has two distinct
+     completion points and only the later one is correct here —
+       • flipSlot's done  = flip scale-in + any reveal-fx OVERLAY has finished;
+       • fireAtOnce's cb  = the card's own AT ONCE ANIMATION has finished.
+     The heavy per-card animations (Ramses' shimmer, Hatshepsut's Merchant boat,
+     Papyrus' scroll roll) are all ability animations gated on the SECOND one, so
+     this is called from there — by which point both are guaranteed complete. A
+     card with no animation at all reaches that same point immediately, so the
+     onion simply arrives right away.
+
+     Ends on a HARD CUT: the descent holds the onion fully opaque on the card, the
+     bite lands, and the element is removed outright on the next frame. No fade —
+     the onion is gone, not fading.
+     Overlay only; never gates the pipeline, and no-ops without a slot element. */
+  function farmerOnionBite(slotEl, onComplete) {
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+    if (!slotEl || typeof gsap === 'undefined') { finish(); return; }
+    var r = slotEl.getBoundingClientRect();
+    if (!r.width) { finish(); return; }                  // no geometry → skip the visual
+
+    /* A BODY-LEVEL FIXED flyer, not a child of the slot like the Phase 1 pop.
+       .battle-card-slot is overflow:hidden, which caps any in-slot travel at about
+       30px — the existing pop gets away with that because it only drifts a little,
+       but a fall from ABOVE the card would be clipped away to nothing. Anchoring to
+       the card's rect instead lets the onion drop a full card-height, unclipped,
+       and also means it lands correctly on a card that has RELOCATED. */
+    var w  = r.width * 0.82;
+    var cx = r.left + r.width / 2;
+    var cy = r.top  + r.height / 2;
+
+    var onion = document.createElement('img');
+    onion.className = 'reveal-fx-onion-bite';
+    onion.src = 'images/assets/onion@0.25x.png';
+    onion.draggable = false;
+    onion.setAttribute('aria-hidden', 'true');
+    onion.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9996;' +
+      'width:' + w + 'px;height:auto;left:' + cx + 'px;top:' + cy + 'px;';
+    document.body.appendChild(onion);
+
+    function cut() {                                     // HARD CUT — gone, not faded
+      if (onion.parentNode) onion.parentNode.removeChild(onion);
+      finish();
+    }
+
+    gsap.set(onion, { xPercent: -50, yPercent: -50, y: -r.height * 1.15, opacity: 0, scale: 0.82 });
+    gsap.timeline()
+      // fade in while falling
+      .to(onion, { opacity: 1, duration: 0.16, ease: 'power1.out' }, 0)
+      .to(onion, { y: 0, scale: 1.06, duration: 0.46, ease: 'power2.in' }, 0)
+      // land: a small squash, then the bite
+      .to(onion, { scale: 1, duration: 0.1, ease: 'power2.out' })
+      .add(function () { playSfx('sfx/bite.mp3'); })
+      // sits bitten for a beat, then vanishes in ONE FRAME — no fade.
+      // Scheduled with a position offset rather than an empty .to(): a tween with
+      // no vars still takes GSAP's DEFAULT 0.5s duration, which stretched this
+      // pause to ~630ms instead of the 130ms intended.
+      .add(cut, '+=0.13');
+  }
+
+  /* Scribe — EGYPT (56) "Accounting", END-OF-TURN flourish. The Scribe lifts in its
+     slot as if standing up to take the tally, then each of the other Economic cards
+     here POPS in slot order — one at a time, each with the coin sfx and its blue +1.
+
+     Each target's onLand() is what actually applies the +1 (addIPMod + float), and
+     it is called AT THE POP BEAT, so the number the player sees and the number the
+     engine records are the same event — never a faked pop followed by a silent
+     write. The whole sequence is gated on onComplete, which the end-of-turn phase
+     passes its `done` to, so the turn waits for it.
+     No GSAP, or no Scribe element → every onLand still runs, paced, so the IP is
+     never skipped.
+       opts: { sfx, riseMs, popMs, gapMs } */
+  function scribeAccountingSequence(scribeEl, targets, opts, onComplete) {
+    opts = opts || {};
+    var riseMs = (opts.riseMs || 300) / 1000;
+    var popMs  = (opts.popMs  || 180) / 1000;
+    var gapMs  =  opts.gapMs  || 150;
+
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+    if (!targets || !targets.length) { finish(); return; }
+
+    // Degraded path: no animation, but the tally still happens, paced so the
+    // coins do not stack into one noise.
+    if (typeof gsap === 'undefined' || !scribeEl) {
+      var k = 0;
+      (function plain() {
+        if (k >= targets.length) { finish(); return; }
+        var t = targets[k++];
+        if (opts.sfx) playSfx(opts.sfx);
+        if (typeof t.onLand === 'function') t.onLand();
+        setTimeout(plain, gapMs + 180);
+      })();
+      return;
+    }
+
+    // 1) The Scribe rises 15% of its own height, and stays up while it tallies.
+    gsap.to(scribeEl, { y: '-15%', duration: riseMs, ease: 'power2.out', onComplete: popNext });
+
+    var i = 0;
+    function popNext() {
+      if (i >= targets.length) {
+        // 2) Tally done — the Scribe settles back into its slot.
+        gsap.to(scribeEl, {
+          y: '0%', duration: 0.26, ease: 'power2.inOut',
+          onComplete: function () { gsap.set(scribeEl, { clearProps: 'transform' }); finish(); }
+        });
+        return;
+      }
+      var t = targets[i++];
+      if (!t.el) {                       // missing element — still credit the card
+        if (typeof t.onLand === 'function') t.onLand();
+        setTimeout(popNext, gapMs);
+        return;
+      }
+      if (opts.sfx) playSfx(opts.sfx);
+      if (typeof t.onLand === 'function') t.onLand();   // the +1 IS the pop
+      gsap.timeline({
+        onComplete: function () {
+          gsap.set(t.el, { clearProps: 'transform' });
+          setTimeout(popNext, gapMs);
+        }
+      })
+        .to(t.el, { y: '-18%', scale: 1.07, duration: popMs, ease: 'power2.out' })
+        .to(t.el, { y: '0%',   scale: 1,    duration: 0.24,  ease: 'back.out(2)' });
+    }
   }
 
   /* Sargon (id 37) reveal flourish — visualizes his "+3 IP to adjacent location(s)".
@@ -1128,5 +1665,11 @@ SOG.RevealFx = (function () {
            chariotArrow: chariotArrow,
            nebuchadnezzarShimmer: nebuchadnezzarShimmer,
            sargonBeam: sargonBeam,
+           hatshepsutBoatLaunch: hatshepsutBoatLaunch,
+           scribeAccountingSequence: scribeAccountingSequence,
+           farmerOnionBite: farmerOnionBite,
+           boatSplashBurst: boatSplashBurst,
+           papyrusScrollRoll: papyrusScrollRoll,
+           papyrusCopyFlourish: papyrusCopyFlourish,
            endOfTurnShimmer: endOfTurnShimmer };
 })();

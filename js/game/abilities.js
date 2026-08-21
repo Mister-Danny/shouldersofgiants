@@ -230,6 +230,63 @@
     });
   }
 
+  /* ── NARMER (51) "The Unifier" — persistent red glow ─────────────────────────
+     Lights Narmer's own card and, for HIS OWNER'S SIDE ONLY, the score number at
+     his location and at each ADJACENT location, for as long as his Continuous
+     ability is active.
+
+     The affected set is NOT recomputed here. It is read straight off
+     G.narmerGlow, which the averaging pass itself writes as it runs (see the
+     "FINAL PASS" block in evaluateContinuous) — so the glow is by construction
+     the same [narmerLoc] + getAdjacentLocIds(narmerLoc) the ability acts on. That
+     buys three behaviours for free, with no extra wiring:
+       • He MOVES     → the next continuous pass re-scans the board, G.narmerGlow
+                        points at the new location, old nameplates go dark.
+       • He's DESTROYED / leaves play → the pass finds no Narmer, the side's entry
+                        stays empty, and every glow is cleared. No orphans.
+       • BOSS or PLAYER → the pass loops ['player','opp'] over the same code, so a
+                        boss Narmer in his own fight and a player who plays card 51
+                        light up identically. Nothing context-specific here.
+     Each side is lit INDEPENDENTLY on its own score digits, so two Narmers (one
+     per side) each mark their own averaged totals without fighting over one plate.
+     Called from the evaluateContinuous tail beside updateKenteGlows, i.e. after
+     every board-state change. */
+  function updateNarmerGlows() {
+    if (!boardEl || typeof Anim === 'undefined') return;
+
+    // The glow lands on each side's own SCORE NUMBER, PER SIDE — not on the shared
+    // location nameplate. Narmer's averaging only ever touches HIS OWNER's totals,
+    // so the owner's score digit is the thing his ability actually changes, and
+    // lighting it says that precisely. It also makes both-sides-have-Narmer work:
+    // the player's Narmer lights the cyan player digits, the opponent's lights the
+    // red opponent digits, and where the two groups overlap both digits light
+    // independently. A single shared nameplate could not express that.
+    ['player', 'opp'].forEach(function (own) {
+      var g   = G.narmerGlow && G.narmerGlow[own];
+      var lit = {};
+      if (g && g.group) g.group.forEach(function (id) { lit[id] = true; });
+      G.locations.forEach(function (loc) {
+        var scoreEl = document.getElementById('loc-score-' + own + '-' + loc.id);
+        Anim.setNarmerScoreGlow(scoreEl, !!lit[loc.id]);
+      });
+    });
+
+    // Narmer's OWN card — glows only on the slot holding him, per side.
+    ['player', 'opp'].forEach(function (own) {
+      var g     = (G.narmerGlow && G.narmerGlow[own]) || null;
+      var slots = own === 'player' ? G.playerSlots : G.aiSlots;
+      G.locations.forEach(function (loc) {
+        (slots[loc.id] || []).forEach(function (s, si) {
+          var el = getSlotEl(own, loc.id, si);
+          if (!el) return;
+          var isNarmer = !!(s && s.revealed && abilityIdOf(s) === 51 &&
+                            g && g.locId === loc.id);
+          Anim.setNarmerGlow(el, isNarmer);
+        });
+      });
+    });
+  }
+
   /**
    * Update William's displayed IP number immediately (no sound/animation).
    * Called live as each card is destroyed so the number ticks up in real time.
@@ -713,6 +770,10 @@
        truthful. Remainder → Narmer's OWN location first, then neighbours in order
        (e.g. 31 across 3 → 11/10/10). locationBoosts is rebuilt each pass, so no
        compounding. Inert until an Egypt battle decks Narmer. */
+    // Rebuilt from scratch on every pass, exactly like G.locationBoosts above, so
+    // the GLOW below reads the same set the averaging actually used — no parallel
+    // adjacency calc, and no stale entry when Narmer moves or leaves play.
+    G.narmerGlow = { player: { locId: null, group: [] }, opp: { locId: null, group: [] } };
     ['player', 'opp'].forEach(function (own) {
       var sl = own === 'player' ? G.playerSlots : G.aiSlots;
       var narmerLoc = null;
@@ -722,6 +783,7 @@
       if (narmerLoc === null) return;
       // Group = Narmer's loc (FIRST — gets the remainder) + its adjacents.
       var group = [narmerLoc].concat(getAdjacentLocIds(narmerLoc));
+      G.narmerGlow[own] = { locId: narmerLoc, group: group };
       function ownerTotal(locId) {
         var t = 0;
         sl[locId].forEach(function (s) { if (s && s.revealed) t += effectiveIP(s); });
@@ -811,6 +873,8 @@
       });
       // Update Kente location glow on all tiles
       updateKenteGlows();
+      // Update Narmer's persistent "unified lands" glow (card + nameplates)
+      updateNarmerGlows();
     }
   }
 
@@ -1120,7 +1184,10 @@
 
   function abilityFarmerEgypt(owner, locId, done) {
     armPendingIPBuff(owner);
-    if (typeof SFX !== 'undefined' && SFX.ipGained) SFX.ipGained();
+    // No sound here: the Farmer's reveal voice is the onion pop's boing, owned by
+    // reveal-fx handler 55 (same division as the Meso Farmer 39, whose handler owns
+    // its coin cha-ching). The old ipGained ping fired at the same instant and would
+    // simply talk over it.
     done();
   }
 
@@ -2860,11 +2927,40 @@
     done = typeof done === 'function' ? done : function () {};
     var dest = randomOtherOpenLoc(owner, locId);
     if (!dest) { done(); return; }                  // nowhere to send her → fizzle
-    spawnCardAt(owner, dest.id, MERCHANT_ID);
+
+    // STATE FIRST, VISUALS SECOND. spawnCardAt is untouched and runs to completion
+    // here — the Merchant is fully, correctly in its slot (stats, wasSpawned,
+    // trade wiring, scores) before any animation starts. Everything below only
+    // changes when that already-real card becomes VISIBLE.
+    var slots  = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var before = (slots[dest.id] || []).slice();    // identity snapshot
+    if (!spawnCardAt(owner, dest.id, MERCHANT_ID)) { done(); return; }
+
     if (window.SOG_DEBUG && typeof console !== 'undefined') {
       console.log('[Hatshepsut] sent a Merchant from loc ' + locId + ' to loc ' + dest.id);
     }
-    done();
+
+    // Which slot did it land in? Found by OBJECT IDENTITY against the snapshot
+    // rather than by re-running indexOf(null) or scanning for cardId — spawnCardAt
+    // re-syncs (and may compact) the column, and the side may already hold another
+    // Merchant, so identity is the only unambiguous answer.
+    var idx = -1;
+    (slots[dest.id] || []).forEach(function (sd, i) {
+      if (sd && before.indexOf(sd) === -1) idx = i;
+    });
+
+    var rfx = window.SOG && SOG.RevealFx;
+    var hatEl   = findSlotEl(owner, 52);
+    var merchEl = (idx !== -1) ? getSlotEl(owner, dest.id, idx) : null;
+
+    // The boat launch is scoped to THIS ability — a Merchant played from hand, or
+    // arriving any other way, never routes through here and is unaffected. If the
+    // flourish is unavailable the spawn simply appears as it always did.
+    if (rfx && typeof rfx.hatshepsutBoatLaunch === 'function' && hatEl && merchEl) {
+      rfx.hatshepsutBoatLaunch(hatEl, merchEl, { sfx: 'sfx/boatsplash.mp3' }, done);
+    } else {
+      done();
+    }
   }
 
   /* Tribe (id 36) — REACTIVE PRESENTATION ONLY (no IP/state/timing change).
@@ -3260,10 +3356,39 @@
       G.copyIPBonus[side][lastId] = (G.copyIPBonus[side][lastId] || 0) + inherited;
     }
 
+    // STATE FIRST. Everything above is committed and unchanged; the hand already
+    // holds the copy with its copyIPBonus stamped. The flourish below only defers
+    // when that new hand card becomes VISIBLE.
     if (typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
     if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
-    if (typeof SFX !== 'undefined' && SFX.coinSound) SFX.coinSound();
-    done();
+
+    // The copy was PUSHED onto the end of the hand array, and the hand renders in
+    // array order, so it is the LAST element — duplicate-cardId safe (a hand can
+    // legitimately hold two of the same id once Papyrus has copied one).
+    var handEl = null;
+    if (owner === 'player') {
+      var pHand = document.getElementById('battle-player-hand');
+      var cards = pHand ? pHand.querySelectorAll('.battle-hand-card') : null;
+      if (cards && cards.length) handEl = cards[cards.length - 1];
+    } else {
+      var oHand = document.getElementById('battle-opp-hand');
+      var backs = oHand ? oHand.querySelectorAll('.battle-card-back') : null;
+      if (backs && backs.length) handEl = backs[backs.length - 1];
+    }
+
+    var rfx       = window.SOG && SOG.RevealFx;
+    var papyrusEl = findSlotEl(owner, 54);
+    var targetEl  = (lastIdx !== -1) ? getSlotEl(owner, locId, lastIdx) : null;
+    var srcCard   = CARDS.find(function (c) { return c.id === lastId; });
+
+    if (rfx && typeof rfx.papyrusCopyFlourish === 'function' && papyrusEl && targetEl && srcCard) {
+      rfx.papyrusCopyFlourish(papyrusEl, targetEl, srcCard,
+        { sfx: 'sfx/papyrus.mp3', handEl: handEl, isPlayer: owner === 'player' }, done);
+    } else {
+      // No flourish available → exactly the previous behaviour, coin sound and all.
+      if (typeof SFX !== 'undefined' && SFX.coinSound) SFX.coinSound();
+      done();
+    }
   }
 
   /* Pyramid (57) — "Monumental Legacy" (REWORKED). At Once: Pyramid permanently
@@ -3313,6 +3438,21 @@
     done();
   }
 
+  /* Narmer (51) — "The Unifier". His actual effect is CONTINUOUS (the total-IP
+     averaging in evaluateContinuous) and his persistent red glow is driven from
+     that same pass by updateNarmerGlows — neither belongs here. This At-Once slot
+     exists purely to fire his arrival sting ONCE, on the reveal that puts him in
+     play, rather than on every continuous recompute. Fires for whichever side
+     played him, so the boss Narmer and a player's card 51 both sound.
+     Was a bare done() no-op before. */
+  function abilityNarmer(owner, locId, done) {
+    done = typeof done === 'function' ? done : function () {};
+    if (window.SOG && SOG.sfx && typeof SOG.sfx.play === 'function') {
+      SOG.sfx.play('sfx/narmer.mp3');
+    }
+    done();
+  }
+
   /* Ramses II (53) — "Ozymandias": At Once, reduce the owner's in-hand Egypt cards
      by -1 CC. Symmetric with Nebuchadnezzar (id 50) — same one-time in-hand stamp
      mechanism (G.ramsesCCDiscount[side][cardId]), same shimmer reuse, just keyed on
@@ -3347,7 +3487,8 @@
     }
     var rfx = window.SOG && SOG.RevealFx;
     if (rfx && typeof rfx.nebuchadnezzarShimmer === 'function') {
-      rfx.nebuchadnezzarShimmer(ramsesEl, handEls, { sfx: 'sfx/magicshimmer.m4a', onDrop: onDrop }, done);
+      rfx.nebuchadnezzarShimmer(ramsesEl, handEls,
+        { sfx: 'sfx/ramses.mp3', glowClass: 'reveal-fx-ramses-glow', onDrop: onDrop }, done);
     } else {
       onDrop();
       done();
@@ -3689,7 +3830,7 @@
        Sphinx/Imhotep) carry a no-op onAtOnce and do their work in
        evaluateContinuous / effectiveCost / the strike guard. NOT-YET-WIRED Egypt
        cards have NO entry here (and are never decked). ── */
-    51: { onAtOnce: function (o, l, done) { done(); } },  // Narmer — Continuous (IP averaging)
+    51: { onAtOnce: abilityNarmer          },             // Narmer — Continuous (IP averaging) + one-shot play SFX
     52: { onAtOnce: abilityHatshepsut      },             // Hatshepsut — At Once: send a Merchant to another location
     53: { onAtOnce: abilityRamses          },             // Ramses II — At Once: -1 CC to Egypt cards in your hand
     54: { onAtOnce: abilityPapyrus         },             // Papyrus — At Once: copy last-played card (with its permanent buffed state) to hand
@@ -3879,6 +4020,7 @@
     updateWilliamDisplay:      updateWilliamDisplay,
     pulseWilliam:              pulseWilliam,
     updateKenteGlows:          updateKenteGlows,
+    updateNarmerGlows:         updateNarmerGlows,
     /* UI */
     showDiscardChooser:        showDiscardChooser,
     buildChooserCard:          buildChooserCard,

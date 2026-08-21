@@ -474,6 +474,33 @@ var Anim = (function () {
      * @param {Element} locTileEl  The .battle-location tile element
      * @param {boolean} on
      */
+    /* ── Narmer (51) "The Unifier" persistent glow ──────────────────────────
+       Same SHAPE as setKenteGlow below — a persistent, idempotent on/off setter
+       driven from the evaluateContinuous tail — but implemented as a CLASS TOGGLE
+       with a CSS pulse rather than a GSAP boxShadow tween, for two concrete
+       reasons on these two specific elements:
+         • The CARD slot's boxShadow is already owned by setGlow (the cyan
+           continuous-mod ring) which is re-applied on every continuous pass. A
+           second GSAP boxShadow tween on the same element would fight it — each
+           one's killTweensOf('boxShadow') cancels the other, and which colour
+           survives depends on pass ordering. `filter: drop-shadow` composes with
+           the cyan ring instead of contending for the same property.
+         • The SCORE NUMBER is a direct child of .battle-location (overflow:visible),
+           so it can carry a real outer halo — done as a text-shadow on the digit
+           plus a gentle scale pulse, which keeps each side's own colour (cyan for
+           the player, red for the opponent) instead of overwriting it.
+       Class toggling is also inherently idempotent, which matters here in a way it
+       doesn't for Kente: this runs on every continuous recompute, and a GSAP
+       timeline would restart its intro pulse each time. */
+    setNarmerGlow: function (slotEl, on) {
+      if (!slotEl) return;
+      slotEl.classList.toggle('anim-narmer-glow', !!on);
+    },
+    setNarmerScoreGlow: function (scoreEl, on) {
+      if (!scoreEl) return;
+      scoreEl.classList.toggle('anim-narmer-score-glow', !!on);
+    },
+
     setKenteGlow: function (locTileEl, on) {
       if (!locTileEl) return;
       if (!hasGSAP()) {

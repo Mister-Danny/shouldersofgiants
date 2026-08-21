@@ -552,6 +552,22 @@
      (the abilities registry) is where that separates cleanly.
   ═══════════════════════════════════════════════════════════════ */
 
+  /* Current slot element holding this exact slot-data object, or null. Found by
+     OBJECT IDENTITY rather than cardId — a side can legitimately hold two cards of
+     the same id (a Papyrus copy, a Nubian Gold token) — so this pins the right one
+     even after the card has been moved between slots mid-reveal. */
+  function _liveSlotElFor(owner, sd) {
+    if (!sd) return null;
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    for (var i = 0; i < G.locations.length; i++) {
+      var lid = G.locations[i].id, arr = slots[lid];
+      if (!arr) continue;
+      var idx = arr.indexOf(sd);
+      if (idx !== -1) return getSlotEl(owner, lid, idx);
+    }
+    return null;
+  }
+
   /**
    * flipSlot(slotEl, done)
    * Reveals a face-down card with SFX + animation, fires per-card reveal
@@ -1515,14 +1531,31 @@
            At Once runs. That ordering is load-bearing — an Egypt Farmer revealing
            here takes the pending +1 itself and only then arms the next one, instead
            of buffing itself. No buff pending → no-op. */
+        var _tookFarmerBuff = false;
         if (SOG.abilities && typeof SOG.abilities.consumePendingIPBuff === 'function') {
           if (SOG.abilities.consumePendingIPBuff(item.owner, rSd)) {
+            _tookFarmerBuff = true;
             refreshSlotIPDisplays();
             updateScores();
             if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(item.owner, item.cardId, 1);
           }
         }
         fireAtOnce(item.owner, item.cardId, rLocId, function () {
+          /* Egypt Farmer (55) PHASE 2 — the onion descends onto the card that just
+             took the +1 and is eaten. Fired HERE, in the At-Once completion
+             callback, because this is the point at which the buffed card has
+             finished its OWN reveal animation: flipSlot's done only covers the flip
+             and reveal-fx overlays, whereas Ramses' shimmer, Hatshepsut's Merchant
+             boat and Papyrus' scroll are ABILITY animations gated on this callback.
+             A card with no animation reaches here immediately, so the onion just
+             arrives at once. The slot element is re-resolved rather than reusing
+             the captured `slotEl`, because the card may have RELOCATED during its
+             own At Once — the onion has to land on wherever it actually is now.
+             Visual only; never gates the pipeline. */
+          if (_tookFarmerBuff && window.SOG && SOG.RevealFx &&
+              typeof SOG.RevealFx.farmerOnionBite === 'function') {
+            SOG.RevealFx.farmerOnionBite(_liveSlotElFor(item.owner, rSd) || slotEl);
+          }
           // (a) Per-slot play metadata (Scribe needs this on every revealed card)
           if (rSd && rLocId !== null) {
             rSd.playTime      = ++G.playOrderCounter;

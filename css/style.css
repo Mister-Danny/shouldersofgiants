@@ -3993,9 +3993,17 @@ body.hanging-gardens-battle .battle-col .hg-flood-tint {
   white-space:   nowrap;
 }
 
+/* GAME-WIDE GAIN-INDICATOR CONVENTION
+     IP gain      → BLUE   (.anim-float-plus, below)
+     Capital gain → GOLD   (.anim-float-capital)
+     IP loss      → RED    (.anim-float-minus)
+   Every floating +N in the game routes through Anim.floatNumber / Anim.floatCapital,
+   so these three rules ARE the convention — there is no per-card colour to chase.
+   IP gain was green, which collided with nothing but said nothing either; blue now
+   reads as "IP" everywhere it appears. */
 .anim-float-plus {
-  color:       #44ff88;
-  text-shadow: 0 0 6px #00ff66, 1px 1px 0 #000, -1px -1px 0 #000;
+  color:       #6cc0ff;
+  text-shadow: 0 0 6px #1e90ff, 1px 1px 0 #000, -1px -1px 0 #000;
 }
 
 .anim-float-minus {
@@ -9349,6 +9357,95 @@ body.tut-locked #battle-reset-turn {
   100% { filter: brightness(1)    drop-shadow(0 0 0    rgba(170, 225, 255, 0.0)); }
 }
 
+/* ── Narmer (id 51) "The Unifier" — PERSISTENT red glow ──────────────────────
+   Marks, for as long as his Continuous ability is live, the lands his averaging
+   spans: his own card plus the nameplate of his location and of each adjacent
+   location. Driven by Anim.setNarmerGlow / setNarmerNameGlow (class toggles) from
+   updateNarmerGlows on the evaluateContinuous tail — so these classes come and go
+   with the ability itself, never on a timer.
+
+   HIS CARD uses `filter: drop-shadow` rather than box-shadow on purpose: the slot's
+   box-shadow already belongs to Anim.setGlow's cyan continuous ring, which is
+   re-applied on every pass. drop-shadow layers over that ring instead of fighting
+   it for the same property. */
+.battle-card-slot.anim-narmer-glow {
+  /* RESTING state — a plain static glow, no animation running. */
+  filter: drop-shadow(0 0 5px rgba(220, 40, 40, 0.58))
+          drop-shadow(0 0 11px rgba(180, 20, 20, 0.38));
+  /* One-shot arrival pulse. No fill-mode, so when it ends the element simply falls
+     back to the static rule above and nothing keeps animating. Re-adding a class
+     that is already present does not restart a CSS animation, so this fires once
+     when the glow turns on — not on every continuous recompute — and fires again
+     only when Narmer actually moves (class removed, then re-added elsewhere). */
+  animation: narmerSourceIntro 0.6s ease-out 1;
+}
+@keyframes narmerSourceIntro {
+  0%   { filter: drop-shadow(0 0 2px rgba(220, 40, 40, 0.30)); }
+  45%  { filter: drop-shadow(0 0 10px rgba(245, 65, 65, 1))
+                 drop-shadow(0 0 24px rgba(200, 25, 25, 0.75)); }
+  100% { filter: drop-shadow(0 0 5px rgba(220, 40, 40, 0.58))
+                 drop-shadow(0 0 11px rgba(180, 20, 20, 0.38)); }
+}
+
+/* THE SCORE NUMBER carries the glow — per side, on the digit Narmer's averaging
+   actually rewrites. It is a direct child of .battle-location (overflow:visible),
+   so unlike the nameplate it can throw a real outer halo. Each side KEEPS its own
+   colour (cyan player / red opponent) — only the halo and a small scale pulse are
+   added, so two Narmers can light their own digits at the same location without
+   either side's colour coding being hijacked. The black outline from the base rule
+   is repeated here because a text-shadow animation replaces the property wholesale. */
+.battle-loc-score-opp.anim-narmer-score-glow,
+.battle-loc-score-player.anim-narmer-score-glow {
+  /* RESTING state — a light static red glow. Animating a 4-layer text-shadow
+     forever was the expensive part: text-shadow cannot be composited, so every
+     frame repainted the digit, on up to six digits, for the whole battle. Static
+     costs nothing once painted. */
+  text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.95),
+               0 0 10px rgba(0, 0, 0, 0.85),
+               0 0 7px rgba(235, 60, 60, 0.55),
+               0 0 14px rgba(200, 25, 25, 0.30);
+  animation: narmerScoreIntro 0.55s ease-out 1;   /* one-shot; see the card glow above */
+}
+@keyframes narmerScoreIntro {
+  0% {
+    transform: scale(1);
+    text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.95),
+                 0 0 10px rgba(0, 0, 0, 0.85);
+  }
+  45% {
+    transform: scale(1.22);
+    text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.95),
+                 0 0 10px rgba(0, 0, 0, 0.85),
+                 0 0 13px rgba(255, 85, 85, 1),
+                 0 0 26px rgba(220, 35, 35, 0.75);
+  }
+  100% {
+    transform: scale(1);
+    text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.95),
+                 0 0 10px rgba(0, 0, 0, 0.85),
+                 0 0 7px rgba(235, 60, 60, 0.55),
+                 0 0 14px rgba(200, 25, 25, 0.30);
+  }
+}
+
+/* Water droplets thrown up as Hatshepsut's Merchant boat lands. Pale blue-white
+   beads with a soft highlight, small enough to read as spray rather than splash. */
+.reveal-fx-splash-drop {
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(206, 238, 255, 0.92) 45%,
+    rgba(150, 205, 240, 0.75) 100%);
+  box-shadow: 0 0 4px rgba(190, 230, 255, 0.85);
+}
+
+/* Hatshepsut's (52) spawned Merchant, mid-flight as a boat. Lifted off the board
+   with a cast shadow; transform/rotation are owned by GSAP during the launch. */
+.reveal-fx-merchant-boat {
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.6), 0 2px 5px rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+}
+
 /* Nebuchadnezzar (id 50) reveal flourish — visualizes the Mesopotamia -1 CC
    discount. A blue-white magic glow pulse on Neb's card + each affected in-hand
    card (filter only — not clipped by the hand card's overflow:hidden); pairs with
@@ -9360,6 +9457,19 @@ body.tut-locked #battle-reset-turn {
   0%   { filter: brightness(1.6)  drop-shadow(0 0 2px  rgba(170, 225, 255, 0.0)); }
   35%  { filter: brightness(1.25) drop-shadow(0 0 14px rgba(170, 225, 255, 0.9)); }
   100% { filter: brightness(1)    drop-shadow(0 0 0    rgba(170, 225, 255, 0.0)); }
+}
+/* Ramses II (id 53) reveal flourish — the SAME shimmer as Neb's above (same
+   timing, same curve, same brightness ramp), tinted for Egypt: Neb's pale
+   blue-white rgb(170, 225, 255) with the red and blue channels mirrored to
+   rgb(255, 225, 170) — a pale warm gold. Related by construction, distinct on
+   screen. */
+.reveal-fx-ramses-glow {
+  animation: revealFxRamsesGlow 1.2s ease-out 1 both;
+}
+@keyframes revealFxRamsesGlow {
+  0%   { filter: brightness(1.6)  drop-shadow(0 0 2px  rgba(255, 225, 170, 0.0)); }
+  35%  { filter: brightness(1.25) drop-shadow(0 0 14px rgba(255, 225, 170, 0.9)); }
+  100% { filter: brightness(1)    drop-shadow(0 0 0    rgba(255, 225, 170, 0.0)); }
 }
 /* The CC number ticking DOWN as the shimmer lands — a quick gold pop so the drop
    reads as caused by the sparkle. */
@@ -9408,7 +9518,7 @@ body.tut-locked #battle-reset-turn {
 }
 @keyframes revealFxIpGain {
   0%   { transform: scale(1);    color: #fff; }
-  40%  { transform: scale(1.6);  color: #b8ffb0; text-shadow: 0 0 8px rgba(150, 255, 140, 0.95), 2px 2px 0 rgba(0,0,0,0.85); }
+  40%  { transform: scale(1.6);  color: #b8dcff; text-shadow: 0 0 8px rgba(110, 190, 255, 0.95), 2px 2px 0 rgba(0,0,0,0.85); }
   100% { transform: scale(1);    color: #fff; }
 }
 
@@ -12187,6 +12297,15 @@ body[data-screen="overworld"] #overworld-overlay {
   14%  { transform: translate(-50%, -58%)  scale(1.05); opacity: 1; }   /* pop in (overshoot) */
   55%  { transform: translate(-50%, -78%)  scale(1.02); opacity: 1; }   /* linger visible, slow rise */
   100% { transform: translate(-50%, -122%) scale(0.9);  opacity: 0; }   /* rise + dissipate */
+}
+
+/* Farmer — EGYPT (55) PHASE 2: the onion that falls onto the card which took the
+   +1. Unlike the Phase 1 pop this is a BODY-LEVEL fixed flyer positioned from the
+   card's rect, because .battle-card-slot is overflow:hidden and would clip a drop
+   that starts above the card. Motion, opacity and the final hard cut all belong to
+   GSAP in farmerOnionBite — this rule is only the look. */
+.reveal-fx-onion-bite {
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55));
 }
 
 /* ================================================================
