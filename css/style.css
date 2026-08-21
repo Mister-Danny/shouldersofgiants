@@ -12299,6 +12299,79 @@ body[data-screen="overworld"] #overworld-overlay {
   100% { transform: translate(-50%, -122%) scale(0.9);  opacity: 0; }   /* rise + dissipate */
 }
 
+/* Rosetta Stone (58): the scribe's hand that inscribes the transcribed text.
+   Body-level fixed (a hand is larger than the card, and .battle-card-slot is
+   overflow:hidden), so all positioning and motion belong to reveal-fx.js
+   (rosettaTranscribe); this is only the drop shadow that seats it on the card. */
+.reveal-fx-scribe-hand {
+  filter: drop-shadow(0 4px 7px rgba(0, 0, 0, 0.55));
+  user-select: none;
+}
+
+/* Egyptian Priest (71): linen straps that wrap the slot as a Mummy is revived.
+   The layer sits INSIDE .battle-card-slot, which is overflow:hidden — deliberately,
+   so the straps' overhanging ends are trimmed at the card edges and they read as
+   bound around the card rather than floating over it. Position, angle, thickness
+   and all motion are set per-strap by reveal-fx.js (mummyWrapReveal); these rules
+   are only the material. */
+.reveal-fx-wrap-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+.reveal-fx-strap {
+  position: absolute;
+  left: 50%;
+  width: 190%;                    /* overhangs both edges; the slot clips the ends */
+  transform-origin: 50% 50%;
+  border-radius: 2px;
+  /* Off-white linen: warm bone tones with a soft weave banding across the width. */
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(255, 255, 255, 0.06) 0px,
+      rgba(255, 255, 255, 0.06) 2px,
+      rgba(0, 0, 0, 0.05) 2px,
+      rgba(0, 0, 0, 0.05) 4px),
+    linear-gradient(180deg,
+      rgba(243, 236, 220, 0.97) 0%,
+      rgba(226, 214, 190, 0.97) 45%,
+      rgba(198, 184, 158, 0.97) 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+/* Closes the slivers left between straps so "fully covered" is literally true
+   before the dissolve. Faded in by GSAP at the end of the wrap. */
+.reveal-fx-wrap-seal {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(180deg,
+    rgba(238, 230, 212, 0.55) 0%,
+    rgba(214, 202, 178, 0.62) 100%);
+}
+
+/* Pyramid (57): dirt thrown up as it erupts from the ground. Dry earth browns,
+   irregular via border-radius rather than perfect circles so they read as clods
+   and not as more water droplets. Motion is GSAP's (dirtBurst). */
+.reveal-fx-dirt-clod {
+  border-radius: 40% 55% 45% 60%;
+  background: radial-gradient(circle at 35% 30%,
+    rgba(150, 112, 72, 0.98) 0%,
+    rgba(110, 78, 48, 0.95) 50%,
+    rgba(72, 50, 30, 0.9) 100%);
+  box-shadow: 0 0 3px rgba(60, 42, 24, 0.7);
+}
+
+/* The OUTGOING number in an IP badge swap (ipBadgeSwap). A clone of the badge
+   that keeps the badge's own geometry — it is given the same .db-overlay-ip class
+   so it sits exactly where the real number was — then falls away while the new
+   value drops in. Motion and fade are GSAP's; this only detaches it from layout
+   so the real badge is not pushed around while it falls. */
+.db-overlay-ip.reveal-fx-ip-old {
+  pointer-events: none;
+  z-index: 12;
+}
+
 /* Farmer — EGYPT (55) PHASE 2: the onion that falls onto the card which took the
    +1. Unlike the Phase 1 pop this is a BODY-LEVEL fixed flyer positioned from the
    card's rect, because .battle-card-slot is overflow:hidden and would clip a drop

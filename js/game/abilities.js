@@ -3427,15 +3427,42 @@
     // a Political host like Khufu, or Narmer's averaging) is captured; using only
     // ip+ipMod dropped those and grabbed the base value instead of the shown one.
     var gain = Math.max(0, Math.min(99, effectiveIP(last)));
-    if (gain > 0) {
+    if (gain <= 0) { done(); return; }
+
+    /* THE GAIN IS DEFERRED TO THE ANIMATION'S LANDING BEAT — not skipped. absorb()
+       below is the whole of the original write, handed to the flourish, which calls
+       it at the moment the new number appears on the badge (see ipBadgeSwap). That
+       keeps "the number shown" and "the number recorded" the same event. Every
+       failure path in the flourish calls absorb() anyway, so the IP cannot be lost.
+       Nothing mutates in between: the reveal pipeline is gated on this done(). */
+    function absorb() {
       addIPMod(pyramidSd, gain, 'Pyramid');
-      SOG.ui.showIPFloat(owner, 57, gain);
-      if (typeof SFX !== 'undefined' && SFX.coinSound) SFX.coinSound();
+      // No +N float: the badge swap IS Pyramid's IP-change indicator, and stacking a
+      // float on the same beat only crowds it. (showIPFloat also fired SFX.ipGained,
+      // which was talking over earthspell/woodthud.) refreshSlotIPDisplays below is
+      // what writes the new number the swap then animates in.
       evaluateContinuous();
       refreshSlotIPDisplays();
       updateScores();
     }
-    done();
+
+    // Slot elements by INDEX, resolved from the slot-data objects the ability
+    // itself picked — duplicate-cardId safe, so twin Pyramids (a Papyrus copy) and
+    // twin source cards each animate on the right element.
+    var arr       = slots[locId] || [];
+    var pyramidEl = getSlotEl(owner, locId, arr.indexOf(pyramidSd));
+    var sourceEl  = getSlotEl(owner, locId, arr.indexOf(last));
+
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.pyramidAbsorb === 'function') {
+      rfx.pyramidAbsorb(pyramidEl, sourceEl,
+        { onAbsorb: absorb, riseSfx: 'sfx/earthspell.mp3', landSfx: 'sfx/woodthud.mp3' }, done);
+    } else {
+      // No flourish → the previous behaviour exactly, coin sound and all.
+      absorb();
+      if (typeof SFX !== 'undefined' && SFX.coinSound) SFX.coinSound();
+      done();
+    }
   }
 
   /* Narmer (51) — "The Unifier". His actual effect is CONTINUOUS (the total-IP
@@ -3553,12 +3580,27 @@
     });
     if (rIdx !== -1) slots[locId][rIdx].transcribedFrom = srcId;
 
-    // Fire the transcribed At-Once now (real at-once fires; continuous/eot no-op).
-    var spec = CARD_ABILITIES[srcId];
-    if (spec && typeof spec.onAtOnce === 'function') {
-      spec.onAtOnce(owner, locId, done);
+    // STATE FIRST: the adoption above is already stamped. Everything below is the
+    // flourish plus the transcribed ability firing, in that order — the text is
+    // written onto Rosetta, and then the ability it just copied goes off.
+    function fireTranscribed() {
+      // Fire the transcribed At-Once now (real at-once fires; continuous/eot no-op).
+      var spec = CARD_ABILITIES[srcId];
+      if (spec && typeof spec.onAtOnce === 'function') {
+        spec.onAtOnce(owner, locId, done);
+      } else {
+        done();
+      }
+    }
+
+    var rfx       = window.SOG && SOG.RevealFx;
+    var rosettaEl = (rIdx !== -1) ? getSlotEl(owner, locId, rIdx) : null;
+    var sourceEl  = getSlotEl(owner, locId, 0);
+    if (rfx && typeof rfx.rosettaTranscribe === 'function' && rosettaEl && sourceEl) {
+      rfx.rosettaTranscribe(sourceEl, rosettaEl,
+        { introSfx: 'sfx/rosettastone.mp3', sfx: 'sfx/writing.mp3' }, fireTranscribed);
     } else {
-      done();
+      fireTranscribed();
     }
   }
 
@@ -3731,11 +3773,34 @@
     if (!cands.length || (slots[locId] || []).indexOf(null) === -1) { done(); return; }  // fizzle
     function revive(cand) {
       if (!cand) { done(); return; }
-      if (createMummy(owner, locId, cand.cardId, cand.ip, cand.cc)) {
-        if (cand.pile === 'destroyed') popDestroyed(owner, cand.entry);
-        else                           popDiscard(owner, cand.entry);
+
+      /* STATE FIRST. createMummy is untouched and runs to completion here — the
+         Mummy is in its slot with its frozen IP/CC, and the pile entry consumed,
+         before any strap is drawn. The flourish only holds the card face invisible
+         until the wrap comes off.
+         Hooked HERE and not inside createMummy on purpose: Book of the Dead (66)
+         calls that same primitive, and only the Priest wraps. */
+      var slots2 = owner === 'player' ? G.playerSlots : G.aiSlots;
+      var before = (slots2[locId] || []).slice();          // identity snapshot
+      if (!createMummy(owner, locId, cand.cardId, cand.ip, cand.cc)) { done(); return; }
+      if (cand.pile === 'destroyed') popDestroyed(owner, cand.entry);
+      else                           popDiscard(owner, cand.entry);
+
+      // Which slot did the Mummy land in? By OBJECT IDENTITY against the snapshot —
+      // createMummy re-syncs the column, and a side can already hold another Mummy.
+      var mIdx = -1;
+      (slots2[locId] || []).forEach(function (sd2, i) {
+        if (sd2 && before.indexOf(sd2) === -1) mIdx = i;
+      });
+
+      var rfx = window.SOG && SOG.RevealFx;
+      var mummyEl  = (mIdx !== -1) ? getSlotEl(owner, locId, mIdx) : null;
+      var priestEl = findSlotEl(owner, 71);
+      if (rfx && typeof rfx.mummyWrapReveal === 'function' && mummyEl) {
+        rfx.mummyWrapReveal(priestEl, mummyEl, { sfx: 'sfx/wrapping.mp3' }, done);
+      } else {
+        done();                                            // Mummy simply appears, as before
       }
-      done();
     }
     if (owner === 'player') {
       showDiscardChooser('Revive a discarded or destroyed card', cands, function (chosen) { revive(chosen); });

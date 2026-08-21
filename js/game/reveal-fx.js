@@ -1556,6 +1556,342 @@ SOG.RevealFx = (function () {
     }
   }
 
+  /* Dirt clods thrown up as the Pyramid erupts from the ground. Sibling of
+     boatSplashBurst above and the same shape — spawn, arc, fall, self-remove — but
+     RADIAL rather than one-sided: clods spray across the width of the card and out
+     in both directions, and fall faster and heavier than water spray. No-op without
+     GSAP, self-cleaning, purely decorative. */
+  function dirtBurst(cx, cy, spreadW, count) {
+    if (typeof gsap === 'undefined') return;
+    var n = count || 14;
+    for (var i = 0; i < n; i++) {
+      var clod = document.createElement('div');
+      clod.className = 'reveal-fx-dirt-clod';
+      var size = (3 + Math.random() * 4.5).toFixed(1);
+      // start spread across the base of the card
+      var startX = cx + (Math.random() - 0.5) * spreadW;
+      clod.style.cssText =
+        'position:fixed;left:' + startX + 'px;top:' + cy + 'px;' +
+        'width:' + size + 'px;height:' + size + 'px;' +
+        'margin:0;pointer-events:none;z-index:9998;';
+      document.body.appendChild(clod);
+
+      var dir   = (startX < cx) ? -1 : 1;
+      var outX  = dir * (10 + Math.random() * 46);
+      var upY   = -(14 + Math.random() * 34);
+      var upMs  = 0.14 + Math.random() * 0.1;
+      var fallY = 34 + Math.random() * 46;
+      var dnMs  = 0.24 + Math.random() * 0.16;
+      var spin  = (Math.random() - 0.5) * 300;
+
+      /* jshint loopfunc:true */
+      (function (d) {
+        gsap.timeline({ onComplete: function () { if (d.parentNode) d.parentNode.removeChild(d); } })
+          .to(d, { x: outX * 0.68, y: upY, rotation: spin * 0.5, opacity: 1, duration: upMs, ease: 'power2.out' })
+          .to(d, { x: outX, y: upY + fallY, rotation: spin, opacity: 0, duration: dnMs, ease: 'power1.in' });
+      })(clod);
+    }
+  }
+
+  /* Swap the number on a card's IP badge: the OLD value falls away while the NEW
+     value drops in above it. Nothing in the game did a number SWAP before — the
+     existing badge effects (revealFxIpGain, revealFxCcDrop) are in-place pops.
+
+     THE APPLY IS THE SWAP. applyFn is what actually writes the IP (addIPMod +
+     refreshSlotIPDisplays), and it is called BETWEEN capturing the old text and
+     animating the new one in. So the arriving number is literally whatever the
+     engine just recorded — it is read back out of the badge, never passed in and
+     rendered independently. A faked display over a silent write is not possible
+     here by construction.
+     No badge or no GSAP → applyFn still runs, so the IP is never skipped. */
+  function ipBadgeSwap(slotEl, applyFn, onDone) {
+    function finish() { if (typeof onDone === 'function') onDone(); }
+    var badge = slotEl && slotEl.querySelector('.db-overlay-ip');
+    if (!badge || typeof gsap === 'undefined') {
+      if (typeof applyFn === 'function') applyFn();
+      finish();
+      return;
+    }
+
+    var oldText = badge.textContent;
+
+    // The old number, lifted out as its own element so it can fall independently.
+    var ghost = document.createElement('div');
+    ghost.className = 'db-overlay-ip reveal-fx-ip-old';
+    ghost.textContent = oldText;
+    ghost.setAttribute('aria-hidden', 'true');
+    slotEl.appendChild(ghost);
+
+    if (typeof applyFn === 'function') applyFn();   // ← the real write; badge now reads NEW
+
+    gsap.to(ghost, {
+      y: 26, rotation: -18, opacity: 0, duration: 0.42, ease: 'power1.in',
+      onComplete: function () { if (ghost.parentNode) ghost.parentNode.removeChild(ghost); }
+    });
+    gsap.fromTo(badge,
+      { y: -22, opacity: 0, scale: 1.5 },
+      { y: 0, opacity: 1, scale: 1, duration: 0.4, ease: 'back.out(2.2)',
+        onComplete: function () { gsap.set(badge, { clearProps: 'transform,opacity' }); finish(); } }
+    );
+  }
+
+  /* Pyramid (57) "Monumental Legacy" — it takes the IP of the last card played at
+     its location, so the animation goes and GETS it: the Pyramid slides over onto
+     that source card, erupts up out of the ground there in a spray of dirt, then
+     vaults back to its own slot and lands with a thud as the new number arrives.
+
+     PURELY PRESENTATIONAL over an unchanged mechanic, with one deliberate
+     ordering choice: opts.onAbsorb — which performs the real addIPMod — is not
+     called until the badge swap, so the moment the new number appears IS the moment
+     it is recorded (see ipBadgeSwap). Everything before that is travel.
+
+     Body-level fixed flyer (the phoeniciansMerge / boat / scroll shape) because
+     .battle-card-slot is overflow:hidden and would clip both the eruption and the
+     dirt. Any missing piece falls through to onAbsorb + done, i.e. exactly the
+     instant behaviour this replaces.
+       opts: { onAbsorb, riseSfx, landSfx } */
+  function pyramidAbsorb(pyramidEl, sourceEl, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() {
+      if (fired) return; fired = true;
+      if (typeof onComplete === 'function') onComplete();
+    }
+    function bail() {                                  // no animation → still absorb
+      if (typeof opts.onAbsorb === 'function') opts.onAbsorb();
+      finish();
+    }
+    if (!pyramidEl || !sourceEl || typeof gsap === 'undefined') { bail(); return; }
+    var pRect = pyramidEl.getBoundingClientRect();
+    var sRect = sourceEl.getBoundingClientRect();
+    if (!pRect.width || !sRect.width) { bail(); return; }
+
+    var homeX = pRect.left + pRect.width / 2,  homeY = pRect.top + pRect.height / 2;
+    var srcX  = sRect.left + sRect.width / 2,  srcY  = sRect.top + sRect.height / 2;
+
+    var fly = pyramidEl.cloneNode(true);
+    fly.className = (pyramidEl.className || '') + ' reveal-fx-pyramid-fly';
+    fly.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9997;visibility:visible;' +
+      'left:' + homeX + 'px;top:' + homeY + 'px;' +
+      'width:' + pRect.width + 'px;height:' + pRect.height + 'px;';
+    document.body.appendChild(fly);
+    gsap.set(fly, { xPercent: -50, yPercent: -50 });
+
+    var prevVis = pyramidEl.style.visibility;
+    pyramidEl.style.visibility = 'hidden';
+
+    function restore() {
+      if (fly.parentNode) fly.parentNode.removeChild(fly);
+      pyramidEl.style.visibility = prevVis;
+    }
+
+    gsap.timeline()
+      // 1) slide over ON TOP of the card it is taking from.
+      .to(fly, { left: srcX, top: srcY, duration: 0.38, ease: 'power2.inOut' })
+      // 2) settle DOWN into the ground, then ERUPT upward with dirt.
+      .to(fly, { y: 10, scaleY: 0.9, duration: 0.14, ease: 'power2.in' })
+      .add(function () {
+        if (opts.riseSfx) playSfx(opts.riseSfx);
+        dirtBurst(srcX, srcY + sRect.height * 0.34, sRect.width * 0.9);
+      })
+      .to(fly, { y: -sRect.height * 0.42, scaleY: 1.06, duration: 0.5, ease: 'power3.out' })
+      .to(fly, { scaleY: 1, duration: 0.12 })
+      // 3) pop up and OVER, back to its own slot — up first, then down, so the
+      //    path reads as a vault rather than a slide.
+      .to(fly, { left: (srcX + homeX) / 2, y: -sRect.height * 0.85, duration: 0.2, ease: 'power2.out' })
+      .to(fly, { left: homeX, top: homeY, y: 0, duration: 0.26, ease: 'power2.in' })
+      // 4) land: thud + squash, then the number swap (which performs the real gain).
+      .add(function () { if (opts.landSfx) playSfx(opts.landSfx); })
+      .to(fly, { scaleY: 0.84, scaleX: 1.1, duration: 0.08, ease: 'power2.out' })
+      .to(fly, { scaleY: 1, scaleX: 1, duration: 0.22, ease: 'back.out(3)' })
+      .add(function () {
+        restore();                                   // real card back before the swap
+        ipBadgeSwap(pyramidEl, opts.onAbsorb, finish);
+      });
+  }
+
+  /* Egyptian Priest (71) "Embalming" — the revived card is WRAPPED into existence.
+     The Priest lifts in its slot, then off-white straps criss-cross over the slot
+     the Mummy is spawning into, building until the card is completely covered, and
+     dissolve to reveal it.
+
+     PURELY PRESENTATIONAL. createMummy has already run: the Mummy is in its slot
+     with its frozen IP/CC before a single strap is drawn. All this does is hold the
+     card face at opacity 0 until the straps come off. Every early-out simply leaves
+     the face visible, i.e. exactly the instant spawn this replaces.
+
+     Straps live INSIDE the slot rather than in a body-level flyer — the opposite
+     choice to the boat/scroll/onion. .battle-card-slot is overflow:hidden, and here
+     that clipping is wanted: the straps should stop at the card's edges, so their
+     overhanging ends get trimmed and they read as bound AROUND the card.
+
+     Angles: every strap is HORIZONTAL with up to STRAP_MAX_TILT degrees of
+     variance, and the sign alternates strap to strap, so consecutive straps lean
+     opposite ways and cross each other instead of lying parallel.
+       opts: { sfx, straps } */
+  var STRAP_COUNT    = 11;
+  var STRAP_MAX_TILT = 25;      // degrees; 0..25, alternating sign → criss-cross
+
+  function mummyWrapReveal(priestEl, slotEl, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+    if (!slotEl || typeof gsap === 'undefined') { finish(); return; }
+    var r = slotEl.getBoundingClientRect();
+    if (!r.width) { finish(); return; }
+
+    // The card face as it stands NOW (before we add anything) — held invisible
+    // until the wrap comes off, then faded back in.
+    var faces = [].slice.call(slotEl.children);
+    faces.forEach(function (n) { n.style.opacity = '0'; });
+
+    var layer = document.createElement('div');
+    layer.className = 'reveal-fx-wrap-layer';
+    layer.setAttribute('aria-hidden', 'true');
+    slotEl.appendChild(layer);
+
+    function cleanup() {
+      if (layer.parentNode) layer.parentNode.removeChild(layer);
+      faces.forEach(function (n) { n.style.opacity = ''; });
+    }
+
+    var n = opts.straps || STRAP_COUNT;
+    var straps = [];
+    for (var i = 0; i < n; i++) {
+      var st = document.createElement('div');
+      st.className = 'reveal-fx-strap';
+      // Spread across the card, past both edges so the top and bottom are covered.
+      var yPct  = -6 + (112 / (n - 1)) * i;
+      var tilt  = (i % 2 ? 1 : -1) * (Math.random() * STRAP_MAX_TILT);
+      var thick = 13 + Math.random() * 5;               // % of card height
+      st.style.cssText =
+        'top:' + yPct.toFixed(2) + '%;height:' + thick.toFixed(2) + '%;' +
+        'transform:translate(-50%,-50%) rotate(' + tilt.toFixed(2) + 'deg);';
+      st._tilt = tilt;
+      st._from = (i % 2 ? 1 : -1);                      // slides in from alternating sides
+      layer.appendChild(st);
+      straps.push(st);
+    }
+
+    // A faint wash that closes any slivers left between straps, so "fully covered"
+    // is actually true rather than nearly true.
+    var seal = document.createElement('div');
+    seal.className = 'reveal-fx-wrap-seal';
+    layer.appendChild(seal);
+
+    if (opts.sfx) playSfx(opts.sfx);
+
+    var tl = gsap.timeline({ onComplete: function () { cleanup(); finish(); } });
+
+    // Priest lifts 10% and holds while the wrapping happens.
+    if (priestEl) tl.to(priestEl, { y: '-10%', duration: 0.26, ease: 'power2.out' }, 0);
+
+    // Straps land one after another, each swinging in from its own side.
+    straps.forEach(function (st, i) {
+      gsap.set(st, { xPercent: 0, x: st._from * r.width * 0.9, opacity: 0, rotation: st._tilt });
+      tl.to(st, {
+        x: 0, opacity: 1, duration: 0.2, ease: 'power2.out'
+      }, 0.26 + i * 0.06);
+    });
+
+    var wrapEnd = 0.26 + n * 0.06 + 0.2;
+    tl.to(seal, { opacity: 1, duration: 0.16, ease: 'power1.out' }, wrapEnd)
+      // fully wrapped — hold a beat, then the straps dissolve and the Mummy is there.
+      .to(layer, { opacity: 0, duration: 0.42, ease: 'power1.in' }, wrapEnd + 0.28)
+      .to(faces, { opacity: 1, duration: 0.42, ease: 'power1.out' }, wrapEnd + 0.28);
+
+    if (priestEl) {
+      tl.to(priestEl, {
+        y: '0%', duration: 0.26, ease: 'power2.inOut',
+        onComplete: function () { gsap.set(priestEl, { clearProps: 'transform' }); }
+      }, wrapEnd + 0.5);
+    }
+  }
+
+  /* Rosetta Stone (58) "Decipher The Past" — a scribe's hand inscribes the copied
+     text onto the Stone. The SOURCE card (whatever sits in slot 0) lifts to present
+     itself, and the hand sweeps across the Rosetta card writing line by line.
+
+     PURELY PRESENTATIONAL. The adoption is already stamped on Rosetta's slot data
+     before this runs, and the transcribed ability fires from onComplete, so the
+     order the player sees — read the source, write the Stone, then the copied
+     ability goes off — is the order the engine actually did it in.
+
+     The hand is a BODY-LEVEL fixed element: a hand is bigger than the card it
+     writes on, and .battle-card-slot is overflow:hidden, so drawing it inside the
+     slot would amputate it at the card edges.
+
+     TWO SOUNDS, LAYERED: introSfx lands at t=0 with the source card lifting — the
+     Stone being brought to bear — and sfx (the quill) starts as the hand touches
+     down and runs under the sweep. Separate knobs so either can be silenced
+     without touching the other.
+       opts: { sfx, introSfx, lines } */
+  var SCRIBE_HAND_IMG = 'images/assets/scribehand.png';
+
+  function rosettaTranscribe(sourceEl, rosettaEl, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+    if (!sourceEl || !rosettaEl || typeof gsap === 'undefined') { finish(); return; }
+    var rRect = rosettaEl.getBoundingClientRect();
+    if (!rRect.width) { finish(); return; }
+
+    var hand = document.createElement('img');
+    hand.className = 'reveal-fx-scribe-hand';
+    hand.src = SCRIBE_HAND_IMG;
+    hand.draggable = false;
+    hand.setAttribute('aria-hidden', 'true');
+    // Square source art; sized off the card so it reads as a hand ON the card.
+    var size = rRect.height * 1.15;
+    hand.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9997;' +
+      'width:' + size + 'px;height:' + size + 'px;left:0;top:0;';
+    document.body.appendChild(hand);
+
+    function cleanup() { if (hand.parentNode) hand.parentNode.removeChild(hand); }
+
+    // Writing lines down the face of the Stone. The hand tracks left→right along
+    // each, stepping down between them — the shape of actually inscribing.
+    var lines   = opts.lines || 3;
+    var startX  = rRect.left - size * 0.16;
+    var endX    = rRect.left + rRect.width - size * 0.42;
+    var topY    = rRect.top  + rRect.height * 0.16 - size * 0.55;
+    var lineGap = (rRect.height * 0.5) / Math.max(1, lines - 1);
+
+    gsap.set(hand, { x: startX, y: topY, opacity: 0, rotation: -6 });
+
+    var tl = gsap.timeline({ onComplete: function () { cleanup(); finish(); } });
+
+    // Source card lifts 10% and holds while it is being read.
+    tl.to(sourceEl, { y: '-10%', duration: 0.26, ease: 'power2.out' }, 0);
+
+    if (opts.introSfx) tl.add(function () { playSfx(opts.introSfx); }, 0);
+    if (opts.sfx)      tl.add(function () { playSfx(opts.sfx); },      0.2);
+    tl.to(hand, { opacity: 1, duration: 0.16, ease: 'power1.out' }, 0.2);
+
+    for (var i = 0; i < lines; i++) {
+      var y = topY + lineGap * i;
+      var at = 0.28 + i * 0.42;
+      // sweep across the line, with a small nib wobble so it reads as writing
+      tl.fromTo(hand,
+        { x: startX, y: y, rotation: -6 },
+        { x: endX, duration: 0.34, ease: 'none' }, at);
+      tl.to(hand, { y: '+=' + (size * 0.012), duration: 0.055, repeat: 5, yoyo: true, ease: 'sine.inOut' }, at);
+      if (i < lines - 1) {
+        // carriage return to the start of the next line
+        tl.to(hand, { x: startX, y: topY + lineGap * (i + 1), duration: 0.08, ease: 'power2.inOut' }, at + 0.34);
+      }
+    }
+
+    var endAt = 0.28 + lines * 0.42;
+    tl.to(hand, { opacity: 0, duration: 0.2, ease: 'power1.in' }, endAt)
+      .to(sourceEl, {
+        y: '0%', duration: 0.26, ease: 'power2.inOut',
+        onComplete: function () { gsap.set(sourceEl, { clearProps: 'transform' }); }
+      }, endAt);
+  }
+
   /* Sargon (id 37) reveal flourish — visualizes his "+3 IP to adjacent location(s)".
      A gold BEAM of light shoots from Sargon's card to each AFFECTED location's full
      box (the caller passes exactly the boosted boxes — getAdjacentLocIds), and those
@@ -1666,6 +2002,11 @@ SOG.RevealFx = (function () {
            nebuchadnezzarShimmer: nebuchadnezzarShimmer,
            sargonBeam: sargonBeam,
            hatshepsutBoatLaunch: hatshepsutBoatLaunch,
+           dirtBurst: dirtBurst,
+           ipBadgeSwap: ipBadgeSwap,
+           pyramidAbsorb: pyramidAbsorb,
+           mummyWrapReveal: mummyWrapReveal,
+           rosettaTranscribe: rosettaTranscribe,
            scribeAccountingSequence: scribeAccountingSequence,
            farmerOnionBite: farmerOnionBite,
            boatSplashBurst: boatSplashBurst,
