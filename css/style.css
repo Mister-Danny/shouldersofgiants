@@ -12350,6 +12350,26 @@ body[data-screen="overworld"] #overworld-overlay {
   will-change: transform, opacity;
 }
 
+/* Ra (63): the sun-glow on the card being drawn up into him. Orange-gold — warmer
+   and more orange than the capital indicator's pure gold (#ffd700), so "the sun has
+   taken this card" never reads as "you gained capital". Motion belongs to
+   reveal-fx.js (raAbsorb); this is the light. */
+.reveal-fx-ra-card {
+  border-radius: 4px;
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.6);
+  will-change: transform, opacity, filter;
+}
+.reveal-fx-ra-card.reveal-fx-ra-sunglow {
+  animation: revealFxRaSun 1.15s ease-out 1 forwards;
+}
+@keyframes revealFxRaSun {
+  0%   { filter: drop-shadow(0 0 2px  rgba(255, 190, 80, 0.5)); }
+  30%  { filter: drop-shadow(0 0 12px rgba(255, 176, 32, 1))
+                 drop-shadow(0 0 30px rgba(255, 122, 0, 0.85)); }
+  100% { filter: drop-shadow(0 0 18px rgba(255, 176, 32, 1))
+                 drop-shadow(0 0 44px rgba(255, 122, 0, 0.95)); }
+}
+
 /* Hieroglyphics (62): a momentary red flash on a card the moment it GAINS the
    aura. Deliberately not persistent — Narmer's red glow marks an ongoing state,
    this marks an event, and they share the hue on purpose (both are "an Egyptian

@@ -3245,28 +3245,81 @@
   function abilityRa(owner, locId, done) {
     var hand = owner === 'player' ? G.playerHand : G.aiHand;
     if (!hand.length) { done(); return; }
-    var lowestCC = Infinity, lowestId = null;
+    /* SELECTION AND GAIN BOTH COME FROM handStats — one read per card, so the cost
+       Ra judges by and the IP he absorbs cannot disagree with each other or with
+       what the player sees.
+
+       CC is the EFFECTIVE cost (effectiveCost — the same read behind the hand badge
+       and Book of the Dead's qualification), not the printed cc. Ra used to compare
+       card definitions, so he could visibly skip a card whose badge showed 1 in
+       favour of one showing 2 whenever a discount was in play (Imhotep on Scientific,
+       a Nebuchadnezzar/Ramses stamp).
+
+       IP is that card's effective in-hand value — the same snapshot discardFromHand
+       freezes into the pile, taken before anything mutates and notably before
+       Jesus's +3 is stamped. That too used to read the definition, so in-hand buffs
+       were dropped: a card boosted to 4 gave Ra only its printed 1 while the pile
+       entry beside it correctly recorded 4.
+
+       Ties still go to the EARLIEST card in hand order (strict <). */
+    var lowestCC = Infinity, lowestId = null, gain = 0;
     hand.forEach(function (id) {
-      var c = CARDS.find(function (x) { return x.id === id; });
-      if (c && c.cc < lowestCC) { lowestCC = c.cc; lowestId = id; }
+      var hs = handStats(owner, id);
+      if (!hs) return;
+      if (hs.cc < lowestCC) { lowestCC = hs.cc; lowestId = id; gain = hs.ip; }
     });
     if (lowestId === null) { done(); return; }
-    var dc    = CARDS.find(function (x) { return x.id === lowestId; });
-    var gain  = dc ? dc.ip : 0;
+    var dc = CARDS.find(function (x) { return x.id === lowestId; });
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var raSd  = null;
     (slots[locId] || []).forEach(function (s) { if (s && s.cardId === 63) raSd = s; });
+
+    /* Where the absorbed card rises FROM — captured before discardFromHand removes
+       it. The opponent's origin is their face-down hand strip, but the flyer is
+       built from the card definition, so the absorption is shown FACE UP either way
+       (the Book of the Dead precedent: a card leaving a hidden hand for a public
+       event is revealed). */
+    var originEl = null;
+    if (owner === 'player') {
+      var pHand = document.getElementById('battle-player-hand');
+      originEl = pHand && pHand.querySelector('.battle-hand-card[data-id="' + lowestId + '"]');
+    } else {
+      var oHand = document.getElementById('battle-opp-hand');
+      var backs = oHand && oHand.querySelectorAll('.battle-card-back');
+      originEl = (backs && backs.length) ? backs[backs.length - 1] : null;
+    }
+
+    // NOT { animate: true }: the generic rise-and-fade would fight the absorption,
+    // which owns this card's exit from the hand.
     // No manual pile push here — discardFromHand records every discard itself.
     discardFromHand(owner, lowestId, function () {
-      if (raSd && gain !== 0) {
-        addIPMod(raSd, gain, 'Ra');
-        if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(owner, 63, gain);
+      /* The IP lands at the ABSORPTION beat, through the shared ipBadgeSwap (its
+         second consumer after Pyramid): the apply runs between capturing the old
+         badge text and animating the new one in, so the arriving number is read
+         back out of the badge after the engine wrote it. No separate float — the
+         swap IS the indicator. */
+      function absorb() {
+        if (raSd && gain !== 0) addIPMod(raSd, gain, 'Ra');
+        evaluateContinuous();
+        refreshSlotIPDisplays();
+        updateScores();
       }
-      evaluateContinuous();
-      refreshSlotIPDisplays();
-      updateScores();
-      done();
-    }, { animate: true });
+
+      var rfx  = window.SOG && SOG.RevealFx;
+      var raEl = findSlotEl(owner, 63);
+      if (rfx && typeof rfx.raAbsorb === 'function' && raEl && dc) {
+        rfx.raAbsorb(originEl, dc, {
+          raEl:      raEl,
+          sourceIP:  gain,
+          onAbsorb:  absorb,
+          sfx:       'sfx/ra.mp3',
+          boardEl:   document.getElementById('battle-board')
+        }, done);
+      } else {
+        absorb();
+        done();
+      }
+    });
   }
 
   /* Draw the first card of a given TYPE from the owner's deck into their hand

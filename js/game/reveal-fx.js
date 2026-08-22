@@ -2163,6 +2163,75 @@ SOG.RevealFx = (function () {
     });
   }
 
+  /* Ra (63) "Sun God" — the discarded card is drawn up into the sun.
+
+     Reuses the Book judgment's shape (body-level flyer built from the card
+     definition, rising out of the hand) minus the teeter: this is a direct ascent,
+     not a weighing. It then shrinks and fades INTO Ra's card, and the IP lands at
+     that moment through the shared ipBadgeSwap — Pyramid's helper, second consumer.
+     No separate float: the badge swap is the indicator.
+
+     PURELY PRESENTATIONAL over an unchanged mechanic. The discard has already
+     happened; opts.onAbsorb performs the real addIPMod and is called BY ipBadgeSwap
+     between capturing the old badge text and animating the new one in, so the number
+     that arrives is read back out of the badge after the engine wrote it.
+
+     Carries the slot classes so buildCardFace's cqw-based CC/IP overlays resolve
+     against a card-sized container rather than the viewport.
+       opts: { raEl, sourceIP, onAbsorb, sfx, boardEl } */
+  function raAbsorb(originEl, card, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+    function landIP(cb) {
+      var raEl = opts.raEl;
+      if (raEl && typeof ipBadgeSwap === 'function') ipBadgeSwap(raEl, opts.onAbsorb, cb || finish);
+      else { if (typeof opts.onAbsorb === 'function') opts.onAbsorb(); (cb || finish)(); }
+    }
+
+    var raEl = opts.raEl;
+    if (!raEl || typeof gsap === 'undefined') { landIP(); return; }
+    var rRect = raEl.getBoundingClientRect();
+    if (!rRect.width) { landIP(); return; }
+
+    var oRect = originEl && originEl.getBoundingClientRect();
+    var bRect = opts.boardEl && opts.boardEl.getBoundingClientRect();
+    var startX = (oRect && oRect.width) ? oRect.left + oRect.width / 2
+               : (bRect ? bRect.left + bRect.width / 2 : rRect.left + rRect.width / 2);
+    var startY = (oRect && oRect.width) ? oRect.top + oRect.height / 2
+               : (bRect ? bRect.bottom : rRect.bottom + rRect.height);
+
+    var cardW = rRect.width, cardH = rRect.height;
+    var fly = document.createElement('div');
+    fly.className = 'battle-card-slot occupied face-up reveal-fx-ra-card';
+    fly.setAttribute('aria-hidden', 'true');
+    fly.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9998;' +
+      'width:' + cardW + 'px;height:' + cardH + 'px;left:0;top:0;';
+    if (window.SOG && SOG.board && SOG.board.buildCardFace) {
+      try { SOG.board.buildCardFace(fly, card, (opts.sourceIP != null) ? opts.sourceIP : card.ip); }
+      catch (e) {}
+    }
+    document.body.appendChild(fly);
+    function cleanup() { if (fly.parentNode) fly.parentNode.removeChild(fly); }
+
+    gsap.set(fly, { xPercent: -50, yPercent: -50, x: startX, y: startY,
+                    scale: 0.85, opacity: 0 });
+
+    if (opts.sfx) playSfx(opts.sfx);
+
+    gsap.timeline({ onComplete: function () { cleanup(); landIP(); } })
+      // 1) the sun's light takes hold — fade in under an orange-gold glow.
+      .to(fly, { opacity: 1, duration: 0.16, ease: 'power1.out' }, 0)
+      .add(function () { fly.classList.add('reveal-fx-ra-sunglow'); }, 0)
+      // 2) a short lift clear of the hand, then the ascent to Ra.
+      .to(fly, { y: startY - cardH * 0.55, scale: 1.1, duration: 0.34, ease: 'power2.out' }, 0.10)
+      .to(fly, { x: rRect.left + rRect.width / 2, y: rRect.top + rRect.height / 2,
+                 scale: 1, duration: 0.62, ease: 'power2.inOut' })
+      // 3) absorbed — shrinks into Ra and is gone.
+      .to(fly, { scale: 0.18, opacity: 0, duration: 0.30, ease: 'power2.in' });
+  }
+
   /* Sargon (id 37) reveal flourish — visualizes his "+3 IP to adjacent location(s)".
      A gold BEAM of light shoots from Sargon's card to each AFFECTED location's full
      box (the caller passes exactly the boosted boxes — getAdjacentLocIds), and those
@@ -2279,6 +2348,7 @@ SOG.RevealFx = (function () {
            mummyWrapReveal: mummyWrapReveal,
            bookJudgment: bookJudgment,
            hieroglyphicsPulse: hieroglyphicsPulse,
+           raAbsorb: raAbsorb,
            rosettaTranscribe: rosettaTranscribe,
            scribeAccountingSequence: scribeAccountingSequence,
            farmerOnionBite: farmerOnionBite,
