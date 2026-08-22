@@ -1132,7 +1132,7 @@
       var has = function (id) { return arr.some(function (e) { return e.cardId === id; }); };
       if (has(41)) arr.forEach(function (e) { if (e.type === 'Labor') e.ip += 1; });                                   // Canals
       if (has(45)) arr.forEach(function (e) { if (e.type === 'Religious' && e.cardId !== 45) e.ip += 1; });            // Ziggurat
-      if (has(62)) arr.forEach(function (e) { if ((e.type === 'Religious' || e.type === 'Political') && e.cardId !== 62) e.ip += 2; }); // Hieroglyphics
+      if (has(62)) arr.forEach(function (e) { if ((e.type === 'Religious' || e.type === 'Political') && e.cardId !== 62) e.ip += 1; }); // Hieroglyphics (aura halved to +1)
       var scribes = arr.filter(function (e) { return e.cardId === 40; }).length;                                       // Scribe (Meso) +1 to others
       if (scribes) arr.forEach(function (e) { if (e.cardId !== 40) e.ip += scribes; });
       if (has(49) && arr.some(function (e) { return e.type === 'Cultural' && e.cardId !== 49; })) {                    // Phoenicians (+1 if Cultural host)
@@ -1408,7 +1408,7 @@
     41: 1,    // Canals        — +1 to Labor here
     45: 1,    // Ziggurat      — +1 to Religious here
     44: 3,    // Enkidu        — +2 to up to two adjacent others here
-    62: 2,    // Hieroglyphics — +2 to Religious/Political here
+    62: 1,    // Hieroglyphics — +1 to Religious/Political here (aura halved)
     31: 1,    // Megalith      — End of Turn +1
     59: 1,    // Obelisk       — End of Turn +1
     65: 1,    // Imhotep       — global -1 CC to Scientific (resource setup)

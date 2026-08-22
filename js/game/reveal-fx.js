@@ -2138,6 +2138,31 @@ SOG.RevealFx = (function () {
       }, endAt);
   }
 
+  /* Hieroglyphics (62) boost pulse — a momentary red flash on cards that JUST
+     gained the aura, with one sting for the whole batch.
+
+     NOT persistent, unlike Narmer's standing glow: this marks an EVENT (a boost
+     appearing), not a state. The caller — pulseHieroglyphicsGains — is
+     edge-triggered, so this only ever runs on a real gain.
+
+     Uses `filter` rather than box-shadow because a boosted card has a positive
+     contMod, which means Anim.setGlow already owns its boxShadow for the cyan
+     continuous ring. filter layers over that instead of fighting it. (A card that
+     is simultaneously Narmer's source would have its filter briefly replaced by
+     this flash and restored after — a sub-second overlap on a rare pairing.)
+     No GSAP needed: the flash is a one-shot CSS animation, and the class removes
+     itself. Missing elements simply mean no flash; the aura is unaffected either
+     way, since it was applied before this ran. */
+  var HIERO_PULSE_MS = 1250;    // matches the sting; keep in step with the CSS
+
+  function hieroglyphicsPulse(els, sfx) {
+    if (sfx) playSfx(sfx);      // ONE sound for the batch, not one per card
+    if (!els || !els.length) return;
+    els.forEach(function (el) {
+      if (el) flashClass(el, 'reveal-fx-hiero-pulse', HIERO_PULSE_MS);
+    });
+  }
+
   /* Sargon (id 37) reveal flourish — visualizes his "+3 IP to adjacent location(s)".
      A gold BEAM of light shoots from Sargon's card to each AFFECTED location's full
      box (the caller passes exactly the boosted boxes — getAdjacentLocIds), and those
@@ -2253,6 +2278,7 @@ SOG.RevealFx = (function () {
            pyramidAbsorb: pyramidAbsorb,
            mummyWrapReveal: mummyWrapReveal,
            bookJudgment: bookJudgment,
+           hieroglyphicsPulse: hieroglyphicsPulse,
            rosettaTranscribe: rosettaTranscribe,
            scribeAccountingSequence: scribeAccountingSequence,
            farmerOnionBite: farmerOnionBite,

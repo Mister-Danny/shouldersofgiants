@@ -12350,6 +12350,26 @@ body[data-screen="overworld"] #overworld-overlay {
   will-change: transform, opacity;
 }
 
+/* Hieroglyphics (62): a momentary red flash on a card the moment it GAINS the
+   aura. Deliberately not persistent — Narmer's red glow marks an ongoing state,
+   this marks an event, and they share the hue on purpose (both are "an Egyptian
+   aura is acting on this card").
+
+   `filter` rather than box-shadow: a boosted card has contMod > 0, so Anim.setGlow
+   already owns its boxShadow for the cyan continuous ring. Duration is tied to the
+   sting — keep in step with HIERO_PULSE_MS in reveal-fx.js. */
+.battle-card-slot.reveal-fx-hiero-pulse {
+  animation: revealFxHieroPulse 1.25s ease-out 1;
+}
+@keyframes revealFxHieroPulse {
+  0%   { filter: drop-shadow(0 0 0   rgba(240, 64, 48, 0)); }
+  18%  { filter: drop-shadow(0 0 10px rgba(245, 80, 64, 1))
+                 drop-shadow(0 0 24px rgba(200, 30, 24, 0.8)); }
+  55%  { filter: drop-shadow(0 0 8px  rgba(240, 64, 48, 0.85))
+                 drop-shadow(0 0 18px rgba(200, 30, 24, 0.55)); }
+  100% { filter: drop-shadow(0 0 0   rgba(240, 64, 48, 0)); }
+}
+
 /* Egyptian Priest (71): linen straps that wrap the slot as a Mummy is revived.
    The layer sits INSIDE .battle-card-slot, which is overflow:hidden — deliberately,
    so the straps' overhanging ends are trimmed at the card edges and they read as

@@ -493,10 +493,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/kingtut@0.3x.jpg", locked: true
   },
   {
-    id: 62, name: "Hieroglyphics", cc: 2, ip: 1,               // WIRED (continuous type-boost)
+    id: 62, name: "Hieroglyphics", cc: 2, ip: 2,               // WIRED (continuous type-boost; aura halved to +1, base IP 1→2)
     type: "Cultural", type2: null, era: "Egypt",
     abilityName: "Sacred Symbols",
-    ability: "Continuous:\n+2 IP to your Religious and Political cards here.",
+    ability: "Continuous:\n+1 IP to your Religious and Political cards here.",
     image:   "images/cards/egyptcards/hieroglyphs@0.5x.jpg",
     imageSm: "images/cards/egyptcards/hieroglyphs@0.3x.jpg", locked: true
   },

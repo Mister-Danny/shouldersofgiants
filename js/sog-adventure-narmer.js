@@ -160,7 +160,7 @@ SOG.NarmerBattle = (function () {
       } else {
         s = c.ip - c.cc * 0.1;
         if (id === 57) s += topIP[locId] > 0 ? topIP[locId] : -3;          // Pyramid (At Once): grabs the last-played card's IP here; dead alone
-        if (id === 62) s += polCount[locId] > 0 ? 2 * polCount[locId] : -2; // Hieroglyphics: +2 per Political here; dead alone
+        if (id === 62) s += polCount[locId] > 0 ? polCount[locId] : -2;     // Hieroglyphics: +1 per Political here (aura halved); dead alone
         if (id === 51) s += (locId === LOC_MEMPHIS ? 2 : 0);               // Narmer: center seat spans the whole board's averaging
         if (id === 56) s += econCount[locId] > 0 ? 1.5 * econCount[locId] : -2;  // Scribe (REWORKED): +1 IP to OTHER Economic cards here; dead alone
         if (id === 64) s += (ownIP[locId] >= 4 ? 2 : 0);                   // Sphinx: protect a stack worth protecting

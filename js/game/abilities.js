@@ -230,6 +230,63 @@
     });
   }
 
+  /* ── HIEROGLYPHICS (62) boost pulse — EDGE-TRIGGERED ─────────────────────────
+     Fires when a card GAINS the Hieroglyphics aura, and only then.
+
+     This is the counterpart to updateKenteGlows / updateNarmerGlows below, with
+     one deliberate difference: those are LEVEL-driven (the glow is on for as long
+     as the condition holds), this is EDGE-driven (a momentary flash at the moment
+     the boost appears). So it cannot simply read the current state — it has to
+     compare against the previous pass.
+
+     The comparison is per-slot-data, using two flags:
+       _hieroNow     — set by THIS pass's aura block for every boosted card
+       _hieroBoosted — what the same test said on the PREVIOUS pass
+     gained = now && !was. Then _hieroBoosted is updated and _hieroNow cleared, so
+     the next pass starts from a clean slate.
+
+     That single comparison gives all six trigger rules without special-casing any
+     of them, because every one of them is just "who newly gained the aura":
+       • Hieroglyphics revealed onto qualifying cards → they all gain at once
+       • a qualifying card played or MOVED in afterwards → it alone gains
+       • Hieroglyphics itself moves in → everyone there gains at once
+       • a card moves away, or Hieroglyphics leaves → now=false, was=true: NO event
+       • an unrelated recompute → nothing changed, so nothing gains, so no re-flash
+     The flags live on the slot data, which travels with the card when it moves, so
+     a card carrying its boost from one location to another does not re-flash.
+
+     ONE SFX PER EVENT, not per card: a batch of simultaneous gains is one sound and
+     a simultaneous flash. Purely presentational — the aura itself is the recompute's
+     business and has already been applied by the time this runs. */
+  function pulseHieroglyphicsGains() {
+    var gainedEls = [];
+    var anyGain = false;
+
+    ['player', 'opp'].forEach(function (own) {
+      var slots = own === 'player' ? G.playerSlots : G.aiSlots;
+      G.locations.forEach(function (loc) {
+        (slots[loc.id] || []).forEach(function (s, si) {
+          if (!s) return;
+          var now = !!s._hieroNow;
+          var was = !!s._hieroBoosted;
+          if (now && !was) {
+            anyGain = true;
+            var el = getSlotEl(own, loc.id, si);
+            if (el) gainedEls.push(el);
+          }
+          s._hieroBoosted = now;      // remember for the next pass
+          s._hieroNow     = false;    // clear this pass's mark
+        });
+      });
+    });
+
+    if (!anyGain) return;
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.hieroglyphicsPulse === 'function') {
+      rfx.hieroglyphicsPulse(gainedEls, 'sfx/hieroglyphs.mp3');
+    }
+  }
+
   /* ── NARMER (51) "The Unifier" — persistent red glow ─────────────────────────
      Lights Narmer's own card and, for HIS OWNER'S SIDE ONLY, the score number at
      his location and at each ADJACENT location, for as long as his Continuous
@@ -591,8 +648,10 @@
       });
 
       // ── Egypt continuous type-boosts ────────────────────────────
-      // Hieroglyphics (id 62): +2 IP to the OWNER'S Religious AND Political cards
-      // here (same family as Ziggurat; two types, +2). Excludes itself (Cultural).
+      // Hieroglyphics (id 62): +1 IP to the OWNER'S Religious AND Political cards
+      // here (same family as Ziggurat; two types, +1). Excludes itself (Cultural).
+      // Two Hieroglyphics at one location do NOT stack: the guard below asks whether
+      // ANY is present, then boosts each qualifying card once.
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         if (!sl[loc.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 62; })) return;
@@ -600,9 +659,10 @@
           if (!s || !s.revealed || abilityIdOf(s) === 62) return;
           var c = CARDS.find(function (x) { return x.id === s.cardId; });
           if (c && (c.type === 'Religious' || c.type === 'Political')) {
-            s.contMod = (s.contMod || 0) + 2;
-            s.contModSources.push({ source: 'Hieroglyphics', delta: 2 });
-            addBonus(s, 2, 'card', 62, nextEventId(), 'A', true);
+            s.contMod = (s.contMod || 0) + 1;
+            s.contModSources.push({ source: 'Hieroglyphics', delta: 1 });
+            addBonus(s, 1, 'card', 62, nextEventId(), 'A', true);
+            s._hieroNow = true;          // this pass's boost set — see pulseHieroglyphicsGains
           }
         });
       });
@@ -875,6 +935,8 @@
       updateKenteGlows();
       // Update Narmer's persistent "unified lands" glow (card + nameplates)
       updateNarmerGlows();
+      // Flash any card that JUST gained the Hieroglyphics aura (edge-triggered)
+      pulseHieroglyphicsGains();
     }
   }
 
@@ -4015,7 +4077,7 @@
     58: { onAtOnce: abilityRosetta         },             // Rosetta Stone — adopt the SLOT-0 card's ability here
     59: { endOfTurn: obeliskEndOfTurn      },             // Obelisk — End of turn: +1 IP (Megalith key)
     60: { onAtOnce: abilityKhufu           },             // Khufu — draw a Scientific card
-    62: { onAtOnce: function (o, l, done) { done(); } },  // Hieroglyphics — Continuous (+2 Religious/Political)
+    62: { onAtOnce: function (o, l, done) { done(); } },  // Hieroglyphics — Continuous (+1 Religious/Political)
     63: { onAtOnce: abilityRa              },             // Ra — discard lowest → permanent +IP
     64: { onAtOnce: function (o, l, done) { done(); } },  // Sphinx — Continuous protection: no destroy (isDestroyProtected) + no IP reduction (_soldierStrike / Chariot strike)
     65: { onAtOnce: function (o, l, done) { done(); } },  // Imhotep — Continuous (effectiveCost -1 Scientific)
@@ -4196,6 +4258,7 @@
     pulseWilliam:              pulseWilliam,
     updateKenteGlows:          updateKenteGlows,
     updateNarmerGlows:         updateNarmerGlows,
+    pulseHieroglyphicsGains:   pulseHieroglyphicsGains,
     /* UI */
     showDiscardChooser:        showDiscardChooser,
     buildChooserCard:          buildChooserCard,
