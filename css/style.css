@@ -12329,6 +12329,27 @@ body[data-screen="overworld"] #overworld-overlay {
   user-select: none;
 }
 
+/* The SOURCE card shown at the slot just before the bandages go on — the "who is
+   coming back" beat, shared by the Priest revival and Book of the Dead. Sits above
+   the (hidden) Mummy face and below the strap layer, so the straps build over it.
+   Opacity is GSAP's; this only positions it. */
+.battle-card-slot .reveal-fx-wrap-source {
+  position: absolute;
+  inset: 0;
+  z-index: 19;
+  pointer-events: none;
+}
+
+/* Book of the Dead (66): the card under judgment — a body-level flyer carrying the
+   real card face, so it is FACE UP for both sides. Lifted off the board with a
+   heavier shadow than a slot card, since it is being held up to be read. All
+   motion, rotation and the flicker belong to reveal-fx.js (bookJudgment). */
+.reveal-fx-judgment-card {
+  border-radius: 4px;
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.66), 0 3px 7px rgba(0, 0, 0, 0.5);
+  will-change: transform, opacity;
+}
+
 /* Egyptian Priest (71): linen straps that wrap the slot as a Mummy is revived.
    The layer sits INSIDE .battle-card-slot, which is overflow:hidden — deliberately,
    so the straps' overhanging ends are trimmed at the card edges and they read as

@@ -167,6 +167,58 @@ SOG.RevealFx = (function () {
       return IMPACT_MS;       // pace the reveal's done (→ Tool's draw) to the impact beat
     },
 
+    /* Khufu (60): Tool's (26) draw animation VERBATIM — same hammer swing, same
+       tool.m4a, same timings, same pull-in on the drawn card. The body below is a
+       literal copy of handler 26 above; keep them in step.
+
+       The one thing that differs is UPSTREAM, not here: abilityKhufu draws a
+       SCIENTIFIC card rather than the deck's top card. This handler animates
+       whatever the ability actually appended to the hand, so the card shown pulling
+       in and the card drawn cannot disagree — it never picks a card itself.
+
+       And one behavioural difference from Tool: Khufu FIZZLES when his owner's deck
+       holds no Scientific card, and a fizzle plays NOTHING — no swing, no sfx, no
+       pull-in. This handler runs BEFORE the ability (its return value paces
+       flipSlot's done, which is what triggers fireAtOnce), so it has to answer that
+       question itself. It does so with a read-only scan over the SAME deck array
+       and the SAME type test drawTypeFromDeck uses, so the guard and the draw
+       cannot disagree about whether a Scientific card exists. Tool needs no
+       equivalent: it draws any card, so only an empty deck stops it. */
+    60: function (ctx) {
+      var _st   = window.SOG && SOG.state && SOG.state.G;
+      var _deck = _st ? (ctx.owner === 'player' ? _st.playerDeck : _st.aiDeck) : null;
+      var _hasSci = !!_deck && _deck.some(function (id) {
+        var c = CARDS.find(function (x) { return x.id === id; });
+        return c && c.type === 'Scientific';
+      });
+      if (!_hasSci) return 0;   // fizzle → no animation at all
+
+      var IMPACT_MS = 500;    // = the 50% keyframe (full horizontal) of revealFxToolSwing (1s)
+      var SFX_AT    = IMPACT_MS - 350;  // fire tool.m4a 350ms earlier so its strike lands on the visual impact (knob)
+      var SWING_MS  = 1000;   // full swing + rebound; class self-removes after this
+      var handSel   = '#battle-player-hand .battle-hand-card';
+      var beforeCount = document.querySelectorAll(handSel).length;
+
+      flashClass(ctx.slotEl, 'reveal-fx-tool-swing', SWING_MS);
+
+      // SFX leads the visual impact (the audio has lead-in before its "crack").
+      setTimeout(function () { playSfx('sfx/tool.m4a'); }, Math.max(0, SFX_AT));
+
+      // Draw + pull-in stay synced to the impact beat (extraDelay below). Defer
+      // one tick so the hand has been rebuilt, then pull the newly drawn (last)
+      // card in — but only if the hand actually grew (deck could be empty).
+      setTimeout(function () {
+        setTimeout(function () {
+          var cards = document.querySelectorAll(handSel);
+          if (cards.length > beforeCount) {
+            flashClass(cards[cards.length - 1], 'reveal-fx-tool-draw-in', 450);
+          }
+        }, 0);
+      }, IMPACT_MS);
+
+      return IMPACT_MS;       // pace the reveal's done (→ Tool's draw) to the impact beat
+    },
+
     // Fire (29): matchstrike SFX + a warm illuminate pulse that settles back,
     // plus a few glowing embers rising off the card's centre (see spawnEmbers).
     29: function (ctx) {
@@ -348,6 +400,7 @@ SOG.RevealFx = (function () {
   // finished. Keep in sync with the matching handler above.
   var FULL_MS = {
     26: 1000,   // Tool swing+rebound
+    60: 1000,   // Khufu — Tool's swing+rebound, verbatim
     29: 1300,   // Fire illuminate + embers
     30: 2340,   // Cave Art scribble + fade
     32: 1850,   // Domesticated Animal howl
@@ -1711,29 +1764,37 @@ SOG.RevealFx = (function () {
       });
   }
 
-  /* Egyptian Priest (71) "Embalming" — the revived card is WRAPPED into existence.
-     The Priest lifts in its slot, then off-white straps criss-cross over the slot
-     the Mummy is spawning into, building until the card is completely covered, and
-     dissolve to reveal it.
+  /* ── SHARED MUMMY WRAP ────────────────────────────────────────────────────────
+     Used by BOTH resurrection paths — the Egyptian Priest (71) and Book of the
+     Dead (66). Extracted rather than duplicated; createMummy itself stays
+     visual-free, so nothing else that spawns a Mummy picks up a flourish by
+     accident.
 
-     PURELY PRESENTATIONAL. createMummy has already run: the Mummy is in its slot
-     with its frozen IP/CC before a single strap is drawn. All this does is hold the
-     card face at opacity 0 until the straps come off. Every early-out simply leaves
-     the face visible, i.e. exactly the instant spawn this replaces.
+     ITS STARTING STATE IS "THE SOURCE CARD IS VISIBLE AT THE SLOT". Both callers
+     converge on that shape before handing over:
+       • Priest — the helper itself fades the source face in (sourceFadeMs > 0), so
+         you see WHO is coming back before the bandages go on.
+       • Book   — the judgment glide has already flown that card to the slot, so it
+         passes sourceFadeMs 0 and the face is simply there.
 
-     Straps live INSIDE the slot rather than in a body-level flyer — the opposite
-     choice to the boat/scroll/onion. .battle-card-slot is overflow:hidden, and here
-     that clipping is wanted: the straps should stop at the card's edges, so their
-     overhanging ends get trimmed and they read as bound AROUND the card.
+     Then: straps criss-cross over the source face until the slot is covered, a seal
+     closes the slivers, and the whole layer dissolves to reveal the Mummy behind it.
 
-     Angles: every strap is HORIZONTAL with up to STRAP_MAX_TILT degrees of
-     variance, and the sign alternates strap to strap, so consecutive straps lean
-     opposite ways and cross each other instead of lying parallel.
-       opts: { sfx, straps } */
+     PURELY PRESENTATIONAL. The Mummy is already in its slot with its frozen stats
+     before this runs; all this does is hold its face at opacity 0 until the wrap
+     comes off. Every early-out leaves that face visible — the instant spawn.
+
+     Straps live INSIDE the slot (unlike the boat/scroll/onion flyers): the slot is
+     overflow:hidden and here that clipping is wanted, so the overhanging ends are
+     trimmed and the straps read as bound AROUND the card. Each strap is centred via
+     xPercent/yPercent -50 so its 190% width straddles the slot and BOTH ends get
+     trimmed — anchoring without that pull-back is what once made them cover only
+     the right half.
+       opts: { sfx, sourceCard, sourceIP, sourceFadeMs, lifterEl, straps } */
   var STRAP_COUNT    = 11;
   var STRAP_MAX_TILT = 25;      // degrees; 0..25, alternating sign → criss-cross
 
-  function mummyWrapReveal(priestEl, slotEl, opts, onComplete) {
+  function mummyWrapReveal(slotEl, opts, onComplete) {
     opts = opts || {};
     var fired = false;
     function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
@@ -1741,10 +1802,27 @@ SOG.RevealFx = (function () {
     var r = slotEl.getBoundingClientRect();
     if (!r.width) { finish(); return; }
 
-    // The card face as it stands NOW (before we add anything) — held invisible
-    // until the wrap comes off, then faded back in.
+    var lifterEl = opts.lifterEl || null;
+
+    // The Mummy's face as it stands NOW — held invisible until the wrap comes off.
     var faces = [].slice.call(slotEl.children);
     faces.forEach(function (n) { n.style.opacity = '0'; });
+
+    /* The SOURCE card's own face, shown over the slot before the bandages. This is
+       the "we see who is coming back" beat. Rendered through the shared
+       buildCardFace so it is the real card art and the real frozen numbers, not a
+       stand-in. */
+    var srcLayer = null;
+    if (opts.sourceCard && window.SOG && SOG.board && SOG.board.buildCardFace) {
+      srcLayer = document.createElement('div');
+      srcLayer.className = 'reveal-fx-wrap-source';
+      srcLayer.setAttribute('aria-hidden', 'true');
+      try {
+        SOG.board.buildCardFace(srcLayer, opts.sourceCard,
+                                (opts.sourceIP != null) ? opts.sourceIP : opts.sourceCard.ip);
+      } catch (e) { srcLayer = null; }
+      if (srcLayer) slotEl.appendChild(srcLayer);
+    }
 
     var layer = document.createElement('div');
     layer.className = 'reveal-fx-wrap-layer';
@@ -1752,8 +1830,10 @@ SOG.RevealFx = (function () {
     slotEl.appendChild(layer);
 
     function cleanup() {
-      if (layer.parentNode) layer.parentNode.removeChild(layer);
+      if (layer.parentNode)    layer.parentNode.removeChild(layer);
+      if (srcLayer && srcLayer.parentNode) srcLayer.parentNode.removeChild(srcLayer);
       faces.forEach(function (n) { n.style.opacity = ''; });
+      if (lifterEl) gsap.set(lifterEl, { clearProps: 'transform' });
     }
 
     var n = opts.straps || STRAP_COUNT;
@@ -1761,60 +1841,183 @@ SOG.RevealFx = (function () {
     for (var i = 0; i < n; i++) {
       var st = document.createElement('div');
       st.className = 'reveal-fx-strap';
-      // Spread across the card, past both edges so the top and bottom are covered.
-      var yPct  = -6 + (112 / (n - 1)) * i;
+      var yPct  = -6 + (112 / (n - 1)) * i;             // spread past both ends
       var tilt  = (i % 2 ? 1 : -1) * (Math.random() * STRAP_MAX_TILT);
       var thick = 13 + Math.random() * 5;               // % of card height
-      // NO transform here — GSAP owns it below. Setting translate(-50%,-50%) in
-      // cssText and then calling gsap.set(...) simply replaced it, which is what
-      // made the straps cover only the RIGHT half: the -50% X pull-back was lost,
-      // so a strap anchored at left:50% started at the slot's centre line and ran
-      // outward instead of straddling it.
-      st.style.cssText =
-        'top:' + yPct.toFixed(2) + '%;height:' + thick.toFixed(2) + '%;';
+      st.style.cssText = 'top:' + yPct.toFixed(2) + '%;height:' + thick.toFixed(2) + '%;';
       st._tilt = tilt;
       st._from = (i % 2 ? 1 : -1);                      // slides in from alternating sides
       layer.appendChild(st);
       straps.push(st);
     }
 
-    // A faint wash that closes any slivers left between straps, so "fully covered"
-    // is actually true rather than nearly true.
     var seal = document.createElement('div');
     seal.className = 'reveal-fx-wrap-seal';
     layer.appendChild(seal);
 
-    if (opts.sfx) playSfx(opts.sfx);
+    // How long the source face is shown before the wrapping starts.
+    var fadeSec = ((opts.sourceFadeMs != null) ? opts.sourceFadeMs : 380) / 1000;
+    var holdSec = srcLayer ? 0.30 : 0;                  // beat to actually read the card
+    var wrapAt  = fadeSec + holdSec;
 
     var tl = gsap.timeline({ onComplete: function () { cleanup(); finish(); } });
 
-    // Priest lifts 10% and holds while the wrapping happens.
-    if (priestEl) tl.to(priestEl, { y: '-10%', duration: 0.26, ease: 'power2.out' }, 0);
+    if (srcLayer) {
+      gsap.set(srcLayer, { opacity: 0 });
+      tl.to(srcLayer, { opacity: 1, duration: Math.max(0.001, fadeSec), ease: 'power1.out' }, 0);
+    }
 
-    // Straps land one after another, each swinging in from its own side.
+    // The lifter (Priest) rises and holds while the wrapping happens.
+    if (lifterEl) tl.to(lifterEl, { y: '-10%', duration: 0.26, ease: 'power2.out' }, 0);
+
+    if (opts.sfx) tl.add(function () { playSfx(opts.sfx); }, wrapAt);
+
     straps.forEach(function (st, i) {
-      // xPercent/yPercent -50 centre the strap on left:50%/top:N%, so its 190%
-      // width overhangs BOTH edges and the slot's overflow:hidden trims the two
-      // ends evenly — full-width coverage. x is the slide-in offset, tweened to 0.
       gsap.set(st, { xPercent: -50, yPercent: -50, x: st._from * r.width * 0.9,
                      opacity: 0, rotation: st._tilt });
-      tl.to(st, {
-        x: 0, opacity: 1, duration: 0.2, ease: 'power2.out'
-      }, 0.26 + i * 0.06);
+      tl.to(st, { x: 0, opacity: 1, duration: 0.2, ease: 'power2.out' }, wrapAt + i * 0.06);
     });
 
-    var wrapEnd = 0.26 + n * 0.06 + 0.2;
+    var wrapEnd = wrapAt + n * 0.06 + 0.2;
     tl.to(seal, { opacity: 1, duration: 0.16, ease: 'power1.out' }, wrapEnd)
-      // fully wrapped — hold a beat, then the straps dissolve and the Mummy is there.
+      // fully wrapped — hold a beat, then dissolve to reveal the Mummy.
       .to(layer, { opacity: 0, duration: 0.42, ease: 'power1.in' }, wrapEnd + 0.28)
       .to(faces, { opacity: 1, duration: 0.42, ease: 'power1.out' }, wrapEnd + 0.28);
+    if (srcLayer) tl.to(srcLayer, { opacity: 0, duration: 0.30, ease: 'power1.in' }, wrapEnd + 0.28);
 
-    if (priestEl) {
-      tl.to(priestEl, {
-        y: '0%', duration: 0.26, ease: 'power2.inOut',
-        onComplete: function () { gsap.set(priestEl, { clearProps: 'transform' }); }
-      }, wrapEnd + 0.5);
+    if (lifterEl) {
+      tl.to(lifterEl, { y: '0%', duration: 0.26, ease: 'power2.inOut' }, wrapEnd + 0.5);
     }
+  }
+
+  /* ── BOOK OF THE DEAD (66) "Weighing of the Heart" — the judgment ─────────────
+     The randomly-discarded card rises out of the hand FACE UP, teeters like a
+     balance scale being read, and then gets its verdict:
+       • BALANCED (IP == CC) — it levels out, glides to the slot the ability
+         actually chose, lands visible there, and the SHARED wrap takes over.
+       • UNBALANCED — it keeps tipping and falls flat toward the HEAVIER stat, the
+         ghost sfx plays, and it flickers out spectrally rather than fading.
+
+     FALL DIRECTION MIRRORS THE BOARD: the CC badge is top-LEFT and the IP badge is
+     top-RIGHT, so the scale tips left when CC is the bigger number and right when
+     IP is. The caller passes the real comparison, never a guess.
+
+     PURELY PRESENTATIONAL, and everything it shows is read from what already
+     happened: the face is the card actually discarded, `balanced` is the real
+     qualification, `destSlotEl` is the slot the Mummy was really spawned into.
+     Missing GSAP/geometry → straight to onComplete, i.e. the instant behaviour.
+
+     OPPONENT SIDE IS FULLY VISIBLE. The flyer is built from the card definition, so
+     it is face-up by construction; the caller just hands us the opponent's hand
+     strip as the origin. That is deliberate and unlike Papyrus's face-down opponent
+     path — a card leaving hand for public judgment is shown.
+       opts: { balanced, fallLeft, destSlotEl, wrapSfx, ghostSfx,
+               sourceCard, sourceIP, boardEl } */
+  function bookJudgment(originEl, card, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+
+    var dest = opts.destSlotEl || null;
+
+    /* The Mummy is already spawned, so its face would be sitting at the destination
+       for the whole rise/teeter/glide. Hide it NOW; the wrap helper takes ownership
+       of it from the moment it starts and restores it at the end. */
+    var destFaces = dest ? [].slice.call(dest.children) : [];
+    destFaces.forEach(function (n) { n.style.opacity = '0'; });
+    function showDest() { destFaces.forEach(function (n) { n.style.opacity = ''; }); }
+
+    function handOff() {
+      // Balanced: the shared wrap takes it from "card visible at slot".
+      if (opts.balanced && dest) {
+        showDest();                          // wrap re-hides immediately; avoids a stranded 0
+        mummyWrapReveal(dest, {
+          sfx: opts.wrapSfx, sourceCard: opts.sourceCard, sourceIP: opts.sourceIP,
+          sourceFadeMs: 0                    // the glide already delivered the card
+        }, finish);
+        return;
+      }
+      showDest();
+      finish();
+    }
+
+    if (typeof gsap === 'undefined') { handOff(); return; }
+
+    // Geometry: rise from the hand (or the board's centre if the origin is gone).
+    var oRect = originEl && originEl.getBoundingClientRect();
+    var bRect = opts.boardEl && opts.boardEl.getBoundingClientRect();
+    if ((!oRect || !oRect.width) && !bRect) { handOff(); return; }
+
+    var cardW = (dest && dest.getBoundingClientRect().width) || (oRect && oRect.width) || 65;
+    var cardH = cardW * 1.48;
+    var startX = oRect && oRect.width ? oRect.left + oRect.width / 2 : bRect.left + bRect.width / 2;
+    var startY = oRect && oRect.width ? oRect.top + oRect.height / 2 : bRect.top + bRect.height;
+    var liftX  = bRect ? bRect.left + bRect.width / 2 : startX;
+    var liftY  = bRect ? bRect.top + bRect.height * 0.52 : startY - cardH * 1.4;
+
+    var fly = document.createElement('div');
+    /* Carries the SLOT classes as well as its own. buildCardFace's CC/IP overlays
+       are styled under `.battle-card-slot`, so a bare div renders them at a default
+       size — huge against the card. The boat/scroll flyers avoid this by cloning a
+       real slot element; this one is built from scratch, so it has to opt in. The
+       inline position:fixed below still overrides the class's positioning. */
+    fly.className = 'battle-card-slot occupied face-up reveal-fx-judgment-card';
+    fly.setAttribute('aria-hidden', 'true');
+    fly.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9998;' +
+      'width:' + cardW + 'px;height:' + cardH + 'px;left:0;top:0;';
+    if (window.SOG && SOG.board && SOG.board.buildCardFace) {
+      try { SOG.board.buildCardFace(fly, card, (opts.sourceIP != null) ? opts.sourceIP : card.ip); }
+      catch (e) {}
+    }
+    document.body.appendChild(fly);
+    function cleanup() { if (fly.parentNode) fly.parentNode.removeChild(fly); }
+
+    gsap.set(fly, { xPercent: -50, yPercent: -50, x: startX, y: startY,
+                    scale: 0.7, opacity: 0, rotation: 0 });
+
+    var tl = gsap.timeline();
+
+    // 1) rise out of the hand to the lifted spot, face up.
+    tl.to(fly, { opacity: 1, duration: 0.18, ease: 'power1.out' }, 0)
+      .to(fly, { x: liftX, y: liftY, scale: 1.35, duration: 0.52, ease: 'power2.out' }, 0);
+
+    // 2) the weighing — left, right, left, right.
+    var TEETER = 13;
+    tl.to(fly, { rotation: -TEETER, duration: 0.22, ease: 'sine.inOut' })
+      .to(fly, { rotation:  TEETER, duration: 0.30, ease: 'sine.inOut' })
+      .to(fly, { rotation: -TEETER * 0.8, duration: 0.28, ease: 'sine.inOut' })
+      .to(fly, { rotation:  TEETER * 0.8, duration: 0.26, ease: 'sine.inOut' });
+
+    if (opts.balanced) {
+      // 3) levels out, then glides to the REAL destination slot and lands.
+      tl.to(fly, { rotation: 0, duration: 0.30, ease: 'power2.out' });
+      if (dest) {
+        var dRect = dest.getBoundingClientRect();
+        tl.to(fly, {
+          x: dRect.left + dRect.width / 2, y: dRect.top + dRect.height / 2,
+          scale: dRect.width / cardW, duration: 0.72, ease: 'power2.inOut'
+        });
+      }
+      tl.add(function () { cleanup(); handOff(); });
+      return;
+    }
+
+    // 4) unbalanced — tips past the point of no return and falls FLAT toward the
+    //    heavier stat, then flickers out.
+    var dir = opts.fallLeft ? -1 : 1;
+    tl.to(fly, { rotation: dir * 90, y: liftY + cardH * 0.30, scale: 1.2,
+                 duration: 0.46, ease: 'power2.in' })
+      .add(function () { if (opts.ghostSfx) playSfx(opts.ghostSfx); });
+
+    /* Spectral flicker rather than a fade: opacity stutters DOWN through an
+       irregular ladder, each step snapping (no easing between values), so it reads
+       as a failing apparition instead of a dissolve. */
+    var FLICKER = [0.25, 0.85, 0.15, 0.65, 0.08, 0.44, 0.03, 0.22, 0];
+    FLICKER.forEach(function (o) {
+      tl.to(fly, { opacity: o, duration: 0.075, ease: 'none' });
+    });
+    tl.add(function () { cleanup(); handOff(); });
   }
 
   /* Rosetta Stone (58) "Decipher The Past" — a scribe's hand inscribes the copied
@@ -2049,6 +2252,7 @@ SOG.RevealFx = (function () {
            ipBadgeSwap: ipBadgeSwap,
            pyramidAbsorb: pyramidAbsorb,
            mummyWrapReveal: mummyWrapReveal,
+           bookJudgment: bookJudgment,
            rosettaTranscribe: rosettaTranscribe,
            scribeAccountingSequence: scribeAccountingSequence,
            farmerOnionBite: farmerOnionBite,

@@ -3222,16 +3222,27 @@
       var c = CARDS.find(function (x) { return x.id === deck[i]; });
       if (c && c.type === type) { idx = i; break; }
     }
-    if (idx === -1) return false;                                  // none in deck
+    if (idx === -1) return null;                                   // none in deck → fizzle
     var drawnId = deck.splice(idx, 1)[0];
     hand.push(drawnId);
     if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
-    return true;
+    // Returns the DRAWN CARD ID (null when nothing matched) rather than a bare
+    // boolean, so a caller can name exactly what it drew. Truthiness is unchanged
+    // for any boolean-style use: an id is truthy, null is falsy.
+    return drawnId;
   }
 
-  /* Khufu (id 60) — "Great Pyramid": At Once, draw a Scientific card. */
+  /* Khufu (id 60) — "Great Pyramid": At Once, draw a Scientific card.
+     FIZZLES silently when the owner's deck holds none (drawTypeFromDeck returns
+     null and touches nothing). The reveal flourish is Tool's (26) draw animation,
+     copied verbatim as reveal-fx handler 60; it animates whichever card this
+     actually appended to the hand, and it suppresses itself on the fizzle by
+     running the same "is there a Scientific card in this deck" test. */
   function abilityKhufu(owner, locId, done) {
-    drawTypeFromDeck(owner, 'Scientific');
+    var drawnId = drawTypeFromDeck(owner, 'Scientific');
+    if (window.SOG_DEBUG && typeof console !== 'undefined') {
+      console.log('[Khufu] drew ' + (drawnId == null ? 'nothing (no Scientific in deck)' : drawnId));
+    }
     done();
   }
 
@@ -3729,6 +3740,24 @@
      playTime stamp: a Mummy is created, not played, so reveal-order abilities
      (Papyrus/Pyramid/Rosetta) ignore it. wasResurrected is a general flag for any
      "if resurrected" card. */
+  /* SFX for a mummy wrap. King Tutankhamen (61) gets his own sting wherever he is
+     wrapped — Priest revival OR Book of the Dead — and everything else gets the
+     ordinary linen. One definition so the two call sites cannot drift apart.
+     Note this is about being WRAPPED: Tut played normally from hand is untouched. */
+  var KING_TUT_ID = 61;
+  function wrapSfxFor(sourceCardId) {
+    return sourceCardId === KING_TUT_ID ? 'sfx/kingtut.mp3' : 'sfx/wrapping.mp3';
+  }
+
+  /* The card face a wrap should show BEFORE the bandages — the source card's own
+     art carrying its FROZEN cc, so the numbers on the pre-wrap face are the numbers
+     the Mummy inherits rather than the card definition's. */
+  function wrapSourceFace(sourceCardId, frozenCC) {
+    var c = CARDS.find(function (x) { return x.id === sourceCardId; });
+    if (!c) return null;
+    return (frozenCC != null && frozenCC !== c.cc) ? Object.assign({}, c, { cc: frozenCC }) : c;
+  }
+
   function createMummy(owner, locId, sourceId, ip, cc) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var si    = (slots[locId] || []).indexOf(null);
@@ -3797,7 +3826,16 @@
       var mummyEl  = (mIdx !== -1) ? getSlotEl(owner, locId, mIdx) : null;
       var priestEl = findSlotEl(owner, 71);
       if (rfx && typeof rfx.mummyWrapReveal === 'function' && mummyEl) {
-        rfx.mummyWrapReveal(priestEl, mummyEl, { sfx: 'sfx/wrapping.mp3' }, done);
+        /* The SHARED wrap (Book of the Dead uses the same one). sourceCard makes it
+           fade the revived card's own face in first, so you see WHO is coming back
+           before the bandages go on; sourceFadeMs is the length of that beat. */
+        rfx.mummyWrapReveal(mummyEl, {
+          sfx:          wrapSfxFor(cand.cardId),
+          sourceCard:   wrapSourceFace(cand.cardId, cand.cc),
+          sourceIP:     cand.ip,
+          sourceFadeMs: 380,
+          lifterEl:     priestEl
+        }, done);
       } else {
         done();                                            // Mummy simply appears, as before
       }
@@ -3848,9 +3886,30 @@
 
     var pick = hand[Math.floor(Math.random() * hand.length)];
 
+    /* Where the judgment card rises FROM — captured before discardFromHand removes
+       it. The opponent's origin is its face-down hand strip, but the flyer itself is
+       built from the card definition, so the judgment is shown FACE UP for either
+       side: a card leaving hand for public judgment is public. */
+    var originEl = null;
+    if (owner === 'player') {
+      var pHand = document.getElementById('battle-player-hand');
+      originEl = pHand && pHand.querySelector('.battle-hand-card[data-id="' + pick + '"]');
+    } else {
+      var oHand = document.getElementById('battle-opp-hand');
+      var backs = oHand && oHand.querySelectorAll('.battle-card-back');
+      originEl = (backs && backs.length) ? backs[backs.length - 1] : null;
+    }
+
     function afterDiscard(discardedId) {
       // No entry → the card came BACK (Jesus) and was never really discarded.
       var entry = findDiscardEntry(owner, discardedId);
+      var destSlotEl = null, balanced = false, fallLeft = false;
+      var srcIP = entry ? entry.ip : null, srcCC = entry ? entry.cc : null;
+      if (entry) {
+        balanced = (entry.ip === entry.cc);
+        // The scale tips toward the HEAVIER stat: CC badge is top-left, IP top-right.
+        fallLeft = (entry.cc > entry.ip);
+      }
       if (entry && entry.ip === entry.cc) {            // the heart balances → resurrect
         /* DESTINATION IS A RANDOM LOCATION, not Book's own — the scatter is the
            point of the card. randomOtherOpenLoc with a null exclusion is exactly
@@ -3862,14 +3921,50 @@
            DISCARD PILE, still revivable later by a Priest. The discard itself
            already happened and is never undone. */
         var dest = randomOtherOpenLoc(owner, null);
-        if (dest && createMummy(owner, dest.id, discardedId, entry.ip, entry.cc)) {
-          popDiscard(owner, entry);
+        if (dest) {
+          var dSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
+          var dBefore = (dSlots[dest.id] || []).slice();       // identity snapshot
+          if (createMummy(owner, dest.id, discardedId, entry.ip, entry.cc)) {
+            popDiscard(owner, entry);
+            // The slot the Mummy REALLY landed in, by object identity — that is
+            // where the glide must fly to, so shown destination == actual spawn.
+            var dIdx = -1;
+            (dSlots[dest.id] || []).forEach(function (sd2, i) {
+              if (sd2 && dBefore.indexOf(sd2) === -1) dIdx = i;
+            });
+            if (dIdx !== -1) destSlotEl = getSlotEl(owner, dest.id, dIdx);
+          }
         }
+        // Nowhere open → resurrection fizzles; the card stays in the pile,
+        // still Priest-revivable. balanced stays true, so the judgment still
+        // levels out — it simply has no slot to glide into.
       }
-      done();
+
+      /* STATE IS ALREADY DONE — discard, pile entry, qualification, and the spawn
+         at the random destination with frozen stats all happened above. The
+         judgment below only visualises it: the face is the card actually
+         discarded, `balanced` is the real qualification, `fallLeft` is the real
+         heavier stat, and destSlotEl is the slot really spawned into. */
+      var rfx = window.SOG && SOG.RevealFx;
+      if (rfx && typeof rfx.bookJudgment === 'function' && entry) {
+        rfx.bookJudgment(originEl, wrapSourceFace(discardedId, srcCC), {
+          balanced:   balanced && !!destSlotEl,
+          fallLeft:   fallLeft,
+          destSlotEl: destSlotEl,
+          wrapSfx:    wrapSfxFor(discardedId),
+          ghostSfx:   'sfx/bookofthedeadghost.mp3',
+          sourceCard: wrapSourceFace(discardedId, srcCC),
+          sourceIP:   srcIP,
+          boardEl:    document.getElementById('battle-board')
+        }, done);
+      } else {
+        done();                                        // no flourish → instant, as before
+      }
     }
 
-    discardFromHand(owner, pick, function () { afterDiscard(pick); }, { animate: true });
+    // NOT { animate: true }: Anim.cardDiscarded's rise-and-fade would fight the
+    // judgment, which owns this card's exit from the hand.
+    discardFromHand(owner, pick, function () { afterDiscard(pick); });
   }
 
   var CARD_ABILITIES = {
