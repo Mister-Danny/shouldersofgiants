@@ -450,18 +450,31 @@
         var bestDisc = pool.reduce(function (m, e) { return Math.max(m, revIP(e.cardId, e.ip)); }, 0);
         return 1 + Math.min(bestDisc, 6) * 0.4;            // scales with the best revive available
       }
-      case 66: { // Book of the Dead (Egypt) — RANDOM discard + weigh. The discard is no
-                 // longer chosen, so holding one IP==CC card is only a 1-in-handSize
-                 // shot at the resurrection, not a guarantee: value it by the ODDS
-                 // rather than by mere presence (the old `hasEq ? 1.5 : 0` priced a
-                 // pick the AI can no longer make). Location matters now too — the
-                 // Mummy spawns at BOOK'S location, so a full one can only fizzle.
+      case 66: { // Book of the Dead (Egypt) — RANDOM discard + weigh. The discard is not
+                 // chosen, so holding one IP==CC card is only a 1-in-handSize shot at
+                 // the resurrection, not a guarantee: value it by the ODDS rather than
+                 // by mere presence.
+                 //
+                 // DESTINATION IS NOW A RANDOM LOCATION, so the old "is BOOK'S location
+                 // full?" test is the wrong question — it rejected a perfectly good play
+                 // whenever Book's own column was tight, and accepted one when Book's
+                 // column had room but the side was otherwise full. What actually decides
+                 // a fizzle is whether ANY location of this side still has an open slot
+                 // once Book itself has taken one. Hence a BOARD-WIDE free count, minus
+                 // this turn's tentative plays, minus the slot Book will occupy.
+                 // This is location-INDEPENDENT by nature — every location scores the
+                 // same, which is correct: the destination is random, so where Book goes
+                 // no longer changes the odds.
         var bhand = side === 'opp' ? G.aiHand : G.playerHand;
         if (!bhand || !bhand.length) return 0;              // nothing to discard → inert
-        var bhere = (side === 'opp' ? G.aiSlots : G.playerSlots)[locId] || [];
-        var bTent = tentative.filter(function (p) { return p.locId === locId; }).length;
-        // Book occupies one slot itself; the Mummy needs another or it cannot land.
-        if ((bhere.filter(function (s) { return s; }).length + bTent) >= bhere.length - 1) return 0;
+        var bSlots = side === 'opp' ? G.aiSlots : G.playerSlots;
+        var freeTotal = 0;
+        G.locations.forEach(function (l) {
+          freeTotal += (bSlots[l.id] || []).filter(function (s) { return s === null; }).length;
+        });
+        freeTotal -= tentative.length;                      // this turn's not-yet-committed plays
+        freeTotal -= 1;                                     // the slot Book itself will fill
+        if (freeTotal < 1) return 0;                        // Mummy could not land anywhere → fizzle
         var eqCount = bhand.filter(function (id) { var c = CARDS.find(function (x) { return x.id === id; }); return c && c.ip === c.cc; }).length;
         return 1.5 * (eqCount / bhand.length);              // expected value of a random pick
       }

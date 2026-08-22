@@ -525,10 +525,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/imhotep@0.3x.jpg", locked: true
   },
   {
-    id: 66, name: "Book of the Dead", cc: 3, ip: 3,            // WIRED (Batch C: RANDOM discard + weigh → resurrect here if effective IP==CC)
+    id: 66, name: "Book of the Dead", cc: 3, ip: 3,            // WIRED (Batch C: RANDOM discard + weigh → resurrect at a RANDOM location if effective IP==CC)
     type: "Religious", type2: null, era: "Egypt",
     abilityName: "Weighing of the Heart",
-    ability: "At Once:\nRandomly discard a card in your hand. If its IP and CC are equal, it resurrects here.",
+    ability: "At Once:\nDiscard a card in your hand. If its IP and CC are equal, it resurrects to a random location.",
     image:   "images/cards/egyptcards/bookofthedead@0.5x.jpg",
     imageSm: "images/cards/egyptcards/bookofthedead@0.3x.jpg", locked: true
   },

@@ -3835,7 +3835,8 @@
          at once.
        • NO DOUBLE-PUSH — discardFromHand owns the pile write; this ability never
          pushes its own.
-     On a balanced weighing the Mummy spawns at BOOK'S OWN LOCATION ("here"), carrying
+     On a balanced weighing the Mummy spawns at a RANDOM location of the owner's with
+     an open slot (Book's own included), carrying
      the entry's frozen IP/CC, and the entry is consumed. If that location is FULL the
      resurrection fizzles but the discard still stands — the card stays in the pile,
      revivable by a Priest later. If IP != CC it simply stays discarded.
@@ -3850,9 +3851,20 @@
     function afterDiscard(discardedId) {
       // No entry → the card came BACK (Jesus) and was never really discarded.
       var entry = findDiscardEntry(owner, discardedId);
-      if (entry && entry.ip === entry.cc) {            // the heart balances → resurrect HERE
-        if (createMummy(owner, locId, discardedId, entry.ip, entry.cc)) popDiscard(owner, entry);
-        // location full → resurrection fizzles; the card remains in the discard pile
+      if (entry && entry.ip === entry.cc) {            // the heart balances → resurrect
+        /* DESTINATION IS A RANDOM LOCATION, not Book's own — the scatter is the
+           point of the card. randomOtherOpenLoc with a null exclusion is exactly
+           "any location of mine with an open slot": nothing equals null, so no
+           location is excluded, and Book's OWN location stays eligible (Book is
+           already sitting in one of its slots, so indexOf(null) accounts for it).
+           Reused rather than re-implemented so "open slot" has one definition.
+           NOWHERE OPEN → the resurrection fizzles and the card STAYS IN THE
+           DISCARD PILE, still revivable later by a Priest. The discard itself
+           already happened and is never undone. */
+        var dest = randomOtherOpenLoc(owner, null);
+        if (dest && createMummy(owner, dest.id, discardedId, entry.ip, entry.cc)) {
+          popDiscard(owner, entry);
+        }
       }
       done();
     }
