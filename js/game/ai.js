@@ -32,6 +32,20 @@
   var CAPITAL = SOG.state.CAPITAL;
   var helpers = SOG.game;
 
+  /* In-hand {ip,cc} as the badge shows them — the same handStats the abilities use.
+     Scorers that predict what an ability will pick MUST read this, or the prediction
+     and the ability disagree the moment a discount or an in-hand buff is live.
+     Falls back to the card definition only if abilities.js is somehow absent. */
+  function _handStats(owner, cardId) {
+    var hs = (window.SOG && SOG.abilities && SOG.abilities.handStats)
+      ? SOG.abilities.handStats(owner, cardId) : null;
+    if (hs) return hs;
+    var c = CARDS.find(function (x) { return x.id === cardId; });
+    return c ? { ip: c.ip, cc: c.cc } : null;
+  }
+  function _handIP(owner, cardId) { var h = _handStats(owner, cardId); return h ? h.ip : 0; }
+  var _side = function (side) { return side === 'opp' ? 'opp' : 'player'; };
+
   /* ═══════════════════════════════════════════════════════════════
      AI SELECTION  (per-turn card play)
   ═══════════════════════════════════════════════════════════════ */
@@ -403,17 +417,22 @@
                  // way Rosetta (58) and Priest (71) below report a dead spot.
                  // `mine` is the owner's slots at locId; tentative plays here count
                  // because Papyrus reveals last (see _giantRevealOrder). Excludes self.
+        /* Rank board targets by EFFECTIVE IP, not the printed value — these cards
+           are on the board, where effectiveIP is authoritative. Reading the
+           definition undervalued exactly the targets Papyrus most wants: a grown
+           Megalith/Obelisk, or anything sitting under a live aura.
+           Tentative plays are still in hand, so they use the hand truth. */
         var bestIP = 0;
         (mine || []).forEach(function (s) {
           if (s && s.revealed && s.cardId !== 54) {
-            var cc = CARDS.find(function (x) { return x.id === s.cardId; });
-            if (cc && cc.ip > bestIP) bestIP = cc.ip;
+            var eff = helpers.effectiveIP ? helpers.effectiveIP(s) : (s.ip || 0);
+            if (eff > bestIP) bestIP = eff;
           }
         });
         tentative.forEach(function (p) {
           if (p.cardId === 54 || p.locId !== locId) return;
-          var cc = CARDS.find(function (x) { return x.id === p.cardId; });
-          if (cc && cc.ip > bestIP) bestIP = cc.ip;
+          var tip = _handIP(_side(side), p.cardId);
+          if (tip > bestIP) bestIP = tip;
         });
         if (bestIP === 0) return -1;        // nothing to copy HERE → whiffs
         return Math.min(bestIP, 5) * 0.4;   // a 5-IP prior play here → +2
@@ -475,7 +494,15 @@
         freeTotal -= tentative.length;                      // this turn's not-yet-committed plays
         freeTotal -= 1;                                     // the slot Book itself will fill
         if (freeTotal < 1) return 0;                        // Mummy could not land anywhere → fizzle
-        var eqCount = bhand.filter(function (id) { var c = CARDS.find(function (x) { return x.id === id; }); return c && c.ip === c.cc; }).length;
+        /* Qualify on EFFECTIVE values — the ability weighs the frozen pile entry
+           (handStats at discard time), so counting printed ip===cc predicted a
+           different qualification set than the ability computes: a card buffed or
+           discounted into balance was missed, one buffed out of it was counted. */
+        var bSide   = _side(side);
+        var eqCount = bhand.filter(function (id) {
+          var hs = _handStats(bSide, id);
+          return hs && hs.ip === hs.cc;
+        }).length;
         return 1.5 * (eqCount / bhand.length);              // expected value of a random pick
       }
       default:
@@ -1285,7 +1312,7 @@
 
     _serfClearAllStubs();                  // defensive: no stale stubs
     var _handIPavg = hand.length
-      ? hand.reduce(function (s, id) { var c = _serfCardOf(id); return s + (c ? c.ip : 0); }, 0) / hand.length : 2;
+      ? hand.reduce(function (s, id) { return s + _handIP('opp', id); }, 0) / hand.length : 2;
     var plays = [], staged = [], targetLocs = lastTurn ? _serfTargetLocs(_handIPavg) : null;
     var rng = function (n) { return Math.floor(Math.random() * n); };
 
@@ -1658,8 +1685,10 @@
         }
         // Self-sacrifice setup: seed a cheap low-IP card at the location Hammurabi
         // WILL strike (its net-best loc) so a throwaway is waiting there next turn.
-        var c = _serfCardOf(cardId);
-        if (c && c.cc <= 2 && c.ip <= 2) {
+        // Bucket on EFFECTIVE values: a discounted or in-hand-buffed card belongs in
+        // the bucket the player sees on its badge, not the one its print implies.
+        var _hs = _handStats('opp', cardId);
+        if (_hs && _hs.cc <= 2 && _hs.ip <= 2) {
           var target = _giantBestHamLoc().loc;
           if (target == null) target = _giantFindAiCardLoc(47);   // or beside a Hammurabi already down
           if (target != null && legalLocs.indexOf(target) !== -1) return target;
@@ -1711,10 +1740,12 @@
           var big = _giantLocWithBiggestAiCard(legalLocs);
           if (big != null) return big;
         }
-        var c = _serfCardOf(cardId);
-        if (c) {
-          if (c.ip <= 2 && aiHome != null && legalLocs.indexOf(aiHome) !== -1) return aiHome;             // cheap → fill home
-          if (c.ip >= 4 && contested != null && legalLocs.indexOf(contested) !== -1) return contested;    // premium → forward
+        var _hs2 = _handStats('opp', cardId);
+        if (_hs2) {
+          // Effective hand IP, so a Cuneiform-boosted card is routed as the premium
+          // it actually is rather than as its printed value.
+          if (_hs2.ip <= 2 && aiHome != null && legalLocs.indexOf(aiHome) !== -1) return aiHome;          // cheap → fill home
+          if (_hs2.ip >= 4 && contested != null && legalLocs.indexOf(contested) !== -1) return contested; // premium → forward
         }
         return null;
       }
@@ -1853,7 +1884,7 @@
 
     _serfClearAllStubs();
     var _handIPavg = hand.length
-      ? hand.reduce(function (s, id) { var c = _serfCardOf(id); return s + (c ? c.ip : 0); }, 0) / hand.length : 2;
+      ? hand.reduce(function (s, id) { return s + _handIP('opp', id); }, 0) / hand.length : 2;
     var plays = [], targetLocs = positional ? _serfTargetLocs(_handIPavg) : null;
     var rng = function (n) { return Math.floor(Math.random() * n); };
 

@@ -1564,10 +1564,17 @@
 
   function abilityFrancisOfAssisi(owner, locId, done) {
     var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    /* Highest cost AS SHOWN ON THE BADGE. Type still comes from the definition —
+       that never varies — but the cost must be the effective one: the Levant's
+       RELIGIOUS_DISCOUNT reduces exactly the type Francis is choosing among, so a
+       printed-cc comparison could contradict every badge on screen. */
     var best = null, bestCC = -1;
     hand.forEach(function (id) {
-      var c = CARDS.find(function (x) { return x.id === id; });
-      if (c && c.type === 'Religious' && c.cc > bestCC) { bestCC = c.cc; best = id; }
+      var c  = CARDS.find(function (x) { return x.id === id; });
+      if (!c || c.type !== 'Religious') return;
+      var hs = handStats(owner, id);
+      var cc = hs ? hs.cc : c.cc;
+      if (cc > bestCC) { bestCC = cc; best = id; }
     });
     if (best === null) { done(); return; }
     if (owner === 'player') {
@@ -1884,10 +1891,15 @@
   function abilityPriest(owner, locId, done) {
     var hand = owner === 'player' ? G.playerHand : G.aiHand;
     if (hand.length === 0) { done(); return; }
+    /* Lowest cost AS SHOWN ON THE BADGE (handStats -> effectiveCost), not the
+       printed cc. Reading the definition let the Priest discard a card showing 2
+       while ignoring one showing 1 whenever a discount was live (Levant Religious,
+       Kente Cultural, Henry Exploration, a Nebuchadnezzar or Ramses stamp).
+       Ties still go to the earliest card in hand (strict <). */
     var lowestCC = Infinity, lowestId = null;
     hand.forEach(function (id) {
-      var c = CARDS.find(function (x) { return x.id === id; });
-      if (c && c.cc < lowestCC) { lowestCC = c.cc; lowestId = id; }
+      var hs = handStats(owner, id);
+      if (hs && hs.cc < lowestCC) { lowestCC = hs.cc; lowestId = id; }
     });
     if (lowestId === null) { done(); return; }
     // Presentation only: reuse the shared rise-and-disappear (Anim.cardDiscarded)
@@ -4301,6 +4313,9 @@
     staysDead:                 staysDead,         // shared pile-eligibility predicate
     consumePendingIPBuff:      consumePendingIPBuff,  // Egypt Farmer (55) — reveal-pipeline hook
     effectiveCC:               effectiveCC,       // CC honoring a Mummy's inherited sd.cc
+    handStats:                 handStats,         // {ip,cc} for a card SITTING IN HAND — the badge truth,
+                                                  // shared with the AI scorers so a prediction and the
+                                                  // ability it predicts cannot disagree
     /* Shared ability helpers (callable from game.js if needed) */
     isKenteProtected:          isKenteProtected,
     isSphinxProtected:         isSphinxProtected,

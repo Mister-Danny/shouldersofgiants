@@ -118,7 +118,11 @@ SOG.NarmerBattle = (function () {
         if (!x) return;
         ownIP[id] += (x.ip || 0) + (x.ipMod || 0) + (x.contMod || 0);
         topIP[id] = Math.max(topIP[id], (x.ip || 0) + (x.ipMod || 0));   // new Pyramid grabs any type
-        if (POLITICAL_IDS[x.cardId]) { polCount[id]++; polIP[id] = Math.max(polIP[id], x.ip || 0); }
+        // polIP over BOARD cards: effective, matching ownIP/topIP directly above.
+        if (POLITICAL_IDS[x.cardId]) {
+          polCount[id]++;
+          polIP[id] = Math.max(polIP[id], (x.ip || 0) + (x.ipMod || 0) + (x.contMod || 0));
+        }
         // Economic count feeds the reworked Scribe (56), which pays out per
         // Economic card here — read from the card def so it tracks any retype.
         var xc = _cardOf(x.cardId);
@@ -147,18 +151,29 @@ SOG.NarmerBattle = (function () {
        heavy "save the premium pieces" penalty; advance = IP plus the Egypt
        synergy biases. All biases are LIGHT (a few points) so play stays
        beatable; ties resolve toward lower CC. */
+    /* Effective in-hand {ip,cc} — the badge truth, shared with the abilities. */
+    function _eff(id, c, locId) {
+      var hs = (window.SOG && SOG.abilities && SOG.abilities.handStats)
+        ? SOG.abilities.handStats('opp', id) : null;
+      return { ip: hs ? hs.ip : (c ? c.ip : 0), cc: aiCost(c, locId) };
+    }
+
     function scoreCard(id, locId, fillingHome) {
       var c = _cardOf(id);
       if (!c || aiCost(c, locId) > capital) return null;   // affordability honors discounts
+      /* Score on EFFECTIVE values. Affordability above already honoured discounts, so
+         scoring on the printed numbers meant this function rejected a card it could
+         not afford by one rule and then ranked it by another. */
+      var e = _eff(id, c, locId);
       var s;
       if (fillingHome) {
-        s = 10 - c.cc * 3 + c.ip * 0.5;
+        s = 10 - e.cc * 3 + e.ip * 0.5;
         if (PREMIUM_IDS[id]) s -= 8;      // hold the front-line pieces back…
         if (id === 69) s += 1;            // Chariots early → its once-per-battle move stays available
         if (id === 55) s += 1.5;          // Farmer: the pending +1 IP compounds while walling up
         if (id === 26) s += 1;            // Tool: draw keeps the fill going
       } else {
-        s = c.ip - c.cc * 0.1;
+        s = e.ip - e.cc * 0.1;
         if (id === 57) s += topIP[locId] > 0 ? topIP[locId] : -3;          // Pyramid (At Once): grabs the last-played card's IP here; dead alone
         if (id === 62) s += polCount[locId] > 0 ? polCount[locId] : -2;     // Hieroglyphics: +1 per Political here (aura halved); dead alone
         if (id === 51) s += (locId === LOC_MEMPHIS ? 2 : 0);               // Narmer: center seat spans the whole board's averaging
@@ -174,9 +189,10 @@ SOG.NarmerBattle = (function () {
       for (var i = 0; i < hand.length; i++) {
         var sc = scoreCard(hand[i], locId, fillingHome);
         if (sc === null) continue;
-        var c = _cardOf(hand[i]);
-        if (sc > bestScore || (sc === bestScore && c.cc < bestCC)) {
-          best = hand[i]; bestScore = sc; bestCC = c.cc;
+        var c   = _cardOf(hand[i]);
+        var eCC = aiCost(c, locId);          // tie-break on the badge cost, not the print
+        if (sc > bestScore || (sc === bestScore && eCC < bestCC)) {
+          best = hand[i]; bestScore = sc; bestCC = eCC;
         }
       }
       return best;
@@ -193,9 +209,16 @@ SOG.NarmerBattle = (function () {
       plays.push({ cardId: cardId, locId: locId });
       capital -= aiCost(card, locId);   // spend the discounted cost
       free[locId]--; count[locId]++;
-      ownIP[locId] += card.ip;
-      topIP[locId] = Math.max(topIP[locId], card.ip);
-      if (POLITICAL_IDS[cardId]) { polCount[locId]++; polIP[locId] = Math.max(polIP[locId], card.ip); }
+      /* Project the staged play at its EFFECTIVE in-hand IP. aiCost above already
+         uses effectiveCost, so this function had correct CC and printed IP side by
+         side — a Cuneiform-boosted or Papyrus-copied card was projected as weaker
+         than it would actually land. */
+      var _sip = (window.SOG && SOG.abilities && SOG.abilities.handStats)
+        ? (SOG.abilities.handStats('opp', cardId) || {}).ip : null;
+      if (_sip == null) _sip = card.ip;
+      ownIP[locId] += _sip;
+      topIP[locId] = Math.max(topIP[locId], _sip);
+      if (POLITICAL_IDS[cardId]) { polCount[locId]++; polIP[locId] = Math.max(polIP[locId], _sip); }
       hand.splice(hand.indexOf(cardId), 1);
     }
     log('AI plays: ' + JSON.stringify(plays) + ' (capital left ' + capital + ')');
@@ -227,7 +250,15 @@ SOG.NarmerBattle = (function () {
     }
     if (from === LOC_UPPER_EGYPT) {
       var homeFull  = !openAt(LOC_UPPER_EGYPT);
-      var canRefill = (G.aiHand || []).some(function (id) { var c = _cardOf(id); return c && c.cc <= 2; });
+      // "Can I rebuild the wall?" must ask what a refill would actually COST, and
+      // affordability everywhere else in this file is the discounted cost.
+      var canRefill = (G.aiHand || []).some(function (id) {
+        var c = _cardOf(id);
+        if (!c) return false;
+        var cc = (window.SOG && SOG.board && SOG.board.effectiveCost)
+          ? SOG.board.effectiveCost(c, LOC_UPPER_EGYPT, 'ai') : c.cc;
+        return cc <= 2;
+      });
       if (!homeFull || !canRefill) return null;   // don't break a wall we can't rebuild
       if (cnt(LOC_MEMPHIS) < 2 && openAt(LOC_MEMPHIS)) return LOC_MEMPHIS;
       if (openAt(LOC_LOWER_EGYPT) && playerRevealedAt(LOC_LOWER_EGYPT)) return LOC_LOWER_EGYPT;
