@@ -78,7 +78,7 @@
       <img id="home-char-female" class="home-adventurer" draggable="false"
            src="images/metaworld/character sprites/female/adventurer-female-standing.png">
       <img id="home-char-male"   class="home-adventurer" draggable="false"
-           src="images/metaworld/character sprites/female/adventurer-female-standing.png">
+           src="images/metaworld/character sprites/male_sprite/adventurer-male-idle-01.png">
       <!-- Secret-door rectangle + iris wipe overlay, used after a character is picked -->
       <div id="home-secret-door"></div>
       <div id="home-iris-wipe"></div>
@@ -1741,6 +1741,7 @@
   <!-- Overworld map layout (node positions, art, walk paths) for every region.
        MUST load before overworld.js, which reads it synchronously at init.
        Written by tools/map-editor — see that file's header before hand-editing. -->
+  <script src="js/adventurers.js"></script>  <!-- SOG.Adventurers: playable-character sprite/portrait registry; must precede overworld.js/home.js/sog-adventure-hud.js -->
   <script src="data/map-data.js"></script>
   <script src="data/level-data.js"></script>  <!-- window.SOG_LEVEL_DATA: data-driven battle/market levels keyed by node id (level-editor spike) -->
   <script src="js/overworld.js"></script>

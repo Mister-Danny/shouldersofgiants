@@ -873,7 +873,7 @@ SOG.NarmerBattle = (function () {
                   settings: { selectPlays: narmerSelectPlays, chariotMoveDecision: narmerChariotMove } },
       presentation: {
         bodyClass:      'narmer-battle',
-        allyAvatar:     'images/portraits/femaleexplorer%20portrait.jpeg',
+        allyAvatar:     'player',   // selected adventurer, resolved at render time
         opponentAvatar: 'images/portraits/narmerportrait.jpeg',
         popAlly:        true
       },

@@ -52,7 +52,7 @@ SOG.HangingGardensBattle = (function () {
 
   var HG_PRESENTATION = {
     bodyClass:      'hanging-gardens-battle',
-    allyAvatar:     'images/portraits/femaleexplorer%20portrait.jpeg',
+    allyAvatar:     'player',   // selected adventurer, resolved at render time
     opponentAvatar: NEB_BUBBLE_PORTRAIT,
     popAlly:        true
   };

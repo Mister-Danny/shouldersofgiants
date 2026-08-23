@@ -325,7 +325,7 @@ SOG.HatshepsutBattle = (function () {
                   settings: { selectPlays: hatshepsutSelectPlays } },
       presentation: {
         bodyClass:      'hatshepsut-battle',
-        allyAvatar:     'images/portraits/femaleexplorer%20portrait.jpeg',
+        allyAvatar:     'player',   // selected adventurer, resolved at render time
         opponentAvatar: 'images/portraits/hatshepsutportrait.jpeg',
         popAlly:        true
       },

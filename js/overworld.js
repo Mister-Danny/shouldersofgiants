@@ -576,7 +576,8 @@ var Overworld = (function () {
 
      Net effect: the editor owns the world's shape and its unlock sequence;
      this file owns what actually happens. ────── */
-  var SPRITE_PATH = 'images/metaworld/character sprites/female/';
+  /* Sprite paths + per-character frame counts live in SOG.Adventurers;
+     _char() resolves the selected character lazily (see Animation timing). */
 
   /* Pre-exit hooks. Not gates — gates are data now. */
   var EXIT_BEHAVIOUR = {
@@ -676,8 +677,12 @@ var Overworld = (function () {
   var MAP_FRAME_MS  = 1000;   // 1 s per map-reading frame
   var IDLE_DELAY_MS = 15000;
 
-  var FRAME_COUNT = { right: 6, left: 6, up: 8, down: 4 };
-  var MAP_FRAMES  = 9;
+  /* The selected playable character (frame counts, paths, standing pose).
+     Resolved lazily rather than cached: the player can go back to the home
+     screen and pick the other adventurer without a page reload. Frame RATES
+     above are shared by all characters — a longer sequence (e.g. the male's
+     12-frame map idle vs the female's 9) simply runs longer. */
+  function _char() { return SOG.Adventurers.active(); }
 
   /* ── Footstep SFX ──────────────────────────────────────────── */
   var footstepsHowl = null;
@@ -773,9 +778,8 @@ var Overworld = (function () {
   }
 
   function setWalkFrame(dir, frame) {
-    var num = frame < 10 ? '0' + frame : '' + frame;
     var base = (dir === 'left') ? 'right' : dir;
-    charEl.src = SPRITE_PATH + 'adventurer-female-' + base + '-' + num + '.png';
+    charEl.src = SOG.Adventurers.frameUrl(_char(), base, frame);
     charEl.style.transform = (dir === 'left')
       ? 'translate(-50%, -100%) scaleX(-1)'
       : 'translate(-50%, -100%)';
@@ -786,7 +790,8 @@ var Overworld = (function () {
     var frame = 1;
     setWalkFrame(dir, frame);
     walkInterval = setInterval(function () {
-      var fc = FRAME_COUNT[dir] || 4;
+      var base = (dir === 'left') ? 'right' : dir;
+      var fc = _char().walk[base] || 4;
       frame = (frame % fc) + 1;
       setWalkFrame(dir, frame);
     }, WALK_FRAME_MS);
@@ -794,7 +799,7 @@ var Overworld = (function () {
 
   function setStanding() {
     if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
-    charEl.src = SPRITE_PATH + 'adventurer-female-standing.png';
+    charEl.src = SOG.Adventurers.standingUrl(_char());
     charEl.style.transform = 'translate(-50%, -100%)';
   }
 
@@ -965,13 +970,13 @@ var Overworld = (function () {
   }
   function playMapAnim(loops, onDone) {
     var loop = 0, frame = 1;
+    var ch = _char(), mapIdle = ch.mapIdle;
     function step() {
       if (isMoving || isTransitioning) { if (onDone) onDone(); return; }
-      var num = frame < 10 ? '0' + frame : '' + frame;
-      charEl.src = SPRITE_PATH + 'adventurer-female-map-' + num + '.png';
+      charEl.src = SOG.Adventurers.frameUrl(ch, mapIdle.seq, frame);
       charEl.style.transform = 'translate(-50%, -100%)';
       frame++;
-      if (frame > MAP_FRAMES) { frame = 1; loop++; if (loop >= loops) { if (onDone) onDone(); return; } }
+      if (frame > mapIdle.frames) { frame = 1; loop++; if (loop >= loops) { if (onDone) onDone(); return; } }
       idleRoutineTimer = setTimeout(step, MAP_FRAME_MS);
     }
     step();
@@ -980,7 +985,7 @@ var Overworld = (function () {
     var loop = 0, ticks = 0, TICKS_PER_LOOP = 8;
     function step() {
       if (isMoving || isTransitioning) { if (onDone) onDone(); return; }
-      charEl.src = SPRITE_PATH + 'adventurer-female-standing.png';
+      charEl.src = SOG.Adventurers.standingUrl(_char());
       charEl.style.transform = 'translate(-50%, -100%)';
       ticks++;
       if (ticks >= TICKS_PER_LOOP) { ticks = 0; loop++; if (loop >= loops) { if (onDone) onDone(); return; } }
@@ -991,17 +996,11 @@ var Overworld = (function () {
 
   /* ── Load a map (swap image, build overlay, place character) ── */
   // Every character sprite frame the overworld can swap in (walk cycles, the
-  // map-reading idle, and the standing frames). Built from SPRITE_PATH so it tracks
-  // the naming used by setWalkFrame / the idle routine. Preloaded on map load.
+  // map-reading idle, and the standing pose). Delegated to SOG.Adventurers so
+  // it always tracks the selected character's naming and frame counts.
+  // Preloaded on map load. ('left' reuses the 'right' frames, scaleX -1.)
   function _walkFrameUrls() {
-    var P = SPRITE_PATH, out = [], i;
-    var dirs = { down: 4, right: 6, up: 8 };   // 'left' reuses the 'right' frames (scaleX -1)
-    for (var d in dirs) { for (i = 1; i <= dirs[d]; i++) out.push(P + 'adventurer-female-' + d + '-' + (i < 10 ? '0' + i : i) + '.png'); }
-    for (i = 1; i <= 6; i++) out.push(P + 'adventurer-female-idle-' + (i < 10 ? '0' + i : i) + '.png');
-    for (i = 1; i <= 9; i++) out.push(P + 'adventurer-female-map-'  + (i < 10 ? '0' + i : i) + '.png');
-    out.push(P + 'adventurer-female-standing.png');
-    out.push(P + 'adventurer-female-standing-backward.png');
-    return out;   // 35 frames
+    return SOG.Adventurers.allFrameUrls(_char());
   }
 
   // Start (or keep) the overworld track for the current map. Idempotent via

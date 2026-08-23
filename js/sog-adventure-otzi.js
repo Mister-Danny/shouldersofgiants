@@ -234,7 +234,7 @@ SOG.OtziBattle = (function () {
     presentation: {
       bodyClass:        'otzi-battle',
       preCoachingClass: 'otzi-pre-deal',
-      allyAvatar:       'images/portraits/femaleexplorer%20portrait.jpeg',
+      allyAvatar:       'player',   // selected adventurer, resolved at render time
       opponentAvatar:   'images/Otzi.jpg',
       popAlly:          true
     },

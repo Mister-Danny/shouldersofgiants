@@ -52,7 +52,7 @@ SOG.HammurabiBattle = (function () {
   //    CSS note below) and does NOT hide the hand / CC overlays.
   var HAMMURABI_PRESENTATION = {
     bodyClass:      'hammurabi-battle',
-    allyAvatar:     'images/portraits/femaleexplorer%20portrait.jpeg',
+    allyAvatar:     'player',   // selected adventurer, resolved at render time
     opponentAvatar: 'images/portraits/hammurabi.jpg',
     popAlly:        true
   };

@@ -25,11 +25,10 @@ var HomeFlow = (function () {
   var KEY_INTRO_SEEN        = 'sog_intro_seen';
   function introSeen() { return localStorage.getItem(KEY_INTRO_SEEN) === 'true'; }
 
-  var SPRITE_PATH  = 'images/metaworld/character sprites/female/';
-
-  /* Walk animation constants (same as overworld) */
+  /* Walk animation frame rate (same as overworld). Sprite paths and
+     per-character frame counts live in SOG.Adventurers — each select-screen
+     <img> is stamped with its character id (el._advId) at init. */
   var WALK_FRAME_MS = 125;
-  var FRAME_COUNT   = { right: 6, left: 6, up: 8, down: 4 };
 
   /* ── Elements ──────────────────────────────────────────────── */
   var screenHomeEl, homeContentEl, adventureStageEl;
@@ -208,6 +207,8 @@ var HomeFlow = (function () {
     subtitleAdventurerEl = document.getElementById('home-subtitle-adventurer');
     charFemaleEl         = document.getElementById('home-char-female');
     charMaleEl           = document.getElementById('home-char-male');
+    if (charFemaleEl) charFemaleEl._advId = 'female';
+    if (charMaleEl)   charMaleEl._advId   = 'male';
     backBtn              = document.getElementById('home-adventure-back');
     doorEl               = document.getElementById('home-secret-door');
     irisEl               = document.getElementById('home-iris-wipe');
@@ -651,7 +652,9 @@ var HomeFlow = (function () {
     var frame = 1;
     setWalkFrame(el, dir, frame);
     var iv = setInterval(function () {
-      var fc = FRAME_COUNT[dir] || 4;
+      var ch   = SOG.Adventurers.get(el._advId);
+      var base = (dir === 'left') ? 'right' : dir;
+      var fc   = ch.walk[base] || 4;
       frame = (frame % fc) + 1;
       setWalkFrame(el, dir, frame);
     }, WALK_FRAME_MS);
@@ -660,9 +663,8 @@ var HomeFlow = (function () {
   }
 
   function setWalkFrame(el, dir, frame) {
-    var num  = frame < 10 ? '0' + frame : '' + frame;
     var base = (dir === 'left') ? 'right' : dir;
-    el.src = SPRITE_PATH + 'adventurer-female-' + base + '-' + num + '.png';
+    el.src = SOG.Adventurers.frameUrl(SOG.Adventurers.get(el._advId), base, frame);
     el.style.transform = (dir === 'left')
       ? 'translate(-50%, 0) scaleX(-1)'
       : 'translate(-50%, 0)';
@@ -674,7 +676,7 @@ var HomeFlow = (function () {
       el._walkInterval = null;
     }
     if (el) {
-      el.src = SPRITE_PATH + 'adventurer-female-standing.png';
+      el.src = SOG.Adventurers.standingUrl(SOG.Adventurers.get(el._advId));
       // Keep transform but remove scaleX flip so character faces forward
       el.style.transform = 'translate(-50%, 0)';
     }
@@ -727,6 +729,8 @@ var HomeFlow = (function () {
   /* ── Adventurer picked — door + iris + video + overworld ──── */
   function onAdventurerPicked(choice) {
     localStorage.setItem(KEY_ADVENTURER, choice);
+    // No portrait push needed: every player-portrait surface pulls the
+    // selection from SOG.Adventurers when it next renders.
 
     // Fade home music out now — before the door opens and the character walks.
     // 1.5s fade so it winds down over the door-expand + pause phase.
@@ -1028,6 +1032,8 @@ var HomeFlow = (function () {
       if (snap.selectedAdventurer) localStorage.setItem(KEY_ADVENTURER, snap.selectedAdventurer);
       else localStorage.removeItem(KEY_ADVENTURER);
     } catch (e) {}
+    // No portrait re-sync needed: portrait surfaces pull the selection
+    // from SOG.Adventurers when they next render.
   }
 
   return {

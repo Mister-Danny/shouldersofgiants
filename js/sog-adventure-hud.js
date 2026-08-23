@@ -40,6 +40,8 @@ SOG.HUD = (function () {
   ══════════════════════════════════════════════════════════════ */
 
   var CHARACTERS = {
+    // Explorer portrait is a female-default; _refreshPlayerPortrait pulls the
+    // selected adventurer's portrait over it at init and on every show().
     explorer:    { portrait: 'images/portraits/femaleexplorer portrait.jpeg', bleepHz: 520, side: 'player' },
     lucy:        { portrait: 'images/portraits/lucy.jpeg',                     bleepHz: 480, side: 'npc'    },
     neanderthal: { portrait: 'images/portraits/neanderthalportait.jpeg', bleepHz: 160, side: 'npc' },
@@ -183,6 +185,7 @@ SOG.HUD = (function () {
     }
 
     _wirePortrait();
+    _refreshPlayerPortrait();
     _wireUtilButtons();
     _setupShowScreenHook();
 
@@ -282,6 +285,18 @@ SOG.HUD = (function () {
     });
   }
 
+  /* Pull the selected adventurer's portrait into the corner slot and the
+     dialogue registry's explorer entry. Called at init and on every show(),
+     so a selection made while the HUD is hidden (the home screen) is picked
+     up the next time the HUD renders — nothing pushes to us. */
+  function _refreshPlayerPortrait() {
+    if (!window.SOG || !SOG.Adventurers) return;
+    var src = SOG.Adventurers.portrait();
+    CHARACTERS.explorer.portrait = src;
+    var img = _playerPortEl && _playerPortEl.querySelector('img');
+    if (img) img.src = src;
+  }
+
   function _wireUtilButtons() {
     // Card-back deck element — merges the old deck slot + Deck Builder button.
     // Clicking it opens the solo deck builder (same path battlelobby uses).
@@ -376,6 +391,12 @@ SOG.HUD = (function () {
       if (_hudEl) _hudEl.style.display = '';
       if (id === 'screen-overworld') {
         refreshDecks();
+        // The HUD becomes visible on this transition via the data-screen CSS
+        // alone — show() is only called on battle-RETURN paths — so this is
+        // the corner portrait's first render of a run. Pull the selected
+        // adventurer here or a new run shows the previous run's face until
+        // its first battle (module state persists across runs by design).
+        _refreshPlayerPortrait();
         // Resume the current map's context soundtrack on EVERY return to the
         // overworld (battles stop/replace it). Universal hook so no return path is
         // missed (prehistory/Ötzi return via bare showScreen, etc.); idempotent.
@@ -807,6 +828,7 @@ SOG.HUD = (function () {
     if (!_hudEl) return;
     _hudEl.style.display = 'flex';
     refreshDecks();
+    _refreshPlayerPortrait();
     log('show()');
   }
 
@@ -829,7 +851,11 @@ SOG.HUD = (function () {
 
      presentation = {
        opponentAvatar: <img src>,    // required to set the opponent frame
-       allyAvatar:     <img src>,    // required to set the ally frame
+       allyAvatar:     <img src>,    // required to set the ally frame.
+                                     // 'player' = the SELECTED adventurer's
+                                     // portrait, resolved at render time
+                                     // (SOG.Adventurers) — use it for every
+                                     // battle where the player is the ally.
        popAlly:        <bool>        // add .adv-active so the ally avatar
                                      // animates in at apply time (Explorer
                                      // battles). Omit when the battle pops
@@ -847,6 +873,12 @@ SOG.HUD = (function () {
   function _setBattleAvatar(role, src) {
     var img = _battleAvatarFrameImg(role);
     if (!img || !src) return;
+    // 'player' (and any legacy hardcoded explorer path) means the SELECTED
+    // adventurer — resolved here, at render time, so every battle entry
+    // path shows the right face without knowing about selection.
+    if (window.SOG && SOG.Adventurers && SOG.Adventurers.isPlayerPortraitRef(src)) {
+      src = SOG.Adventurers.portrait();
+    }
     img.src = src;
     img.style.display        = '';   // un-hide if a prior onerror hid it
     img.style.objectPosition = '';   // use the CSS-default framing

@@ -55,7 +55,7 @@ window.SOG_LEVEL_DATA = {
 
       presentation: {
         bodyClass:              'sargon-battle',
-        allyAvatar:              'images/portraits/femaleexplorer%20portrait.jpeg',
+        allyAvatar:              'player',   // selected adventurer, resolved at render time
         opponentAvatar:          'images/portraits/sargonportrait.jpg',
         opponentBubblePortrait:  'images/portraits/sargonportrait.jpg',
         popAlly:                 true
@@ -181,7 +181,7 @@ window.SOG_LEVEL_DATA = {
 
       presentation: {
         bodyClass:              'ramses-battle',
-        allyAvatar:              'images/portraits/femaleexplorer%20portrait.jpeg',
+        allyAvatar:              'player',   // selected adventurer, resolved at render time
         opponentAvatar:          'images/portraits/ramsesIIportrait.jpeg',
         opponentBubblePortrait:  'images/portraits/ramsesIIportrait.jpeg',
         popAlly:                 true

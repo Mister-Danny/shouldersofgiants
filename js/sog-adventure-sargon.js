@@ -47,7 +47,7 @@ SOG.SargonBattle = (function () {
   //    so this plays with the normal capital-battle UI).
   var SARGON_PRESENTATION = {
     bodyClass:      'sargon-battle',
-    allyAvatar:     'images/portraits/femaleexplorer%20portrait.jpeg',
+    allyAvatar:     'player',   // selected adventurer, resolved at render time
     opponentAvatar: 'images/portraits/sargonportrait.jpg',
     popAlly:        true
   };
