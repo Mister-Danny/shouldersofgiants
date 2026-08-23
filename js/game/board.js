@@ -527,15 +527,11 @@
     if (card.cc === 5 &&
         G.locations.some(function (l) { return l.abilityKey === 'BABYLON_COST_5'; }))
       cost = Math.max(0, cost - 1);
-    // Imhotep (id 65) — "Ancient Engineering": -1 CC to the owner's SCIENTIFIC
-    // cards at ALL locations while a revealed Imhotep is on THIS owner's side
-    // anywhere (GLOBAL — was location-scoped). Layered like Babylon; owner-aware
-    // (a player Imhotep never discounts the AI, and vice versa).
-    if (card.type === 'Scientific' &&
-        G.locations.some(function (l) {
-          return slots[l.id] && slots[l.id].some(function (s) { return s && s.revealed && abilityIdOf(s) === 65; });
-        }))
-      cost = Math.max(0, cost - 1);
+    // (Imhotep (65) used to sit here with a global -1 CC to Scientific. He is now an
+    // At-Once that CREATES a Pyramid in hand, so there is no Scientific discount in
+    // the game any more — and none in refreshHandCostDisplays either. The two must
+    // always agree: the hand badge, the play charge and Book of the Dead's weighing
+    // all read this one function.)
     return cost;
   }
 
@@ -613,11 +609,27 @@
      SCORE / DISPLAY REFRESH
   ═══════════════════════════════════════════════════════════════ */
 
+  /* THE DISPLAYED IP of a revealed slot.
+     Normally just effectiveIP. While a flourish holds the slot (_ipDisplayHold),
+     it is the value that was on the badge when the hold began (_ipHeldAt) — so the
+     badge and the location total defer the SAME pending delta and arrive together
+     on the flourish's beat. Without this the score moved with the state while the
+     badge waited, and a location total climbed with no visible source.
+     STATE IS NEVER DELAYED: effectiveIP is still the truth, and every rule that
+     reads IP (scoring at end of turn, Pyramid's absorb, Book's weighing) goes
+     through effectiveIP, not this. This is a display function only.
+     Defensive fallback: a hold without a captured value shows the live number
+     rather than 0, so a mis-set flag can never zero a card out of the score. */
+  function displayedIP(s) {
+    if (s._ipDisplayHold && typeof s._ipHeldAt === 'number') return s._ipHeldAt;
+    return effectiveIP(s);
+  }
+
   function updateScores() {
     G.locations.forEach(function (loc) {
       var pIP = 0, aIP = 0;
-      G.playerSlots[loc.id].forEach(function (s) { if (s && s.revealed) pIP += effectiveIP(s); });
-      G.aiSlots[loc.id].forEach(    function (s) { if (s && s.revealed) aIP += effectiveIP(s); });
+      G.playerSlots[loc.id].forEach(function (s) { if (s && s.revealed) pIP += displayedIP(s); });
+      G.aiSlots[loc.id].forEach(    function (s) { if (s && s.revealed) aIP += displayedIP(s); });
       // Add per-location external boosts (e.g., Sargon's adjacent-location bonus)
       if (G.locationBoosts && G.locationBoosts[loc.id]) {
         G.locationBoosts[loc.id].player.forEach(function (b) { pIP += b.amount; });
@@ -638,8 +650,14 @@
           if (!s || !s.revealed) return;
           var slotEl = getSlotEl(owner, loc.id, si);
           if (!slotEl) return;
+          /* displayedIP, not effectiveIP: a flourish may OWN this badge for the
+             length of its beat (see above). Akhenaten (77) sets the hold while a
+             discard's source animation plays and clears it inside the ipBadgeSwap
+             that reveals the new total — badge and location score release on that
+             same beat. Same "state first, visibility deferred" contract the hand
+             flourishes use. */
           var ipEl = slotEl.querySelector('.db-overlay-ip');
-          if (ipEl) ipEl.textContent = effectiveIP(s);
+          if (ipEl) ipEl.textContent = displayedIP(s);
         });
       });
     });
@@ -681,6 +699,7 @@
     SOURCE_ID_MAP:         SOURCE_ID_MAP,
     effectiveCost:         effectiveCost,
     effectiveIP:           effectiveIP,
+    displayedIP:           displayedIP,
     isLocationPlayable:    isLocationPlayable,
     nextEventId:           nextEventId,
     addBonus:              addBonus,

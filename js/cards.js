@@ -430,7 +430,7 @@ const CARDS = [
   },
   {
     id: 54, name: "Papyrus", cc: 2, ip: 2,                      // WIRED (At Once: copy last-played card — with its permanent buffed state — to hand)
-    type: "Scientific", type2: null, era: "Egypt",             // (was "Technology" — dropped; Imhotep's Scientific discount now covers it)
+    type: "Scientific", type2: null, era: "Egypt",             // (was "Technology" — dropped; Scientific is the Egypt science type)
     abilityName: "For the Record",
     ability: "At Once:\nCreate a copy of the last card you played here and add it to your hand.",
     image:   "images/cards/egyptcards/papyrus@0.5x.jpg",
@@ -517,10 +517,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/sphinx@0.3x.jpg", locked: true
   },
   {
-    id: 65, name: "Imhotep", cc: 4, ip: 4,                      // WIRED (effectiveCost -1 Scientific GLOBAL)
+    id: 65, name: "Imhotep", cc: 4, ip: 4,                      // WIRED (At Once: creates a Pyramid (57) in hand)
     type: "Scientific", type2: null, era: "Egypt",
     abilityName: "Ancient Engineering",
-    ability: "Continuous:\nReduces the cost to play Scientific cards by -1 CC.",
+    ability: "At Once:\nAdd a Pyramid to your hand.",
     image:   "images/cards/egyptcards/imhotep@0.5x.jpg",
     imageSm: "images/cards/egyptcards/imhotep@0.3x.jpg", locked: true
   },
@@ -655,6 +655,21 @@ const CARDS = [
     // mechanism every Egypt card already uses (they declare @0.3x pairs).
     image:   "images/cards/egyptcards/egypt_merchant.jpg",
     imageSm: "images/cards/egyptcards/egypt_merchant_sm.jpg", locked: true
+  },
+  {
+    id: 77, name: "Akhenaten", cc: 4, ip: 1,                    // WIRED (Continuous: +2 IP per card THIS side has discarded)
+    type: "Religious", type2: null, era: "Egypt",               // NOTE: Religious means Hieroglyphics' (62) aura boosts him
+    abilityName: "Forsaken Gods",
+    ability: "Continuous:\n+2 IP for each card you have discarded.",
+    /* THE COUNT IS HISTORY, NOT INVENTORY. It reads G.discardCount[side] — a
+       monotonic per-owner tally of discard EVENTS this battle, incremented inside
+       discardFromHand — NOT the discard pile. Jesus discarded leaves no pile entry
+       yet still counts; a card the Priest or Book resurrects consumes its pile entry
+       yet the count never falls. The forsaken stay forsaken. */
+    // Same explicit-imageSm case as the Merchant above: the _sm suffix does NOT
+    // match buildCardImg's derived "@sm.jpg" fallback, so it must be declared here.
+    image:   "images/cards/egyptcards/akhenaten.jpg",
+    imageSm: "images/cards/egyptcards/akhenaten_sm.jpg", locked: true
   },
 
 

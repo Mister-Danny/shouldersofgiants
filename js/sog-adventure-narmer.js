@@ -96,9 +96,9 @@ SOG.NarmerBattle = (function () {
     var LOCS    = [LOC_UPPER_EGYPT, LOC_MEMPHIS, LOC_LOWER_EGYPT];
 
     // AI-side effective cost — the SAME path the player uses, so location/card
-    // discounts (here: a revealed AI Imhotep -1 to Scientific cards at its
-    // location) apply to the AI's affordability + budget symmetrically. Falls
-    // back to base CC if the engine helper is unavailable.
+    // discounts (the Levant's Religious -1, Kente, Henry, the Neb/Ramses in-hand
+    // stamps) apply to the AI's affordability + budget symmetrically. Falls back
+    // to base CC if the engine helper is unavailable.
     function aiCost(card, locId) {
       return (window.SOG && SOG.board && SOG.board.effectiveCost)
         ? SOG.board.effectiveCost(card, locId, 'ai') : card.cc;
@@ -866,7 +866,7 @@ SOG.NarmerBattle = (function () {
       scoring:  { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
       // Two-tier AI, tier derived from state (_aiTier above): SERF for the first
       // battle + retries, GIANT for the rematch ('narmer' signature: Pyramid/Papyrus
-      // combo, Narmer→Memphis when lopsided, Imhotep early, fill home cheap /
+      // combo, Narmer→Memphis when lopsided, Imhotep early (mints a Pyramid), fill home cheap /
       // premiums forward). Bespoke narmerSelectPlays stays as the untiered
       // fallback; window.__forceTier (node click / dev menu) overrides.
       ai:       { profile: 'heuristic', tier: _aiTier, movement: 'adventure',

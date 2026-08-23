@@ -1158,16 +1158,6 @@
     // Mesopotamia discount. Inert in battles with no Babylon location. Mirrors
     // effectiveCost so the in-hand number matches the on-play charge.
     var babylonOnBoard        = G.locations.some(function (l) { return l.abilityKey === 'BABYLON_COST_5'; });
-    // Imhotep (id 65) — "Ancient Engineering": -1 CC to the owner's SCIENTIFIC cards
-    // at ALL locations while a revealed Imhotep sits on THIS (player) side. Global,
-    // so it belongs in the hand display; mirrors the effectiveCost clause exactly
-    // (ability-id via transcribedFrom ?? cardId, so a Rosetta-transcribed Imhotep or
-    // a Papyrus copy discounts the display just as it discounts the on-play charge).
-    var imhotepOnBoard        = G.locations.some(function (l) {
-      return G.playerSlots[l.id].some(function (s) {
-        return s && s.revealed && (s.transcribedFrom != null ? s.transcribedFrom : s.cardId) === 65;
-      });
-    });
     G.playerHand.forEach(function (cardId) {
       var card = CARDS.find(function (c) { return c.id === cardId; });
       if (!card) return;
@@ -1177,7 +1167,6 @@
       if (card.era  === 'Mesopotamia' && nebDiscount[cardId])    displayCC = Math.max(0, displayCC - 1);
       if (card.era  === 'Egypt'        && ramsesDiscount[cardId]) displayCC = Math.max(0, displayCC - 1);
       if (card.cc   === 5             && babylonOnBoard)         displayCC = Math.max(0, displayCC - 1);
-      if (card.type === 'Scientific'  && imhotepOnBoard)         displayCC = Math.max(0, displayCC - 1);
       var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"] .db-overlay-cc');
       if (hEl) hEl.textContent = displayCC;
     });

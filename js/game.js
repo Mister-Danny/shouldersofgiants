@@ -327,6 +327,17 @@
     G.ramsesCCDiscount       = { player: {}, opp: {} };  // Ramses II one-time in-hand -1 CC stamps
     G.destroyedIPTotal       = 0;
     G.aiDestroyedIPTotal     = 0;
+    /* Akhenaten (77) — "Forsaken Gods". A MONOTONIC per-owner tally of discard
+       EVENTS this battle, incremented in abilities.discardFromHand (the one central
+       pipeline every discard funnels through) and NEVER decremented. Deliberately
+       not the discard pile: Jesus discarded is filtered out of the pile by
+       staysDead yet still counts, and a Priest/Book resurrection consumes a pile
+       entry without lowering the count. History, not inventory. Battle-scoped, so
+       it resets here with the rest of the per-battle counters. */
+    G.discardCount           = { player: 0, opp: 0 };
+    // Queued Akhenaten pulses (one per discard event, drained after the source
+    // ability's own animation finishes — see flushAkhenatenPulses in abilities.js).
+    G.akhPulseQueue          = { player: 0, opp: 0 };
     G.columbusMoved          = false;
     G.aiColumbusMoved        = false;
     G.movedThisTurn          = {};

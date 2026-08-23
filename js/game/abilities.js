@@ -489,6 +489,27 @@
         }
       });
 
+      /* Akhenaten (id 77) — "Forsaken Gods": +2 IP for each card HIS OWN side has
+         discarded this battle. Continuous, so it recomputes every pass, travels with
+         him when he moves, and clears on destroy like every other contMod — the same
+         shape as William the Conqueror above, whose counter is destroyed IP rather
+         than discards. Own-side only: each owner's Akhenaten reads their own tally,
+         so a player's discards never feed the AI's Akhenaten.
+         G.discardCount is a monotonic event count, NOT G.playerDiscard.length — see
+         discardFromHand for why the pile is the wrong source of truth. */
+      ['player', 'opp'].forEach(function (own) {
+        var sl  = own === 'player' ? G.playerSlots : G.aiSlots;
+        var cnt = (G.discardCount && G.discardCount[own]) || 0;
+        if (cnt <= 0) return;
+        sl[loc.id].forEach(function (s) {
+          if (!s || !s.revealed || abilityIdOf(s) !== 77) return;
+          var gain = 2 * cnt;
+          s.contMod = (s.contMod || 0) + gain;
+          s.contModSources.push({ source: 'Akhenaten', delta: gain });
+          addBonus(s, gain, 'card', 77, nextEventId(), 'A', true);
+        });
+      });
+
       // The Sahara (ALL_MINUS_ONE_IP): -1 IP to ALL revealed cards here (both sides)
       if (loc.abilityKey === 'ALL_MINUS_ONE_IP') {
         var saharaName = loc.name || 'The Sahara';
@@ -1104,6 +1125,28 @@
        revivable, while Jesus (10) — who early-returns AND flies back to hand — is
        filtered out inside pushDiscard. */
     pushDiscard(owner, cardId, discardStats);
+
+    /* AKHENATEN (77) — "Forsaken Gods" counter. Deliberately OUTSIDE pushDiscard:
+       pushDiscard skips anything that comes back (staysDead), so a discarded Jesus
+       leaves no pile entry — yet the discard still HAPPENED and still counts. And
+       because the count only ever rises, a Priest or Book resurrection consuming a
+       pile entry can never lower it. History, not inventory.
+       This sits in discardFromHand because EVERY discard in the game funnels through
+       here — Ra, Book of the Dead, the Meso Priest, Francis, Erasmus, and anything
+       added later are all caught with no per-source wiring. */
+    var _akhSide = owner === 'player' ? 'player' : 'opp';
+    if (!G.discardCount)  G.discardCount  = { player: 0, opp: 0 };
+    if (!G.akhPulseQueue) G.akhPulseQueue = { player: 0, opp: 0 };
+    G.discardCount[_akhSide] = (G.discardCount[_akhSide] || 0) + 1;
+    /* Queue the reaction rather than playing it now: this call sits in the MIDDLE of
+       the source's own animation (Ra's absorption, Book's judgment, the Priest's
+       rise-and-fade), so pulsing here would talk over it. fireAtOnce's completion
+       drains the queue — the same beat the Egypt Farmer's phase 2 uses.
+       The badge is HELD from here until that drain, so the +2 arrives on the pulse
+       instead of appearing silently during the source's animation (Ra's absorb()
+       calls evaluateContinuous + refreshSlotIPDisplays mid-flight). State is not
+       delayed — only the number's arrival. */
+    if (holdAkhenatenBadge(_akhSide)) G.akhPulseQueue[_akhSide] += 1;
 
     if (cardId === 7) {
       triggerJanHus(owner, janHusEl, function () {
@@ -2905,6 +2948,20 @@
       if (advanced) return;
       advanced = true;
       if (!SOG.game || typeof SOG.game.executeMoveAnimated !== 'function') { done(); return; }
+      /* TRADE SFX — tied to the RELOCATION beat, not the reveal. The Merchant's
+         plain play stays a silent card flip on purpose (he has no reveal
+         flourish); the sound is the trade firing, so it starts as the move
+         begins and runs under the travel.
+         The +1 IP keeps its existing blue float and gains no audio of its own.
+         Safe here rather than inside the slide: executeMoveAnimated's two
+         early-outs (source slot unresolvable, destination full) cannot be hit on
+         this path — dest comes from randomOtherOpenLoc, which only returns a
+         location with an open spot on THIS owner's side, and opts.sd is the exact
+         slot object, so snapIdx always resolves. A missing file is a silent
+         no-op: SOG.sfx.play never throws and returns null.
+         One call site, so a Hatshepsut-spawned Merchant sounds the same — the
+         reactive dispatcher keys on sd.cardId, not on how the card got there. */
+      if (window.SOG && SOG.sfx) SOG.sfx.play('sfx/merchant.mp3');
       // No fireMoveHereBonus call here any more — applyMove fires it for EVERY
       // move, so doing it here too would double-pay Punt/Thebes.
       SOG.game.executeMoveAnimated(owner, MERCHANT_ID, fromLoc, dest.id, { sd: ctx.slot }, function () {
@@ -2960,6 +3017,58 @@
 
   /* Papyrus — ECONOMIC (74). Note the type string is 'Scientific'; the card text
      says "Science cards" in player-facing language. */
+  /* Imhotep (65) — "Ancient Engineering": At Once, CREATE a Pyramid (57) in the
+     owner's hand. This is a MINT, not a draw: the deck is untouched, and a deck that
+     holds no Pyramid still gets one. The created card is ordinary in every way — it
+     costs its printed 3 CC, it is playable this turn if capital allows, and its own
+     At Once (absorb the last card played here) works normally. Same shape as
+     Papyrus's copy and the Nubian Gold token.
+     Fizzles if the hand is already FULL — maxHandSize is 7 in a standard battle and 4
+     in the small adventures — with no queue, matching applyNubianGoldOnPlay and
+     abilityPapyrus. A fizzle plays no animation at all.
+     Note what is NOT here any more: Imhotep used to carry a global -1 CC to
+     Scientific cards inside board.effectiveCost, mirrored in input's
+     refreshHandCostDisplays. Both are gone; there is no Scientific discount left in
+     the game. */
+  function abilityImhotep(owner, locId, done) {
+    var hand    = owner === 'player' ? G.playerHand : G.aiHand;
+    var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
+    if (!hand) { done(); return; }
+    if (hand.length >= maxHand) { done(); return; }      // hand full → fizzle, no animation
+
+    hand.push(57);                                       // the created Pyramid
+
+    // STATE FIRST. The mint above is committed and unchanged; the flourish below only
+    // defers when that new hand card becomes VISIBLE.
+    if (typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+    if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
+
+    // Pushed onto the END of the hand array, and the hand renders in array order, so
+    // the created Pyramid is the last element — duplicate-cardId safe (a hand can
+    // legitimately hold two Pyramids once Imhotep has minted one).
+    var handEl = null;
+    if (owner === 'player') {
+      var pHand = document.getElementById('battle-player-hand');
+      var cards = pHand ? pHand.querySelectorAll('.battle-hand-card') : null;
+      if (cards && cards.length) handEl = cards[cards.length - 1];
+    } else {
+      var oHand = document.getElementById('battle-opp-hand');
+      var backs = oHand ? oHand.querySelectorAll('.battle-card-back') : null;
+      if (backs && backs.length) handEl = backs[backs.length - 1];
+    }
+
+    var rfx     = window.SOG && SOG.RevealFx;
+    var srcEl   = findSlotEl(owner, 65);
+    var pyrCard = CARDS.find(function (c) { return c.id === 57; });
+
+    if (rfx && typeof rfx.imhotepSandSculpt === 'function' && srcEl && pyrCard) {
+      rfx.imhotepSandSculpt(srcEl, pyrCard,
+        { sfx: 'sfx/sand.mp3', handEl: handEl, isPlayer: owner === 'player' }, done);
+    } else {
+      done();                                            // no flourish → instant, card already in hand
+    }
+  }
+
   function abilityPapyrusEconomic(owner, locId, done) {
     _atOnceTypeBuffHere(owner, locId, 'Scientific', 2, 'Papyrus', done);
   }
@@ -3264,7 +3373,7 @@
        CC is the EFFECTIVE cost (effectiveCost — the same read behind the hand badge
        and Book of the Dead's qualification), not the printed cc. Ra used to compare
        card definitions, so he could visibly skip a card whose badge showed 1 in
-       favour of one showing 2 whenever a discount was in play (Imhotep on Scientific,
+       favour of one showing 2 whenever a discount was in play (the Levant on Religious,
        a Nebuchadnezzar/Ramses stamp).
 
        IP is that card's effective in-hand value — the same snapshot discardFromHand
@@ -3768,7 +3877,7 @@
      destroyed-IP total instead of the accumulator.
      CC is the card's EFFECTIVE COST — the discounted number shown on the in-hand CC
      badge, not the printed card.cc — via the same board.effectiveCost the play-charge
-     uses, so Henry/Cosimo/Nebuchadnezzar/Babylon/Imhotep/Ramses discounts all count.
+     uses, so Henry/Cosimo/Nebuchadnezzar/Babylon/Ramses discounts all count.
      locId is null deliberately: a card in hand is at no location, so the only
      location-scoped clause (the Levant's RELIGIOUS_DISCOUNT) correctly sits this out —
      effectiveCost guards it with `loc &&`. The owner key must be 'player'/'ai' here,
@@ -3796,6 +3905,93 @@
      ONE place — discardFromHand — so every discard is piled exactly once (no
      per-caller pushes to double up). Gated by the shared staysDead() predicate,
      so Jesus (who returns to hand) never lands here. */
+  var AKHENATEN_ID = 77;
+
+  /* Find the owner's revealed Akhenaten slot record (abilityIdOf, so a
+     Rosetta-transcribed or Papyrus-copied Akhenaten counts exactly like a printed
+     one). Returns null when that side has none on the board. */
+  function akhenatenSlotOf(side) {
+    var slots = side === 'player' ? G.playerSlots : G.aiSlots;
+    var found = null;
+    (G.locations || []).forEach(function (loc) {
+      (slots[loc.id] || []).forEach(function (s) {
+        if (!found && s && s.revealed && abilityIdOf(s) === AKHENATEN_ID) found = s;
+      });
+    });
+    return found;
+  }
+
+  /* Hold that side's Akhenaten IP badge — AND his contribution to the location
+     score — until the queued pulse releases both on the same beat.
+     _ipHeldAt is the number currently on the badge, captured here because nothing
+     has recomputed yet: discardFromHand raised the counter one line earlier, so
+     effectiveIP still reads the PRE-discard total. board.displayedIP serves that
+     number to the badge and to updateScores for as long as the hold stands.
+     Captured ONCE — a second discard arriving before the flush must not re-snapshot,
+     or the first discard's +2 would be baked into the "old" number and lost from
+     the swap.
+     Returns false when the side has no Akhenaten on board — the counter still rose
+     (it always does) but there is nothing to show, so no pulse is queued. */
+  function holdAkhenatenBadge(side) {
+    var sd = akhenatenSlotOf(side);
+    if (!sd) return false;
+    if (!sd._ipDisplayHold) {
+      sd._ipDisplayHold = true;
+      sd._ipHeldAt = (SOG.board && SOG.board.effectiveIP) ? SOG.board.effectiveIP(sd) : null;
+    }
+    return true;
+  }
+
+  /* Drain the queued Akhenaten pulses. Called from fireAtOnce's completion, so the
+     discard SOURCE's own animation has finished first and Akhenaten answers it
+     rather than overlapping it. Sequenced: each pulse waits for the previous one.
+
+     EDGE-TRIGGERED BY CONSTRUCTION — stronger than the Hieroglyphics pattern, which
+     infers an edge by comparing passes. Here nothing is inferred: the queue is only
+     ever appended at the increment site, so an unrelated evaluateContinuous recompute
+     can never produce a pulse.
+
+     Each pulse's apply() releases the badge hold and recomputes, so ipBadgeSwap
+     captures the pre-discard total as the old number and animates the new one in.
+     (Two discards inside a SINGLE ability would drain as two pulses with the full
+     total arriving on the first; no source does that today — each of Ra, Book, the
+     Meso Priest, Francis and Erasmus discards exactly one card per activation, so
+     two discards in a turn are two separate reveals and two separate drains.) */
+  function flushAkhenatenPulses(onDone) {
+    onDone = typeof onDone === 'function' ? onDone : function () {};
+    if (!G.akhPulseQueue) { onDone(); return; }
+    var queue = [];
+    ['player', 'opp'].forEach(function (own) {
+      var n = G.akhPulseQueue[own] || 0;
+      G.akhPulseQueue[own] = 0;
+      for (var i = 0; i < n; i++) queue.push(own);
+    });
+    if (!queue.length) { onDone(); return; }
+
+    var rfx = window.SOG && SOG.RevealFx;
+    var i = 0;
+    (function next() {
+      if (i >= queue.length) { onDone(); return; }
+      var own = queue[i++];
+      var sd  = akhenatenSlotOf(own);
+      var el  = sd ? findSlotEl(own, AKHENATEN_ID) : null;
+      /* Release the hold and recompute — the real write, whether or not it is
+         animated. Badge and location score both come off displayedIP, so clearing
+         the hold before the refresh is what makes them arrive TOGETHER.
+         Every failure path below still runs this, so a hold can never leak: no
+         slot element, no RevealFx, or no GSAP (ipBadgeSwap applies and finishes
+         synchronously when gsap is absent) all end with the hold cleared. */
+      var apply = function () {
+        if (sd) { delete sd._ipDisplayHold; delete sd._ipHeldAt; }
+        evaluateContinuous();
+        refreshSlotIPDisplays();
+        updateScores();
+      };
+      if (!el || !rfx || typeof rfx.akhenatenPulse !== 'function') { apply(); next(); return; }
+      rfx.akhenatenPulse(el, { sfx: 'sfx/akhenaten.mp3', apply: apply }, next);
+    })();
+  }
+
   function pushDiscard(owner, cardId, stats) {
     if (cardId == null || !staysDead(cardId, 'discard')) return;
     var st    = stats || handStats(owner, cardId) || { ip: 0, cc: 0 };
@@ -4129,9 +4325,9 @@
     50: { onAtOnce: abilityNebuchadnezzar },  // Nebuchadnezzar — Continuous discount; At-Once = shimmer flourish
 
     /* ── Egypt era (WIRED only). Continuous cards (Narmer/Pyramid/Hieroglyphics/
-       Sphinx/Imhotep) carry a no-op onAtOnce and do their work in
-       evaluateContinuous / effectiveCost / the strike guard. NOT-YET-WIRED Egypt
-       cards have NO entry here (and are never decked). ── */
+       Sphinx) carry a no-op onAtOnce and do their work in evaluateContinuous /
+       effectiveCost / the strike guard. NOT-YET-WIRED Egypt cards have NO entry
+       here (and are never decked). ── */
     51: { onAtOnce: abilityNarmer          },             // Narmer — Continuous (IP averaging) + one-shot play SFX
     52: { onAtOnce: abilityHatshepsut      },             // Hatshepsut — At Once: send a Merchant to another location
     53: { onAtOnce: abilityRamses          },             // Ramses II — At Once: -1 CC to Egypt cards in your hand
@@ -4143,9 +4339,10 @@
     59: { endOfTurn: obeliskEndOfTurn      },             // Obelisk — End of turn: +1 IP (Megalith key)
     60: { onAtOnce: abilityKhufu           },             // Khufu — draw a Scientific card
     62: { onAtOnce: function (o, l, done) { done(); } },  // Hieroglyphics — Continuous (+1 Religious/Political)
+    77: { onAtOnce: function (o, l, done) { done(); } },  // Akhenaten — Continuous (+2 IP per own discard; reveal pulse lives in reveal-fx)
     63: { onAtOnce: abilityRa              },             // Ra — discard lowest → permanent +IP
     64: { onAtOnce: function (o, l, done) { done(); } },  // Sphinx — Continuous protection: no destroy (isDestroyProtected) + no IP reduction (_soldierStrike / Chariot strike)
-    65: { onAtOnce: function (o, l, done) { done(); } },  // Imhotep — Continuous (effectiveCost -1 Scientific)
+    65: { onAtOnce: abilityImhotep },                     // Imhotep — At Once: creates a Pyramid (57) in hand
     66: { onAtOnce: abilityBookOfDead      },             // Book of the Dead — discard + weigh (IP==CC → revive now)
     67: { onAtOnce: abilityHyksos          },             // Hyksos — transfer to opponent's side (stuck if full)
     69: { onAtOnce: function (o, l, done) { done(); } },  // Chariots — movement card; arrival -2 strike in executeMoveAnimated
@@ -4172,11 +4369,19 @@
       var atSlotEl = findSlotEl(owner, cardId);
       if (atSlotEl && typeof Anim !== 'undefined') Anim.pulseYellow(atSlotEl);
     }
+    /* Akhenaten (77) reacts HERE, not at the discard itself. Wrapping done means
+       the source ability's own animation has fully finished before his pulse — the
+       Egypt Farmer's phase-2 sequencing, applied to a reaction instead of a buff.
+       Every discard source in the game is an At Once (Ra 63, Book 66, Meso Priest
+       38, Francis 8, Erasmus 9), so this one wrapper covers all of them, including
+       Pacal's chained re-fires (which route back through fireAtOnce per card).
+       A no-op when nothing is queued — the common case costs one object check. */
+    var _afterAtOnce = function () { flushAkhenatenPulses(done); };
     var spec = CARD_ABILITIES[cardId];
     if (spec && typeof spec.onAtOnce === 'function') {
-      spec.onAtOnce(owner, locId, done);
+      spec.onAtOnce(owner, locId, _afterAtOnce);
     } else {
-      done();
+      _afterAtOnce();
     }
   }
 

@@ -329,7 +329,8 @@
   // (Removed _giantEffectiveCC — the Giant strategy now uses the SAME owner-aware
   //  SOG.board.effectiveCost(card, locId, 'ai') as the player + every other AI
   //  path, so discounts are computed in one place. It previously handled only
-  //  Henry/Cosimo/Levant/Neb and missed Imhotep + Babylon.)
+  //  Henry/Cosimo/Levant/Neb and missed Babylon (and the since-removed Imhotep
+  //  Scientific discount).)
 
   /**
    * Score a single (cardId, locId) candidate play.
@@ -504,6 +505,35 @@
           return hs && hs.ip === hs.cc;
         }).length;
         return 1.5 * (eqCount / bhand.length);              // expected value of a random pick
+      }
+      case 77: { // Akhenaten (Egypt) — "Forsaken Gods": +2 IP for each card THIS side
+                 // has discarded this battle. Scales with a counter the AI can both
+                 // read (what it has already discarded) and forecast (the discard
+                 // engines it still holds), which is the same shape as the other
+                 // scaling cards: current value + a discounted future.
+                 //
+                 // Reads G.discardCount, NOT the pile length — the pile is a
+                 // different number (Jesus never enters it; a revive leaves it) and
+                 // scoring off it would price him wrong in exactly the cases the
+                 // mechanic was written for.
+        var aOwner = side === 'opp' ? 'opp' : 'player';
+        var aCount = (G.discardCount && G.discardCount[aOwner]) || 0;
+        // Discard ENGINES still to come — every source that funnels through
+        // discardFromHand: Ra 63, Book of the Dead 66, Meso Priest 38,
+        // Francis 8, Erasmus 9. Each is a future +2 for him.
+        var ENGINES  = [63, 66, 38, 8, 9];
+        var isEngine = function (id) { return ENGINES.indexOf(id) !== -1; };
+        var aHand = (side === 'opp' ? G.aiHand : G.playerHand) || [];
+        var aDeck = (side === 'opp' ? G.aiDeck : G.playerDeck) || [];
+        // In hand it is playable now; in deck it still has to be drawn AND played,
+        // so it counts at half. Deliberately simple — same weighting spirit as
+        // Priest's `Math.min(bestDisc, 6) * 0.4`.
+        var support = aHand.filter(isEngine).length + aDeck.filter(isEngine).length * 0.5;
+        // WHIFF: no discards yet and no way to cause one. He is a 4-CC 1-IP body
+        // whose whole text is dead — worse than a vanilla card of the same cost,
+        // so he must score BELOW one, not merely at zero.
+        if (aCount === 0 && support === 0) return -2;
+        return aCount * 1.2 + support * 0.8;
       }
       default:
         return 0;
@@ -1226,7 +1256,7 @@
       if (!card) continue;
       var cost = costFree ? 0
         : (SOG.board && SOG.board.effectiveCost ? SOG.board.effectiveCost(card, G.locations[0].id, 'ai') : card.cc);
-      // cost can be location-scoped (Imhotep); recomputed per loc below.
+      // cost can be location-scoped (the Levant's Religious discount); recomputed per loc below.
       for (var li = 0; li < G.locations.length; li++) {
         var lid = G.locations[li].id;
         var arr = G.aiSlots[lid] || [];
@@ -1242,7 +1272,8 @@
   }
 
   // Stage a face-down play into G.aiSlots (occupancy for the gate; revealed:false
-  // so a same-turn Imhotep can't discount — matches the real reveal timing) / undo.
+  // so a same-turn reveal can't feed a continuous aura — matches the real reveal
+  // timing) / undo.
   function _serfStage(cardId, locId) {
     var card = _serfCardOf(cardId);
     var idx = (G.aiSlots[locId] || []).indexOf(null);
@@ -1438,7 +1469,7 @@
     62: 1,    // Hieroglyphics — +1 to Religious/Political here (aura halved)
     31: 1,    // Megalith      — End of Turn +1
     59: 1,    // Obelisk       — End of Turn +1
-    65: 1,    // Imhotep       — global -1 CC to Scientific (resource setup)
+    65: 1,    // Imhotep       — mints a Pyramid (57) into hand (resource setup; cashes a later turn)
     2:  1     // Scholar-Officials — +capital next turn (resource setup)
   };
   function _giantSetupBonus(cardId, turnsLeft, positional) {
@@ -1629,7 +1660,7 @@
      (Papyrus 54 / Pyramid 57, which read the LAST-played card here) go last so
      they capture the fully-built board. Reused for every Giant. */
   function _giantRevealOrder(cardId) {
-    if (cardId === 65) return 0;                                // Imhotep discount — earliest
+    if (cardId === 65) return 0;                                // Imhotep — earliest: his mint needs HAND ROOM, so go before other card-granters
     if (cardId === 62 || cardId === 41 || cardId === 45 || cardId === 40) return 1;  // type auras
     if (cardId === 47) return 7;                                // Hammurabi — AFTER the bait body, so his destruction sacrifices it
     if (cardId === 57) return 8;                                // Pyramid — grabs the built board → late
@@ -1723,14 +1754,17 @@
       }
     },
 
-    // NARMER — Imhotep early (discount); Pyramid/Papyrus land BEHIND big cards (grab
+    // NARMER — Imhotep early (his minted Pyramid needs turns left to cash); Pyramid/Papyrus land BEHIND big cards (grab
     // large IP → Papyrus copies the buffed Pyramid, reveal-ordered after it); Narmer
     // → Memphis (contested) when the AI is lopsided (averaging spreads the lead);
     // cheap cards fill home, premiums push forward (the advance-board insight).
     narmer: {
       cardBias: function (cardId, ctx) {
         var t = (typeof ctx.turn === 'number') ? ctx.turn : G.turn;
-        return (cardId === 65 && t <= 2) ? 3 : 0;
+        // Imhotep mints a Pyramid rather than discounting a whole Scientific deck,
+        // so the early bias is real but smaller than the old discount's +3: the
+        // payoff is ONE card, and only if a later turn has the capital and the slot.
+        return (cardId === 65 && t <= 2) ? 2 : 0;
       },
       choosePlacement: function (cardId, legalLocs) {
         var gate = (G.config && G.config.rules && G.config.rules.advanceGate) || {};

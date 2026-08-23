@@ -219,6 +219,59 @@ SOG.RevealFx = (function () {
       return IMPACT_MS;       // pace the reveal's done (→ Tool's draw) to the impact beat
     },
 
+    /* Sphinx (64): rises out of the sand. sphinx.mp3 as the reveal begins, a MODEST
+       lift — an emergence, not a launch — and sand cascading down off the card the
+       whole time it is clearing, dissipating as it settles back to rest.
+
+       The lift is safe to drive here: Anim.cardReveal's scale-in has already
+       finished and cleared its transform by the time this handler runs (flipSlot
+       fires reveal-fx 320ms in), so nothing else owns the slot's transform. It is
+       cleared again on completion so the resting state is untouched.
+
+       Purely presentational — Sphinx's protection is Continuous and has no ability
+       beats; this is only the entrance. Returns a hold so the turn waits for it. */
+    /* Akhenaten (77) — reveal. He is Continuous, so there is no At Once to hang
+       this on; the reveal beat belongs here.
+       Counter 0 -> return 0 and NOTHING happens: no sfx, no pulse, a plain flip.
+       Counter > 0 -> the badge is still showing his printed 1 at this point
+       (flipSlot painted it before any evaluateContinuous pass had him revealed), so
+       the swap below is a true 1 -> 1+2n, the whole bonus in one update. */
+    77: function (ctx) {
+      var st  = window.SOG && SOG.state && SOG.state.G;
+      var own = ctx.owner === 'player' ? 'player' : 'opp';
+      var n   = (st && st.discardCount && st.discardCount[own]) || 0;
+      if (n <= 0) return 0;
+      akhenatenPulse(ctx.slotEl, {
+        sfx: 'sfx/akhenaten.mp3',
+        apply: function () {
+          if (!window.SOG) return;
+          if (SOG.abilities && SOG.abilities.evaluateContinuous) SOG.abilities.evaluateContinuous();
+          if (SOG.board && SOG.board.refreshSlotIPDisplays)      SOG.board.refreshSlotIPDisplays();
+          if (SOG.board && SOG.board.updateScores)               SOG.board.updateScores();
+        }
+      });
+      return holdFor(AKH_PULSE_MS);
+    },
+
+    64: function (ctx) {
+      playSfx('sfx/sphinx.mp3');
+      var el = ctx.slotEl;
+      var RISE = 0.46, HOLD = 0.22, SETTLE = 0.34;      // seconds
+      var totalMs = (RISE + HOLD + SETTLE) * 1000;
+      if (!el || typeof gsap === 'undefined') return holdFor(totalMs);
+      var r = el.getBoundingClientRect();
+      if (!r.width) return holdFor(totalMs);
+
+      gsap.timeline({ onComplete: function () { gsap.set(el, { clearProps: 'transform' }); } })
+        .to(el, { y: -r.height * 0.10, duration: RISE, ease: 'power2.out' })
+        .to(el, { y: 0, duration: SETTLE, ease: 'power2.inOut' }, '+=' + HOLD);
+
+      // Pour for as long as the card is emerging (rise + hold).
+      sandCascade(r, { count: 44, windowMs: (RISE + HOLD) * 1000 });
+
+      return holdFor(totalMs);
+    },
+
     // Fire (29): matchstrike SFX + a warm illuminate pulse that settles back,
     // plus a few glowing embers rising off the card's centre (see spawnEmbers).
     29: function (ctx) {
@@ -400,6 +453,8 @@ SOG.RevealFx = (function () {
   // finished. Keep in sync with the matching handler above.
   var FULL_MS = {
     26: 1000,   // Tool swing+rebound
+    64: 1020,   // Sphinx rise + sand cascade
+    77: 900,    // Akhenaten reddish-purple pulse + badge swap (only when his counter > 0)
     60: 1000,   // Khufu — Tool's swing+rebound, verbatim
     29: 1300,   // Fire illuminate + embers
     30: 2340,   // Cave Art scribble + fade
@@ -1646,6 +1701,54 @@ SOG.RevealFx = (function () {
     }
   }
 
+  /* Sand shedding off a card that is rising out of a dune — Sphinx (64).
+
+     Third member of the particle family, after boatSplashBurst (water, one-sided
+     arc) and dirtBurst (clods, radial eruption). Same hygiene: spawn, animate,
+     self-remove, no-op without GSAP. What differs is the TRAJECTORY FAMILY — this
+     one does NOT burst outward. Grains start across the card's top and upper face
+     and CASCADE STRAIGHT DOWN, with only a slight lateral drift near the end so the
+     fall reads as sand pooling rather than sand being thrown.
+
+     They are also finer and more numerous than clods (1.4–3.5px vs 3–7.5px), and
+     spawn STAGGERED across a window rather than all at once, so it reads as a
+     continuous pour for as long as the card is emerging instead of a single puff.
+       rect: the card's bounding rect;  opts: { count, windowMs } */
+  function sandCascade(rect, opts) {
+    if (typeof gsap === 'undefined' || !rect || !rect.width) return;
+    opts = opts || {};
+    var n      = opts.count || 44;
+    var window = (opts.windowMs || 620) / 1000;   // stagger spread — the pour's duration
+
+    for (var i = 0; i < n; i++) {
+      var g = document.createElement('div');
+      g.className = 'reveal-fx-sand-grain';
+      var size = (1.4 + Math.random() * 2.1).toFixed(1);
+      // Across the full width, and down the upper face — it sheds off the whole
+      // card as it clears the sand, not just off the top edge.
+      var startX = rect.left + Math.random() * rect.width;
+      var startY = rect.top + Math.random() * rect.height * 0.55;
+      g.style.cssText =
+        'position:fixed;left:' + startX + 'px;top:' + startY + 'px;' +
+        'width:' + size + 'px;height:' + size + 'px;' +
+        'margin:0;pointer-events:none;z-index:9998;';
+      document.body.appendChild(g);
+
+      var fall  = rect.height * (0.55 + Math.random() * 0.7);      // down past the base
+      var drift = (Math.random() - 0.5) * rect.width * 0.28;       // slight pooling, not a burst
+      var dur   = 0.42 + Math.random() * 0.34;
+      var delay = Math.random() * window;
+
+      /* jshint loopfunc:true */
+      (function (d) {
+        gsap.timeline({ delay: delay, onComplete: function () { if (d.parentNode) d.parentNode.removeChild(d); } })
+          .fromTo(d, { opacity: 0 }, { opacity: 1, duration: 0.07, ease: 'none' }, 0)
+          .to(d, { y: fall, x: drift, duration: dur, ease: 'power1.in' }, 0)
+          .to(d, { opacity: 0, duration: 0.26, ease: 'power1.in' }, dur * 0.55);
+      })(g);
+    }
+  }
+
   /* Swap the number on a card's IP badge: the OLD value falls away while the NEW
      value drops in above it. Nothing in the game did a number SWAP before — the
      existing badge effects (revealFxIpGain, revealFxCcDrop) are in-place pops.
@@ -2155,6 +2258,31 @@ SOG.RevealFx = (function () {
      way, since it was applied before this ran. */
   var HIERO_PULSE_MS = 1250;    // matches the sting; keep in step with the CSS
 
+  /* AKHENATEN (77) — "Forsaken Gods": one reddish-purple pulse, with the whole
+     +2 x discard-count arriving as a SINGLE badge update on the same beat.
+
+     opts.apply is the real engine write (release the badge hold, recompute,
+     rescore) handed to ipBadgeSwap, which runs it BETWEEN capturing the old badge
+     text and animating the new one in — so the number that flies in is read back
+     out of the badge after the engine wrote it, never a faked value. Every early
+     return still calls apply(), so the IP can never be lost to a missing element
+     or a missing GSAP.
+
+     Used by BOTH entry points: the reveal handler below (counter already > 0 when
+     he lands) and abilities.flushAkhenatenPulses (a discard while he is on board).
+     Both sides use it — he is a board card, so the opponent's pulses the same. */
+  var AKH_PULSE_MS = 900;
+  function akhenatenPulse(el, opts, onDone) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onDone === 'function') onDone(); }
+    if (!el) { if (typeof opts.apply === 'function') opts.apply(); finish(); return; }
+    if (opts.sfx) playSfx(opts.sfx);
+    flashClass(el, 'reveal-fx-akhenaten-pulse', AKH_PULSE_MS);
+    ipBadgeSwap(el, opts.apply);
+    setTimeout(finish, AKH_PULSE_MS);   // the pulse, not the badge, sets the beat's length
+  }
+
   function hieroglyphicsPulse(els, sfx) {
     if (sfx) playSfx(sfx);      // ONE sound for the batch, not one per card
     if (!els || !els.length) return;
@@ -2332,6 +2460,144 @@ SOG.RevealFx = (function () {
     }, 820);
   }
 
+  /* Imhotep (65) — the sand-sculpting mint. He tips over like a poured vessel, sand
+     streams out, the pour gathers into a card-shaped outline that FILLS bottom-up,
+     the filled block cross-dissolves into the Pyramid's face, Imhotep rights himself
+     and the Pyramid slides into the hand.
+
+     The Pyramid already exists in the hand before this runs (abilityImhotep mints it
+     first, unconditionally). All this does is hold that hand card's VISIBILITY back
+     until the flyer lands on it, so every early return below falls through to the
+     previous instant behaviour with the card simply already there.
+
+     Imhotep's own slot is `overflow:hidden` and sits inside a location column, so a
+     90-degree rotation of the real element would be clipped. Instead the slot's face
+     is CLONED into a body-level fixed flyer and the real one is blanked for the
+     duration — same escape the boat and scroll flourishes use. The clone carries the
+     original's classes so the cqw-sized CC/IP overlays still resolve (a bare div
+     renders them enormous — the judgment-card lesson).
+
+     Pour direction is chosen from viewport room: normally the card tips clockwise and
+     the sand gathers to its RIGHT, but an Imhotep near the right edge tips the other
+     way so the forming card stays on screen. */
+  function imhotepSandSculpt(sourceEl, card, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+
+    var handEl   = opts.handEl || null;
+    var isPlayer = !!opts.isPlayer;
+    function revealHandCard() { if (handEl) handEl.style.visibility = ''; }
+
+    if (!sourceEl || !card || typeof gsap === 'undefined') { finish(); return; }
+    var rect = sourceEl.getBoundingClientRect();
+    if (!rect.width) { finish(); return; }
+
+    if (handEl) handEl.style.visibility = 'hidden';
+
+    /* Which way to pour: right unless the formed card would run off the viewport.
+       Clearance is measured from the TIPPED card, not the upright one — rotated 90
+       degrees about its bottom centre, the card reaches rect.height/2 sideways, which
+       is wider than the slot itself. Using the upright right edge here put the sand
+       form underneath the tipped Imhotep. */
+    var cx    = rect.left + rect.width / 2;
+    var reach = rect.height / 2 + rect.width * 0.14;
+    var dir   = (cx + reach + rect.width + 8 <= window.innerWidth) ? 1 : -1;
+    var formLeft = dir === 1 ? cx + reach : cx - reach - rect.width;
+
+    // ── the tipping vessel: a clone, with the real slot blanked underneath ──
+    var tipper = sourceEl.cloneNode(true);
+    tipper.className = (sourceEl.className || '') + ' reveal-fx-imhotep-tip';
+    tipper.setAttribute('aria-hidden', 'true');
+    tipper.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9997;' +
+      'left:' + rect.left + 'px;top:' + rect.top + 'px;' +
+      'width:' + rect.width + 'px;height:' + rect.height + 'px;';
+    document.body.appendChild(tipper);
+    var realFaces = [].slice.call(sourceEl.children);
+    realFaces.forEach(function (n) { n.style.opacity = '0'; });
+    function showReal() { realFaces.forEach(function (n) { n.style.opacity = ''; }); }
+
+    // ── the forming card: outline + a fill that rises from the base ──
+    var form = document.createElement('div');
+    form.className = 'reveal-fx-sand-form';
+    form.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9998;opacity:0;' +
+      'left:' + formLeft + 'px;top:' + rect.top + 'px;' +
+      'width:' + rect.width + 'px;height:' + rect.height + 'px;';
+    var fill = document.createElement('div');
+    fill.className = 'reveal-fx-sand-fill';
+    fill.style.cssText = 'position:absolute;left:0;right:0;bottom:0;height:0%;';
+    form.appendChild(fill);
+    document.body.appendChild(form);
+
+    // ── the Pyramid's face, dissolved in over the filled sand ──
+    var face = document.createElement('div');
+    face.className = 'battle-card-slot occupied face-up reveal-fx-imhotep-pyramid';
+    face.setAttribute('aria-hidden', 'true');
+    face.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9999;opacity:0;' +
+      'left:' + formLeft + 'px;top:' + rect.top + 'px;' +
+      'width:' + rect.width + 'px;height:' + rect.height + 'px;';
+    if (window.SOG && SOG.board && SOG.board.buildCardFace) {
+      try { SOG.board.buildCardFace(face, card, card.ip); } catch (e) {}
+    }
+    document.body.appendChild(face);
+
+    function cleanup() {
+      [tipper, form, face].forEach(function (n) { if (n && n.parentNode) n.parentNode.removeChild(n); });
+      showReal();
+      revealHandCard();
+    }
+
+    var TIP = 0.44, POUR = 0.62, DISSOLVE = 0.30, UNTIP = 0.38, SLIDE = 0.58;
+    var tl = gsap.timeline({ onComplete: function () { cleanup(); finish(); } });
+
+    gsap.set(tipper, { transformOrigin: '50% 100%' });
+
+    // 1) tip over like a vessel; the pour starts just before it bottoms out.
+    tl.to(tipper, { rotation: dir * 90, duration: TIP, ease: 'power2.in' })
+      .add(function () {
+        if (opts.sfx) playSfx(opts.sfx);
+        // Grains rain across the forming card's column, from above it down into it.
+        sandCascade({ left: formLeft, top: rect.top - rect.height * 0.30,
+                      width: rect.width, height: rect.height * 0.9 },
+                    { count: 54, windowMs: POUR * 1000 });
+      }, '-=0.10')
+      // 2) the outline appears and fills bottom-up.
+      .to(form, { opacity: 1, duration: 0.16, ease: 'power1.out' }, '<')
+      .to(fill, { height: '100%', duration: POUR, ease: 'power1.out' }, '<')
+      // 3) the sand block BECOMES the Pyramid.
+      .to(face, { opacity: 1, duration: DISSOLVE, ease: 'power1.inOut' })
+      .to(form, { opacity: 0, duration: DISSOLVE, ease: 'power1.inOut' }, '<')
+      // 4) Imhotep rights himself as the Pyramid heads for the hand.
+      .to(tipper, { rotation: 0, duration: UNTIP, ease: 'power2.out' });
+
+    // 5) slide into the hand — face-down for the opponent's hidden strip.
+    var hRect = handEl ? handEl.getBoundingClientRect() : null;
+    if (hRect && hRect.width) {
+      if (!isPlayer) {
+        var back = document.createElement('div');
+        back.className = 'reveal-fx-imhotep-back';
+        back.style.cssText =
+          'position:absolute;inset:0;margin:0;opacity:0;' +
+          'background-image:url(' + PAPYRUS_BACK_IMG + ');background-size:cover;' +
+          'background-position:center;background-repeat:no-repeat;';
+        face.appendChild(back);
+        tl.to(back, { opacity: 1, duration: 0.22, ease: 'power1.inOut' }, '-=' + (UNTIP * 0.6));
+      }
+      /* Land ON the real hand card: the flyer's width/height animate to the hand
+         card's, so left/top go straight to its rect — no centring offset (which
+         would be measured against the old, smaller board-slot size and miss). */
+      tl.to(face, { left: hRect.left, top: hRect.top,
+                    width: hRect.width, height: hRect.height,
+                    duration: SLIDE, ease: 'power2.inOut' }, '-=' + (UNTIP * 0.7))
+        .to(face, { opacity: 0, duration: 0.16, ease: 'power1.in' });
+    } else {
+      tl.to(face, { opacity: 0, duration: 0.24, ease: 'power1.in' });
+    }
+  }
+
   return { fire: fire, has: has, reactBounce: reactBounce,
            scribeStampSequence: scribeStampSequence,
            soldierCharge: soldierCharge,
@@ -2343,11 +2609,13 @@ SOG.RevealFx = (function () {
            sargonBeam: sargonBeam,
            hatshepsutBoatLaunch: hatshepsutBoatLaunch,
            dirtBurst: dirtBurst,
+           sandCascade: sandCascade,
            ipBadgeSwap: ipBadgeSwap,
            pyramidAbsorb: pyramidAbsorb,
            mummyWrapReveal: mummyWrapReveal,
            bookJudgment: bookJudgment,
            hieroglyphicsPulse: hieroglyphicsPulse,
+           akhenatenPulse: akhenatenPulse,
            raAbsorb: raAbsorb,
            rosettaTranscribe: rosettaTranscribe,
            scribeAccountingSequence: scribeAccountingSequence,
@@ -2355,5 +2623,6 @@ SOG.RevealFx = (function () {
            boatSplashBurst: boatSplashBurst,
            papyrusScrollRoll: papyrusScrollRoll,
            papyrusCopyFlourish: papyrusCopyFlourish,
+           imhotepSandSculpt: imhotepSandSculpt,
            endOfTurnShimmer: endOfTurnShimmer };
 })();
