@@ -641,9 +641,17 @@
       // Any card revealed at a location where Juvenal is already active:
       // flash the newly revealed card if it is penalised (CC ≥ 4, not Juvenal itself)
       if (cardId !== 18 && card && card.cc >= 4) {
+        /* ABILITY id, mirroring evaluateContinuous's own Juvenal detection
+           (abilities.js, abilityIdOf(s) === 18). Presentation only — the -2 itself
+           is applied by evaluateContinuous — but a raw cardId scan meant a Rosetta
+           (58) that had TRANSCRIBED Juvenal levied the penalty with no flash to
+           explain it. Same "if one side changes, the other must" rule as the CC
+           badge / effectiveCost pair. */
         var juvenalPresent = ['player', 'opp'].some(function (own) {
           var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-          return sl[locId].some(function (s) { return s && s.revealed && s.cardId === 18; });
+          return sl[locId].some(function (s) {
+            return s && s.revealed && ((s.transcribedFrom != null) ? s.transcribedFrom : s.cardId) === 18;
+          });
         });
         if (juvenalPresent) {
           if (typeof SFX !== 'undefined') SFX.juvenalSound();
@@ -1559,7 +1567,9 @@
             if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(item.owner, item.cardId, 1);
           }
         }
-        fireAtOnce(item.owner, item.cardId, rLocId, function () {
+        // rSi/rSd are THIS play's resolved coordinates (see the duplicate-safe
+        // lookup above) — the At-Once handler needs the actor, not just the id.
+        fireAtOnce(item.owner, item.cardId, rLocId, rSi, rSd, function () {
           /* Egypt Farmer (55) PHASE 2 — the onion descends onto the card that just
              took the +1 and is eaten. Fired HERE, in the At-Once completion
              callback, because this is the point at which the buffed card has

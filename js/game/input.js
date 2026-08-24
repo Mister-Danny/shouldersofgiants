@@ -1137,11 +1137,23 @@
    * Cosimo de'Medici (id 19): global -1 CC for all Cultural cards.
    */
   function refreshHandCostDisplays() {
+    /* ABILITY id, not card id — the same resolution board.js effectiveCost uses.
+       BADGE AND CHARGE MUST ALWAYS AGREE: this function paints the in-hand CC and
+       effectiveCost decides what the play actually costs (and what Book of the
+       Dead weighs). A raw s.cardId scan here missed a Rosetta (58) that had
+       TRANSCRIBED Cosimo or Henry — abilityIdOf reports it as 19/22, so
+       effectiveCost discounted while this badge showed the full price. Same class
+       as the Imhotep divergence: if a clause is added or removed on one side, it
+       must move on the other in the same edit.
+       Local mirror of abilities.abilityIdOf (this module has no import of it). */
+    var _abilityIdOf = function (s) {
+      return (s && s.transcribedFrom != null) ? s.transcribedFrom : (s ? s.cardId : null);
+    };
     var henryOnBoard          = G.locations.some(function (l) {
-      return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 22; });
+      return G.playerSlots[l.id].some(function (s) { return s && s.revealed && _abilityIdOf(s) === 22; });
     });
     var cosimoOnBoard         = G.locations.some(function (l) {
-      return G.playerSlots[l.id].some(function (s) { return s && s.revealed && s.cardId === 19; });
+      return G.playerSlots[l.id].some(function (s) { return s && s.revealed && _abilityIdOf(s) === 19; });
     });
     // Nebuchadnezzar (id 50): At Once, the owner's in-hand Mesopotamia cards get a
     // one-time -1 CC stamp (G.nebCCDiscount, set in abilities.js). Read per-card below

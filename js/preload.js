@@ -77,7 +77,11 @@ SOG.preload = (function () {
     'sfx/columbus-churchbell.mp3', 'sfx/voltaire-break.mp3', 'sfx/waterflow.m4a',
     'sfx/francis-prayer.mp3', 'sfx/justinian-reset.mp3', 'sfx/kente-shield.mp3',
     'sfx/juvenal-laugh.mp3', 'sfx/demedici-money.mp3', 'sfx/jesus-resurrect.mp3',
-    'sfx/janhus-firebell.mp3'
+    'sfx/janhus-firebell.mp3',
+    // Hyksos (67) "Foreign Rule": the whip cracks in the slot, then the horse
+    // carries the crossing. Warmed here so the two land from cache — the pair is
+    // sequenced 320ms apart and a cold fetch mid-beat is audible.
+    'sfx/whip.mp3', 'sfx/hyksoshorse.mp3'
   ];
   var _abilityWarmed = false;
 

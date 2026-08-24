@@ -169,6 +169,46 @@
     return (sd.transcribedFrom != null) ? sd.transcribedFrom : sd.cardId;
   }
 
+  /* THE ACTOR'S OWN SLOT ELEMENT — for a flourish that must play on the card that
+     is ACTING, not on whichever card happens to share its id.
+
+     Every At-Once handler used to find itself with findSlotEl(owner, <its id>),
+     which returns the FIRST id match at any location. That was wrong twice over:
+     with duplicates (three Hyksos, a Papyrus copy) it picked an arbitrary twin,
+     and with Rosetta (58) transcribing a card it picked the SOURCE — so a copied
+     Scribe stamped from the real Scribe's slot and a copied Ra banked its IP onto
+     the real Ra. onAtOnce now receives (slotIndex, sd) exactly as endOfTurn always
+     has, and this resolves them.
+
+     Resolution order, most-exact first:
+       1. OBJECT IDENTITY in the live array — survives compaction, which can shift
+          indexes mid-ability (the Hammurabi/Megalith lesson).
+       2. the slotIndex the dispatcher recorded — correct when nothing compacted.
+       3. the legacy id scan — only when no actor was supplied at all. */
+  function actorSlotEl(owner, locId, sd, slotIndex) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    if (sd && slots && slots[locId]) {
+      var i = slots[locId].indexOf(sd);
+      if (i !== -1) return getSlotEl(owner, locId, i);
+    }
+    if (slotIndex != null && slotIndex >= 0) {
+      var el = getSlotEl(owner, locId, slotIndex);
+      if (el) return el;
+    }
+    return sd ? findSlotEl(owner, sd.cardId) : null;
+  }
+
+  /* The actor's CURRENT index at its location, by object identity. Falls back to
+     the dispatcher's recorded index. -1 when the actor has left the board. */
+  function actorSlotIdx(owner, locId, sd, slotIndex) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    if (sd && slots && slots[locId]) {
+      var i = slots[locId].indexOf(sd);
+      if (i !== -1) return i;
+    }
+    return (slotIndex != null && slotIndex >= 0) ? slotIndex : -1;
+  }
+
   /* Effective CC for a BOARD slot. Normally the card def's CC, but a created Mummy
      (Batch C) inherits its source card's CC onto sd.cc — so ALL game-logic CC reads
      on board cards (Juvenal's CC≥4 penalty, Hammurabi's lowest-CC destroy, AI CC
@@ -839,6 +879,81 @@
           }
         });
       }
+
+      /* THE NILE DELTA (ONE_CC_PLUS_ONE_HERE, Hyksos battle): +1 IP to a side's
+         total here for each of ITS OWN 1-CC cards here. Per side and symmetric —
+         each side counts only its own cards, so the two totals move independently.
+
+         EFFECTIVE CC, not printed (effectiveCC → sd.cc when a Mummy inherited one,
+         else the definition). Two reasons: the badge-truth rule this codebase runs
+         on — what the card SHOWS is what counts — and precedent inside this very
+         battle, where the Egypt Soldier (70) already picks its 1-CC targets with
+         effectiveCC for exactly that reason. There is no board-side CC discount in
+         the game (discounts are in-hand, applied at the moment of play), so today
+         effective and printed differ only for a Mummy; if a board-side discount is
+         ever added, this clause follows it for free.
+         A location-TOTAL bonus, not a per-card one — "+1 IP for each 1-CC card you
+         have here" rewards the location, the same reading Abu Simbel above uses. */
+      if (loc.abilityKey === 'ONE_CC_PLUS_ONE_HERE') {
+        ['player', 'opp'].forEach(function (own) {
+          var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+          var n  = 0;
+          (sl[loc.id] || []).forEach(function (s) {
+            if (s && s.revealed && effectiveCC(s) === 1) n++;
+          });
+          if (n > 0 && G.locationBoosts[loc.id]) {
+            G.locationBoosts[loc.id][own].push({
+              sourceCardId: null, sourceOwner: own, sourceLocId: loc.id, amount: n
+            });
+          }
+        });
+      }
+    });
+
+    /* THEBES (LEAD_HERE_BOOSTS_OTHERS, Hyksos battle): whichever side is STRICTLY
+       AHEAD at Thebes gets +2 IP at EACH of the other locations. A tie gives nobody
+       the bonus — "if you're winning here", not "if you're not losing".
+
+       A CONDITIONAL CROSS-LOCATION effect, and the engine already had the machinery:
+       G.locationBoosts is the per-location external-boost table Sargon's adjacency
+       bonus and Abu Simbel's fill bonus write into, and updateScores / tallyResult
+       / the location popup all read it. It is rebuilt from scratch on every
+       evaluateContinuous pass, so this re-derives live: the moment the lead flips or
+       levels, the +2s move or vanish with it. Nothing is accumulated.
+
+       RUN AFTER the per-location loop above, deliberately: every card's contMod must
+       be final before the lead can be measured, or the comparison would read a
+       half-built board.
+
+       NOT SELF-REFERENTIAL: the lead is measured from card IP plus the boosts
+       ALREADY standing at Thebes, and the +2s are pushed only to the OTHER
+       locations — Thebes never boosts itself, so there is no feedback loop and no
+       ordering dependence on this block running once or twice.
+
+       Attribution rides the same {sourceCardId, sourceOwner, sourceLocId, amount}
+       shape as Sargon's; sourceLocId is Thebes, so the popup can name where it came
+       from (sourceCardId is null because the source is the LOCATION, not a card —
+       identical to Abu Simbel). */
+    G.locations.forEach(function (loc) {
+      if (loc.abilityKey !== 'LEAD_HERE_BOOSTS_OTHERS') return;
+      var totalAt = function (own) {
+        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+        var t = 0;
+        (sl[loc.id] || []).forEach(function (s) { if (s && s.revealed) t += effectiveIP(s); });
+        if (G.locationBoosts[loc.id]) {
+          G.locationBoosts[loc.id][own].forEach(function (b) { t += b.amount; });
+        }
+        return t;
+      };
+      var p = totalAt('player'), a = totalAt('opp');
+      if (p === a) return;                                   // a tie boosts nobody
+      var leader = (p > a) ? 'player' : 'opp';
+      G.locations.forEach(function (other) {
+        if (other.id === loc.id || !G.locationBoosts[other.id]) return;
+        G.locationBoosts[other.id][leader].push({
+          sourceCardId: null, sourceOwner: leader, sourceLocId: loc.id, amount: 2
+        });
+      });
     });
 
     /* ── Narmer (id 51) "The Unifier" — total-IP averaging (FINAL PASS) ──────────
@@ -1251,7 +1366,7 @@
      the standard At-Once pulse/chime; harmlessly no-ops where capital is off.
      Also used by the Nubian Gold token (73). NOT the Egypt Farmer (55) — that one
      buffs the next card played, see abilityFarmerEgypt. */
-  function abilityFarmer(owner, locId, done) {
+  function abilityFarmer(owner, locId, slotIndex, sd, done) {
     grantCapitalNextTurn(owner, 1);
     done();
   }
@@ -1287,7 +1402,7 @@
     return true;
   }
 
-  function abilityFarmerEgypt(owner, locId, done) {
+  function abilityFarmerEgypt(owner, locId, slotIndex, sd, done) {
     armPendingIPBuff(owner);
     // No sound here: the Farmer's reveal voice is the onion pop's boing, owned by
     // reveal-fx handler 55 (same division as the Meso Farmer 39, whose handler owns
@@ -1304,14 +1419,18 @@
      the visible mark / float / sfx — never a faked number). done() is passed as
      the sequence's onComplete, so the reveal pipeline waits for all stamps before
      advancing. No other cards here → harmless no-op (done() immediately). */
-  function abilityScribe(owner, locId, done) {
+  function abilityScribe(owner, locId, slotIndex, sd, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
 
     // The owner's OTHER revealed cards here, in slot order. Exclude Scribe by id
     // (matches Scholar-Officials' by-id self-exclusion), per the At-Once rule.
     var targets = [];
     forEachRevealedAt(slots, locId, function (s, i) {
-      if (s.cardId === 40) return;                 // not Scribe itself
+      /* Exclude the ACTOR by identity, not every card with id 40. By-id exclusion
+         INVERTED the ability whenever a Rosetta carried it: the real Scribe was
+         skipped and Rosetta — the actor — was stamped as a target. A second real
+         Scribe here is a legitimate target of the first. */
+      if (s === sd) return;                        // not the stamping Scribe itself
       var el = getSlotEl(owner, locId, i);
       targets.push({
         el: el,
@@ -1331,11 +1450,7 @@
     if (!targets.length) { done(); return; }       // nothing to stamp → no-op
 
     // Scribe's own slot element — the stamp's starting position.
-    var scribeIdx = -1;
-    forEachRevealedAt(slots, locId, function (s, i) {
-      if (scribeIdx === -1 && s.cardId === 40) scribeIdx = i;
-    });
-    var scribeEl = scribeIdx !== -1 ? getSlotEl(owner, locId, scribeIdx) : null;
+    var scribeEl = actorSlotEl(owner, locId, sd, slotIndex);   // the stamp starts on the ACTOR
 
     var rfx = window.SOG && SOG.RevealFx;
     if (rfx && typeof rfx.scribeStampSequence === 'function') {
@@ -1354,7 +1469,7 @@
     }
   }
 
-  function abilityScholarOfficials(owner, locId, done) {
+  function abilityScholarOfficials(owner, locId, slotIndex, sd, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     // "Other cards here" = all revealed at this location minus THIS Scholar.
     // Counting by id-exclusion (cardId !== 2) undercounted when a duplicated
@@ -1364,8 +1479,7 @@
     var count = Math.max(0, total - 1);
     grantCapitalNextTurn(owner, count);   // shared next-turn-capital accumulator
     if (count > 0) {
-      var slotIdx = slots[locId].findIndex(function (s) { return s && s.cardId === 2; });
-      var slotEl  = slotIdx !== -1 ? getSlotEl(owner, locId, slotIdx) : null;
+      var slotEl  = actorSlotEl(owner, locId, sd, slotIndex);   // THIS Scholar, not the first id match
       if (typeof SFX  !== 'undefined') SFX.coinSound();
       if (typeof Anim !== 'undefined' && slotEl) {
         Anim.scholarPulse(slotEl);
@@ -1374,7 +1488,7 @@
       // Pulse each contributing card so viewers can see what's being counted
       if (typeof Anim !== 'undefined') {
         forEachRevealedAt(slots, locId, function (s, si) {
-          if (s.cardId === 2) return;
+          if (s === sd) return;                       // identity, not id: a twin Scholar IS a contributor
           var contEl = getSlotEl(owner, locId, si);
           if (contEl) Anim.scholarPulse(contEl);
         });
@@ -1386,11 +1500,11 @@
     done();
   }
 
-  function abilityJustinian(owner, locId, done) {
+  function abilityJustinian(owner, locId, slotIndex, sd, done) {
     if (typeof SFX !== 'undefined') SFX.justinianShing();
 
     // Flash Justinian's own card white
-    var justinianEl = findSlotEl(owner, 3);
+    var justinianEl = actorSlotEl(owner, locId, sd, slotIndex);
     if (justinianEl && typeof Anim !== 'undefined') Anim.justinianFlash(justinianEl);
 
     // Reset ipMod on ALL revealed cards here (both sides), show floats for any that changed
@@ -1439,7 +1553,7 @@
     setTimeout(done, anyAffected ? 800 : 650);
   }
 
-  function abilityEmpressWu(owner, locId, done) {
+  function abilityEmpressWu(owner, locId, slotIndex, sd, done) {
     done = done || function () {};
     var adjLocs = getAdjacentLocIds(locId);
     if (!adjLocs.length) { done(); return; }
@@ -1473,7 +1587,7 @@
     var destIdx   = canPush ? destSlots[destLocId].indexOf(null) : -1;
 
     // ── Element refs ──────────────────────────────────────────────
-    var wuEl    = findSlotEl(owner, 4);
+    var wuEl    = actorSlotEl(owner, locId, sd, slotIndex);
     var tgtIdx  = best.idx;   // the exact scored slot (not a cardId re-scan — twin-safe)
     var tgtEl   = tgtIdx !== -1 ? getSlotEl(oppSide, locId, tgtIdx) : null;
     var destEl  = (canPush && destIdx !== -1) ? getSlotEl(oppSide, destLocId, destIdx) : null;
@@ -1573,14 +1687,18 @@
                      duration: 0.28, ease: 'back.out(1.6)' });
   }
 
-  function abilityPacal(owner, locId, done) {
+  function abilityPacal(owner, locId, slotIndex, sd, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    // Collect other At Once cards at this location (exclude Pacal himself)
+    /* Collect the other At-Once cards here — as ACTORS, not bare ids. Pacal
+       re-fires each card's own ability, so each must be handed ITSELF; an id alone
+       would send the handler back to scanning, which is the bug this whole change
+       removes. Pacal excludes himself by OBJECT IDENTITY (s !== sd) rather than by
+       id, so a second Pacal at this location is a legitimate target. */
     var cards = [];
-    forEachRevealedAt(slots, locId, function (s) {
-      if (s.cardId === 5) return;
+    forEachRevealedAt(slots, locId, function (s, si) {
+      if (s === sd) return;                                  // not Pacal himself
       var c = CARDS.find(function (x) { return x.id === s.cardId; });
-      if (c && c.ability && c.ability.indexOf('At Once') !== -1) cards.push(s.cardId);
+      if (c && c.ability && c.ability.indexOf('At Once') !== -1) cards.push({ cardId: s.cardId, sd: s, si: si });
     });
 
     // Play Pacal's custom sound immediately
@@ -1591,13 +1709,15 @@
       var idx = 0;
       function next() {
         if (idx >= cards.length) { done(); return; }
-        fireAtOnce(owner, cards[idx++], locId, next);
+        var it = cards[idx++];
+        // Re-resolve the index by identity: an earlier re-fire may have compacted.
+        fireAtOnce(owner, it.cardId, locId, actorSlotIdx(owner, locId, it.sd, it.si), it.sd, next);
       }
       next();
     }
 
     // Clock-wipe over Pacal's card, then trigger the chain
-    var pacalEl = findSlotEl(owner, 5);
+    var pacalEl = actorSlotEl(owner, locId, sd, slotIndex);
     if (pacalEl && typeof Anim !== 'undefined') {
       Anim.pacalWipe(pacalEl, runCards);
     } else {
@@ -1605,7 +1725,7 @@
     }
   }
 
-  function abilityFrancisOfAssisi(owner, locId, done) {
+  function abilityFrancisOfAssisi(owner, locId, slotIndex, sd, done) {
     var hand = owner === 'player' ? G.playerHand : G.aiHand;
     /* Highest cost AS SHOWN ON THE BADGE. Type still comes from the definition —
        that never varies — but the cost must be the effective one: the Levant's
@@ -1634,7 +1754,7 @@
     discardFromHand(owner, best, done);
   }
 
-  function abilityErasmus(owner, locId, done) {
+  function abilityErasmus(owner, locId, slotIndex, sd, done) {
     if (owner === 'opp') {
       // AI: discard a random hand card
       if (G.aiHand.length > 0) {
@@ -1654,10 +1774,10 @@
     });
   }
 
-  function abilityCortes(owner, locId, done) {
+  function abilityCortes(owner, locId, slotIndex, sd, done) {
     var RISE_Y = -16;    // px upward during the sweep
     var slots    = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var cortesEl = findSlotEl(owner, 13);
+    var cortesEl = actorSlotEl(owner, locId, sd, slotIndex);
 
     // ── Blocked: Kente or the owner's own Sphinx is protecting ────
     // Cortes inlines its own destruction (it never calls destroyCard), so the
@@ -1682,7 +1802,7 @@
     // ── Snapshot victims (all revealed at this loc except Cortes) ─
     var victims = [];
     forEachRevealedAt(slots, locId, function (s, idx) {
-      if (s.cardId === 13) return;
+      if (s === sd) return;                        // spare the ACTOR, not every Cortes
       var el   = getSlotEl(owner, locId, idx);
       var rect = el ? el.getBoundingClientRect() : null;
       victims.push({ cardId: s.cardId, ip: effectiveIP(s), slotIdx: idx, el: el, rect: rect });
@@ -1721,7 +1841,7 @@
       if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
       else                    { compactOppSlots(locId);    syncOppSlots(locId);    }
       afterFnsFB.forEach(function (fn) { fn(); });
-      var cortesSdFB = slots[locId].find(function (s) { return s && s.cardId === 13; });
+      var cortesSdFB = (slots[locId].indexOf(sd) !== -1) ? sd : null;   // the ACTOR banks the IP
       if (cortesSdFB && ipGainedFB > 0) {
         addIPMod(cortesSdFB, ipGainedFB, 'Cortes');
         SOG.ui.showIPFloat(owner, 13, ipGainedFB);
@@ -1763,7 +1883,7 @@
 
         // Unmute and update Cortes IP before any return animations start
         if (typeof SFX !== 'undefined') SFX.mute(false);
-        var cortesSd = slots[locId].find(function (s) { return s && s.cardId === 13; });
+        var cortesSd = (slots[locId].indexOf(sd) !== -1) ? sd : null;   // the ACTOR banks the IP
         if (cortesSd && ipGained > 0) {
           addIPMod(cortesSd, ipGained, 'Cortes');
           SOG.ui.showIPFloat(owner, 13, ipGained);
@@ -1899,7 +2019,7 @@
       .to(cortesEl, { scale: 1.0, duration: 0.20, ease: 'power2.inOut' }, '<0.10');
   }
 
-  function abilityZhengHe(owner, locId, done) {
+  function abilityZhengHe(owner, locId, slotIndex, sd, done) {
     var slots   = owner === 'player' ? G.playerSlots : G.aiSlots;
     var adjLocs = getAdjacentLocIds(locId);
     var anyAffected = false;
@@ -1931,7 +2051,7 @@
 
   // Priest (id 38) — At Once: Discard the card in your hand with the
   // lowest CC.  Ties resolved by first-in-hand order.
-  function abilityPriest(owner, locId, done) {
+  function abilityPriest(owner, locId, slotIndex, sd, done) {
     var hand = owner === 'player' ? G.playerHand : G.aiHand;
     if (hand.length === 0) { done(); return; }
     /* Lowest cost AS SHOWN ON THE BADGE (handStats -> effectiveCost), not the
@@ -1958,7 +2078,7 @@
   // Soldier (70). soldierCardId picks whose slot the spear flies FROM. Sphinx (64)
   // protection: if the TARGET's owner has a Sphinx here, the strike whiffs (no IP
   // reduction) — the Kente-pattern reuse the Egypt Sphinx requested.
-  function _soldierStrike(owner, locId, done, soldierCardId) {
+  function _soldierStrike(owner, locId, done, soldierCardId, actorSd, actorIdx) {
     var oppSide  = owner === 'player' ? 'opp' : 'player';
     var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
     // Keep each target's SLOT INDEX alongside its data so the charge animation can
@@ -1974,7 +2094,9 @@
     function applyStrike(t) {
       var targetSd  = t.sd;
       var targetEl  = getSlotEl(oppSide, locId, t.idx);       // the SAME card the ability chose
-      var soldierEl = findSlotEl(owner, soldierCardId);       // the charging Soldier's slot
+      // The CHARGING Soldier's own slot — the actor, not the first card with this
+      // id (a twin, or the source when a Rosetta is acting as a Soldier).
+      var soldierEl = actorSlotEl(owner, locId, actorSd, actorIdx) || findSlotEl(owner, soldierCardId);
 
       function strike() {   // the real, one-time IP reduction (shown at impact)
         // Sphinx guards the target owner's cards here — block the reduction.
@@ -2001,7 +2123,7 @@
     var target = targets[Math.floor(Math.random() * targets.length)];
     applyStrike(target);
   }
-  function abilitySoldier(owner, locId, done)      { _soldierStrike(owner, locId, done, 42); }  // Mesopotamia
+  function abilitySoldier(owner, locId, slotIndex, sd, done) { _soldierStrike(owner, locId, done, 42, sd, slotIndex); }  // Mesopotamia
 
   /* Soldier — Egypt (70) "Military Service": At Once, DESTROY one of the opponent's
      1-CC cards here. Distinct from the Mesopotamia Soldier's -1 IP strike above, so
@@ -2016,7 +2138,7 @@
          summon, William's counter, and the destroyed pile.
      Presentation reuses the Soldier charge: the spear flies at the chosen card and
      the destroy lands on the impact beat, so the reveal pipeline waits for it. */
-  function abilitySoldierEgypt(owner, locId, done) {
+  function abilitySoldierEgypt(owner, locId, slotIndex, sd, done) {
     var oppSide  = owner === 'player' ? 'opp' : 'player';
     var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
     // Protection is LOCATION-WIDE, so it removes every candidate at once: zero valid
@@ -2031,7 +2153,7 @@
 
     var t         = targets[Math.floor(Math.random() * targets.length)];
     var targetEl  = getSlotEl(oppSide, locId, t.idx);
-    var soldierEl = findSlotEl(owner, 70);
+    var soldierEl = actorSlotEl(owner, locId, sd, slotIndex);
 
     function strike() {
       // Re-resolve the slot index at impact: the board may have shifted between
@@ -2067,7 +2189,7 @@
   // Only REVEALED cards are eligible (forEachRevealedAt), same as every At-Once.
   // The two destroys are fired at the strike beat by the FX (presentation coupled to
   // logic, like Scribe/Soldier): the cards that SPLIT are the cards that really die.
-  function abilityHammurabi(owner, locId, done) {
+  function abilityHammurabi(owner, locId, slotIndex, sd, done) {
     var mySlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
     var oppSide  = owner === 'player' ? 'opp' : 'player';
     var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
@@ -2099,7 +2221,7 @@
     // splits the same two cards the logic removes (same-target integrity).
     var sacEl = getSlotEl(owner,   locId, sacIdx);
     var oppEl = getSlotEl(oppSide, locId, oppIdx);
-    var hamEl = findSlotEl(owner, 47);
+    var hamEl = actorSlotEl(owner, locId, sd, slotIndex);
 
     // The REAL destruction, fired at the down-stroke. skipAnim → no generic
     // shake/sfx; the strike FX supplies swordslice + the split + bodyfalling.
@@ -2117,7 +2239,7 @@
         { strikeSfx: 'sfx/swordslice.m4a', splitSfx: 'sfx/bodyfalling.m4a', onStrike: strike,
           // The strike compacts the owner's row, so Hammurabi's card moves to a new
           // slot element. This lets the FX re-find him after the strike to slide him in.
-          getStrikerEl: function () { return findSlotEl(owner, 47); } },
+          getStrikerEl: function () { return actorSlotEl(owner, locId, sd, slotIndex); } },
         done);
     } else {
       // Defensive fallback (no FX available): destroy instantly, still correct.
@@ -2131,7 +2253,7 @@
   // ipMod applied once, now. Face-down Prehistory cards (not yet in play) and
   // hand cards are NOT boosted — the universal At Once rule, enforced via
   // forEachRevealedAt, same as every other slot-touching ability.
-  function abilityCuneiform(owner, locId, done) {
+  function abilityCuneiform(owner, locId, slotIndex, sd, done) {
     var slots = (owner === 'player') ? G.playerSlots : G.aiSlots;
 
     function isPrehistory(id) {
@@ -2186,11 +2308,11 @@
   // Phoenicians is consumed either way. Player gets a chooser over all their cards
   // here; the AI auto-picks the card that gains the most (the +1 Cultural edge tips
   // close calls).
-  function abilityPhoenicians(owner, locId, done) {
+  function abilityPhoenicians(owner, locId, slotIndex, sd, done) {
     var mySlots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var targets = [];
     forEachRevealedAt(mySlots, locId, function (s, si) {
-      if (s.cardId === 49) return;            // never attach to itself
+      if (s === sd) return;                   // never attach to itself (identity, not id)
       targets.push({ sd: s, si: si });        // ANY of the owner's revealed cards here
     });
     if (targets.length === 0) { done(); return; }   // no host → Phoenicians reveals normally
@@ -2204,7 +2326,7 @@
     // host by +3 (its own IP), +1 more if the host is Cultural. Runs at the DISSOLVE
     // beat so the visible consumption equals the game-state change.
     function doMerge(hostSd) {
-      var phoenIdx = mySlots[locId].findIndex(function (s) { return s && s.cardId === 49; });
+      var phoenIdx = actorSlotIdx(owner, locId, sd, slotIndex);   // THIS Phoenicians
       if (phoenIdx !== -1) {
         mySlots[locId][phoenIdx] = null;
         clearSlotDOM(owner, locId, phoenIdx);
@@ -2232,7 +2354,7 @@
     // the SAME target the ability chose, dissolves, and onMerge applies the real merge
     // at that beat. done() fires after, so the reveal pipeline waits for the sequence.
     function attach(target) {   // target = { sd, si }
-      var phoenIdx = mySlots[locId].findIndex(function (s) { return s && s.cardId === 49; });
+      var phoenIdx = actorSlotIdx(owner, locId, sd, slotIndex);   // THIS Phoenicians
       var phoenEl  = phoenIdx !== -1 ? getSlotEl(owner, locId, phoenIdx) : null;
       var targetEl = getSlotEl(owner, locId, target.si);
       var rfx = window.SOG && SOG.RevealFx;
@@ -2541,7 +2663,14 @@
         }
       }
       // Fire the summoned card's At Once ability (if any); default case just calls done()
-      fireAtOnce('player', religiousId, locId, done || function () {});
+      /* The summoned card's own At Once. Resolve its actor from the slot it was
+         just placed in — by identity where possible — so it acts as ITSELF. */
+      var _jSlots = G.playerSlots[locId] || [];
+      var _jIdx   = -1;
+      for (var _ji = 0; _ji < _jSlots.length; _ji++) {
+        if (_jSlots[_ji] && _jSlots[_ji].cardId === religiousId && _jSlots[_ji].revealed) { _jIdx = _ji; break; }
+      }
+      fireAtOnce('player', religiousId, locId, _jIdx, (_jIdx !== -1 ? _jSlots[_jIdx] : null), done || function () {});
     }, null, 0.65);
   }
 
@@ -2704,7 +2833,7 @@
      Tool's draw is owned by the ability, not by the start-of-turn
      loop. In the prehistory tutorial battle (4-card hand cap), Tool's
      draw can push the hand from 4 → 5. */
-  function abilityTool(owner, locId, done) {
+  function abilityTool(owner, locId, slotIndex, sd, done) {
     var deck = owner === 'player' ? G.playerDeck : G.aiDeck;
     var hand = owner === 'player' ? G.playerHand : G.aiHand;
     if (deck.length > 0) {
@@ -3030,7 +3159,7 @@
      Scientific cards inside board.effectiveCost, mirrored in input's
      refreshHandCostDisplays. Both are gone; there is no Scientific discount left in
      the game. */
-  function abilityImhotep(owner, locId, done) {
+  function abilityImhotep(owner, locId, slotIndex, sd, done) {
     var hand    = owner === 'player' ? G.playerHand : G.aiHand;
     var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
     if (!hand) { done(); return; }
@@ -3058,7 +3187,7 @@
     }
 
     var rfx     = window.SOG && SOG.RevealFx;
-    var srcEl   = findSlotEl(owner, 65);
+    var srcEl   = actorSlotEl(owner, locId, sd, slotIndex);
     var pyrCard = CARDS.find(function (c) { return c.id === 57; });
 
     if (rfx && typeof rfx.imhotepSandSculpt === 'function' && srcEl && pyrCard) {
@@ -3069,11 +3198,11 @@
     }
   }
 
-  function abilityPapyrusEconomic(owner, locId, done) {
+  function abilityPapyrusEconomic(owner, locId, slotIndex, sd, done) {
     _atOnceTypeBuffHere(owner, locId, 'Scientific', 2, 'Papyrus', done);
   }
   /* Purple Dye (75). */
-  function abilityPurpleDye(owner, locId, done) {
+  function abilityPurpleDye(owner, locId, slotIndex, sd, done) {
     _atOnceTypeBuffHere(owner, locId, 'Political', 2, 'Purple Dye', done);
   }
 
@@ -3106,7 +3235,7 @@
      card is played at its location. This is automatic rather than suppressed —
      onCardLandedHere fires for cards that LAND at a location, and spawning is
      not a landing, so nothing re-enters the Merchant's own trigger here. */
-  function abilityHatshepsut(owner, locId, done) {
+  function abilityHatshepsut(owner, locId, slotIndex, sd, done) {
     done = typeof done === 'function' ? done : function () {};
     var dest = randomOtherOpenLoc(owner, locId);
     if (!dest) { done(); return; }                  // nowhere to send her → fizzle
@@ -3128,12 +3257,12 @@
     // re-syncs (and may compact) the column, and the side may already hold another
     // Merchant, so identity is the only unambiguous answer.
     var idx = -1;
-    (slots[dest.id] || []).forEach(function (sd, i) {
-      if (sd && before.indexOf(sd) === -1) idx = i;
+    (slots[dest.id] || []).forEach(function (cand, i) {   // `cand`, not `sd` — the outer sd is the ACTOR
+      if (cand && before.indexOf(cand) === -1) idx = i;
     });
 
     var rfx = window.SOG && SOG.RevealFx;
-    var hatEl   = findSlotEl(owner, 52);
+    var hatEl   = actorSlotEl(owner, locId, sd, slotIndex);
     var merchEl = (idx !== -1) ? getSlotEl(owner, dest.id, idx) : null;
 
     // The boat launch is scoped to THIS ability — a Merchant played from hand, or
@@ -3197,8 +3326,8 @@
          nothing to sparkle on-screen.
      The in-hand sparkle + CC-drop therefore runs ONLY for the side whose hand is
      visible (the player), while the stamp applies to whichever side played Neb. */
-  function abilityNebuchadnezzar(owner, locId, done) {
-    var nebEl = findSlotEl(owner, 50);
+  function abilityNebuchadnezzar(owner, locId, slotIndex, sd, done) {
+    var nebEl = actorSlotEl(owner, locId, sd, slotIndex);
     // The cards that get the one-time -1 stamp: the OWNER's in-hand Mesopotamia
     // cards (player or AI). The hand here is what's LEFT after this turn's plays.
     var ownerHand = (owner === 'player') ? (G.playerHand || []) : (G.aiHand || []);
@@ -3246,8 +3375,8 @@
      Targets EXACTLY getAdjacentLocIds(locId) (the same adjacency the boost uses), so
      a middle Sargon beams both neighbors and an end Sargon beams just one. Plays for
      BOTH sides (the board is visible to both). Gates the turn via done. */
-  function abilitySargon(owner, locId, done) {
-    var sargonEl = findSlotEl(owner, 37);
+  function abilitySargon(owner, locId, slotIndex, sd, done) {
+    var sargonEl = actorSlotEl(owner, locId, sd, slotIndex);
     var boxes = [];
     getAdjacentLocIds(locId).forEach(function (adjId) {
       var box = boardEl.querySelector('.battle-col[data-loc-id="' + adjId + '"]');
@@ -3274,7 +3403,10 @@
   function megalithEndOfTurn(owner, locId, slotIndex, sd, done) {
     // Re-acquire the slot element by owner+cardId (the Hammurabi lesson: slot
     // indexes can shift if an earlier queue entry compacted the board).
-    var el = findSlotEl(owner, sd.cardId);
+    // The actor, by identity — findSlotEl(owner, sd.cardId) picked the first card
+    // with this id, which is a twin (duplicate decks) or the SOURCE when a Rosetta
+    // carries this ability. actorSlotEl still falls back to that scan.
+    var el = actorSlotEl(owner, locId, sd, slotIndex);
     var rfx = window.SOG && SOG.RevealFx;
     var tick = function () {
       addIPMod(sd, 1, 'Megalith');            // permanent +1, cumulative across turns
@@ -3296,7 +3428,7 @@
      cumulatively. Identical to Megalith (31) — same end-of-turn phase + shimmer,
      different attribution source. */
   function obeliskEndOfTurn(owner, locId, slotIndex, sd, done) {
-    var el  = findSlotEl(owner, sd.cardId);
+    var el  = actorSlotEl(owner, locId, sd, slotIndex);   // the actor, by identity
     var rfx = window.SOG && SOG.RevealFx;
     var tick = function () {
       addIPMod(sd, 1, 'Obelisk');
@@ -3348,7 +3480,7 @@
     });
     if (!targets.length) { done(); return; }                 // nothing Economic here → fizzle
 
-    var scribeEl = findSlotEl(owner, 56);
+    var scribeEl = actorSlotEl(owner, locId, sd, slotIndex);   // the stamping Scribe itself
     var rfx = window.SOG && SOG.RevealFx;
     if (rfx && typeof rfx.scribeAccountingSequence === 'function') {
       rfx.scribeAccountingSequence(scribeEl, targets,
@@ -3363,7 +3495,7 @@
   /* Ra (id 63) — "Sun God": At Once, discard the owner's lowest-CC hand card; Ra
      permanently gains that card's IP (addIPMod). Reuses the Priest discard pattern
      (lowest-CC selection + discardFromHand) plus a permanent stamp on Ra. */
-  function abilityRa(owner, locId, done) {
+  function abilityRa(owner, locId, slotIndex, sd, done) {
     var hand = owner === 'player' ? G.playerHand : G.aiHand;
     if (!hand.length) { done(); return; }
     /* SELECTION AND GAIN BOTH COME FROM handStats — one read per card, so the cost
@@ -3392,8 +3524,10 @@
     if (lowestId === null) { done(); return; }
     var dc = CARDS.find(function (x) { return x.id === lowestId; });
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var raSd  = null;
-    (slots[locId] || []).forEach(function (s) { if (s && s.cardId === 63) raSd = s; });
+    /* THE GAINER IS THE ACTOR. Scanning for cardId 63 banked the absorbed IP onto
+       the first Ra at this location — which, when a Rosetta was acting as Ra, was
+       the REAL Ra: the player paid the discard and the source card profited. */
+    var raSd = sd || null;
 
     /* Where the absorbed card rises FROM — captured before discardFromHand removes
        it. The opponent's origin is their face-down hand strip, but the flyer is
@@ -3427,7 +3561,7 @@
       }
 
       var rfx  = window.SOG && SOG.RevealFx;
-      var raEl = findSlotEl(owner, 63);
+      var raEl = actorSlotEl(owner, locId, sd, slotIndex);
       if (rfx && typeof rfx.raAbsorb === 'function' && raEl && dc) {
         rfx.raAbsorb(originEl, dc, {
           raEl:      raEl,
@@ -3474,7 +3608,7 @@
      copied verbatim as reveal-fx handler 60; it animates whichever card this
      actually appended to the hand, and it suppresses itself on the fizzle by
      running the same "is there a Scientific card in this deck" test. */
-  function abilityKhufu(owner, locId, done) {
+  function abilityKhufu(owner, locId, slotIndex, sd, done) {
     var drawnId = drawTypeFromDeck(owner, 'Scientific');
     if (window.SOG_DEBUG && typeof console !== 'undefined') {
       console.log('[Khufu] drew ' + (drawnId == null ? 'nothing (no Scientific in deck)' : drawnId));
@@ -3496,37 +3630,104 @@
     return (slots[locId] || []).some(function (s) { return s && s.revealed && abilityIdOf(s) === 64; });
   }
 
-  /* Hyksos (id 67) — "Foreign Kings": At Once on reveal, TRANSFER to the OPPONENT'S
-     side of the SAME location (into an open slot). Ownership = array membership, so
-     moving the sd from the owner's array to the opponent's array flips ownership for
-     ALL systems (scoring/continuous/display/badges) automatically. If the opponent's
-     side is FULL (no null slot — face-down/unrevealed cards count as occupying), the
-     transfer FAILS and Hyksos stays STUCK on its owner's side (its -2 IP stays the
-     owner's — the timing skill). */
-  function abilityHyksos(owner, locId, done) {
-    var oppSide  = owner === 'player' ? 'opp' : 'player';
-    var mySlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var oppSlots = oppSide === 'player' ? G.playerSlots : G.aiSlots;
-    if ((oppSlots[locId] || []).indexOf(null) === -1) { done(); return; }  // opp side FULL → stuck
-    var fromIdx = -1;
-    (mySlots[locId] || []).forEach(function (s, i) { if (fromIdx === -1 && s && s.cardId === 67) fromIdx = i; });
-    if (fromIdx === -1) { done(); return; }
-    var sd = mySlots[locId][fromIdx];
-    // Remove from owner's side, compact/re-render.
-    mySlots[locId][fromIdx] = null;
+  var HYKSOS_ID = 67;
+
+  /* HYKSOS (67) — "Foreign Rule". At Once on reveal: cross to the OPPONENT'S side
+     of the SAME location, carrying a -1 IP body onto their board.
+
+     OWNERSHIP IS ARRAY MEMBERSHIP. There is no sd.owner field — `owner === 'player'
+     ? G.playerSlots : G.aiSlots` is the whole definition of whose card this is, in
+     forty places. Moving the slot record into the other array therefore flips
+     ownership for EVERY system at once: the -1 subtracts from THEIR location total
+     (updateScores sums each array into its own side), their Scribe counts it among
+     their cards, their auras reach it, a destroy on it credits their counters. An
+     "occupier flag" would have fixed scoring alone and left the other thirty-nine
+     sites disagreeing.
+
+     FIZZLE: if the opponent's side of this location has no open slot (face-down and
+     unrevealed cards both occupy), he CANNOT cross and stays put at -1 on his
+     owner's side. A misplayed invasion is a self-inflicted -1, which is the point.
+
+     DUPLICATE-SAFE SELF-IDENTIFICATION. The invader deck runs THREE copies, and
+     onAtOnce is handed (owner, locId) with no slot index — a `cardId === 67` scan
+     takes the first match, which is the wrong card when two are at one location.
+     Same trick Pyramid (57) uses instead: the copy that just revealed is the one
+     with NO playTime yet, because revealNext stamps playTime only AFTER the At Once
+     returns. abilityIdOf so a transcribed/copied Hyksos behaves like a printed one.
+
+     _defected marks the crossed card so neither side's mover will pick it up:
+     ai.js _aiSlotMovableNow and input.js refreshMoveableCards both refuse it. The
+     invader chose where he stands; the invaded live with it. */
+  function abilityHyksos(owner, locId, slotIndex, sd, done) {
+    var fromSlots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var toOwner   = owner === 'player' ? 'opp' : 'player';
+    var toSlots   = toOwner === 'player' ? G.playerSlots : G.aiSlots;
+
+    /* The whip cracks on REVEAL, before anything is decided — including on the
+       failed invasion below, where the crack is all that happens and nothing
+       crosses. hyksoshorse.mp3 comes later, under the travel, so a card that never
+       travels never plays it. The invader has his OWN horse — deliberately not the
+       Chariot's chariot.mp3, which belongs to card 69's roll. */
+    if (window.SOG && SOG.sfx) SOG.sfx.play('sfx/whip.mp3');
+
+    if ((toSlots[locId] || []).indexOf(null) === -1) { done(); return; }   // their side FULL → stays at -1, NO travel
+
+    /* THIS Hyksos = the ACTOR. The abilityIdOf + no-playTime scan this replaces was
+       already CORRECT (it found Rosetta, not the source) — it was a workaround for
+       a signature that carried no actor. The dispatcher supplies one now, so the
+       workaround is retired rather than regressed. */
+    var fromIdx = actorSlotIdx(owner, locId, sd, slotIndex);
+    if (fromIdx === -1 || !fromSlots[locId][fromIdx]) { done(); return; }  // actor gone → no-op
+    // fromSlots[locId][fromIdx] IS the actor (actorSlotIdx resolved it by identity);
+    // the local name is kept so the crossing code below reads unchanged.
+
+    /* Clone the card while it is STILL STANDING in its own slot — the state move
+       below clears this slot, so there is nothing left to photograph afterwards.
+       The clone is the thing that travels; the real card is already at the other
+       end by then, held hidden until it lands. */
+    var _rfx    = window.SOG && SOG.RevealFx;
+    var _flight = (_rfx && typeof _rfx.hyksosLiftOff === 'function')
+      ? _rfx.hyksosLiftOff(getSlotEl(owner, locId, fromIdx)) : null;
+
+    // ── the crossing: same object, other array ──
+    fromSlots[locId][fromIdx] = null;
     clearSlotDOM(owner, locId, fromIdx);
     if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
     else                    { compactOppSlots(locId);    syncOppSlots(locId);    }
-    // Place onto opponent's side (first open compacted slot) + render.
-    var toIdx = oppSlots[locId].indexOf(null);
-    oppSlots[locId][toIdx] = sd;
-    if (oppSide === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
+
+    // Re-read the destination AFTER the source compaction (which never touches the
+    // other side, but keeping the two steps independent costs nothing).
+    var toIdx = (toSlots[locId] || []).indexOf(null);
+    if (toIdx === -1) {                                                    // vanishingly unlikely → put him back
+      var back = fromSlots[locId].indexOf(null);
+      if (back !== -1) fromSlots[locId][back] = sd;
+      if (owner === 'player') syncPlayerSlots(locId); else syncOppSlots(locId);
+      done();
+      return;
+    }
+    sd._defected = true;                                                   // his new side may not move him
+    toSlots[locId][toIdx] = sd;
+    if (toOwner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
     else                      { compactOppSlots(locId);    syncOppSlots(locId);    }
-    if (typeof SFX !== 'undefined' && SFX.cardDiscarded) SFX.cardDiscarded();
+
+    /* STATE IS COMMITTED. Everything above is the real transfer and is unchanged
+       by the animation below, which only defers ONE slot's visibility.
+       The landing slot is resolved by OBJECT IDENTITY, not by the toIdx computed
+       before compaction and not by cardId: compaction can shift the index, and
+       three Hyksos crossing in one turn share an id but not an object. This is
+       what makes each copy fly to its own real landing spot. */
+    var _landIdx = toSlots[locId].indexOf(sd);
+    var _destEl  = (_landIdx !== -1) ? getSlotEl(toOwner, locId, _landIdx) : null;
+
     evaluateContinuous();
     refreshSlotIPDisplays();
     updateScores();
-    setTimeout(done, 300);
+
+    if (_flight && _rfx && typeof _rfx.hyksosCrossing === 'function') {
+      _rfx.hyksosCrossing(_flight, _destEl, { sfx: 'sfx/hyksoshorse.mp3' }, done);
+    } else {
+      setTimeout(done, 300);                                               // no GSAP → the previous instant behaviour
+    }
   }
 
 
@@ -3575,7 +3776,7 @@
      shape abilityPyramid (57) already uses for "the last card you played here".
      Fizzles if no prior play HERE, or hand full.
      Inherited amount defensively clamped to ±99 (overflow insurance). */
-  function abilityPapyrus(owner, locId, done) {
+  function abilityPapyrus(owner, locId, slotIndex, sd, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var hand  = owner === 'player' ? G.playerHand  : G.aiHand;
     var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
@@ -3585,6 +3786,12 @@
     var lastId = null, lastSd = null, lastIdx = -1, lastTime = -Infinity;
     (slots[locId] || []).forEach(function (s, si) {
       if (!s || !s.revealed) return;
+      /* Excluded BY ID on purpose, unlike the actor-identity exclusions elsewhere:
+         the rule is "copy the last card you played here", and a Papyrus copying a
+         Papyrus is a self-referential loop the card was never meant to allow. So
+         every 54 is skipped, not just the actor. (A Rosetta acting as Papyrus is
+         NOT a 54 and is therefore copyable by a real Papyrus — deliberate: it is a
+         different card holding the same text.) */
       if (s.cardId === 54) return;                         // exclude Papyrus itself (and Papyrus copies)
       var t = (typeof s.playTime === 'number') ? s.playTime : -1;
       if (t > lastTime) { lastTime = t; lastId = s.cardId; lastSd = s; lastIdx = si; }
@@ -3624,7 +3831,7 @@
     }
 
     var rfx       = window.SOG && SOG.RevealFx;
-    var papyrusEl = findSlotEl(owner, 54);
+    var papyrusEl = actorSlotEl(owner, locId, sd, slotIndex);
     var targetEl  = (lastIdx !== -1) ? getSlotEl(owner, locId, lastIdx) : null;
     var srcCard   = CARDS.find(function (c) { return c.id === lastId; });
 
@@ -3647,16 +3854,15 @@
      is stamped AFTER the At-Once fires), so an earlier-revealed twin (which has
      one) is never re-buffed. Fizzles when no prior own play exists here, or when
      fired via a transcribed Rosetta (no unstamped 57 to buff). */
-  function abilityPyramid(owner, locId, done) {
+  function abilityPyramid(owner, locId, slotIndex, sd, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
 
-    // The just-revealed Pyramid: revealed 57 at this location without a playTime.
-    var pyramidSd = null;
-    (slots[locId] || []).forEach(function (s) {
-      if (pyramidSd || !s || !s.revealed) return;
-      if (s.cardId === 57 && typeof s.playTime !== 'number') pyramidSd = s;
-    });
-    if (!pyramidSd) { done(); return; }                    // transcribed/edge → fizzle
+    /* THE ABSORBER IS THE ACTOR. This used to hunt for "a revealed 57 here with no
+       playTime yet" — a stand-in for "the copy that just revealed" that FIZZLED
+       outright under Rosetta, because the only 57 present was the already-played
+       source. The dispatcher hands us the actor now, so there is nothing to guess. */
+    var pyramidSd = sd || null;
+    if (!pyramidSd) { done(); return; }
 
     // Last card the owner played HERE (highest playTime; the Pyramid itself and
     // other just-revealed cards have no playTime yet and are excluded).
@@ -3719,7 +3925,7 @@
      play, rather than on every continuous recompute. Fires for whichever side
      played him, so the boss Narmer and a player's card 51 both sound.
      Was a bare done() no-op before. */
-  function abilityNarmer(owner, locId, done) {
+  function abilityNarmer(owner, locId, slotIndex, sd, done) {
     done = typeof done === 'function' ? done : function () {};
     if (window.SOG && SOG.sfx && typeof SOG.sfx.play === 'function') {
       SOG.sfx.play('sfx/narmer.mp3');
@@ -3734,8 +3940,8 @@
      full rationale (one-time stamp, not a continuous aura, not applied to
      later-drawn cards). Read by the player cost path (board.js effectiveCost +
      input.js refreshHandCostDisplays) and the Giant AI cost path (ai.js). */
-  function abilityRamses(owner, locId, done) {
-    var ramsesEl = findSlotEl(owner, 53);
+  function abilityRamses(owner, locId, slotIndex, sd, done) {
+    var ramsesEl = actorSlotEl(owner, locId, sd, slotIndex);
     var ownerHand = (owner === 'player') ? (G.playerHand || []) : (G.aiHand || []);
     var affectedIds = ownerHand.filter(function (cardId) {
       var card = CARDS.find(function (c) { return c.id === cardId; });
@@ -3802,7 +4008,7 @@
      transcribed At-Once just calls that card's onAtOnce; continuous/end-of-turn
      cards carry a no-op onAtOnce, so this call harmlessly no-ops for them and the
      other dispatch paths do the work. */
-  function abilityRosetta(owner, locId, done) {
+  function abilityRosetta(owner, locId, slotIndex, sd, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
 
     /* TARGET = THE CARD IN SLOT 0 AT THIS LOCATION — a POSITION, not a play order.
@@ -3821,27 +4027,34 @@
     // Prefer the UNSTAMPED Rosetta: with two copies at one location (Papyrus can
     // duplicate any card), the old first-found match would re-stamp the already-
     // transcribed twin and leave the just-revealed one blank.
-    var rIdx = -1;
-    forEachRevealedAt(slots, locId, function (s, i) {
-      if (rIdx === -1 && s.cardId === 58 && s.transcribedFrom == null) rIdx = i;
-    });
-    if (rIdx !== -1) slots[locId][rIdx].transcribedFrom = srcId;
+    /* Stamp the ACTOR. The old scan ("first revealed 58 here with no
+       transcribedFrom") was a stand-in for "the copy that just revealed"; the
+       dispatcher hands us the real one now. */
+    var rIdx = actorSlotIdx(owner, locId, sd, slotIndex);
+    var rSd  = (rIdx !== -1) ? slots[locId][rIdx] : sd;
+    if (rSd) rSd.transcribedFrom = srcId;
 
     // STATE FIRST: the adoption above is already stamped. Everything below is the
     // flourish plus the transcribed ability firing, in that order — the text is
     // written onto Rosetta, and then the ability it just copied goes off.
     function fireTranscribed() {
       // Fire the transcribed At-Once now (real at-once fires; continuous/eot no-op).
+      /* THE ACTOR IS ROSETTA. This is the whole point of the signature change:
+         the transcribed handler is handed ROSETTA's slot index and slot data, so
+         "here", "itself" and "the card that just revealed" all resolve around
+         Rosetta rather than around the card she copied.
+         The index is re-read by identity at fire time — the flourish above ran
+         first and something may have compacted. */
       var spec = CARD_ABILITIES[srcId];
       if (spec && typeof spec.onAtOnce === 'function') {
-        spec.onAtOnce(owner, locId, done);
+        spec.onAtOnce(owner, locId, actorSlotIdx(owner, locId, rSd, rIdx), rSd, done);
       } else {
         done();
       }
     }
 
     var rfx       = window.SOG && SOG.RevealFx;
-    var rosettaEl = (rIdx !== -1) ? getSlotEl(owner, locId, rIdx) : null;
+    var rosettaEl = actorSlotEl(owner, locId, rSd, rIdx);
     var sourceEl  = getSlotEl(owner, locId, 0);
     if (rfx && typeof rfx.rosettaTranscribe === 'function' && rosettaEl && sourceEl) {
       rfx.rosettaTranscribe(sourceEl, rosettaEl,
@@ -4119,7 +4332,7 @@
     return out;
   }
 
-  function abilityPriestEgypt(owner, locId, done) {
+  function abilityPriestEgypt(owner, locId, slotIndex, sd, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var cands = priestCandidates(owner);
     if (!cands.length || (slots[locId] || []).indexOf(null) === -1) { done(); return; }  // fizzle
@@ -4147,7 +4360,7 @@
 
       var rfx = window.SOG && SOG.RevealFx;
       var mummyEl  = (mIdx !== -1) ? getSlotEl(owner, locId, mIdx) : null;
-      var priestEl = findSlotEl(owner, 71);
+      var priestEl = actorSlotEl(owner, locId, sd, slotIndex);
       if (rfx && typeof rfx.mummyWrapReveal === 'function' && mummyEl) {
         /* The SHARED wrap (Book of the Dead uses the same one). sourceCard makes it
            fade the revived card's own face in first, so you see WHO is coming back
@@ -4203,7 +4416,7 @@
      revivable by a Priest later. If IP != CC it simply stays discarded.
      Empty hand (including "Book was the only card you held") → nothing to discard and
      no effect at all. */
-  function abilityBookOfDead(owner, locId, done) {
+  function abilityBookOfDead(owner, locId, slotIndex, sd, done) {
     var hand = owner === 'player' ? G.playerHand : G.aiHand;
     if (!hand.length) { done(); return; }              // nothing to discard → no-op
 
@@ -4313,14 +4526,14 @@
     38: { onAtOnce: abilityPriest       },
     39: { onAtOnce: abilityFarmer       },  // Harvest — +1 capital next turn (shared accumulator)
     40: { onAtOnce: abilityScribe },  // Record Keeper — At Once: stamps +1 IP onto owner's other cards here
-    41: { onAtOnce: function (o, l, done) { done(); } },  // Canals   — Continuous only
+    41: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Canals   — Continuous only
     42: { onAtOnce: abilitySoldier      },
     43: {},  // Gilgamesh — Continuous only; handled in evaluateContinuous
-    44: { onAtOnce: function (o, l, done) { done(); } },  // Enkidu   — Continuous only
-    45: { onAtOnce: function (o, l, done) { done(); } },  // Ziggurat — Continuous only
+    44: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Enkidu   — Continuous only
+    45: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Ziggurat — Continuous only
     46: { onAtOnce: abilityCuneiform    },
     47: { onAtOnce: abilityHammurabi    },
-    48: { onAtOnce: function (o, l, done) { done(); } },  // Chariot  — movement ability
+    48: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Chariot  — movement ability
     49: { onAtOnce: abilityPhoenicians  },
     50: { onAtOnce: abilityNebuchadnezzar },  // Nebuchadnezzar — Continuous discount; At-Once = shimmer flourish
 
@@ -4338,14 +4551,14 @@
     58: { onAtOnce: abilityRosetta         },             // Rosetta Stone — adopt the SLOT-0 card's ability here
     59: { endOfTurn: obeliskEndOfTurn      },             // Obelisk — End of turn: +1 IP (Megalith key)
     60: { onAtOnce: abilityKhufu           },             // Khufu — draw a Scientific card
-    62: { onAtOnce: function (o, l, done) { done(); } },  // Hieroglyphics — Continuous (+1 Religious/Political)
-    77: { onAtOnce: function (o, l, done) { done(); } },  // Akhenaten — Continuous (+2 IP per own discard; reveal pulse lives in reveal-fx)
+    62: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Hieroglyphics — Continuous (+1 Religious/Political)
+    77: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Akhenaten — Continuous (+2 IP per own discard; reveal pulse lives in reveal-fx)
     63: { onAtOnce: abilityRa              },             // Ra — discard lowest → permanent +IP
-    64: { onAtOnce: function (o, l, done) { done(); } },  // Sphinx — Continuous protection: no destroy (isDestroyProtected) + no IP reduction (_soldierStrike / Chariot strike)
+    64: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Sphinx — Continuous protection: no destroy (isDestroyProtected) + no IP reduction (_soldierStrike / Chariot strike)
     65: { onAtOnce: abilityImhotep },                     // Imhotep — At Once: creates a Pyramid (57) in hand
     66: { onAtOnce: abilityBookOfDead      },             // Book of the Dead — discard + weigh (IP==CC → revive now)
-    67: { onAtOnce: abilityHyksos          },             // Hyksos — transfer to opponent's side (stuck if full)
-    69: { onAtOnce: function (o, l, done) { done(); } },  // Chariots — movement card; arrival -2 strike in executeMoveAnimated
+    67: { onAtOnce: abilityHyksos          },             // Hyksos — At Once: cross to the opponent's side here (fizzles if their side is full)
+    69: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Chariots — movement card; arrival -2 strike in executeMoveAnimated
     70: { onAtOnce: abilitySoldierEgypt    },             // Soldier (EGY) — destroy an opponent 1-CC card here
     71: { onAtOnce: abilityPriestEgypt     },             // Priest (EGY) — revive a discarded OR destroyed card as a Mummy here
     73: { onAtOnce: abilityFarmer          }              // Nubian Gold (token) — +1 capital next turn (Farmer machinery)
@@ -4357,7 +4570,11 @@
      ability spec in CARD_ABILITIES and invokes onAtOnce if present.
   ═══════════════════════════════════════════════════════════════ */
 
-  function fireAtOnce(owner, cardId, locId, done) {
+  /* THE AT-ONCE DISPATCHER. Now carries the ACTOR (slotIndex + sd) through to the
+     handler, matching endOfTurn(owner, locId, slotIndex, sd, done) — which always
+     had it and was always correct as a result. Handlers must self-locate from the
+     passed actor, never by scanning for their own card id. */
+  function fireAtOnce(owner, cardId, locId, slotIndex, sd, done) {
     // Cards with actual At Once abilities: play sound + pulse animation.
     // Cards 2, 3, 5, 13 have custom sfx — skip the generic 8-bit chime for those.
     // Tool (26) has its own SFX (the hammer strike via SOG.RevealFx) and Soldier
@@ -4366,7 +4583,7 @@
     var hasAtOnce = [4, 8, 9, 23, 26, 38, 39, 42, 46, 47, 49].indexOf(cardId) !== -1;
     if (hasAtOnce) {
       if (typeof SFX !== 'undefined' && cardId !== 26 && cardId !== 42) SFX.atOnce();
-      var atSlotEl = findSlotEl(owner, cardId);
+      var atSlotEl = actorSlotEl(owner, locId, sd, slotIndex) || findSlotEl(owner, cardId);
       if (atSlotEl && typeof Anim !== 'undefined') Anim.pulseYellow(atSlotEl);
     }
     /* Akhenaten (77) reacts HERE, not at the discard itself. Wrapping done means
@@ -4379,7 +4596,7 @@
     var _afterAtOnce = function () { flushAkhenatenPulses(done); };
     var spec = CARD_ABILITIES[cardId];
     if (spec && typeof spec.onAtOnce === 'function') {
-      spec.onAtOnce(owner, locId, _afterAtOnce);
+      spec.onAtOnce(owner, locId, slotIndex, sd, _afterAtOnce);
     } else {
       _afterAtOnce();
     }
