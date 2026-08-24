@@ -1264,12 +1264,14 @@ img    { display: block; }
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* Pixel-art friendly scaling: nearest-neighbor sampling stops the
-     bilinear shimmer when card art is downscaled (most visible on hand
-     cards). Fallback chain covers Firefox + Chrome/Safari/Edge. */
-  image-rendering: -moz-crisp-edges;
-  image-rendering: crisp-edges;
-  image-rendering: pixelated;
+  /* Card art is a photographic export with a baked-in dither pattern, and
+     it is always DOWNSCALED here (hand 328x492 -> 119x180, deck builder
+     624x900 -> 111x168, board slot 731x1054 -> 91x136). `pixelated` makes
+     Chrome nearest-neighbour those ratios — it discards pixels instead of
+     averaging them, so the dither grid beats against the sampling grid and
+     shimmers. `auto` lets the browser filter properly. Sprites and map art
+     elsewhere still use `pixelated`; that art really is pixel art. */
+  image-rendering: auto;
 }
 
 /* Faint initial letter — visible when art is missing */
