@@ -863,7 +863,7 @@
       slotEl.dataset.cardId = cardId;
       slotEl.className = 'battle-card-slot occupied face-up unplayed';
       slotEl.draggable = true;
-      buildCardFace(slotEl, card, card.ip + resBonus);
+      buildCardFace(slotEl, card, card.ip + resBonus, SOG.board.SLOT_ART);
     }
     updateHeader();
 
@@ -1407,7 +1407,7 @@
       destSlotEl.dataset.cardId = cardId;
       destSlotEl.className      = 'battle-card-slot occupied face-up queued-dest';
       destSlotEl.removeAttribute('draggable');
-      buildCardFace(destSlotEl, faceCard(sd, card), effectiveIP(sd));
+      buildCardFace(destSlotEl, faceCard(sd, card), effectiveIP(sd), SOG.board.SLOT_ART);
     }
 
     G.movedThisTurn[cardId] = true;

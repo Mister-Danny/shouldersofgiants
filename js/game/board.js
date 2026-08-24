@@ -139,12 +139,23 @@
     if (slotEl.dataset.owner === 'player') slotEl.draggable = true;
   }
 
+  /* Art size for a board slot. A slot is ~91x136 layout px, so full-size art
+     (731x1054 for the prehistory set) arrives at roughly an 8x downscale on a
+     dpr-1 Chromebook — the harshest ratio anywhere in the game, and it shows:
+     the card in play looked visibly worse than the same card in hand, which
+     pulls the @sm tier at ~2.7x. Every slot render passes this.
+
+     Not used by the reveal-fx flyers: those are sized from a slot rect but
+     scale up mid-flight, so they keep full-size art deliberately. */
+  var SLOT_ART = { size: 'sm' };
+
   /** Build card-face HTML inside slotEl (used by flipSlot and placeRevealedCard). */
   /* opts is passed straight through to buildCardImg — notably { size: 'sm' },
      which loads the pre-rendered thumbnail (card.imageSm / the @sm variant)
-     instead of full-size art. Callers that render SMALL tiles (the market
-     shelves) should pass it, or the browser downscales the big export and the
-     result dithers. Omitted → unchanged full-size behaviour for the board. */
+     instead of full-size art. Small surfaces (board slots via SLOT_ART, the
+     market shelves) pass it, or the browser downscales the big export and the
+     result aliases. buildCardImg's onerror falls back to the full-size
+     original, so cards with no @sm variant still render. */
   function buildCardFace(slotEl, card, displayIP, opts) {
     slotEl.innerHTML = '';
     var wrap = document.createElement('div');
@@ -230,7 +241,7 @@
       slotEl.dataset.cardId = cardId;
       slotEl.className      = 'battle-card-slot occupied face-up';
       slotEl.removeAttribute('draggable');
-      buildCardFace(slotEl, _faceCard(sd, card), effectiveIP(sd));
+      buildCardFace(slotEl, _faceCard(sd, card), effectiveIP(sd), SLOT_ART);
     }
     return true;
   }
@@ -315,7 +326,7 @@
           slotEl.dataset.cardId = sd.cardId;
           slotEl.className      = 'battle-card-slot occupied face-up unplayed';
           slotEl.draggable      = true;
-          if (uCard) buildCardFace(slotEl, _faceCard(sd, uCard), effectiveIP(sd));
+          if (uCard) buildCardFace(slotEl, _faceCard(sd, uCard), effectiveIP(sd), SLOT_ART);
         }
       } else {
         var card = CARDS.find(function (c) { return c.id === sd.cardId; });
@@ -323,7 +334,7 @@
           slotEl.dataset.cardId = sd.cardId;
           slotEl.className      = 'battle-card-slot occupied face-up';
           slotEl.removeAttribute('draggable');
-          buildCardFace(slotEl, _faceCard(sd, card), effectiveIP(sd));
+          buildCardFace(slotEl, _faceCard(sd, card), effectiveIP(sd), SLOT_ART);
         }
       }
     }
@@ -360,7 +371,7 @@
           slotEl.dataset.cardId = sd.cardId;
           slotEl.className      = 'battle-card-slot occupied face-up';
           slotEl.removeAttribute('draggable');
-          buildCardFace(slotEl, _faceCard(sd, card), effectiveIP(sd));
+          buildCardFace(slotEl, _faceCard(sd, card), effectiveIP(sd), SLOT_ART);
         }
       }
     }
@@ -391,7 +402,7 @@
     G.locations.forEach(function (l) {
       (G.playerSlots[l.id] || []).forEach(function (s) { if (s && s.cardId === showCardId) showSd = s; });
     });
-    buildCardFace(slotEl, _faceCard(showSd, showCard), showSd ? effectiveIP(showSd) : showCard.ip);
+    buildCardFace(slotEl, _faceCard(showSd, showCard), showSd ? effectiveIP(showSd) : showCard.ip, SLOT_ART);
     slotEl.classList.add('trader-preview');
     slotEl.dataset.cardId = atCardId;           // keep the REAL identity (interactions/scoring)
   }
@@ -721,6 +732,7 @@
     compactOppSlots:       compactOppSlots,
     syncOppSlots:          syncOppSlots,
     SOURCE_ID_MAP:         SOURCE_ID_MAP,
+    SLOT_ART:              SLOT_ART,
     effectiveCost:         effectiveCost,
     effectiveIP:           effectiveIP,
     displayedIP:           displayedIP,

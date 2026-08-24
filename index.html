@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=1">
 
   <!-- Third-party libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js"></script>
@@ -1687,21 +1687,21 @@
   </div><!-- /#sog-stage -->
 
   <!-- Stage scaling — must be first so SOG.Stage exists before any module -->
-  <script src="js/sog-stage.js"></script>
+  <script src="js/sog-stage.js?v=1"></script>
 
   <!-- Feature flags — must load before js/teacher-dashboard.js and js/home.js,
        which check MULTIPLAYER_ENABLED to hide their Versus/Tournament entry
        points. -->
-  <script src="js/feature-flags.js"></script>
+  <script src="js/feature-flags.js?v=1"></script>
 
   <!-- ── Multi-deck save layer (must load before any deck consumer) ── -->
-  <script src="js/decks.js"></script>
+  <script src="js/decks.js?v=1"></script>
 
   <!-- ── Analytics (Firebase must be loaded above in <head>) ───── -->
-  <script src="js/analytics.js"></script>
+  <script src="js/analytics.js?v=1"></script>
   <!-- Anonymous auth (AUTH_SPEC.md Phase 2) — must load after analytics.js,
        which initializes the default Firebase app this file reuses. -->
-  <script src="js/auth.js"></script>
+  <script src="js/auth.js?v=1"></script>
   <!-- Teacher dashboard (AUTH_SPEC.md Phase 5) — needs SogAuth (just above)
        at init() time. Deliberately loaded here rather than grouped with
        account.js/account-ui.js below: js/home.js's own init() runs
@@ -1713,87 +1713,87 @@
        Only wired at click-time to window.SogAccount (logout) and
        window.Multiplayer (tournament lobby), both of which are safe to
        reference late regardless of this file's own load position. -->
-  <script src="js/teacher-dashboard.js"></script>
-  <script src="js/multiplayer.js"></script>
-  <script src="js/match.js"></script>
-  <script src="js/battlelobby.js"></script>
+  <script src="js/teacher-dashboard.js?v=1"></script>
+  <script src="js/multiplayer.js?v=1"></script>
+  <script src="js/match.js?v=1"></script>
+  <script src="js/battlelobby.js?v=1"></script>
 
   <!-- ── Data files ─────────────────────────────────────────────── -->
-  <script src="js/cards.js"></script>
-  <script src="js/preload.js"></script>  <!-- SOG.preload: warms battle/scene asset cache (Stage 1 online-lag fix) -->
-  <script src="js/sog-collection.js"></script>  <!-- player collection (owns sog_unlocked_cards); must load right after cards.js -->
-  <script src="js/sog-gold.js"></script>  <!-- player gold (owns sog_gold); marketplace currency -->
-  <script src="js/sog-rewards.js"></script>  <!-- two-tier boss win-reward gating (gold + card); consumes window.__pendingReward -->
-  <script src="js/sog-focus.js"></script>  <!-- player focus (owns sog_focus); adventure energy drained by battles/travel/market -->
-  <script src="js/sog-playtime.js"></script>  <!-- active play-time tracking (owns sog_playtime_seconds); starts its own visibilitychange listener at load -->
-  <script src="js/locations.js"></script>
+  <script src="js/cards.js?v=1"></script>
+  <script src="js/preload.js?v=1"></script>  <!-- SOG.preload: warms battle/scene asset cache (Stage 1 online-lag fix) -->
+  <script src="js/sog-collection.js?v=1"></script>  <!-- player collection (owns sog_unlocked_cards); must load right after cards.js -->
+  <script src="js/sog-gold.js?v=1"></script>  <!-- player gold (owns sog_gold); marketplace currency -->
+  <script src="js/sog-rewards.js?v=1"></script>  <!-- two-tier boss win-reward gating (gold + card); consumes window.__pendingReward -->
+  <script src="js/sog-focus.js?v=1"></script>  <!-- player focus (owns sog_focus); adventure energy drained by battles/travel/market -->
+  <script src="js/sog-playtime.js?v=1"></script>  <!-- active play-time tracking (owns sog_playtime_seconds); starts its own visibilitychange listener at load -->
+  <script src="js/locations.js?v=1"></script>
 
   <!-- ── Feature modules (load order matters) ──────────────────── -->
-  <script src="js/sfx.js"></script><!-- central non-music sound router; must precede audio.js -->
-  <script src="js/audio.js"></script>
-  <script src="js/animations.js"></script>
-  <script src="js/progression.js"></script>
-  <script src="js/deckbuilder.js"></script>
-  <script src="js/dbtutorial.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/tutorial.js"></script>
-  <script src="js/legend.js"></script>
+  <script src="js/sfx.js?v=1"></script><!-- central non-music sound router; must precede audio.js -->
+  <script src="js/audio.js?v=1"></script>
+  <script src="js/animations.js?v=1"></script>
+  <script src="js/progression.js?v=1"></script>
+  <script src="js/deckbuilder.js?v=1"></script>
+  <script src="js/dbtutorial.js?v=1"></script>
+  <script src="js/ui.js?v=1"></script>
+  <script src="js/tutorial.js?v=1"></script>
+  <script src="js/legend.js?v=1"></script>
   <!-- Overworld map layout (node positions, art, walk paths) for every region.
        MUST load before overworld.js, which reads it synchronously at init.
        Written by tools/map-editor — see that file's header before hand-editing. -->
-  <script src="js/adventurers.js"></script>  <!-- SOG.Adventurers: playable-character sprite/portrait registry; must precede overworld.js/home.js/sog-adventure-hud.js -->
-  <script src="data/map-data.js"></script>
-  <script src="data/level-data.js"></script>  <!-- window.SOG_LEVEL_DATA: data-driven battle/market levels keyed by node id (level-editor spike) -->
-  <script src="js/overworld.js"></script>
-  <script src="js/home.js"></script>
-  <script src="js/game/state.js"></script>
-  <script src="js/game/hand.js"></script>  <!-- SOG.hand: hand-of-objects migration seam (Stage 0: wraps the current bare-id hands) -->
-  <script src="js/game/battle-hooks.js"></script>  <!-- script-hook mechanism; engine + input.js call it at runtime -->
-  <script src="js/game/board.js"></script>
-  <script src="js/game/input.js"></script>
-  <script src="js/game/abilities.js"></script>
-  <script src="js/game/reveal-fx.js"></script>  <!-- per-card reveal presentation (SFX + flavor anim); separate from abilities -->
-  <script src="js/game.js"></script>
-  <script src="js/game/ai.js"></script>
-  <script src="js/game/ui.js"></script>
-  <script src="js/game/card-hover.js"></script>  <!-- SOG.cardHover: hover card-info panel for hand cards (renders via SOG.ui.fillPopupContent) -->
-  <script src="js/game/dialogue-runner.js"></script>  <!-- SOG.DialogueRunner: shared in-battle speech-bubble engine, used by every boss below -->
-  <script src="js/level-runtime.js"></script>  <!-- SOG.LevelRuntime: data-driven battle/market launcher for SOG_LEVEL_DATA levels (level-editor spike) -->
-  <script src="js/sog-adventure-prehistory.js"></script>
-  <script src="js/sog-adventure-otzi.js"></script>
-  <script src="js/sog-adventure-egypt.js"></script>
-  <script src="js/battle-rules-popup.js"></script>
-  <script src="js/sog-learning-check.js"></script><!-- learning-check popup (focus refill via history questions) -->
-  <script src="js/options-panel.js"></script><!-- shared Options overlay (overworld + battle) -->
-  <script src="js/sog-adventure-gilgamesh.js"></script>
-  <script src="js/sog-adventure-sargon.js"></script>
-  <script src="js/sog-adventure-hammurabi.js"></script>
-  <script src="js/sog-adventure-hanginggardens.js"></script>
-  <script src="js/sog-adventure-narmer.js"></script>
-  <script src="js/sog-adventure-hatshepsut.js"></script>
-  <script src="js/sog-adventure-hyksos.js"></script>
+  <script src="js/adventurers.js?v=1"></script>  <!-- SOG.Adventurers: playable-character sprite/portrait registry; must precede overworld.js/home.js/sog-adventure-hud.js -->
+  <script src="data/map-data.js?v=1"></script>
+  <script src="data/level-data.js?v=1"></script>  <!-- window.SOG_LEVEL_DATA: data-driven battle/market levels keyed by node id (level-editor spike) -->
+  <script src="js/overworld.js?v=1"></script>
+  <script src="js/home.js?v=1"></script>
+  <script src="js/game/state.js?v=1"></script>
+  <script src="js/game/hand.js?v=1"></script>  <!-- SOG.hand: hand-of-objects migration seam (Stage 0: wraps the current bare-id hands) -->
+  <script src="js/game/battle-hooks.js?v=1"></script>  <!-- script-hook mechanism; engine + input.js call it at runtime -->
+  <script src="js/game/board.js?v=1"></script>
+  <script src="js/game/input.js?v=1"></script>
+  <script src="js/game/abilities.js?v=1"></script>
+  <script src="js/game/reveal-fx.js?v=1"></script>  <!-- per-card reveal presentation (SFX + flavor anim); separate from abilities -->
+  <script src="js/game.js?v=1"></script>
+  <script src="js/game/ai.js?v=1"></script>
+  <script src="js/game/ui.js?v=1"></script>
+  <script src="js/game/card-hover.js?v=1"></script>  <!-- SOG.cardHover: hover card-info panel for hand cards (renders via SOG.ui.fillPopupContent) -->
+  <script src="js/game/dialogue-runner.js?v=1"></script>  <!-- SOG.DialogueRunner: shared in-battle speech-bubble engine, used by every boss below -->
+  <script src="js/level-runtime.js?v=1"></script>  <!-- SOG.LevelRuntime: data-driven battle/market launcher for SOG_LEVEL_DATA levels (level-editor spike) -->
+  <script src="js/sog-adventure-prehistory.js?v=1"></script>
+  <script src="js/sog-adventure-otzi.js?v=1"></script>
+  <script src="js/sog-adventure-egypt.js?v=1"></script>
+  <script src="js/battle-rules-popup.js?v=1"></script>
+  <script src="js/sog-learning-check.js?v=1"></script><!-- learning-check popup (focus refill via history questions) -->
+  <script src="js/options-panel.js?v=1"></script><!-- shared Options overlay (overworld + battle) -->
+  <script src="js/sog-adventure-gilgamesh.js?v=1"></script>
+  <script src="js/sog-adventure-sargon.js?v=1"></script>
+  <script src="js/sog-adventure-hammurabi.js?v=1"></script>
+  <script src="js/sog-adventure-hanginggardens.js?v=1"></script>
+  <script src="js/sog-adventure-narmer.js?v=1"></script>
+  <script src="js/sog-adventure-hatshepsut.js?v=1"></script>
+  <script src="js/sog-adventure-hyksos.js?v=1"></script>
   <!-- Adventure Mode HUD — loads after game/ui.js (SOG.music) is available -->
-  <script src="js/sog-adventure-hud.js"></script>
-  <script src="js/bypass.js"></script>
-  <script src="js/welcome.js"></script>
+  <script src="js/sog-adventure-hud.js?v=1"></script>
+  <script src="js/bypass.js?v=1"></script>
+  <script src="js/welcome.js?v=1"></script>
   <!-- Guest notice + corner strip (AUTH_SPEC.md Phase 2) — must load after
        welcome.js so it can sequence behind the "Before You Begin" popup. -->
-  <script src="js/guest-status.js"></script>
-  <script src="js/feedback.js"></script>
+  <script src="js/guest-status.js?v=1"></script>
+  <script src="js/feedback.js?v=1"></script>
   <!-- Developer state panel (toggle with `): reads/writes the real game state
        (collection, gold, progression flags) and launches anywhere from it.
        Always-loaded for now; gate behind a build flag pre-launch. -->
-  <script src="js/sog-dev-panel.js"></script>
+  <script src="js/sog-dev-panel.js?v=1"></script>
   <!-- Local save-state aggregator (AUTH_SPEC.md Phase 1) — must load after every
        module above it that owns a getSnapshot()/applySnapshot() pair. -->
-  <script src="js/save-state.js"></script>
+  <script src="js/save-state.js?v=1"></script>
   <!-- Student accounts (AUTH_SPEC.md Phase 3) — account.js needs SaveState +
        SogAuth already defined; account-ui.js drives the modal via account.js.
        username-words.js is pure data (figures/epithets baked from the CSVs
        in the repo root) and must load before account.js. -->
-  <script src="js/data/username-words.js"></script>
-  <script src="js/account.js"></script>
-  <script src="js/account-ui.js"></script>
+  <script src="js/data/username-words.js?v=1"></script>
+  <script src="js/account.js?v=1"></script>
+  <script src="js/account-ui.js?v=1"></script>
 
   <!-- Initial screen tag for CSS selectors (showScreen overwrites on navigation) -->
   <script>document.body.dataset.screen = 'home';</script>
