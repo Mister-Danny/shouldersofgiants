@@ -592,7 +592,7 @@
     slotEl.classList.remove('face-down', 'unplayed');
     slotEl.classList.add('face-up');
     var sd = slots[locId] && slots[locId][slotIndex];
-    buildCardFace(slotEl, faceCard(sd, card), sd ? effectiveIP(sd) : card.ip);
+    buildCardFace(slotEl, faceCard(sd, card), sd ? effectiveIP(sd) : card.ip, SOG.board.SLOT_ART);
     if (typeof Anim !== 'undefined') Anim.cardReveal(slotEl);
 
     // ── Per-card reveal SFX + animations ──────────────────────────
@@ -777,7 +777,7 @@
       toSlotEl.dataset.cardId = cardId;
       toSlotEl.className      = 'battle-card-slot occupied face-up';
       toSlotEl.removeAttribute('draggable');
-      buildCardFace(toSlotEl, faceCard(sd, card), effectiveIP(sd));
+      buildCardFace(toSlotEl, faceCard(sd, card), effectiveIP(sd), SOG.board.SLOT_ART);
     }
 
     // Magellan: +1 IP per move
@@ -971,7 +971,7 @@
         finalSlotEl.dataset.cardId = cardId;
         finalSlotEl.className      = 'battle-card-slot occupied face-up';
         finalSlotEl.removeAttribute('draggable');
-        buildCardFace(finalSlotEl, faceCard(sd, card), effectiveIP(sd));
+        buildCardFace(finalSlotEl, faceCard(sd, card), effectiveIP(sd), SOG.board.SLOT_ART);
       }
 
       if (cardId === 24) {
