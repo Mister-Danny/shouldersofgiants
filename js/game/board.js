@@ -94,6 +94,30 @@
     return null;
   }
 
+  /* NO_MOVE_HERE (The Cataracts, Hyksos battle): nothing may MOVE INTO this
+     location. Both sides, every path — the player's drag/click, the AI's post-reveal
+     movers, and any ability-driven relocation (the Merchant's trade, a Chariot's
+     roll). Enforced at the UI gate so the affordance never offers it, at the AI's
+     destination choosers so a Chariot cannot burn its once-per-battle move on a
+     refusal, and finally inside executeMove / executeMoveAnimated, which every real
+     relocation passes through.
+
+     WHAT IT DOES NOT BLOCK — three things, all deliberately:
+       • PLAYING a card here from hand. It says cards cannot MOVE here.
+       • SPAWNING a card here (Hatshepsut's Merchant, a Book of the Dead Mummy,
+         Joan's summon). A card appearing is not a card moving.
+       • The HYKSOS (67) side-crossing. He crosses to the opponent's side OF HIS OWN
+         LOCATION — he is already here, and his transfer never goes through
+         executeMove at all (it is an array-to-array move inside abilityHyksos). So a
+         Hyksos played at the Cataracts still defects. This is the ruling, and it
+         falls out of the architecture rather than needing a special case.
+     Inert in every battle whose locations don't carry the key. */
+  function isMoveBlockedInto(locId) {
+    if (!G.locations) return false;
+    var loc = G.locations.find(function (l) { return l.id === locId; });
+    return !!(loc && loc.abilityKey === 'NO_MOVE_HERE');
+  }
+
   /** Return the locId where a card currently lives, or null. */
   function getCardLocId(owner, cardId) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
@@ -701,6 +725,7 @@
     effectiveIP:           effectiveIP,
     displayedIP:           displayedIP,
     isLocationPlayable:    isLocationPlayable,
+    isMoveBlockedInto:     isMoveBlockedInto,
     nextEventId:           nextEventId,
     addBonus:              addBonus,
     addIPMod:              addIPMod,

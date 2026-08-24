@@ -894,6 +894,51 @@ var BOSS_SOURCES = {
       }
     ]
   }
+  ,
+  hyksos: {
+    nodeId: 'hyksos', file: 'js/sog-adventure-hyksos.js', hook: 'hyksos',
+    /* AMBUSH, not an overworld boss node. Three consequences for this registry:
+       - THREE dialogue slots, not ten. There is no tier here (the config sets no
+         ai.tier at all, which routes ai.js to the battle's own INVADER selector),
+         so none of the serf or giant slots exist. There is also no `opening`:
+         the ambush drops straight into the battle by design, and Stage 2 owns
+         the intro dialogue.
+       - The three arrays are PLACEHOLDER DRAFTS. They are real, findable,
+         plain-literal vars, so they are editable exactly like every other
+         boss's — the text itself is just not final.
+       - NOT REACHABLE FROM THE MAP yet: js/overworld.js has no branch for a
+         'hyksos' node (Stage 2 wires the ambush trigger/staging). The script
+         self-registers via BattleHooks and the dev panel's LAUNCH row starts it,
+         but nothing on the map calls start(). Same standing as hatshepsut. */
+    dialogue: { win: 'WIN_DIALOGUE', loss: 'LOSS_DIALOGUE', tie: 'TIE_DIALOGUE' },
+    locationsFn: '_locations', aiIdsFn: '_buildAiIds',
+    presentationInline: true,   // inline object literal in buildHyksosConfig
+    structure: { turns: 5, locationsCount: 3, slotsPerLocation: 4, handStart: 5, maxHandSize: 7 },
+    resource: { model: 'capital', capital: 5, resetEachTurn: true },
+    scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
+    notes: [
+      'All three locations now carry an ability, handled by SHARED engine keys rather than by the battle module: The Nile Delta (131) ONE_CC_PLUS_ONE_HERE, Thebes (132) LEAD_HERE_BOOSTS_OTHERS, Aswan Cataract (133) NO_MOVE_HERE. Text lives in LOC_ABILITY_TEXT; the handlers are in abilities.js evaluateContinuous (the first two) and board.js isMoveBlockedInto (the third).',
+      'AI deck is BUILT, not listed — _buildAiIds() expands HYKSOS_COUNT/SOLDIER_COUNT/CHARIOT_COUNT into 5x67 + 5x70 + 5x69. This is the first deck in the game with DUPLICATE card ids, so there is no flat AI_IDS array to extract; edit the three count constants instead.',
+      'Reward is script-owned and is the CARD ONLY — _onWin unlocks Hyksos (67) via SOG.Cards.unlock and grants NO gold. SOG.rewards is never consulted, because it gates on tier flags and this battle has no tier.',
+      'UNTIERED: buildHyksosConfig sets no ai.tier, so cfg.flagTier stays null and a win stamps no tier-beaten flag. The dev panel entry carries forceTier: null so its tier selector is not baked in.',
+      'MUST-WIN: the loss/tie scoreboard offers only PLAY AGAIN / GAMEBOARD (no exit). Stage 2 replaces this with the real retry loop.',
+      'Location art is REAL for all three (no placeholders): nile_delta.jpg (131, renamed from Avaris), thebes.jpg (132), aswan_cataract.jpg (133, renamed from The Cataracts). The two new filenames use UNDERSCORES. Each path appears TWICE — LOC_ART in the module (popup/thumbnail) and the body.hyksos-battle rules in css/style.css (tile background); they must agree.'
+    ],
+    bespokeMechanics: [
+      {
+        name: 'Side-crossing (Hyksos 67, "Foreign Rule")',
+        file: 'js/game/abilities.js',
+        lines: 'abilityHyksos',
+        description: 'At Once, the card TRANSFERS to the opponent\'s side of its own location — the slot record moves from one side\'s array to the other. Ownership in this engine is purely positional (`owner === \'player\' ? G.playerSlots : G.aiSlots`), so the transfer flips scoring, per-location counting, aura eligibility and destroy credit all at once. Fizzles (stays put at -1 on its owner\'s side) when the target side is full. The crossed card is marked _defected and neither side\'s mover will relocate it.'
+      },
+      {
+        name: 'Duplicate-id deck',
+        file: 'js/sog-adventure-hyksos.js',
+        lines: '_buildAiIds',
+        description: 'First deck to run multiple copies of the same card. The engine already supported it (decks never dedupe, hand removal splices ONE instance, reveals resolve by (locId, slotIndex) coordinates); the one thing that does not survive duplicates is findSlotEl(owner, cardId), so abilityHyksos identifies its own slot by "revealed, here, no playTime yet" instead.'
+      }
+    ]
+  }
 };
 
 /* Assemble one boss's read-only preview: every dialogue array (extracted

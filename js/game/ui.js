@@ -778,6 +778,23 @@
           img.className          = 'location-popup-thumb-img';
           img.style.backgroundImage = "url('" + card.image.replace(/'/g, '%27') + "')";
           thumb.appendChild(img);
+        } else if (e.isExternal && e.sourceLocId !== null) {
+          /* A LOCATION-sourced boost has no card to show — Abu Simbel's fill bonus,
+             the Nile Delta's 1-CC count, Thebes' lead bonus. Show the SOURCE
+             LOCATION's art instead of an empty tile, so the contributor strip names
+             where the IP came from the way a card-sourced boost does. */
+          var srcLoc = (typeof LOCATIONS !== 'undefined')
+            ? LOCATIONS.find(function (l) { return l.id === e.sourceLocId; }) : null;
+          if (!srcLoc && G.locations) {
+            srcLoc = G.locations.find(function (l) { return l.id === e.sourceLocId; });
+          }
+          if (srcLoc && srcLoc.image) {
+            var limg = document.createElement('div');
+            limg.className          = 'location-popup-thumb-img';
+            limg.style.backgroundImage = "url('" + srcLoc.image.replace(/'/g, '%27') + "')";
+            limg.title              = srcLoc.name || '';
+            thumb.appendChild(limg);
+          }
         }
 
         var ipLabel = document.createElement('div');

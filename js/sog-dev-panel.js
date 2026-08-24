@@ -70,7 +70,14 @@ SOG.DevPanel = (function () {
     { hook: 'sargon',          label: 'Sargon (Akkad)',        module: 'SargonBattle',         skipFlag: 'sog_sargon_opening_seen' },
     { hook: 'hammurabi',       label: 'Hammurabi (Babylon)',   module: 'HammurabiBattle',      skipFlag: 'sog_hammurabi_opening_seen' },
     { hook: 'hanging-gardens', label: 'Nebuchadnezzar (HG)',   module: 'HangingGardensBattle', skipFlag: 'sog_hanging_gardens_battle_opening_seen' },
-    { hook: 'narmer',          label: 'Narmer (Egypt)',        module: 'NarmerBattle',         skipFlag: 'sog_narmer_battle_opening_seen' }
+    { hook: 'narmer',          label: 'Narmer (Egypt)',        module: 'NarmerBattle',         skipFlag: 'sog_narmer_battle_opening_seen' },
+    /* Hyksos invasion (ambush, Stage 1). UNTIERED — the module's config sets no
+       ai.tier, so ai.js routes to its own INVADER selector; the tier the panel
+       bakes into window.__forceTier would override that, hence forceTier: null.
+       No skipFlag either: the ambush has no opening dialogue to skip (Stage 2
+       owns the intro). Until the map ambush is wired, this launcher is the only
+       way in. */
+    { hook: 'hyksos',          label: 'Hyksos Invasion (ambush)', module: 'HyksosBattle',      skipFlag: null, forceTier: null }
   ];
 
   var MAPS = [
@@ -192,7 +199,7 @@ SOG.DevPanel = (function () {
     try { if (window.HomeFlow && typeof window.HomeFlow.stopMusic === 'function') window.HomeFlow.stopMusic(300); } catch (e) {}
   }
   function _teardownBattles() {
-    ['GilgameshBattle', 'OtziBattle', 'NarmerBattle', 'HammurabiBattle', 'SargonBattle', 'HangingGardensBattle']
+    ['GilgameshBattle', 'OtziBattle', 'NarmerBattle', 'HammurabiBattle', 'SargonBattle', 'HangingGardensBattle', 'HyksosBattle']
       .forEach(function (name) {
         try { if (window.SOG && SOG[name] && typeof SOG[name].teardown === 'function') SOG[name].teardown(); }
         catch (e) { console.warn('[DevPanel] teardown failed for', name, e); }
@@ -217,7 +224,12 @@ SOG.DevPanel = (function () {
     hide();
     _stopHomeMusic();
     _teardownBattles();
-    window.__forceTier = tier;
+    /* An UNTIERED battle (boss.forceTier === null, e.g. the Hyksos ambush) must
+       NOT have the panel's tier selector baked in — initGame would write it onto
+       cfg.ai.tier and route the battle to a Serf/Giant brain instead of its own
+       selector. `'forceTier' in boss` distinguishes "declared untiered" from
+       "not specified", so every existing boss is unchanged. */
+    window.__forceTier = ('forceTier' in boss) ? boss.forceTier : tier;
     var mod = window.SOG && SOG[boss.module];
     if (mod && typeof mod.start === 'function') { mod.start(); }
     else { window.__forceTier = null; console.warn('[DevPanel] ' + boss.module + ' not found'); }

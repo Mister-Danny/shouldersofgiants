@@ -535,6 +535,34 @@
         if (aCount === 0 && support === 0) return -2;
         return aCount * 1.2 + support * 0.8;
       }
+      case 67: { // Hyksos (Egypt) — "Foreign Rule": crosses to the OPPONENT'S side of
+                 // this location, planting a -1 IP body on their board. The AI wants
+                 // to defect where the player is STRONG: the -1 subtracts from the
+                 // total that actually matters, and the slot it takes is a slot the
+                 // player cannot use for the rest of the battle.
+                 //
+                 // WHIFFS where the player's side here is FULL — he cannot cross and
+                 // stays at -1 on the AI's own side, a self-inflicted loss. That is a
+                 // hard rejection, not a low score.
+        var hOpp   = (side === 'opp' ? G.playerSlots : G.aiSlots)[locId] || [];
+        var hMine  = (side === 'opp' ? G.aiSlots     : G.playerSlots)[locId] || [];
+        // Their open slots here, minus nothing: this turn's tentative plays are the
+        // AI's own and land on the AI's side, so they cannot fill the target side.
+        if (hOpp.indexOf(null) === -1) return -4;           // nowhere to cross → never play him here
+        // The AI needs a slot of its OWN to be played into first; if this location is
+        // already full for the AI the play is impossible anyway (the caller checks),
+        // so only the crossing target is tested here.
+        var theirIP = 0, myIP = 0;
+        hOpp.forEach(function  (x) { if (x && x.revealed) theirIP += helpers.effectiveIP(x); });
+        hMine.forEach(function (x) { if (x && x.revealed) myIP   += helpers.effectiveIP(x); });
+        /* Two things make a defection good, and they are the same thing seen twice:
+           how much the player has invested here, and whether the AI is behind here.
+           Denying a slot is worth more the tighter their side already is. */
+        var theirFree = hOpp.filter(function (x) { return x === null; }).length;
+        var denial    = (theirFree <= 1) ? 1.5 : (theirFree === 2 ? 0.8 : 0.3);
+        var contest   = (theirIP > myIP) ? Math.min(theirIP - myIP, 8) * 0.35 : 0;
+        return 1 + denial + contest;
+      }
       default:
         return 0;
     }
@@ -923,6 +951,11 @@
     var best = null;
     G.locations.forEach(function (loc) {
       if (loc.id === curLocId) return;
+      // NO_MOVE_HERE (The Cataracts): rejected HERE, not just at the engine —
+      // runAdventureMovements stamps _advChariotMoved before calling
+      // executeMoveAnimated, so a destination the engine would refuse would burn
+      // the Chariot's once-per-BATTLE move for nothing.
+      if (SOG.board && SOG.board.isMoveBlockedInto && SOG.board.isMoveBlockedInto(loc.id)) return;
       if ((G.aiSlots[loc.id] || []).indexOf(null) === -1) return;          // no open slot
       var pCards = (G.playerSlots[loc.id] || []).filter(function (s) { return s && s.revealed; });
       if (!pCards.length) return;                                          // nothing to strike
@@ -999,6 +1032,12 @@
          could not legally have had. One move per card per turn. */
   function _aiSlotMovableNow(G, sd) {
     if (!sd || !sd.revealed) return false;
+    /* A DEFECTED card (Hyksos 67, "Foreign Rule") cannot be moved by the side it
+       crossed onto. It is fully that side's card in every other respect — it scores
+       for them, counts for their per-location effects, takes their auras — but the
+       INVADER chose where it stands, and the invaded side does not get to relocate
+       it. The flag rides the slot data, so it survives every later relocation. */
+    if (sd._defected) return false;
     if (sd._movedOnTurn === G.turn) return false;
     return sd.turnPlayed == null || G.turn > sd.turnPlayed;
   }
@@ -1018,10 +1057,20 @@
     //    the card's slot data (travels with the card when it moves);
     //  • revealed AND settled (not the turn it entered play) — see
     //    _aiSlotMovableNow, which now owns that rule for both post-reveal movers.
-    // Gather ALL eligible Chariots (both twins if a Papyrus copy exists), in
-    // location order. We move the FIRST whose decision resolves to a destination
-    // — a Chariot that decides to HOLD must NOT block another one that would move
-    // this turn (the old first-eligible-only scan let a holder end the pass).
+    /* Gather ALL eligible Chariots, in location order, and move EVERY one whose
+       decision resolves to a destination.
+
+       There is NO across-all-cards, per-side movement cap in this game. The real
+       limits are per CARD: one move per card per turn (_aiSlotMovableNow's
+       _movedOnTurn gate), plus whatever the card's own ability imposes (the
+       Chariot's once-per-BATTLE _advChariotMoved), plus whatever a location
+       imposes. This pass previously moved only the first Chariot that resolved a
+       destination and then stopped — a cap the rules never had, invisible until a
+       deck held two self-movable cards (none did: every boss deck carries at most
+       one Chariot, so this change moves nothing that used to stay put).
+       Sequential, not parallel: each move animates to completion before the next
+       decision is made, so every decision reads the true post-move board rather
+       than a stale snapshot. */
     var eligible = [];
     G.locations.forEach(function (loc) {
       (G.aiSlots[loc.id] || []).forEach(function (s) {
@@ -1046,20 +1095,27 @@
       ? function (f) { return _mvSettings.chariotMoveDecision(G, f); }
       : function (f) { return _bestChariotDest(G, f.locId, helpers.effectiveIP(f.sd)); };
 
-    var found = null, dest = null;
-    for (var _ei = 0; _ei < eligible.length; _ei++) {
-      var _d = _decide(eligible[_ei]);
-      if (_d !== null && _d !== undefined) { found = eligible[_ei]; dest = _d; break; }
-    }
-    if (!found) { _tryAiBarter(G, onDone); return; }   // every eligible Chariot chose to hold
-
-    found.sd._advChariotMoved = true;   // persists with the card → never moves again
-    // Pass the exact slot-data object — duplicate-cardId safe (a Papyrus-copied
-    // twin Chariots may have already spent its once-per-battle move flag; the
-    // sd pins WHICH one moves).
-    SOG.game.executeMoveAnimated('opp', found.cardId, found.locId, dest, { sd: found.sd }, function () {
-      _tryAiBarter(G, onDone);
-    });
+    /* Walk the eligible list, moving each Chariot that resolves a destination.
+       Re-checked per card at decision time rather than trusted from the gather:
+       an earlier move in this same pass can fill the slot a later one wanted, or
+       change whether its source is safe to leave, so the decision must be made
+       against the board as it is NOW. A Chariot that holds simply falls through
+       to the next — holding never ends the pass. */
+    var _i = 0;
+    (function nextMover() {
+      if (_i >= eligible.length) { _tryAiBarter(G, onDone); return; }
+      var f = eligible[_i++];
+      // Re-validate against the live board: a previous move this pass may have
+      // relocated or spent this card (defected cards are excluded by the gather's
+      // gate, and _movedOnTurn is stamped by executeMoveAnimated).
+      if (!_aiSlotMovableNow(G, f.sd) || f.sd._advChariotMoved) { nextMover(); return; }
+      var d = _decide(f);
+      if (d === null || d === undefined) { nextMover(); return; }   // this one holds
+      f.sd._advChariotMoved = true;   // persists with the card → never moves again
+      // Pass the exact slot-data object — duplicate-cardId safe (six Chariots in an
+      // invader deck are six independent movers; the sd pins WHICH one moves).
+      SOG.game.executeMoveAnimated('opp', f.cardId, f.locId, d, { sd: f.sd }, nextMover);
+    })();
   }
 
   /* Light AI Trader (68) barter (reuses SOG.game.executeBarter, the same queued-

@@ -48,6 +48,7 @@ const FILES = [
   'js/game/abilities.js',
   'js/game/ai.js',
   'js/sog-adventure-narmer.js',
+  'js/sog-adventure-hyksos.js',
   'js/sog-adventure-hatshepsut.js',
   'js/sog-adventure-gilgamesh.js',
   'js/sog-adventure-hanginggardens.js',

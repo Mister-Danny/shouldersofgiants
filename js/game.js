@@ -51,6 +51,7 @@
      Every path that rebuilds a face must go through this or the badge regresses. */
   var faceCard              = SOG.board.faceCard;
   var placeRevealedCard     = SOG.board.placeRevealedCard;
+  var isMoveBlockedInto     = SOG.board.isMoveBlockedInto;   // NO_MOVE_HERE (The Cataracts)
   var removeEl              = SOG.board.removeEl;
   var makeBoardGhost        = SOG.board.makeBoardGhost;
   var removeGhost           = SOG.board.removeGhost;
@@ -762,6 +763,11 @@
   /* refreshMoveableCards moved to game/input.js (Pass 3c). Aliased above. */
 
   function executeMove(owner, fromLocId, fromSlotIndex, toLocId) {
+    /* NO_MOVE_HERE (The Cataracts): the LAST line of defence. Every real
+       relocation — player, AI, ability-driven, either side — passes through this
+       function or executeMoveAnimated below, so blocking here catches paths the
+       UI gate and the AI choosers cannot see. */
+    if (isMoveBlockedInto(toLocId)) return;
     var slots   = owner === 'player' ? G.playerSlots : G.aiSlots;
     var sd      = slots[fromLocId][fromSlotIndex];
     if (!sd) return;
@@ -867,6 +873,9 @@
     if (typeof opts === 'function') { done = opts; opts = {}; }
     opts = opts || {};
     done = done || function () {};
+    // NO_MOVE_HERE — same last line of defence as executeMove. done() still fires
+    // so a caller waiting on the move (the reveal pipeline) is never stranded.
+    if (isMoveBlockedInto(toLocId)) { done(); return; }
 
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var card  = CARDS.find(function (c) { return c.id === cardId; });

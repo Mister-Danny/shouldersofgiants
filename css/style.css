@@ -10419,12 +10419,23 @@ body.otzi-battle .adv-bubble .adv-bubble-hint {
   margin-top: 6px;
 }
 
-/* ── Sargon battle speech bubbles — same comic-book treatment as the Otzi /
-   Gilgamesh battles. Sargon uses its own body class (so the otzi-battle bubble
-   rules above don't reach it) and keeps the capital UI (CC overlays), so we
-   mirror ONLY the bubble styling here. Avatars sit in their default spots
-   (opponent top-right 20/20, ally bottom-left 40/40), matching these anchors. */
-body.sargon-battle #adv-bubble-otzi {
+/* ── Sargon + Hyksos battle speech bubbles — the comic-book treatment, same as
+   the Otzi / Gilgamesh battles. Each battle uses its own body class (so the
+   otzi-battle bubble rules above don't reach it) and keeps the capital UI (CC
+   overlays), so we mirror ONLY the bubble styling here. Avatars sit in their
+   default spots (opponent top-right 20/20, ally bottom-left 40/40), matching
+   these anchors.
+
+   HYKSOS SHARES THIS BLOCK rather than getting a sixth byte-identical copy.
+   EVERY battle must opt in by body class — the bare .adv-bubble default is a
+   plain parchment box with the portrait inside, which is NOT the game's dialogue
+   look and should never be seen. A new battle that forgets to add itself here
+   silently falls back to that box; adding the class to these selector lists is
+   the whole fix. (Hammurabi / Hanging Gardens / Narmer / Hatshepsut still carry
+   their own identical blocks below — folding those in too is a tidy-up for
+   another pass, deliberately not done here to avoid touching shipped battles.) */
+body.sargon-battle #adv-bubble-otzi,
+body.hyksos-battle #adv-bubble-otzi {
   top: 80px;
   transform: translateY(-50%);
   right: 152px;
@@ -10440,7 +10451,8 @@ body.sargon-battle #adv-bubble-otzi {
   padding: 12px 14px 10px;
   box-shadow: -4px 4px 0 #111;
 }
-body.sargon-battle #adv-bubble-otzi::before {
+body.sargon-battle #adv-bubble-otzi::before,
+body.hyksos-battle #adv-bubble-otzi::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -10449,7 +10461,8 @@ body.sargon-battle #adv-bubble-otzi::before {
   border: 10px solid transparent;
   border-left-color: #111;
 }
-body.sargon-battle #adv-bubble-otzi::after {
+body.sargon-battle #adv-bubble-otzi::after,
+body.hyksos-battle #adv-bubble-otzi::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -10458,7 +10471,8 @@ body.sargon-battle #adv-bubble-otzi::after {
   border: 8px solid transparent;
   border-left-color: #f0ebe0;
 }
-body.sargon-battle #adv-bubble-explorer {
+body.sargon-battle #adv-bubble-explorer,
+body.hyksos-battle #adv-bubble-explorer {
   top: 624px;
   transform: translateY(-50%);
   left: 168px;
@@ -10474,7 +10488,8 @@ body.sargon-battle #adv-bubble-explorer {
   padding: 12px 14px 10px;
   box-shadow: 4px 4px 0 #111;
 }
-body.sargon-battle #adv-bubble-explorer::before {
+body.sargon-battle #adv-bubble-explorer::before,
+body.hyksos-battle #adv-bubble-explorer::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -10483,7 +10498,8 @@ body.sargon-battle #adv-bubble-explorer::before {
   border: 10px solid transparent;
   border-right-color: #111;
 }
-body.sargon-battle #adv-bubble-explorer::after {
+body.sargon-battle #adv-bubble-explorer::after,
+body.hyksos-battle #adv-bubble-explorer::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -10492,15 +10508,18 @@ body.sargon-battle #adv-bubble-explorer::after {
   border: 8px solid transparent;
   border-right-color: #fffef5;
 }
-body.sargon-battle .adv-bubble .adv-bubble-portrait { display: none; }
-body.sargon-battle .adv-bubble .adv-bubble-text {
+body.sargon-battle .adv-bubble .adv-bubble-portrait,
+body.hyksos-battle .adv-bubble .adv-bubble-portrait { display: none; }
+body.sargon-battle .adv-bubble .adv-bubble-text,
+body.hyksos-battle .adv-bubble .adv-bubble-text {
   font-size: 18px;
   line-height: 1.45;
   color: #111;
   text-shadow: none;
   min-height: 28px;
 }
-body.sargon-battle .adv-bubble .adv-bubble-hint {
+body.sargon-battle .adv-bubble .adv-bubble-hint,
+body.hyksos-battle .adv-bubble .adv-bubble-hint {
   color: #666;
   margin-top: 6px;
 }
@@ -12920,4 +12939,48 @@ body.narmer-battle .battle-col[data-loc-id="113"]::before {
   background: url('../images/locations/upperegypt.jpeg') center / cover no-repeat;
   opacity: 0.5;
   z-index: -1;
+}
+
+/* ── Hyksos invasion column art (loc ids 131-133 exist only in that battle;
+   the body scope keeps them inert everywhere else). Same shape as Narmer's
+   block above — the tile background is CSS, not the location's `image` field,
+   which feeds popups/thumbnails only. Both must name the same file: this rule
+   draws the tile, LOC_ART in js/sog-adventure-hyksos.js draws the popup.
+
+   ALL THREE ARE REAL ART — no placeholders. Note the UNDERSCORES in the two new
+   filenames (nile_delta, aswan_cataract): the server is character- and
+   case-sensitive, so a hyphen or a collapsed name 404s. ── */
+body.hyksos-battle .battle-col[data-loc-id="131"]::before {   /* The Nile Delta */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/nile_delta.jpg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.hyksos-battle .battle-col[data-loc-id="132"]::before {   /* Thebes */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/thebes.jpg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/locations/aswan_cataract.jpg') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+}
+
+/* Hyksos (67) — the crossing flyer. A body-level fixed clone of the card,
+   sliding from its own slot to the opponent's side (reveal-fx hyksosLiftOff /
+   hyksosCrossing). The shadow is the whole point: it lifts the card off the
+   board for the length of the roll so the travel reads as a card CROSSING
+   rather than two slots redrawing. Positioning is inline; only the lift is here. */
+.reveal-fx-hyksos-fly {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.65);
+  filter: brightness(1.06);
 }

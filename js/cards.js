@@ -533,10 +533,17 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/bookofthedead@0.3x.jpg", locked: true
   },
   {
-    id: 67, name: "Hyksos", cc: 3, ip: -2,                      // TODO (Egypt): NOT YET WIRED
-    type: "Political", type2: null, era: "Egypt",
-    abilityName: "Foreign Kings",
-    ability: "Foreign rulers seize the land.\n(Not yet wired.)",
+    id: 67, name: "Hyksos", cc: 3, ip: -1,                      // WIRED (At Once: crosses to the opponent's side of this location)
+    type: "Military", type2: null, era: "Egypt",                // Military, not Political: Political sits in Hieroglyphics' (62) aura, which would BOOST an invader who is supposed to be a liability; Military also reads as one army with Soldier (70) / Chariots (69)
+    abilityName: "Foreign Rule",
+    /* A NEGATIVE-IP card whose whole point is to land on someone else. Crossing is a
+       FULL ownership transfer — the slot record moves from one side's array to the
+       other, which is the only thing "whose card is this" means in this engine — so
+       the -1 scores against them, their per-location effects count it, and their
+       auras reach it. If the opponent's side of this location is FULL he cannot
+       cross and STAYS at -1 on his owner's side: a misplayed invasion hurts you.
+       The invaded side may not move him afterwards (sd._defected). */
+    ability: "At Once:\nMoves to your opponent's side of this location.",
     image:   "images/cards/egyptcards/hyksos@0.5x.jpg",
     imageSm: "images/cards/egyptcards/hyksos@0.3x.jpg", locked: true
   },

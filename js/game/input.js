@@ -754,6 +754,11 @@
     if (G.phase !== 'select') return false;
     if (fromLocId === toLocId) return false;
     if (!G.playerSlots[toLocId]) return false;
+    /* NO_MOVE_HERE (The Cataracts): nothing may MOVE in. Checked FIRST so no
+       move-enabler below (Scandinavia, Timbuktu, the Red Sea's per-location
+       budget) can grant a move into it, and so the drag preview never offers a
+       destination the commit would then refuse. See board.isMoveBlockedInto. */
+    if (SOG.board && SOG.board.isMoveBlockedInto && SOG.board.isMoveBlockedInto(toLocId)) return false;
     /* DESTINATION CAPACITY — reservations are deliberately NOT subtracted here.
        reservedSlotsPerLoc[X] counts cards that have LEFT X this turn (queueMove
        increments it for fromLocId), and each of those departures already emptied a
@@ -1225,6 +1230,13 @@
     G.locations.forEach(function (loc) {
       G.playerSlots[loc.id].forEach(function (s, si) {
         if (!s || !s.revealed) return;
+        /* A DEFECTED card (Hyksos 67) that crossed onto THIS side cannot be moved
+           by this side — the invader placed it, the invaded live with it. Checked
+           first so no move-enabler below (Scandinavia, Timbuktu, the Red Sea's
+           per-location budget) can grant it a move. Mirrors ai.js
+           _aiSlotMovableNow's identical gate, so the rule reads the same for both
+           sides. */
+        if (s._defected) return;
         var card = CARDS.find(function (x) { return x.id === s.cardId; });
         var mv = (s.cardId === 24 && !G.movedThisTurn[24]) ||   // Magellan
                  (s.cardId === 25 && !G.columbusMoved)    ||    // Columbus
@@ -1351,6 +1363,9 @@
   function queueMove(fromLocId, fromSlotIndex, toLocId) {
     var sd = G.playerSlots[fromLocId][fromSlotIndex];
     if (!sd) return;
+    // NO_MOVE_HERE — the same rule at the commit point as at the gate above; the
+    // two must agree or a drag would preview a move it then refuses.
+    if (SOG.board && SOG.board.isMoveBlockedInto && SOG.board.isMoveBlockedInto(toLocId)) return;
     var cardId = sd.cardId;
     var card   = CARDS.find(function (c) { return c.id === cardId; });
 

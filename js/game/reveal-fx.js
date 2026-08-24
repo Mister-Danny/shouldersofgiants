@@ -2283,6 +2283,88 @@ SOG.RevealFx = (function () {
     setTimeout(finish, AKH_PULSE_MS);   // the pulse, not the badge, sets the beat's length
   }
 
+  /* HYKSOS (67) — "Foreign Rule": the crossing.
+
+     TWO functions because the STATE MOVE HAPPENS BETWEEN THEM, and it must.
+     hyksosLiftOff clones the card while it is still standing in its own slot;
+     the ability then commits the ownership transfer (array move + _defected),
+     which clears that slot and rebuilds the destination; hyksosCrossing then
+     flies the clone across to where the card ACTUALLY landed. The card the
+     player watches travel is the card that really moved — nothing is faked and
+     nothing is delayed except one slot's visibility.
+
+     The clone carries the origin slot's CLASSES as well as its markup, so the
+     cqw-sized CC/IP overlays keep resolving against .battle-card-slot (a bare
+     div renders them huge — the judgment-card lesson). Same clone-and-slide
+     shape game.js's executeMoveAnimated uses for the Chariot's roll.
+
+     DUPLICATE-SAFE: the ability resolves the destination slot by OBJECT
+     IDENTITY (indexOf(sd)), so three Hyksos crossing in one turn each fly to
+     their own landing spot; these functions only ever touch the elements they
+     are handed.
+
+     No GSAP -> hyksosLiftOff returns null, hyksosCrossing finishes immediately
+     and never hides the destination, so the card simply appears where it landed. */
+  var HYKSOS_TRAVEL_MS = 900;   // the roll across the board
+  var HYKSOS_WHIP_MS   = 320;   // the crack before it lurches — the travel sfx starts after this
+
+  function hyksosLiftOff(fromEl) {
+    if (!fromEl || typeof gsap === 'undefined') return null;
+    var r = fromEl.getBoundingClientRect();
+    if (!r.width) return null;
+    var clone = fromEl.cloneNode(true);
+    clone.className = (fromEl.className || '') + ' reveal-fx-hyksos-fly';
+    clone.setAttribute('aria-hidden', 'true');
+    clone.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9000;transition:none;' +
+      'left:' + r.left + 'px;top:' + r.top + 'px;' +
+      'width:' + r.width + 'px;height:' + r.height + 'px;';
+    document.body.appendChild(clone);
+    return { clone: clone, rect: r };
+  }
+
+  function hyksosCrossing(flight, destEl, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+
+    if (!flight || !flight.clone || !destEl || typeof gsap === 'undefined') {
+      if (flight && flight.clone && flight.clone.parentNode) flight.clone.parentNode.removeChild(flight.clone);
+      finish();
+      return;
+    }
+    var d = destEl.getBoundingClientRect();
+    if (!d.width) {
+      if (flight.clone.parentNode) flight.clone.parentNode.removeChild(flight.clone);
+      finish();
+      return;
+    }
+
+    /* The card is ALREADY in the destination slot — state committed first — so
+       hold it hidden IMMEDIATELY, before the whip beat. Deferring this even by a
+       frame would show the card at both ends at once. */
+    var destFaces = [].slice.call(destEl.children);
+    destFaces.forEach(function (n) { n.style.opacity = '0'; });
+
+    function cleanup() {
+      if (flight.clone.parentNode) flight.clone.parentNode.removeChild(flight.clone);
+      destFaces.forEach(function (n) { n.style.opacity = ''; });
+    }
+
+    // The whip has already cracked in its slot; hold, then ride across under the
+    // caller's travel sfx (hyksoshorse.mp3 — the invader's own horse, not the
+    // Chariot card's chariot.mp3).
+    setTimeout(function () {
+      if (opts.sfx) playSfx(opts.sfx);
+      gsap.to(flight.clone, {
+        left: d.left, top: d.top, width: d.width, height: d.height,
+        duration: (opts.durationMs || HYKSOS_TRAVEL_MS) / 1000,
+        ease: 'power2.inOut',
+        onComplete: function () { cleanup(); finish(); }
+      });
+    }, (opts.holdMs != null) ? opts.holdMs : HYKSOS_WHIP_MS);
+  }
+
   function hieroglyphicsPulse(els, sfx) {
     if (sfx) playSfx(sfx);      // ONE sound for the batch, not one per card
     if (!els || !els.length) return;
@@ -2615,6 +2697,8 @@ SOG.RevealFx = (function () {
            mummyWrapReveal: mummyWrapReveal,
            bookJudgment: bookJudgment,
            hieroglyphicsPulse: hieroglyphicsPulse,
+           hyksosLiftOff: hyksosLiftOff,
+           hyksosCrossing: hyksosCrossing,
            akhenatenPulse: akhenatenPulse,
            raAbsorb: raAbsorb,
            rosettaTranscribe: rosettaTranscribe,
