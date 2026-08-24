@@ -58,7 +58,13 @@ SOG.HUD = (function () {
     // Egypt's travelling merchant — distinct character from `trader` (the
     // Mesopotamia market stallholder), and the speaker for the Narmer→
     // Hatshepsut journey + the Hatshepsut card delivery.
-    merchant:    { portrait: 'images/portraits/egyptmerchant.jpg', bleepHz: 300, side: 'npc'   }
+    merchant:    { portrait: 'images/portraits/egyptmerchant.jpg', bleepHz: 300, side: 'npc'   },
+    // The Hyksos invader — the ambush's speaker (overworld cinematic) and the
+    // Hyksos battle's opponent. Low bleep to match the battle module's own profile.
+    // `flip: true` mirrors the portrait horizontally — the Hyksos art faces the
+    // wrong way for the NPC slot (which sits on the right and should look INWARD,
+    // toward the player). Generic field: any future portrait can opt in.
+    hyksos:      { portrait: 'images/portraits/hyksos.jpeg', bleepHz: 150, side: 'npc', flip: true }
   };
 
   /* ══════════════════════════════════════════════════════════════
@@ -571,6 +577,11 @@ SOG.HUD = (function () {
     if (char.frame) {
       _npcImgEl.classList.add('adv-hud-npc-' + char.frame);
     }
+    /* Horizontal mirror, per character. Set as an inline transform rather than a
+       class so it composes with nothing and is trivially inspectable; cleared
+       explicitly on every swap so a flipped portrait never leaves the next one
+       reversed. Same scaleX(-1) the Neanderthal bubble portrait already uses. */
+    _npcImgEl.style.transform = char.flip ? 'scaleX(-1)' : '';
     _currentNpc = who;
   }
 

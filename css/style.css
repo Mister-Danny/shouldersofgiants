@@ -9273,6 +9273,55 @@ body.tut-locked #battle-reset-turn {
    SWIRL outward from the node's spot and dissipate, "uncovering" the node (which
    fades in mid-storm; JS removes the layer at the end). Each grain carries its own
    randomized --ang / --dist / --dur / --delay (set inline in overworld.js). */
+/* ══ REUSABLE OVERWORLD SPRITE ANIMATOR ═══════════════════════════
+   The container for createOwSpriteAnimator (js/overworld.js). Percentage-
+   positioned like every other overworld element, so it survives a resize the way
+   the nodes do; the animator swaps the img's src for the frame cycle, so nothing
+   here is per-sprite. image-rendering keeps the pixel art crisp at scale. */
+.ow-sprite-anim {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  user-select: none;
+  image-rendering: pixelated;
+  will-change: left, top;
+}
+/* An ambush horde: a soft ground shadow so three layered sprites read with depth
+   instead of as flat cut-outs, and a z-index band of their own so the group
+   overlaps consistently regardless of DOM order. */
+.ow-ambush-sprite {
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55));
+  z-index: 6;
+}
+
+/* ══ OVERWORLD DIRT TRAIL ═════════════════════════════════════════
+   Re-parameterized from .sargon-duststorm below: same "layer of grain spans
+   driven by custom properties" shape, but a TRAIL rather than a swirl. The
+   grains are emitted repeatedly at the sprite's CURRENT position as it travels
+   (see _dirtTrail), and each kicks BACKWARD (+--dx, to the right, away from the
+   leftward gallop) while settling DOWN (+--dy) instead of orbiting a centre. */
+.ow-dirt-trail {
+  position: absolute;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+.ow-dirt-grain {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, #e6cfa0 0%, #bd9256 70%, rgba(170, 130, 75, 0) 100%);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: owDirtKick var(--dur, 0.8s) ease-out 1 both;
+}
+@keyframes owDirtKick {
+  0%   { opacity: 0;    transform: translate(-50%, -50%) scale(0.5); }
+  15%  { opacity: 0.85; }
+  100% { opacity: 0;    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.25); }
+}
+
 .sargon-duststorm {
   position: absolute;
   transform: translate(-50%, -50%);

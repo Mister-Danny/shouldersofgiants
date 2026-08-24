@@ -149,24 +149,51 @@ SOG.HyksosBattle = (function () {
   }
 
   /* ══════════════════════════════════════════════════════════════
-     DIALOGUE — PLACEHOLDER DRAFTS. Danny writes the final text; these
-     exist so the hooks are wired and the beats are visible in a
-     playtest. who: 'hyksos' = the invader portrait, 'explorer' = the
-     player. An EMPTY array runs synchronously with nothing shown, so
-     blanking any of these is a safe way to mute that beat.
-     No OPENING_DIALOGUE by design — the ambush goes straight in
-     (Stage 2 owns the intro).
+     DIALOGUE. who: 'hyksos' = the invader portrait (the shared opponent
+     bubble, top-right), 'explorer' = the player (bottom-left). An EMPTY
+     array runs synchronously with nothing shown, so blanking any of these
+     is a safe way to mute that beat.
+
+     THE OPENING NOW EXISTS. It was deliberately absent while Stage 2's
+     ambush was the only intro — the cinematic dropped you straight into
+     the board and that abruptness was the whole design. The opening batch
+     below sits INSIDE the battle, after the entry wipe has revealed it, so
+     the ambush stays abrupt and the threat gets its own beat once the
+     board is up.
+
+     It plays ONCE. PLAY AGAIN routes through _restartBattle -> start(),
+     which re-runs onBattleStart, so without a guard a must-win battle
+     would replay six lines on every retry. See _skipOpeningOnce below.
+
+     CONSECUTIVE SAME-SPEAKER LINES are fine and used here on purpose
+     (the Hyksos gets runs of two and three). The runner only hides the
+     OTHER bubble and re-adds 'is-visible' to this one — already present,
+     so the 0.25s fade never re-runs. The bubble holds still and retypes,
+     which is what makes a run of Hyksos lines read as one speech.
   ══════════════════════════════════════════════════════════════ */
+  var OPENING_DIALOGUE = [
+    { who: 'explorer', text: "I'm sorry. I think you made a mistake." },
+    { who: 'hyksos',   text: 'Make no mistake.' },
+    { who: 'hyksos',   text: 'Your land is fertile.' },
+    { who: 'explorer', text: "See, it's not really my land…" },
+    { who: 'hyksos',   text: 'But you are weak.' },
+    { who: 'hyksos',   text: 'Prepare for the onslaught!' }
+  ];
   var WIN_DIALOGUE = [
-    { who: 'explorer', text: 'The chariots break. Egypt holds.' },
-    { who: 'hyksos',   text: 'Hold it, then. We were here before you named it.' }
+    { who: 'explorer', text: 'Who is weak now?' },
+    { who: 'hyksos',   text: 'Hold it.' },
+    { who: 'hyksos',   text: 'We cannot bear the shame.' },
+    { who: 'explorer', text: "We'll keep the horses." }
   ];
   var LOSS_DIALOGUE = [
-    { who: 'hyksos',   text: 'The Delta is ours. Thebes will follow.' },
-    { who: 'explorer', text: 'Not while I can still stand a line.' }
+    { who: 'hyksos',   text: 'Inevitable.' },
+    { who: 'hyksos',   text: 'Bow before your masters.' },
+    { who: 'explorer', text: 'But I have to get home.' },
+    { who: 'hyksos',   text: 'The only path forward is through us.' }
   ];
   var TIE_DIALOGUE = [
-    { who: 'hyksos',   text: 'Neither of us holds the river. Come again.' }
+    { who: 'hyksos',   text: 'Neither of us holds the river.' },
+    { who: 'hyksos',   text: 'But we will not leave so easily.' }
   ];
 
   /* ══════════════════════════════════════════════════════════════
@@ -485,21 +512,66 @@ SOG.HyksosBattle = (function () {
      (#adv-bubble-explorer) needs nothing: adventurers.js watches it and keeps the
      selected adventurer's portrait on it. */
   var _origOppBubbleSrc = null;
+  var _origOppBubbleXf  = null;
   function _swapOpponentBubblePortrait() {
     var img = document.querySelector('#adv-bubble-otzi .adv-bubble-portrait');
     if (!img) return;
-    if (_origOppBubbleSrc === null) _origOppBubbleSrc = img.getAttribute('src');
+    if (_origOppBubbleSrc === null) {
+      _origOppBubbleSrc = img.getAttribute('src');
+      _origOppBubbleXf  = img.style.transform || '';
+    }
     img.setAttribute('src', HYKSOS_BUBBLE_PORTRAIT);
+    /* MIRRORED, matching the HUD's `flip: true` for this character — the Hyksos art
+       faces the wrong way for the opponent slot and should look inward. The original
+       transform is remembered too, because the bubble this borrows is the
+       NEANDERTHAL/Otzi one, whose markup already carries a scaleX(-1) in some
+       battles; restoring src without restoring transform would leave it reversed. */
+    img.style.transform = 'scaleX(-1)';
   }
   function _restoreOpponentBubblePortrait() {
     if (_origOppBubbleSrc === null) return;
     var img = document.querySelector('#adv-bubble-otzi .adv-bubble-portrait');
-    if (img) img.setAttribute('src', _origOppBubbleSrc);
+    if (img) {
+      img.setAttribute('src', _origOppBubbleSrc);
+      img.style.transform = _origOppBubbleXf || '';
+    }
     _origOppBubbleSrc = null;
+    _origOppBubbleXf  = null;
+  }
+
+  /* THE SECOND HALF OF THE SHARED BATTLE-ENTRY TRANSITION.
+     Entering a battle from the overworld is TWO halves, and this module had
+     neither: overworld._fireWipeFromNode closes a radial wipe over the map with
+     sfx/woosh.m4a and starts the battle underneath it, and then the BATTLE fades
+     that same cover away in onBattleStart to reveal its board. Byte-identical to
+     Hatshepsut's / Narmer's — same element (#adv-radial-wipe), same 0.45s
+     power2.out, same cleanup — so the ambush's entry is indistinguishable from
+     every other battle's.
+     Harmless when no wipe is active (a dev-panel launch), which is why the
+     `.active` check comes first: it just calls back immediately. */
+  function _fadeOutCover(onDone) {
+    var wipeEl = document.getElementById('adv-radial-wipe');
+    if (!wipeEl || !wipeEl.classList.contains('active')) { if (onDone) onDone(); return; }
+    if (typeof gsap === 'undefined') {
+      wipeEl.classList.remove('active'); wipeEl.style.opacity = ''; wipeEl.style.clipPath = '';
+      if (onDone) onDone();
+      return;
+    }
+    gsap.to(wipeEl, {
+      opacity: 0, duration: 0.45, ease: 'power2.out',
+      onComplete: function () {
+        wipeEl.classList.remove('active'); wipeEl.style.opacity = ''; wipeEl.style.clipPath = '';
+        if (onDone) onDone();
+      }
+    });
   }
 
   function _teardown() {
     document.body.classList.remove('hyksos-battle');
+    // Safety: a teardown that lands mid-transition must not leave the wipe cover
+    // stranded over the map (the same clear the overworld's _clearWipe performs).
+    var _wipe = document.getElementById('adv-radial-wipe');
+    if (_wipe) { _wipe.classList.remove('active'); _wipe.style.opacity = ''; _wipe.style.clipPath = ''; }
     _restoreOpponentBubblePortrait();
     hideBubbles();
     if (window.SOG && SOG.HUD && typeof SOG.HUD.restoreBattleAvatars === 'function') SOG.HUD.restoreBattleAvatars();
@@ -577,11 +649,25 @@ SOG.HyksosBattle = (function () {
     overlay.appendChild(wrap);
     document.body.appendChild(overlay);
   }
-  function _restartBattle() { _removeResultPopup(); _teardown(); start(); }
+  /* MUST-WIN RETRY. Re-enters the BATTLE only — the overworld is never touched,
+     so the ambush cinematic cannot replay (the Gilgamesh pattern). The opening is
+     suppressed for this one re-entry: six lines before every attempt at a battle
+     you are required to win would wear out fast. */
+  function _restartBattle() {
+    _skipOpeningOnce = true;
+    _removeResultPopup(); _teardown(); start();
+  }
+  /* WIN EXIT — Stage 2. Routes through Overworld.returnFromHyksosWin, which clears
+     the ambush sprites, stamps the once-only flag, and then runs the journey the
+     ambush DEFERRED (the Merchant conversation + the walk south). Falls back to the
+     plain overworld return when that handler is absent, so a dev-panel launch with
+     no ambush in flight still lands somewhere sane. */
   function _exit() {
     _removeResultPopup(); _teardown();
-    // Stage 2 routes this back to the ambush's map position. For now, the
-    // standard overworld return so a dev-menu playtest lands somewhere sane.
+    if (window.Overworld && typeof window.Overworld.returnFromHyksosWin === 'function') {
+      window.Overworld.returnFromHyksosWin();
+      return;
+    }
     if (typeof window.showScreen === 'function') window.showScreen('screen-overworld');
     setTimeout(function () {
       if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') window.Overworld.resumeAfterBattle();
@@ -594,6 +680,17 @@ SOG.HyksosBattle = (function () {
      own scoreboard; loss/tie play their line and offer the retry.
   ══════════════════════════════════════════════════════════════ */
   var _dialogueActive = false;
+
+  /* ONE-SHOT RETRY GUARD for the opening batch.
+     start() is the ONLY entry point — a fresh ambush, a dev-panel launch and a
+     PLAY AGAIN retry all call it — so onBattleStart alone cannot tell them apart.
+     _restartBattle raises this flag immediately before re-starting, and
+     onBattleStart CONSUMES it (reads, then clears). That makes the skip exactly
+     one battle deep: the retry is silent, and the next genuinely fresh entry
+     plays the opening again. A plain "already played" flag would have been wrong
+     the other way — it would mute the opening forever once the page had seen it,
+     including on a later fresh ambush. */
+  var _skipOpeningOnce = false;
 
   var HYKSOS_SCRIPT = {
     onIntro: function (ctx, done) {
@@ -609,7 +706,20 @@ SOG.HyksosBattle = (function () {
         SOG.HUD.applyBattleAvatars(ctx.config && ctx.config.presentation);
       }
       _swapOpponentBubblePortrait();   // the invader's face on the shared opponent bubble
-      done();
+      /* Reveal the board from under the entry wipe, exactly as every other battle
+         does — THEN the opening exchange, over the revealed board. done() is gated
+         on both, so turn 1 cannot begin behind the cover or under the dialogue.
+         _dialogueActive blocks card placement while it types (isInputBlocked). */
+      _fadeOutCover(function () {
+        var skip = _skipOpeningOnce;
+        _skipOpeningOnce = false;            // consume: the skip is one battle deep
+        if (skip) { done(); return; }        // PLAY AGAIN -> straight into turn 1
+        _dialogueActive = true;
+        _runLinesIfAny(OPENING_DIALOGUE, function () {
+          _dialogueActive = false;
+          done();
+        });
+      });
     },
 
     isInputBlocked: function () { return _dialogueActive; },

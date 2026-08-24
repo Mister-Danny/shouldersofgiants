@@ -47,6 +47,7 @@ var Overworld = (function () {
   var KEY_MET_HATSHEPSUT            = 'sog_met_hatshepsut';             // set after the first Hatshepsut encounter → later clicks skip straight to the battle
   // Stage B
   var KEY_HATSHEPSUT_TRANSITION     = 'sog_hatshepsut_transition_seen'; // Narmer→Hatshepsut journey played (once, after the Narmer GIANT win)
+  var KEY_HYKSOS_AMBUSH             = 'sog_hyksos_ambush_seen';         // Hyksos ambush cinematic + battle CLEARED (once; a completed ambush never re-fires)
   var KEY_HATSHEPSUT_CARDS          = 'sog_hatshepsut_cards_delivered'; // Merchant(76)+Purple Dye(75) handed over — shared gate for BOTH delivery paths
 
   /* ════════════════════════════════════════════════════════════
@@ -1776,6 +1777,17 @@ var Overworld = (function () {
   /* ── Exit click — walk then transition ─────────────────────── */
   function onExitClick(exit) {
     if (isMoving || isTransitioning || isDialogueLocked) return;
+    /* HYKSOS AMBUSH — GUARD (b). Interception (a) above is the path that actually
+       fires in a normal playthrough, but the To Upper Egypt exit is walkable once
+       narmer-beaten, so a save that reached it with the ambush still pending must
+       not slip south around it. The exit's own travel becomes the deferred resume,
+       so accepting the ambush here still delivers the player where they were going. */
+    if (exit && exit.target === 'upper-egypt' && !_ambushDone(AMBUSH_HYKSOS)) {
+      _runConquerorAmbush(AMBUSH_HYKSOS, function () {
+        transitionToMap(exit.target, exit.entryAt);
+      });
+      return;
+    }
     // Focus gate: block map-to-map travel at 0 focus (before any walk),
     // showing the refill prompt instead.
     if (_focusGated()) { _showFocusGate(); return; }
@@ -2936,6 +2948,359 @@ var Overworld = (function () {
     runDialogue(D4_FIRST_MARKET_INTERSTITIAL, function () {
       isDialogueLocked = false;
       if (done) done();
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     REUSABLE OVERWORLD SPRITE ANIMATOR
+     ────────────────────────────────────────────────────────────────────────
+     The overworld had NO frame-cycle animation of any kind — the Explorer is a
+     single static image and every cinematic so far moved whole images or spawned
+     CSS particles. This is the general animator, written for the Hyksos chariots
+     but deliberately knowing nothing about them: give it a list of frame URLs and
+     it cycles them, moves itself, and cleans itself up.
+
+     Frame URLs are encodeURI'd on the way in because sprite folders in this repo
+     contain SPACES ("character sprites"), which a bare src would not survive —
+     the same reason femaleexplorer%20portrait.jpeg is written encoded.
+
+     Returns a handle:
+       el          the <img>, already appended under the Explorer sprite
+       start()     begin cycling frames
+       stop()      freeze on the current frame
+       moveTo(x,y,ms,ease,cb)  travel to a % position on the map
+       destroy()   stop, unhook, remove
+     Percentages, not pixels: the overworld is a percentage-positioned overlay, so
+     a sprite placed in % survives window resizes exactly as the nodes do. */
+  function createOwSpriteAnimator(opts) {
+    opts = opts || {};
+    var frames = (opts.frames || []).map(function (f) { return encodeURI(f); });
+    if (!frames.length || !overlayEl) return null;
+
+    var el = document.createElement('img');
+    el.className = 'ow-sprite-anim' + (opts.className ? ' ' + opts.className : '');
+    el.src = frames[0];
+    el.alt = '';
+    el.draggable = false;
+    el.style.left = (opts.x || 0) + '%';
+    el.style.top  = (opts.y || 0) + '%';
+    if (opts.width)  el.style.width  = opts.width;
+    if (opts.zIndex != null) el.style.zIndex = opts.zIndex;
+    // Under the Explorer, like the Sargon node reveal does, so the player sprite
+    // always reads as in front of the scenery.
+    if (charEl && charEl.parentNode === overlayEl) overlayEl.insertBefore(el, charEl);
+    else overlayEl.appendChild(el);
+
+    var i = 0, timer = null;
+    var fps = opts.fps || 12;
+
+    function start() {
+      if (timer) return;
+      timer = setInterval(function () {
+        i = (i + 1) % frames.length;
+        el.src = frames[i];
+      }, Math.max(30, Math.round(1000 / fps)));
+    }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+    function destroy() { stop(); if (el.parentNode) el.parentNode.removeChild(el); }
+
+    /* Travel to a map % position. GSAP when present (so it eases and can be
+       killed); a plain CSS transition otherwise, which keeps the cinematic
+       watchable rather than snapping. */
+    function moveTo(x, y, ms, ease, cb) {
+      var dur = (ms == null ? 1200 : ms);
+      if (typeof gsap !== 'undefined') {
+        gsap.to(el, {
+          left: x + '%', top: y + '%',
+          duration: dur / 1000, ease: ease || 'power1.inOut',
+          onComplete: function () { if (cb) cb(); }
+        });
+      } else {
+        el.style.transition = 'left ' + dur + 'ms linear, top ' + dur + 'ms linear';
+        el.style.left = x + '%';
+        el.style.top  = y + '%';
+        setTimeout(function () { if (cb) cb(); }, dur);
+      }
+    }
+    return { el: el, start: start, stop: stop, moveTo: moveTo, destroy: destroy };
+  }
+
+  /* A LOOPING sfx with a fade-out, for a cinematic whose length is not the clip's.
+     hyksoshorse.mp3 is ~34KB — far shorter than the gallop — so it loops and fades
+     rather than ending mid-entrance or being cut dead on arrival. Volume tracks
+     SOG.sfx's own factor so the options panel still governs it. */
+  function _loopingSfx(src) {
+    var a = null;
+    try {
+      a = new Audio(src);
+      a.loop = true;
+      a.volume = (window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1;
+      a.play();
+    } catch (e) { a = null; }
+    return {
+      fadeOut: function (ms) {
+        if (!a) return;
+        var steps = 12, i = 0, v0 = a.volume;
+        var iv = setInterval(function () {
+          i++;
+          try { a.volume = Math.max(0, v0 * (1 - i / steps)); } catch (e) {}
+          if (i >= steps) { clearInterval(iv); try { a.pause(); a.currentTime = 0; } catch (e) {} }
+        }, Math.max(20, Math.round((ms || 600) / steps)));
+      },
+      stop: function () { if (a) { try { a.pause(); a.currentTime = 0; } catch (e) {} } }
+    };
+  }
+
+  /* A DIRT TRAIL behind a moving sprite. Re-parameterized from
+     _dustStormRevealSargon's CSS particle pattern (a layer of grain spans driven
+     by custom properties), with two changes that make it a TRAIL rather than a
+     swirl: the grains are emitted repeatedly at the sprite's CURRENT position as
+     it travels, and each one kicks BACKWARD (to the right, away from the leftward
+     gallop) and settles downward instead of orbiting.
+     Returns a stop() — call it when the sprite halts; grains already in flight
+     finish their own animation and the layer self-removes. */
+  function _dirtTrail(getPos, opts) {
+    opts = opts || {};
+    if (!overlayEl) return { stop: function () {} };
+    var layer = document.createElement('div');
+    layer.className = 'ow-dirt-trail';
+    if (charEl && charEl.parentNode === overlayEl) overlayEl.insertBefore(layer, charEl);
+    else overlayEl.appendChild(layer);
+
+    var every = opts.everyMs || 90;
+    var per   = opts.perTick || 3;
+    var iv = setInterval(function () {
+      var p = getPos();
+      if (!p) return;
+      for (var k = 0; k < per; k++) {
+        var g = document.createElement('span');
+        g.className = 'ow-dirt-grain';
+        var size = 3 + Math.random() * 5;
+        g.style.left = (p.x + (Math.random() - 0.5) * 1.2) + '%';
+        g.style.top  = (p.y + (Math.random() - 0.5) * 1.0) + '%';
+        g.style.width = g.style.height = size.toFixed(1) + 'px';
+        g.style.setProperty('--dx',  (10 + Math.random() * 26).toFixed(0) + 'px');   // kicked BACKWARD (right)
+        g.style.setProperty('--dy',  (6 + Math.random() * 16).toFixed(0) + 'px');    // and settling down
+        g.style.setProperty('--dur', (0.5 + Math.random() * 0.5).toFixed(2) + 's');
+        layer.appendChild(g);
+        (function (node) {
+          setTimeout(function () { if (node.parentNode) node.parentNode.removeChild(node); }, 1100);
+        })(g);
+      }
+    }, every);
+
+    return {
+      stop: function () {
+        clearInterval(iv);
+        // Let the last grains settle, then take the layer with them.
+        setTimeout(function () { if (layer.parentNode) layer.parentNode.removeChild(layer); }, 1200);
+      }
+    };
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     THE CONQUEROR AMBUSH — a reusable shape
+     ────────────────────────────────────────────────────────────────────────
+     Everything below the CONFIG is generic. A conqueror ambush is six beats:
+
+       1. TRIGGER INTERCEPTION   a journey the player was about to take is
+                                 intercepted, and the journey itself is DEFERRED
+                                 rather than replaced (see the resume callback).
+       2. CINEMATIC ENTRANCE     the player's line, then N grouped sprites gallop
+                                 in from an edge under a looping sfx and a dirt
+                                 trail, stopping near the Explorer to block the way.
+       3. TWO-LINE EXCHANGE      the conqueror's threat, the Explorer's answer, in
+                                 the comic bubbles with the conqueror's portrait.
+       4. STRAIGHT TO BATTLE     no rules popup, no menu — the abruptness is the
+                                 point.
+       5. MUST-WIN RETRY         a loss re-enters the BATTLE only. The cinematic is
+                                 not replayed (the battle module's own
+                                 _restartBattle → teardown+start, the same shape
+                                 Gilgamesh uses) so a retry is instant.
+       6. DEFERRED RESUME        on the win, the sprites clear, the flag is stamped,
+                                 and the intercepted journey runs UNCHANGED.
+
+     Hannibal / Darius / Attila should be a new CONFIG entry plus a portrait, a
+     sprite folder and a battle module — not a rebuild. The only Hyksos-specific
+     things in this file are the AMBUSHES entry below and the two call sites that
+     name it.
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  /* ─────────── HYKSOS-SPECIFIC CONFIG (everything above is generic) ─────────── */
+  var AMBUSH_HYKSOS = {
+    id:            'hyksos',
+    flagKey:       KEY_HYKSOS_AMBUSH,
+    module:        'HyksosBattle',                    // SOG.<module>.start()
+    portrait:      'hyksos',                          // HUD CHARACTERS key
+    sfx:           'sfx/hyksoshorse.mp3',             // looped, faded on arrival
+    // 7 frames, already flipped to face LEFT (they ride in from the east).
+    frames: (function () {
+      var out = [];
+      for (var i = 1; i <= 7; i++) out.push('images/metaworld/character sprites/hyksos/hyksos-0' + i + '.png');
+      return out;
+    })(),
+    fps:           10,
+    riderCount:    3,
+    spriteWidth:   '13%',
+    /* Grouped, not stacked: staggered offsets so three sprites read as a horde with
+       depth rather than one unit or a tidy row. entryX is off the RIGHT edge (they
+       ride in from the east); dx/dy are relative to the EXPLORER.
+
+       ANCHORED ON THE MEASURED POST-NARMER POSITION. After the Narmer Giant win the
+       Explorer stands at x 11.3%, y 78.2% on the egypt map — near the LEFT edge and
+       low down. So every dx is POSITIVE: a negative one put a rider half off-screen,
+       which is what the first pass did. Right-and-below is also the correct read
+       twice over — it is the direction they rode in from, and it sits squarely on
+       the walk from the Explorer to the To Upper Egypt exit at {50, 88}, so the
+       horde is physically in the way of the journey south.
+       Re-measure these if the post-Narmer spawn ever moves. */
+    riders: [
+      { entryX: 112, dx:  8.5, dy: 4.0, delayMs:   0 },
+      { entryX: 122, dx: 15.5, dy: 1.5, delayMs: 140 },
+      { entryX: 132, dx: 12.0, dy: 7.0, delayMs: 280 }
+    ],
+    gallopMs:      2100,
+    // EDITABLE TEXT — final wording is Danny's.
+    approachLine:  [{ who: 'explorer', text: "Now that we've unified Egypt, let's go see the other half..." }],
+    exchange:      [{ who: 'hyksos',   text: "We've come for your kingdom." },
+                    { who: 'explorer', text: 'My kingdom? Gulp.' }]
+  };
+  /* ─────────── end Hyksos-specific config ─────────── */
+
+  // The live sprite handles, so the win path can clear them (and a re-entry can't
+  // leave a second horde behind). Module-scoped rather than per-run: only one
+  // ambush can be on screen at a time.
+  var _ambushSprites = [];
+
+  function _clearAmbushSprites() {
+    _ambushSprites.forEach(function (h) { try { h.destroy(); } catch (e) {} });
+    _ambushSprites = [];
+  }
+
+  function _ambushDone(cfg) {
+    try { return localStorage.getItem(cfg.flagKey) === 'true'; } catch (e) { return false; }
+  }
+
+  /* BEAT 2 + 3 + 4. `resume` is stashed, not called: it is the DEFERRED journey,
+     and only the battle's win path runs it. */
+  var _ambushResume = null;
+
+  function _runConquerorAmbush(cfg, resume) {
+    var hud = window.SOG && window.SOG.HUD;
+    _ambushResume = resume || null;
+
+    // No HUD (or already done) → don't strand the journey; run it now.
+    if (!hud || typeof hud.enterDialogueMode !== 'function' || _ambushDone(cfg)) {
+      if (_ambushResume) { var r = _ambushResume; _ambushResume = null; r(); }
+      return;
+    }
+
+    isDialogueLocked = true;
+    cancelIdle();
+
+    // ── BEAT 2a: the Explorer's line, before anything appears ──
+    hud.enterDialogueMode(null, function () {
+      _runLinesKeepOpen(cfg.approachLine, function () {
+        if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+
+        // ── BEAT 2b: the entrance — grouped sprites, looping sfx, dirt trail ──
+        var horse = _loopingSfx(cfg.sfx);
+        _clearAmbushSprites();
+        var trails  = [];
+        var arrived = 0;
+        var total   = Math.min(cfg.riderCount, cfg.riders.length);
+
+        // The Explorer stays exactly where they are: the deferred journey's own
+        // walkPath starts from currentPos, so moving the player here would change
+        // the walk that follows. The horde comes to THEM.
+        var px = currentPos.x, py = currentPos.y;
+
+        /* Clamp the horde into the visible map. The offsets are relative to the
+           Explorer, who can be standing anywhere — near the left edge (as they are
+           right after the Narmer win) a negative dx pushed a rider half off-screen.
+           Clamping keeps the group readable wherever the player happens to stand. */
+        var CLAMP_X = [8, 88], CLAMP_Y = [10, 88];
+        var clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
+        for (var i = 0; i < total; i++) {
+          (function (r, idx) {
+            var stopX = clamp(px + r.dx, CLAMP_X[0], CLAMP_X[1]);
+            var stopY = clamp(py + r.dy, CLAMP_Y[0], CLAMP_Y[1]);
+            var h = createOwSpriteAnimator({
+              frames: cfg.frames, fps: cfg.fps,
+              x: r.entryX, y: stopY,          // enter level with where they'll stop
+              width: cfg.spriteWidth,
+              className: 'ow-ambush-sprite'
+            });
+            if (!h) { arrived++; return; }
+            /* The LEAD rider carries a data-id so the SHARED battle-entry wipe can
+               centre on it. _fireWipeFromNode finds its origin with
+               overlayEl.querySelector('[data-id="…"]') — normally a map node, but it
+               only ever needs an element, so tagging the horde reuses the existing
+               transition rather than adding a variant. Without it the wipe would
+               fall back to screen centre; the horde is what the player is being
+               pulled into, so it is the right origin. */
+            if (idx === 0) h.el.dataset.id = cfg.wipeFromId || (cfg.id + '-ambush');
+            _ambushSprites.push(h);
+            setTimeout(function () {
+              h.start();
+              var t = _dirtTrail(function () {
+                // Read the sprite's live % position so the trail follows it.
+                var l = parseFloat(h.el.style.left), tp = parseFloat(h.el.style.top);
+                return isFinite(l) && isFinite(tp) ? { x: l, y: tp } : null;
+              });
+              trails.push(t);
+              h.moveTo(stopX, stopY, cfg.gallopMs, 'power2.out', function () {
+                h.stop();                     // freeze mid-stride: they've halted
+                t.stop();
+                arrived++;
+                if (arrived >= total) {
+                  horse.fadeOut(700);
+                  // ── BEAT 3: the exchange, in the comic bubbles ──
+                  hud.enterDialogueMode(null, function () {
+                    if (typeof hud.swapNpcPortrait === 'function') {
+                      hud.swapNpcPortrait({ character: cfg.portrait });
+                    }
+                    _runLinesKeepOpen(cfg.exchange, function () {
+                      if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
+                      /* ── BEAT 4: into the battle, through the SHARED entry wipe ──
+                         The same _fireWipeFromNode every other battle launch uses
+                         (Narmer, Hatshepsut, Sargon, Hammurabi, Hanging Gardens,
+                         Walls of Uruk): a radial clip-path wipe closing over the map
+                         with sfx/woosh.m4a, then the module starts underneath it and
+                         fades the cover away in its own onBattleStart.
+
+                         SEQUENCING: the wipe fires only AFTER exitDialogueMode has
+                         closed the exchange, so the last line is dismissed before the
+                         wipe rather than being swallowed by it. That ordering is the
+                         one adjustment the ambush needed — "straight into battle"
+                         previously meant the battle screen replaced the map with no
+                         transition at all. It still reads as abrupt: the whole wipe
+                         is 1.0s, identical to every other entry. */
+                      isDialogueLocked = false;
+                      var mod = window.SOG && SOG[cfg.module];
+                      if (mod && typeof mod.start === 'function') {
+                        _fireWipeFromNode(cfg.wipeFromId || (cfg.id + '-ambush'), function () {
+                          mod.start();
+                        });
+                      } else {
+                        _clearAmbushSprites();
+                        if (_ambushResume) { var rr = _ambushResume; _ambushResume = null; rr(); }
+                      }
+                    });
+                  });
+                }
+              });
+            }, r.delayMs || 0);
+          })(cfg.riders[i], i);
+        }
+
+        if (total === 0) {   // defensive: no sprites → skip to the exchange
+          horse.stop();
+          isDialogueLocked = false;
+          var mod0 = window.SOG && SOG[cfg.module];
+          if (mod0 && typeof mod0.start === 'function') mod0.start();
+        }
+      });
     });
   }
 
@@ -5134,8 +5499,43 @@ var Overworld = (function () {
       var seen = false;
       try { seen = localStorage.getItem(KEY_HATSHEPSUT_TRANSITION) === 'true'; } catch (e) {}
       if (seen) return;
-      // Let the flag-stamp choreography in resumeAfterBattle settle first.
-      setTimeout(function () { _startHatshepsutTransition(null); }, 900);
+      /* HYKSOS AMBUSH — INTERCEPTION POINT (a), the real one.
+         This journey south is AUTOMATIC: nothing waits for the player to walk to
+         the To Upper Egypt exit, so "the next time they head for Upper Egypt" IS
+         this beat. The ambush therefore fires HERE, and the journey — the Merchant
+         conversation, the walk to y=115, the map swap, the parting lines — is
+         DEFERRED, not rewritten: _startHatshepsutTransition is handed in as the
+         resume and runs UNCHANGED once the battle is won. */
+      setTimeout(function () {
+        if (!_ambushDone(AMBUSH_HYKSOS)) {
+          _runConquerorAmbush(AMBUSH_HYKSOS, function () { _startHatshepsutTransition(null); });
+        } else {
+          _startHatshepsutTransition(null);
+        }
+      }, 900);
+    },
+
+    /* HYKSOS AMBUSH — BEAT 6, the win return. Called by the Hyksos battle module's
+       exit instead of a plain overworld return.
+       Order matters: the horde is cleared FIRST (they are driven out — leaving them
+       on screen would read as the path still blocked), then the flag is stamped so
+       the ambush can never re-fire, and only then does the DEFERRED journey run.
+       That journey is whatever _runConquerorAmbush was handed — normally
+       _startHatshepsutTransition, so the Merchant conversation plays IN FULL, from
+       its own first line, exactly as it would have without the ambush. */
+    returnFromHyksosWin: function () {
+      if (!mapImgEl) init();
+      if (typeof showScreen === 'function') showScreen('screen-overworld');
+      if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') {
+        window.Overworld.resumeAfterBattle();
+      }
+      _clearAmbushSprites();
+      try { localStorage.setItem(KEY_HYKSOS_AMBUSH, 'true'); } catch (e) {}
+      var resume = _ambushResume; _ambushResume = null;
+      isDialogueLocked = false;
+      // Let resumeAfterBattle's own choreography settle before the journey starts,
+      // the same 900ms the un-ambushed path used.
+      if (resume) setTimeout(resume, 900);
     },
 
     /* Hatshepsut SERF-win return (Stage B) — plain return, then the Merchant's
