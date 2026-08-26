@@ -202,8 +202,103 @@ window.SOG_LEVEL_DATA = {
       // 51, Hatshepsut → 52).
       reward: { cardIdOnGiantWin: 53 },
 
-      // Dialogue intentionally left empty — drafted separately.
-      dialogue: { opening: [], serfWinA: [], serfWinB: [], loss: [], tie: [], giantIntro: [], giantWinA: [], giantWinB: [], giantLoss: [], giantDraw: [] }
+      /* ── DIALOGUE ────────────────────────────────────────────────────────
+         Slot semantics (see js/level-runtime.js):
+           nodeIntro  — OVERWORLD, at the node, BEFORE the walk + battle wipe.
+                        Runs through SOG.HUD (not the battle bubbles), gated by
+                        its own sog_level_ramses_node_intro_seen flag.
+           opening    — in-battle, first visit only, then the rules popup.
+           turn1      — in-battle interjection, ~2s after turn 1 becomes live.
+           <tier>WinA — plays BEFORE the reward animation.
+           <tier>WinB — plays AFTER it. NOT a variant of A: A and B are two
+                        halves of one scene with the gold/card grant between
+                        them (see spike-sargon-shadow, which uses both). Ramses'
+                        win batches are written as single uninterrupted scenes,
+                        so they live entirely in A and B is left empty — putting
+                        the same text in both would play it twice. To land the
+                        reward mid-scene later, move a trailing line into B. */
+      dialogue: {
+        nodeIntro: [
+          { who: 'explorer', text: 'Sproutin\' sparrows!' },
+          { who: 'explorer', text: 'Look at those giants.' },
+          { who: 'explorer', text: 'And there\'s four of them.' },
+          { who: 'ramses', text: 'You\'re welcome.' },
+          { who: 'explorer', text: 'Hey, they kind of look like you.' },
+          { who: 'ramses', text: 'Thank you.' },
+          { who: 'ramses', text: 'And you\'re welcome, again.' },
+          { who: 'explorer', text: 'Um. Who are you?' },
+          { who: 'ramses', text: 'You don\'t know The Great Ramses?' },
+          { who: 'explorer', text: 'If it\'s any consolation, I do now!' },
+          { who: 'ramses', text: 'Oh, you will never forget.' }
+        ],
+        opening: [
+          { who: 'ramses', text: 'Behold my kingdom.' },
+          { who: 'ramses', text: 'My city, my temple, and my face carved in stone.' },
+          { who: 'explorer', text: 'Faces. Four of them. Why?' },
+          { who: 'ramses', text: 'A warning to unwanted visitors.' },
+          { who: 'explorer', text: 'Oh…' },
+          { who: 'explorer', text: 'Is it too late to tell you I always make my bed?' },
+          { who: 'ramses', text: 'Yes.' },
+          { who: 'explorer', text: 'Unless you want me to strip the sheets…' },
+          { who: 'ramses', text: 'Enough!' },
+          { who: 'ramses', text: 'Build yourself a monument worth remembering…' },
+          { who: 'ramses', text: 'Or be left to the sands of time.' }
+        ],
+        turn1: [
+          { who: 'explorer', text: 'Wait. Why do I only have 2 Capital to spend?' },
+          { who: 'explorer', text: 'I usually get 5.' },
+          { who: 'ramses', text: 'Such entitlement.' },
+          { who: 'ramses', text: 'You cannot build monuments that last the test of time in one turn.' },
+          { who: 'ramses', text: 'In my kingdom, you build your way up.' },
+          { who: 'explorer', text: 'So I get more each turn?' },
+          { who: 'ramses', text: 'If you play your cards right…' }
+        ],
+        serfWinA: [
+          { who: 'explorer', text: 'That win was monumental!' },
+          { who: 'ramses', text: 'It was pity.' },
+          { who: 'ramses', text: 'I barely tried.' },
+          { who: 'explorer', text: 'My mom says you should always try your best.' },
+          { who: 'ramses', text: 'Return again and you will see the full strength of Ramses.' }
+        ],
+        serfWinB: [],
+        loss: [
+          { who: 'ramses', text: 'As expected.' },
+          { who: 'ramses', text: 'I tower over all.' },
+          { who: 'explorer', text: 'I just want to get home.' },
+          { who: 'ramses', text: 'Then you must prove yourself.' }
+        ],
+        tie: [
+          { who: 'ramses', text: 'A draw. How forgettable.' },
+          { who: 'explorer', text: 'I\'ll take it.' },
+          { who: 'ramses', text: 'It gets you nothing.' }
+        ],
+        giantIntro: [
+          { who: 'ramses', text: 'You\'ve come back to etch your name into my walls of history.' },
+          { who: 'explorer', text: 'If you say so…' },
+          { who: 'explorer', text: 'You\'re not exactly a household name.' },
+          { who: 'ramses', text: 'Then I will etch it in every house from here to eternity!' }
+        ],
+        giantWinA: [
+          { who: 'explorer', text: 'Well, I appreciate the effort.' },
+          { who: 'ramses', text: 'This is my greatest failure.' },
+          { who: 'ramses', text: 'Please don\'t tell the Kushites.' },
+          { who: 'explorer', text: 'I don\'t know what a cushonite is.' },
+          { who: 'ramses', text: 'You really need to learn your history.' },
+          { who: 'explorer', text: 'Perhaps that\'s why I\'m on this journey.' }
+        ],
+        giantWinB: [],
+        giantLoss: [
+          { who: 'ramses', text: 'Ye Mighty, and despair.' },
+          { who: 'explorer', text: 'I don\'t know what that means.' },
+          { who: 'ramses', text: 'You will.' }
+        ],
+        giantDraw: [
+          { who: 'ramses', text: 'A draw.' },
+          { who: 'ramses', text: 'At Kadesh I fought a draw. Do you know what I carved on the walls?' },
+          { who: 'explorer', text: '…that you won?' },
+          { who: 'ramses', text: 'That I won.' }
+        ]
+      }
     }
   }
 };

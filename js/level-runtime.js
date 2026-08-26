@@ -72,7 +72,7 @@ SOG.LevelRuntime = (function () {
   var _state = {};   // levelId -> { runner, origBubbleSrc, portraitClickHandler }
 
   function _stateFor(levelId) {
-    if (!_state[levelId]) _state[levelId] = { runner: null, origBubbleSrc: null, portraitClickHandler: null };
+    if (!_state[levelId]) _state[levelId] = { runner: null, origBubbleSrc: null, portraitClickHandler: null, turn1Timer: null };
     return _state[levelId];
   }
 
@@ -243,6 +243,11 @@ SOG.LevelRuntime = (function () {
     if (window.SOG && SOG.HUD && typeof SOG.HUD.restoreBattleAvatars === 'function') SOG.HUD.restoreBattleAvatars();
     if (window.SOG && SOG.BattleRulesPopup && typeof SOG.BattleRulesPopup.hide === 'function') SOG.BattleRulesPopup.hide();
     var st = _stateFor(levelId);
+    /* A pending turn-1 interjection must not survive the battle it belongs to —
+       conceding or Play Again inside its 2s window would otherwise fire it over
+       the next screen. Its seen-flag is already set by then, so it simply never
+       plays for that run; that is the correct outcome, not a lost line. */
+    if (st.turn1Timer) { clearTimeout(st.turn1Timer); st.turn1Timer = null; }
     if (st.runner) st.runner.hideBubbles();
     var wipeEl = document.getElementById('adv-radial-wipe');
     if (wipeEl) { wipeEl.classList.remove('active'); wipeEl.style.opacity = ''; wipeEl.style.clipPath = ''; }
@@ -316,6 +321,43 @@ SOG.LevelRuntime = (function () {
       if (lines && lines.length) runLines(lines, onDone); else onDone();
     }
 
+    /* ── Turn-1 interjection (dialogue.turn1) ─────────────────────────────
+       A mid-battle beat that fires shortly AFTER turn 1 goes live, so the
+       player sees their dealt hand first and the line can refer to it (Ramses
+       uses it to explain the rising capital curve).
+
+       Why not onTurnStart: that hook fires for turns 2+ only (js/game.js —
+       "start of a selection phase (turns 2+)"), so turn 1 can never reach it.
+       Nebuchadnezzar's flood interjection rides onTurnStart precisely because
+       it lands on turns 3-5. Rather than change when the engine fires that hook
+       — which would touch every shipped battle — this schedules off the tail of
+       onBattleStart, where the board is already built and the hand already
+       dealt. The input block / release is Neb's exact pattern.
+
+       Fires ONCE, ever: the seen-flag is localStorage, so a rematch, a Play
+       Again, or a return visit weeks later all skip it. It is also skipped
+       outright once any tier is beaten, matching how every boss suppresses its
+       teaching beats for a player who has already won. */
+    var KEY_TURN1_SEEN = 'sog_level_' + levelId + '_turn1_seen';
+    var TURN1_DELAY_MS = 2000;
+
+    function _scheduleTurn1Interjection() {
+      if (!dlg.turn1 || !dlg.turn1.length) return;
+      if (_has(KEY_TURN1_SEEN) || _everBeaten(levelId)) return;
+      var st2 = _stateFor(levelId);
+      if (st2.turn1Timer) clearTimeout(st2.turn1Timer);
+      st2.turn1Timer = setTimeout(function () {
+        st2.turn1Timer = null;
+        _set(KEY_TURN1_SEEN);
+        _dialogueActive = true;      // isInputBlocked() consults this
+        _disableButtons();
+        runLines(dlg.turn1, function () {
+          _dialogueActive = false;
+          _enableButtons();
+        });
+      }, TURN1_DELAY_MS);
+    }
+
     var _dialogueActive = false;
 
     /* Win — routes through SOG.rewards.consume(levelId), the SAME generic
@@ -384,7 +426,8 @@ SOG.LevelRuntime = (function () {
             _dialogueActive = false;
             _enableButtons();
             _wireOpponentPortraitClick(levelId, level);
-            done();
+            done();                          // turn 1 goes live here
+            _scheduleTurn1Interjection();    // ...then the beat lands on top of it
           };
           _dialogueActive = true;
           // GIANT rematch → in-battle dominance intro instead of the Serf

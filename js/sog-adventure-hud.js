@@ -64,7 +64,12 @@ SOG.HUD = (function () {
     // `flip: true` mirrors the portrait horizontally — the Hyksos art faces the
     // wrong way for the NPC slot (which sits on the right and should look INWARD,
     // toward the player). Generic field: any future portrait can opt in.
-    hyksos:      { portrait: 'images/portraits/hyksos.jpeg', bleepHz: 150, side: 'npc', flip: true }
+    hyksos:      { portrait: 'images/portraits/hyksos.jpeg', bleepHz: 150, side: 'npc', flip: true },
+    // Ramses II — speaker for the overworld node intro that plays before his
+    // battle. The battle itself uses its own bubbles (body.ramses-battle), so
+    // this entry exists purely for the OVERWORLD half. Low-but-not-Hyksos bleep:
+    // he is imperious rather than brutish.
+    ramses:      { portrait: 'images/portraits/ramsesIIportrait.jpeg', bleepHz: 220, side: 'npc', flip: true }
   };
 
   /* ══════════════════════════════════════════════════════════════

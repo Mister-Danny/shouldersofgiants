@@ -1543,12 +1543,29 @@ var Overworld = (function () {
       isDialogueLocked = true;
       cancelIdle();
       walkPath(_routeTo(node.id), function () {
-        _fireWipeFromNode(node.id, function () {
-          if (!SOG.LevelRuntime.launch(node.id)) {
-            _clearWipe();
-            isDialogueLocked = false;
-            scheduleIdle();
-          }
+        /* Optional overworld node intro (level.dialogue.nodeIntro): a scene AT
+           the node, after the walk and before the battle wipe — the same slot in
+           the flow as the hand-authored bosses' node-click dialogue (see the
+           Hanging Gardens knock sequence above), but driven from level data so a
+           data-driven level needs no branch of its own here.
+
+           Battle-side dialogue can't cover this: LevelRuntime's `opening` runs
+           after the wipe, inside the battle, against the battle's own bubbles.
+           This runs on the overworld through SOG.HUD, so its speakers resolve
+           from the HUD CHARACTERS registry (a `who` used here must have an entry
+           there — a missing one renders no portrait).
+
+           Once-only, on its own flag, independent of the battle's opening: the
+           player meets a boss at their node once, however many times they then
+           fight them. */
+        _runLevelNodeIntro(node.id, function () {
+          _fireWipeFromNode(node.id, function () {
+            if (!SOG.LevelRuntime.launch(node.id)) {
+              _clearWipe();
+              isDialogueLocked = false;
+              scheduleIdle();
+            }
+          });
         });
       });
       return;
@@ -1885,6 +1902,33 @@ var Overworld = (function () {
     } else {
       if (onDone) setTimeout(onDone, 0);
     }
+  }
+
+  /* Run a data-driven level's optional overworld node intro, then continue.
+     Generic: any SOG_LEVEL_DATA level gets this by declaring dialogue.nodeIntro.
+     Silent no-op when the level has none, when it has already been seen, or when
+     the HUD is unavailable — in every one of those cases `next` runs immediately,
+     so the battle-entry path is byte-identical to before for levels that don't
+     use it. */
+  function _levelNodeIntroSeen(levelId) {
+    try { return localStorage.getItem('sog_level_' + levelId + '_node_intro_seen') === 'true'; }
+    catch (e) { return false; }
+  }
+  function _runLevelNodeIntro(levelId, next) {
+    var lvl = window.SOG_LEVEL_DATA && SOG_LEVEL_DATA.levels && SOG_LEVEL_DATA.levels[levelId];
+    var lines = lvl && lvl.dialogue && lvl.dialogue.nodeIntro;
+    var hud = window.SOG && window.SOG.HUD;
+    if (!lines || !lines.length || _levelNodeIntroSeen(levelId) ||
+        !hud || typeof hud.enterDialogueMode !== 'function') { next(); return; }
+    try { localStorage.setItem('sog_level_' + levelId + '_node_intro_seen', 'true'); } catch (e) {}
+    hud.enterDialogueMode(null, function () {
+      _runLinesKeepOpen(lines, function () {
+        // exitDialogueMode takes a SINGLE onDone callback — passing `next` as a
+        // second argument would drop it and the battle would never launch.
+        if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(next);
+        else next();
+      });
+    });
   }
 
   /* ── Phase 1: 3s wait → Explorer monologue ────────────────── */

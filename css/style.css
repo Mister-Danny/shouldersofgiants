@@ -10477,7 +10477,7 @@ body.otzi-battle .adv-bubble .adv-bubble-hint {
    default spots (opponent top-right 20/20, ally bottom-left 40/40), matching
    these anchors.
 
-   HYKSOS SHARES THIS BLOCK rather than getting a sixth byte-identical copy.
+   HYKSOS AND RAMSES SHARE THIS BLOCK rather than each getting a byte-identical copy.
    EVERY battle must opt in by body class — the bare .adv-bubble default is a
    plain parchment box with the portrait inside, which is NOT the game's dialogue
    look and should never be seen. A new battle that forgets to add itself here
@@ -10486,7 +10486,8 @@ body.otzi-battle .adv-bubble .adv-bubble-hint {
    their own identical blocks below — folding those in too is a tidy-up for
    another pass, deliberately not done here to avoid touching shipped battles.) */
 body.sargon-battle #adv-bubble-otzi,
-body.hyksos-battle #adv-bubble-otzi {
+body.hyksos-battle #adv-bubble-otzi,
+body.ramses-battle #adv-bubble-otzi {
   top: 80px;
   transform: translateY(-50%);
   right: 152px;
@@ -10503,7 +10504,8 @@ body.hyksos-battle #adv-bubble-otzi {
   box-shadow: -4px 4px 0 #111;
 }
 body.sargon-battle #adv-bubble-otzi::before,
-body.hyksos-battle #adv-bubble-otzi::before {
+body.hyksos-battle #adv-bubble-otzi::before,
+body.ramses-battle #adv-bubble-otzi::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -10513,7 +10515,8 @@ body.hyksos-battle #adv-bubble-otzi::before {
   border-left-color: #111;
 }
 body.sargon-battle #adv-bubble-otzi::after,
-body.hyksos-battle #adv-bubble-otzi::after {
+body.hyksos-battle #adv-bubble-otzi::after,
+body.ramses-battle #adv-bubble-otzi::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -10523,7 +10526,8 @@ body.hyksos-battle #adv-bubble-otzi::after {
   border-left-color: #f0ebe0;
 }
 body.sargon-battle #adv-bubble-explorer,
-body.hyksos-battle #adv-bubble-explorer {
+body.hyksos-battle #adv-bubble-explorer,
+body.ramses-battle #adv-bubble-explorer {
   top: 624px;
   transform: translateY(-50%);
   left: 168px;
@@ -10540,7 +10544,8 @@ body.hyksos-battle #adv-bubble-explorer {
   box-shadow: 4px 4px 0 #111;
 }
 body.sargon-battle #adv-bubble-explorer::before,
-body.hyksos-battle #adv-bubble-explorer::before {
+body.hyksos-battle #adv-bubble-explorer::before,
+body.ramses-battle #adv-bubble-explorer::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -10550,7 +10555,8 @@ body.hyksos-battle #adv-bubble-explorer::before {
   border-right-color: #111;
 }
 body.sargon-battle #adv-bubble-explorer::after,
-body.hyksos-battle #adv-bubble-explorer::after {
+body.hyksos-battle #adv-bubble-explorer::after,
+body.ramses-battle #adv-bubble-explorer::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -10560,9 +10566,11 @@ body.hyksos-battle #adv-bubble-explorer::after {
   border-right-color: #fffef5;
 }
 body.sargon-battle .adv-bubble .adv-bubble-portrait,
-body.hyksos-battle .adv-bubble .adv-bubble-portrait { display: none; }
+body.hyksos-battle .adv-bubble .adv-bubble-portrait,
+body.ramses-battle .adv-bubble .adv-bubble-portrait { display: none; }
 body.sargon-battle .adv-bubble .adv-bubble-text,
-body.hyksos-battle .adv-bubble .adv-bubble-text {
+body.hyksos-battle .adv-bubble .adv-bubble-text,
+body.ramses-battle .adv-bubble .adv-bubble-text {
   font-size: 18px;
   line-height: 1.45;
   color: #111;
@@ -10570,7 +10578,8 @@ body.hyksos-battle .adv-bubble .adv-bubble-text {
   min-height: 28px;
 }
 body.sargon-battle .adv-bubble .adv-bubble-hint,
-body.hyksos-battle .adv-bubble .adv-bubble-hint {
+body.hyksos-battle .adv-bubble .adv-bubble-hint,
+body.ramses-battle .adv-bubble .adv-bubble-hint {
   color: #666;
   margin-top: 6px;
 }
