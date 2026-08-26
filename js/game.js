@@ -296,7 +296,8 @@
 
     G.turn              = 1;
     G.phase             = 'select';
-    G.capital           = _capitalForTurn(cfg.resource, G.turn);
+    G.baseCapitalThisTurn = _capitalForTurn(cfg.resource, G.turn);
+    G.capital           = G.baseCapitalThisTurn;
     G.turnStartCapital  = G.capital;
     G.playerFirst       = Math.random() < 0.5;
     showRevealFirstHighlight(G.playerFirst);
@@ -1690,7 +1691,8 @@
        identical to the old CAPITAL + bonus. The 'none' branch is unreached
        by Arcadium. */
     var _res = G.config.resource;
-    G.capital  = (_res.model === 'none') ? 0 : (_capitalForTurn(_res, G.turn) + G.bonusCapitalNextTurn);
+    G.baseCapitalThisTurn  = (_res.model === 'none') ? 0 : _capitalForTurn(_res, G.turn);
+    G.capital  = (_res.model === 'none') ? 0 : (G.baseCapitalThisTurn + G.bonusCapitalNextTurn);
     G.turnStartCapital     = G.capital;
     G.bonusCapitalNextTurn = 0;
     SOG.input.resetDragInfo();

@@ -48,6 +48,15 @@
 
     turnStartCapital: CAPITAL,  // capital at the start of this turn (may exceed CAPITAL with bonus)
 
+    /* The BASE capital both sides get this turn, before either side's bonus.
+       Normally the flat resource.capital, but a level may declare a per-turn
+       curve (resource.capitalByTurn — Ramses ramps 2,3,4,5,6). Published on G
+       because the AI has to budget from the SAME number the player does; it
+       previously read the module-load constant SOG.state.CAPITAL and so
+       ignored the curve entirely. Distinct from turnStartCapital, which
+       already includes the PLAYER's bonus and must not leak to the AI. */
+    baseCapitalThisTurn: CAPITAL,
+
     // locId → [ null | {cardId,ip,revealed,ipMod,contMod} ]  ×4, always compacted
     playerSlots: {},
     aiSlots:     {},

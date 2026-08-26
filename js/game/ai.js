@@ -55,7 +55,13 @@
     // Note: aiActionLog is reset at the start of runAiMovements (which runs
     // before runAiSelection on the AI's turn). Don't reset it here or we'd
     // wipe any movement entries the AI just recorded.
-    var budget = CAPITAL + G.aiBonusCapitalNextTurn;
+    /* Budget from the per-turn BASE, not the module-load constant. A level
+       with a rising curve (resource.capitalByTurn — Ramses ramps 2,3,4,5,6)
+       otherwise left the AI spending a flat 5 every turn while the player was
+       held to the curve: 5 against 2 on turn 1. Falls back to CAPITAL so any
+       battle that never sets the field behaves exactly as before. */
+    var _base  = (G.baseCapitalThisTurn != null) ? G.baseCapitalThisTurn : CAPITAL;
+    var budget = _base + G.aiBonusCapitalNextTurn;
     G.aiBonusCapitalNextTurn = 0;
 
     // Shared helper: write a decided play to the board and reveal queue.
