@@ -4806,6 +4806,15 @@ button,
   height: 100%;
   object-fit: cover;
   object-position: center top;
+  /* Clip to the frame's circle HERE rather than relying on the parent. The
+     frame's `overflow:hidden` + `border-radius:50%` does not clip a child that
+     carries its own transform (Chrome), so every transformed portrait bled
+     square corners outside the gold ring — the mirrored opponents
+     (Ramses/Hyksos, scaleX(-1)) and the zoomed ones (Otzi, scale(1.36);
+     Neanderthal, scaleX(-1)) alike. Clipping the <img> instead of the frame
+     leaves the border and the ring shadows intact, and circle(50%) is
+     symmetric so it survives the mirror unchanged. */
+  clip-path: circle(50%);
 }
 
 /* Turn-first highlight — pulses gold on the avatar that plays first this turn (selection phase only) */

@@ -183,6 +183,9 @@ window.SOG_LEVEL_DATA = {
         bodyClass:              'ramses-battle',
         allyAvatar:              'player',   // selected adventurer, resolved at render time
         opponentAvatar:          'images/portraits/ramsesIIportrait.jpeg',
+        // The Ramses art faces the wrong way for the opponent slot (which sits
+        // on the right and should look INWARD, toward the player).
+        opponentAvatarFlip:      true,
         opponentBubblePortrait:  'images/portraits/ramsesIIportrait.jpeg',
         popAlly:                 true
       },

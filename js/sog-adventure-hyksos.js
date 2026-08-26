@@ -467,6 +467,10 @@ SOG.HyksosBattle = (function () {
         bodyClass:      'hyksos-battle',
         allyAvatar:     'player',
         opponentAvatar: OPP_PORTRAIT,
+        // Mirror the battle avatar too — the HUD's overworld portrait already
+        // flips (CHARACTERS.hyksos.flip), and the bubble portrait flip below is
+        // inert under the comic-bubble style, which hides that portrait.
+        opponentAvatarFlip: true,
         popAlly:        true
       },
       rewards:  {},                       // script-owned (see _onWin), like every boss

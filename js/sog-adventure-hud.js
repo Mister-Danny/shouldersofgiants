@@ -886,7 +886,7 @@ SOG.HUD = (function () {
   function _battleAvatarFrameImg(role) {
     return document.querySelector('.battle-avatar-' + role + ' .battle-avatar-frame img');
   }
-  function _setBattleAvatar(role, src) {
+  function _setBattleAvatar(role, src, flip) {
     var img = _battleAvatarFrameImg(role);
     if (!img || !src) return;
     // 'player' (and any legacy hardcoded explorer path) means the SELECTED
@@ -898,13 +898,22 @@ SOG.HUD = (function () {
     img.src = src;
     img.style.display        = '';   // un-hide if a prior onerror hid it
     img.style.objectPosition = '';   // use the CSS-default framing
+    /* Horizontal mirror for portraits whose art faces the wrong way for this
+       slot. Written on EVERY call, not just when flipping — these avatar <img>
+       elements are reused across battles, so a flipped portrait would otherwise
+       leak into the next opponent. Same reasoning as the HUD's NPC portrait
+       flip (see swapNpcPortrait). */
+    img.style.transform      = flip ? 'scaleX(-1)' : '';
   }
 
   /** Set both battle-screen avatar slots from a presentation block. */
   function applyBattleAvatars(presentation) {
     presentation = presentation || {};
-    if (presentation.opponentAvatar) _setBattleAvatar('opponent', presentation.opponentAvatar);
-    if (presentation.allyAvatar)     _setBattleAvatar('ally',     presentation.allyAvatar);
+    // opponentAvatarFlip / allyAvatarFlip: mirror that slot horizontally.
+    // Data-driven so a level (or a boss config) declares it without any
+    // per-battle code here.
+    if (presentation.opponentAvatar) _setBattleAvatar('opponent', presentation.opponentAvatar, presentation.opponentAvatarFlip);
+    if (presentation.allyAvatar)     _setBattleAvatar('ally',     presentation.allyAvatar,     presentation.allyAvatarFlip);
     if (presentation.popAlly) {
       var allyEl = document.querySelector('.battle-avatar-ally');
       if (allyEl) allyEl.classList.add('adv-active');
