@@ -534,7 +534,7 @@ const CARDS = [
   },
   {
     id: 67, name: "Hyksos", cc: 3, ip: -1,                      // WIRED (At Once: crosses to the opponent's side of this location)
-    type: "Military", type2: null, era: "Egypt",                // Military, not Political: Political sits in Hieroglyphics' (62) aura, which would BOOST an invader who is supposed to be a liability; Military also reads as one army with Soldier (70) / Chariots (69)
+    type: "Political", type2: null, era: "Egypt",               // Political: foreign RULE, not a raiding party — the Hyksos took the throne. Note this puts him inside Hieroglyphics' (62) "+1 to your Religious and Political cards here" aura and Purple Dye's (75) +2, and takes him out of Tigris' MILITARY_PLUS_1_HERE and Scandinavia's MILITARY_FREE_MOVE_AWAY. Because he DEFECTS on reveal, the aura that reaches him is normally the INVADED side's, softening a -1 to 0.
     abilityName: "Foreign Rule",
     /* A NEGATIVE-IP card whose whole point is to land on someone else. Crossing is a
        FULL ownership transfer — the slot record moves from one side's array to the
