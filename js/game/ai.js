@@ -1937,8 +1937,131 @@
         }
         return null;
       }
+    },
+
+    /* RAMSES — his three locations each reward a SPECIFIC shape of play, and the
+       generic brain reads none of them. Measured over 14 scripted battles before
+       this signature existed: Giant averaged 34.6 IP vs Serf's 33.0 — inside the
+       run-to-run noise (Serf's own spread was 27-45), i.e. not a tier a player
+       could feel. The three misreads, and what this fixes:
+
+         Karnak (DOUBLE_HIGHEST_IP_HERE) doubles ONLY the highest card here, ties
+           included. The generic Giant stacked 2.6 cards there per battle — every
+           card after the biggest is near-wasted, and worse, a second big card
+           SPLITS the doubling across a tie instead of concentrating it.
+         Pi-Ramses (HIGHEST_IP_PLUS_2_HERE) is the same shape at a flat +2, so it
+           wants the SECOND-biggest card, not a crowd.
+         Abu Simbel (FULL_SLOTS_PLUS_6_HERE) pays +6 for filling all four slots —
+           the single biggest swing on the board. Giant completed it 2/5 battles,
+           Serf 0/4. Nothing was aiming at it; cheap bodies are exactly the tool.
+
+       Locations are resolved by abilityKey, never by id: the Hyksos battle uses
+       the SAME ids 131-133 for entirely different abilities, so hardcoding them
+       would be correct only by luck.
+
+       The rising capital curve (2,3,4,5,6) is why holdCard matters here — the
+       biggest card is usually unaffordable until turn 4-5 anyway, and playing it
+       early at Karnak wastes the doubling on a board that is still half empty. */
+    ramses: {
+      holdCard: function (cardId, ctx) {
+        // Hold the single biggest card for the Karnak window (turns 4-5). The
+        // shared loop already releases holds on the final turn, and releases
+        // everything if holds would stall a whole turn, so this cannot deadlock.
+        var loc = _ramsesLoc('DOUBLE_HIGHEST_IP_HERE');
+        if (loc == null) return false;
+        var hand = (ctx && ctx.hand) || G.aiHand || [];
+        return cardId === _ramsesBiggestInHand(hand) && _handIP('opp', cardId) >= 3;
+      },
+
+      playBias: function (cardId, locId, ctx) {
+        var ip = _handIP('opp', cardId);
+        var karnak = _ramsesLoc('DOUBLE_HIGHEST_IP_HERE');
+        var pi     = _ramsesLoc('HIGHEST_IP_PLUS_2_HERE');
+        var abu    = _ramsesLoc('FULL_SLOTS_PLUS_6_HERE');
+
+        if (locId === karnak) {
+          // Worth the doubling only if this card would actually BECOME the
+          // highest here; otherwise it is a body in the wrong place.
+          var top = _ramsesTopIPAt(karnak);
+          return (ip > top) ? (ip * 1.5) : -2;
+        }
+        if (locId === pi) {
+          var topPi = _ramsesTopIPAt(pi);
+          return (ip > topPi) ? 2 : -1;
+        }
+        if (locId === abu) {
+          var filled = (G.aiSlots[abu] || []).filter(Boolean).length;
+          if (filled >= 4) return -3;                 // already full — stop feeding it
+          var free = 4 - filled;
+          // The +6 only ever lands if the remaining slots can still be filled.
+          // Cheap cards are the tool; the closer to completion, the louder.
+          var reachable = free <= (((ctx && ctx.turn) != null ? (5 - ctx.turn + 1) : 2) * 2);
+          if (!reachable) return 0;
+          var cheapness = Math.max(0, 3 - (_handStats('opp', cardId) || { cc: 3 }).cc);
+          return cheapness + (free === 1 ? 4 : free === 2 ? 2 : 1);
+        }
+        return 0;
+      },
+
+      choosePlacement: function (cardId, legalLocs, ctx) {
+        var ip     = _handIP('opp', cardId);
+        var karnak = _ramsesLoc('DOUBLE_HIGHEST_IP_HERE');
+        var pi     = _ramsesLoc('HIGHEST_IP_PLUS_2_HERE');
+        var abu    = _ramsesLoc('FULL_SLOTS_PLUS_6_HERE');
+
+        // Biggest card takes Karnak, but only if it beats what is already there.
+        if (karnak != null && legalLocs.indexOf(karnak) !== -1 &&
+            ip > _ramsesTopIPAt(karnak) && ip >= 3) return karnak;
+
+        // Second tier takes Pi-Ramses on the same "must be the new highest" rule.
+        if (pi != null && legalLocs.indexOf(pi) !== -1 &&
+            ip > _ramsesTopIPAt(pi) && ip >= 2) return pi;
+
+        // Cheap bodies complete Abu Simbel's fill.
+        var cc = (_handStats('opp', cardId) || { cc: 9 }).cc;
+        if (abu != null && legalLocs.indexOf(abu) !== -1 && cc <= 2) {
+          var filled = (G.aiSlots[abu] || []).filter(Boolean).length;
+          if (filled < 4) return abu;
+        }
+        return null;
+      }
     }
   };
+
+  /* ── Ramses signature helpers ───────────────────────────────────────────
+     Kept beside the signature rather than inline so the hooks stay readable.
+     All three resolve against the LIVE board, so they are correct on any turn
+     and in any battle that happens to share Ramses' ability keys. */
+  function _ramsesLoc(abilityKey) {
+    for (var i = 0; i < G.locations.length; i++) {
+      if (G.locations[i].abilityKey === abilityKey) return G.locations[i].id;
+    }
+    return null;
+  }
+  /* Highest effective IP among REVEALED cards at `locId`, either side — the
+     doubling/`+2` contests compare both sides together (see abilities.js), so a
+     card only wins the bonus by beating the whole table, not just the AI's own. */
+  function _ramsesTopIPAt(locId) {
+    if (locId == null) return -Infinity;
+    var top = -Infinity;
+    [G.aiSlots[locId] || [], G.playerSlots[locId] || []].forEach(function (arr) {
+      arr.forEach(function (s) {
+        if (s && s.revealed && helpers && helpers.effectiveIP) {
+          var v = helpers.effectiveIP(s);
+          if (v > top) top = v;
+        }
+      });
+    });
+    return top === -Infinity ? -Infinity : top;
+  }
+  function _ramsesBiggestInHand(hand) {
+    var best = null, bestIP = -Infinity;
+    (hand || []).forEach(function (id) {
+      var ip = _handIP('opp', id);
+      if (ip > bestIP) { bestIP = ip; best = id; }
+    });
+    return best;
+  }
 
   /* The shared Giant brain. Mirrors serfSelectPlays' loop but applies the five
      shared upgrades + the supplied per-boss signature. Leaves serfSelectPlays
