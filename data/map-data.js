@@ -177,7 +177,7 @@ window.SOG_MAP_DATA = {
         kind:  'market',
         image: 'images/metaworld/civilization nodes/egyptmarket.png',
         x: 61.15, y: 31.11,
-        scale: 1.15,
+        scale: 1.45,
         showFrom: 'neb-beaten',
         note: 'Scaffolded position — drag into place. Shop contents not wired.'
       }
