@@ -373,9 +373,7 @@ SOG.NarmerBattle = (function () {
     { who: 'narmer', text: 'Secure your land. Then contest Memphis. Only then may you march on mine.' },
     { who: 'explorer', text: 'One step at a time. Got it.' },
     { who: 'narmer', text: 'Accumulate more Influence Points at 2 of the 3 locations to become The Unifier.' },
-    { who: 'narmer', text: 'But you will not.' },
-    { who: 'narmer', text: 'The crown is clearly not meant for you.' },
-    { who: 'explorer', text: 'We\'ll see about that.' }
+    { who: 'narmer', text: 'But you will not.' }
   ];
 
   /* ══════════════════════════════════════════════════════════════════════════
@@ -390,16 +388,13 @@ SOG.NarmerBattle = (function () {
 
   // SERF WIN — grants 20 gold at the "Take this." beat, NO card. Split around the gold.
   var NARMER_SERF_WIN_A = [
-    { who: 'narmer',   text: 'You upset the balance of power.' },
-    { who: 'explorer', text: 'Are you upset?' },
-    { who: 'narmer',   text: 'Never.' },
-    { who: 'narmer',   text: 'I did not account for you.' },
-    { who: 'narmer',   text: 'Take this.' }
-    // → [GOLD — 20]
+    { who: 'narmer', text: 'You have upset the balance of power.' },
+    { who: 'explorer', text: 'Don\'t you mean the balance of YOUR power?' },
+    { who: 'narmer', text: 'I said what I said.' },
+    { who: 'narmer', text: 'Take this.' }
   ];
   var NARMER_SERF_WIN_B = [
-    { who: 'narmer',   text: 'Consider it a measure of my patience.' },
-    { who: 'narmer',   text: 'Return, and I will set things right.' }
+    { who: 'narmer', text: 'All will be set right when you return.' }
   ];
 
   // GIANT REMATCH INTRO — in-battle, before the Giant rematch (onBattleStart).
@@ -414,25 +409,24 @@ SOG.NarmerBattle = (function () {
   var NARMER_GIANT_WIN_A = [
     { who: 'narmer',   text: 'You have split the union of my kingdom.' },
     { who: 'explorer', text: 'I just played the cards I was dealt.' },
-    { who: 'narmer',   text: 'No. It is more than that.' },
-    { who: 'narmer',   text: 'You belong to no land. No people. No crown.' },
-    { who: 'narmer',   text: 'That is why I could not account for you.' },
-    { who: 'narmer',   text: 'One who belongs nowhere… cannot be divided.' },
-    { who: 'narmer',   text: 'Take it.' }
+    { who: 'narmer',   text: 'You are what I don\'t comprehend.' },
+    { who: 'narmer',   text: 'But you have proven your ability.' },
+    { who: 'explorer',   text: 'My coach calls me a team player.' },
+    { who: 'narmer',   text: 'I shall be a team player too.' },
+    { who: 'narmer',   text: 'Take this.' }
     // → [CARD — Narmer] THEN [GOLD — 30]
   ];
   var NARMER_GIANT_WIN_B = [
     { who: 'narmer',   text: 'The Double Crown is yours.' },
     { who: 'narmer',   text: 'Go. Find whatever it is you are looking for.' },
     { who: 'explorer', text: "Home. I'm looking for home." },
-    { who: 'narmer',   text: 'Then perhaps you are more unifier than I.' }
+    { who: 'narmer',   text: 'Perhaps you are a unifier.' }
   ];
 
   // GIANT LOSS — dismissive, replayable (no grant).
   var NARMER_GIANT_LOSS = [
-    { who: 'narmer',   text: 'As it must be. The whole remains unbroken.' },
-    { who: 'narmer',   text: 'You are corrected. The balance holds.' },
-    { who: 'narmer',   text: 'Return when you wish to be corrected again.' }
+    { who: 'narmer', text: 'As it must be. ' },
+    { who: 'narmer', text: 'My balance holds.' }
   ];
 
   // GIANT DRAW — a stalemate is not a win, replayable (no grant).
@@ -444,17 +438,15 @@ SOG.NarmerBattle = (function () {
 
   /* ── SERF-tier loss / tie (FRONT-HALF, UNCHANGED) ── */
   var LOSS_DIALOGUE = [
-    { who: 'narmer',   text: 'As it must be.' },
-    { who: 'narmer',   text: 'The whole remains unbroken.' },
+    { who: 'narmer', text: 'It is I who wears the Double Crown.' },
+    { who: 'narmer', text: 'As it must be.' },
     { who: 'explorer', text: 'Can I try again?' },
-    { who: 'narmer',   text: 'The unworthy always ask.' },
-    { who: 'narmer',   text: 'Come. Let us restore the balance.' }
+    { who: 'narmer', text: 'Try as you must.' }
   ];
   var TIE_DIALOGUE = [
-    { who: 'narmer',   text: 'A divided result.' },
-    { who: 'narmer',   text: 'Two halves, neither whole.' },
-    { who: 'narmer',   text: 'This is the one thing I cannot abide.' },
-    { who: 'narmer',   text: 'We begin again — and this time, there will be one.' }
+    { who: 'narmer', text: 'A divided result.' },
+    { who: 'narmer', text: 'Two halves, neither whole.' },
+    { who: 'narmer', text: 'We begin again and this time, there will be one.' }
   ];
 
   /* ── Tier helpers (ported verbatim from the Sargon reference) ──────────────

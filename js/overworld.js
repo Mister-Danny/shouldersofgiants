@@ -86,7 +86,7 @@ var Overworld = (function () {
     { who: 'explorer', text: "But I don't know anything about anything yet!" },
     { who: 'lucy',     text: 'Give yourself some credit.' },
     { who: 'lucy',     text: "You outsmarted a knuckle-draggin' Neanderthal." },
-    { who: 'explorer', text: 'I guess...' },
+    { who: 'explorer', text: 'That was pretty cool.' },
     { who: 'lucy',     text: 'Here. Take this.' }
   ];
   // Second half of Lucy's goodbye — plays AFTER her card-acquisition reveal.
@@ -100,15 +100,14 @@ var Overworld = (function () {
      Egypt signpost (sog_battle_otzi_complete not yet set). Click-to-
      advance, portrait boxes, same runner as all other overworld dialogue. */
   var OTZI_PRE_BATTLE_DIALOGUE = [
-    { who: "otzi",     text: "Where do you think you're going?" },
-    { who: "explorer", text: "I'm trying to find my way home." },
-    { who: "otzi",     text: "You look like you're trying to find an arrowhead to the back of the head." },
-    { who: "explorer", text: "That's not nice." },
-    { who: "otzi",     text: "The world isn't nice." },
-    { who: "explorer", text: "Okay! Great talk! I'll just be on my way—" },
-    { who: "otzi",     text: "No. You won't." },
-    { who: "explorer", text: "Dancin' dingos..." },
-    { who: "explorer", text: "I'm starting to sense a pattern here." }
+    { who: 'otzi', text: 'Where do you think you\'re going?' },
+    { who: 'explorer', text: 'I\'m trying to find my way home.' },
+    { who: 'otzi', text: 'You look like you\'re trying to find an arrowhead to the back of the head.' },
+    { who: 'explorer', text: 'That\'s not nice.' },
+    { who: 'otzi', text: 'The world isn\'t nice.' },
+    { who: 'explorer', text: 'Okay! Great talk! I\'ll just be on my way—' },
+    { who: 'otzi', text: 'No. You won\'t.' },
+    { who: 'explorer', text: 'I\'m starting to sense a pattern here.' }
   ];
 
   /* ── Phase D1 — Otzi→Mesopotamia travel dialogue ───────────────────
