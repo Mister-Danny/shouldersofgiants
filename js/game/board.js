@@ -338,7 +338,6 @@
         }
       }
     }
-    _applyTraderPreview(locId);   // display-only barter overlay (no-op unless active)
     // refreshMoveableCards lives in game.js until Pass 3c (input concern).
     if (SOG.game && typeof SOG.game.refreshMoveableCards === 'function') {
       SOG.game.refreshMoveableCards();
@@ -377,35 +376,6 @@
     }
   }
 
-  /* Trader (68) barter PREVIEW — DISPLAY-ONLY. The barter never mutates G during
-     selection; this re-skins the two swapped slots' FACES on top of the true
-     render (leaving each slot's real dataset.cardId, and therefore scoring /
-     costs / continuous effects / interactions, UNCHANGED). Re-applied at the end
-     of every syncPlayerSlots so it survives selection-phase re-renders. Guarded by
-     G.traderBarter (null in every non-Trader battle → zero cost) and the SELECT
-     phase; at reveal the guard fails so the slots render their true faces. */
-  function _applyTraderPreview(locId) {
-    var tb = G.traderBarter;
-    if (!tb || G.phase !== 'select') return;
-    var atCardId, showCardId;
-    if      (locId === tb.traderLocId)  { atCardId = tb.traderCardId;  showCardId = tb.partnerCardId; }
-    else if (locId === tb.partnerLocId) { atCardId = tb.partnerCardId; showCardId = tb.traderCardId;  }
-    else return;
-    var arr = G.playerSlots[locId] || [], idx = -1;
-    for (var i = 0; i < arr.length; i++) { if (arr[i] && arr[i].cardId === atCardId) { idx = i; break; } }
-    if (idx === -1) return;                     // the real card left this slot → no preview
-    var slotEl   = getSlotEl('player', locId, idx);
-    var showCard = CARDS.find(function (c) { return c.id === showCardId; });
-    if (!slotEl || !showCard) return;
-    // Badge = the SHOWN card's true effectiveIP (from its real slot elsewhere).
-    var showSd = null;
-    G.locations.forEach(function (l) {
-      (G.playerSlots[l.id] || []).forEach(function (s) { if (s && s.cardId === showCardId) showSd = s; });
-    });
-    buildCardFace(slotEl, _faceCard(showSd, showCard), showSd ? effectiveIP(showSd) : showCard.ip, SLOT_ART);
-    slotEl.classList.add('trader-preview');
-    slotEl.dataset.cardId = atCardId;           // keep the REAL identity (interactions/scoring)
-  }
 
   /* ═══════════════════════════════════════════════════════════════
      BONUS ATTRIBUTION
@@ -555,6 +525,13 @@
     // `nebSide` is just the owner-side key ('player'/'opp'), reused as-is.
     if (card.era === 'Egypt' && G.ramsesCCDiscount && G.ramsesCCDiscount[nebSide] && G.ramsesCCDiscount[nebSide][card.id])
       cost = Math.max(0, cost - 1);
+    /* Kashta (79) — "Tablesetter": a per-card CC stamp on Piye (78) only, keyed
+       by ID rather than era. Cumulative (two Kashtas = -2) and floored at 0 by
+       the caller, same as the two era stamps above. Mirrored in input.js
+       refreshHandCostDisplays — the badge and the charge must resolve the same
+       way or they disagree. */
+    if (G.kushCCDiscount && G.kushCCDiscount[nebSide] && G.kushCCDiscount[nebSide][card.id])
+      cost -= G.kushCCDiscount[nebSide][card.id];
     // Babylon (BABYLON_COST_5 location, Nebuchadnezzar battle): BASE-cost-5 cards cost
     // -1 while a Babylon location is present. Global (not at-Babylon-only). Keyed off
     // card.cc (base), so it STACKS with the Neb-50 discount above. Inert in battles

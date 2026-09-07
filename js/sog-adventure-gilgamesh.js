@@ -459,7 +459,12 @@ SOG.GilgameshBattle = (function () {
       }
       case 44: return base + (pref !== null ? 1 : 0);     // Enkidu into a stack (adjacency payoff)
       case 43: return base + 4;                            // Gilgamesh (held until turn 3) = top priority when live
-      case 39: return base - 2.5;                          // Farmer: Harvest is dead in a no-capital battle → castoff
+      /* Farmer (39): weight KEPT at -2.5, reason REWRITTEN for its new ability.
+         It used to grant capital, which was literally dead here (this battle is
+         model:'none', capital 0). Post-swap it arms +1 IP on the next card played
+         — not dead, but still the weakest card in hand when every play is free:
+         a 1/1 body whose whole payoff is a single +1 somewhere else. Castoff. */
+      case 39: return base - 2.5;
       case 41: return base - 2;                            // Canals: only boosts Farmer here → castoff
       default: return base;
     }

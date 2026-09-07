@@ -170,7 +170,7 @@ SOG.NarmerBattle = (function () {
         s = 10 - e.cc * 3 + e.ip * 0.5;
         if (PREMIUM_IDS[id]) s -= 8;      // hold the front-line pieces back…
         if (id === 69) s += 1;            // Chariots early → its once-per-battle move stays available
-        if (id === 55) s += 1.5;          // Farmer: the pending +1 IP compounds while walling up
+        if (id === 55) s += 1.5;          // Farmer: post-swap grants +1 capital — buys another wall piece next turn while filling home
         if (id === 26) s += 1;            // Tool: draw keeps the fill going
       } else {
         s = e.ip - e.cc * 0.1;

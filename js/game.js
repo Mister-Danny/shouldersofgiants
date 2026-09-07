@@ -316,10 +316,10 @@
     G.aiDiscard              = [];
     G.playerDestroyed        = [];  // Batch C destroyed pile — same entry shape; fed by destroyCard. Priest (71) revives from BOTH
     G.aiDestroyed            = [];
-    // Egypt Farmer (55): one PENDING +1 IP per side for the next card that side
+    // Meso Farmer (39): one PENDING +1 IP per side for the next card that side
     // plays. A flag, not a counter (Farmers don't stack), and deliberately NOT
     // cleared by nextTurn — it waits across turns until a card consumes it.
-    G.pendingIPBuff          = { player: false, opp: false };
+    G.pendingIPBuff          = { player: 0, opp: 0 };
     G.cardIPBonus            = {};
     G.aiCardIPBonus          = {};
     // Papyrus (54) state-copy: PERMANENT ipMod inherited by a pending copy in
@@ -327,6 +327,7 @@
     G.copyIPBonus            = { player: {}, opp: {} };
     G.nebCCDiscount          = { player: {}, opp: {} };  // Nebuchadnezzar one-time in-hand -1 CC stamps
     G.ramsesCCDiscount       = { player: {}, opp: {} };  // Ramses II one-time in-hand -1 CC stamps
+    G.kushCCDiscount         = { player: {}, opp: {} };  // Kashta (79) -1 CC stamps on Piye (78), cumulative
     G.destroyedIPTotal       = 0;
     G.aiDestroyedIPTotal     = 0;
     /* Akhenaten (77) — "Forsaken Gods". A MONOTONIC per-owner tally of discard
@@ -347,7 +348,6 @@
     G.aiMovedThisTurn        = {};
     G.moveLog                = [];
     G.playerActionLog        = [];
-    G.traderBarter           = null;   // Trader (68) barter preview/queue
     G.locationSnapshots      = {};
     G.reservedSlotsPerLoc    = {};
     G.deferredPlays          = {};
@@ -581,6 +581,21 @@
       if (!arr) continue;
       var idx = arr.indexOf(sd);
       if (idx !== -1) return getSlotEl(owner, lid, idx);
+    }
+    /* NOT IN ANY SLOT — the card was CONSUMED during its own At Once rather than
+       merely relocated. The Phoenicians dissolves into a host card and hands its
+       IP over; anything the pipeline still owes the dissolved card (the Farmer
+       onion bite) belongs to that host now, so follow the pointer the merge left.
+       Depth-guarded: a merge chain is short, and a self-reference must not spin. */
+    var hops = 0;
+    while (sd && sd._mergedInto && sd._mergedInto !== sd && ++hops <= 4) {
+      sd = sd._mergedInto;
+      for (var k = 0; k < G.locations.length; k++) {
+        var lid2 = G.locations[k].id, arr2 = slots[lid2];
+        if (!arr2) continue;
+        var idx2 = arr2.indexOf(sd);
+        if (idx2 !== -1) return getSlotEl(owner, lid2, idx2);
+      }
     }
     return null;
   }
@@ -1140,115 +1155,6 @@
     }
   }
 
-  /* Trader (68) barter: at the Trader's beat in the reveal, swap the Trader and
-     its chosen partner between their slots FOR REAL (both cards belong to the
-     same owner). Preview was display-only; this is the authoritative exchange.
-     FIZZLES safely if either card is gone (destroyed earlier this reveal), with
-     no half-swap. Once-per-battle flag `_advTraderBartered` is set here (on real
-     resolution) so re-choosing during selection stays free. Animates a two-card
-     cross-slide both sides see, then re-tallies. */
-  function executeBarter(owner, traderCardId, partnerCardId, done, coords) {
-    done = done || function () {};
-    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
-
-    function locate(cardId) {
-      for (var li = 0; li < G.locations.length; li++) {
-        var lid = G.locations[li].id, arr = slots[lid] || [];
-        for (var si = 0; si < arr.length; si++) {
-          if (arr[si] && arr[si].cardId === cardId) return { locId: lid, idx: si, sd: arr[si] };
-        }
-      }
-      return null;
-    }
-    // Coordinate resolution (duplicate-cardId safe): coords — recorded at queue
-    // time — pin the exact trader/partner slots. Validated (the slot must still
-    // hold an sd with the expected cardId); a stale coordinate falls back to the
-    // first-match locate() scan (pre-coordinate behaviour).
-    function locateAt(locId, idx, cardId) {
-      if (locId == null || idx == null) return null;
-      var arr = slots[locId];
-      var s = arr && arr[idx];
-      return (s && s.cardId === cardId) ? { locId: locId, idx: idx, sd: s } : null;
-    }
-
-    var t = null, p = null;
-    if (coords) {
-      t = locateAt(coords.traderLocId,  coords.traderIdx,  traderCardId);
-      p = locateAt(coords.partnerLocId, coords.partnerIdx, partnerCardId);
-    }
-    if (!t) t = locate(traderCardId);
-    if (!p) p = locate(partnerCardId);
-    // Fizzle safely: a partner (or the Trader) destroyed before this beat.
-    if (!t || !p || (t.locId === p.locId && t.idx === p.idx)) {
-      G.traderBarter = null;
-      done();
-      return;
-    }
-
-    var tCard = CARDS.find(function (c) { return c.id === traderCardId; });
-    var pCard = CARDS.find(function (c) { return c.id === partnerCardId; });
-    var syncLoc = (owner === 'player')
-      ? function (l) { syncPlayerSlots(l); }
-      : function (l) { syncOppSlots(l); };
-
-    // Capture on-screen rects of both cards BEFORE the swap, for the cross-slide.
-    var tEl = getSlotEl(owner, t.locId, t.idx);
-    var pEl = getSlotEl(owner, p.locId, p.idx);
-    var tRect = tEl ? tEl.getBoundingClientRect() : null;
-    var pRect = pEl ? pEl.getBoundingClientRect() : null;
-
-    function commit() {
-      // Real exchange: swap the two sd objects between their slots.
-      slots[t.locId][t.idx] = p.sd;
-      slots[p.locId][p.idx] = t.sd;
-      // A barter relocates BOTH cards, so both spend their move for the turn. This
-      // commit path swaps slots directly rather than going through applyMove, so
-      // the once-per-turn stamp has to be applied here too.
-      t.sd._movedOnTurn = G.turn;
-      p.sd._movedOnTurn = G.turn;
-      t.sd._advTraderBartered = true;   // once per battle — set on real resolution
-      G.traderBarter = null;
-      syncLoc(t.locId);
-      if (p.locId !== t.locId) syncLoc(p.locId);
-      evaluateContinuous();
-      refreshSlotIPDisplays();
-      updateScores();
-      done();
-    }
-
-    SOG.sfx.play('sfx/chariot.mp3');
-
-    if (typeof gsap !== 'undefined' && tEl && pEl && tRect && pRect) {
-      var cloneT = tEl.cloneNode(true);
-      var cloneP = pEl.cloneNode(true);
-      function styleClone(clone, rect) {
-        clone.style.cssText = [
-          'position:fixed', 'left:' + rect.left + 'px', 'top:' + rect.top + 'px',
-          'width:' + rect.width + 'px', 'height:' + rect.height + 'px',
-          'z-index:9000', 'pointer-events:none', 'margin:0', 'transition:none'
-        ].join(';');
-        document.body.appendChild(clone);
-      }
-      styleClone(cloneT, tRect);
-      styleClone(cloneP, pRect);
-      tEl.style.opacity = '0';
-      pEl.style.opacity = '0';
-      var remaining = 2;
-      var onOne = function () {
-        remaining--;
-        if (remaining > 0) return;
-        document.body.removeChild(cloneT);
-        document.body.removeChild(cloneP);
-        tEl.style.opacity = '';
-        pEl.style.opacity = '';
-        commit();
-      };
-      gsap.to(cloneT, { left: pRect.left, top: pRect.top, duration: 0.6, ease: 'power2.inOut', onComplete: onOne });
-      gsap.to(cloneP, { left: tRect.left, top: tRect.top, duration: 0.6, ease: 'power2.inOut', onComplete: onOne });
-    } else {
-      commit();
-    }
-  }
 
   /* ═══════════════════════════════════════════════════════════════
      REVEAL PHASE
@@ -1262,13 +1168,6 @@
     clearSelection();      // tear down any click/keyboard selection state
     hideRevealFirstHighlight();  // glow shown during selection — clear it now
     snapBack();            // Restore all queued cards to true origin slots
-    // Trader barter: tear down the display-only swap PREVIEW (real swap still
-    // queued in the action log, executes at the Trader's beat). Phase is now
-    // 'reveal', so _applyTraderPreview no-ops and these re-syncs show TRUE faces.
-    if (G.traderBarter) {
-      syncPlayerSlots(G.traderBarter.traderLocId);
-      syncPlayerSlots(G.traderBarter.partnerLocId);
-    }
     refreshMoveableCards();
     updateHeader();
 
@@ -1400,6 +1299,33 @@
       if (SOG.abilities && typeof SOG.abilities.applyNubianGoldOnPlay === 'function') {
         SOG.abilities.applyNubianGoldOnPlay(revealed);
       }
+      /* RELIGIOUS_PLAY_DISCARDS (The Closed Temples): each side that revealed a
+         Religious card at a keyed location discards a random card from hand.
+         Same reveal-end slot and the same `revealed` list as the two appliers
+         above. Routed through discardFromHand, so G.discardCount rises and
+         Akhenaten (77) scales off it. Inert without the key. */
+      /* KUSH reveal-end location keys, same slot and same `revealed` list as the
+         appliers above. Napata stamps +1 onto Political cards played there (an
+         addIPMod on the card, so it travels with a Piye copy); the Mines roll a
+         chance of a Nubian Gold token per card played there. Both inert without
+         their key. */
+      if (SOG.abilities && typeof SOG.abilities.applyNapataStamp === 'function') {
+        if (SOG.abilities.applyNapataStamp(revealed) > 0) {
+          evaluateContinuous();
+          refreshSlotIPDisplays();
+          updateScores();
+        }
+      }
+      if (SOG.abilities && typeof SOG.abilities.applyGoldChanceOnPlay === 'function') {
+        SOG.abilities.applyGoldChanceOnPlay(revealed);
+      }
+      if (SOG.abilities && typeof SOG.abilities.applyClosedTemplesOnPlay === 'function') {
+        if (SOG.abilities.applyClosedTemplesOnPlay(revealed) > 0) {
+          evaluateContinuous();          // Akhenaten's counter just moved
+          refreshSlotIPDisplays();
+          updateScores();
+        }
+      }
       /* Once-per-turn location abilities (e.g. CAPITAL_WHEN_FULL). Evaluated HERE
          — exactly once, after all flips/At-Once/continuous have resolved — NOT in
          evaluateContinuous (which re-runs many times per turn and would over-grant).
@@ -1508,13 +1434,6 @@
       return;
     }
 
-    if (item.type === 'barter') {
-      // barterCoords (recorded at queue time) pin both swap slots — duplicate-
-      // cardId safe; executeBarter validates + falls back to the cardId scan.
-      executeBarter(item.owner, item.cardId, item.partnerCardId, proceed, item.barterCoords);
-      return;
-    }
-
     // type === 'play'
     // Resolve the play's SLOT — duplicate-cardId safe (Papyrus copies a card to
     // hand, so a side CAN hold two copies of one id; Nubian Gold tokens likewise).
@@ -1564,23 +1483,34 @@
       // After the card's own At Once resolves, run the play-from-hand hooks
       // (in order): play-order metadata, Cultural counter.
       flipSlot(slotEl, function () {
-        /* Egypt Farmer (55) pending +1 IP: consume it onto THIS card BEFORE its own
-           At Once runs. That ordering is load-bearing — an Egypt Farmer revealing
+        /* Meso Farmer (39) pending +1 IP: consume it onto THIS card BEFORE its own
+           At Once runs. That ordering is load-bearing — a second Farmer revealing
            here takes the pending +1 itself and only then arms the next one, instead
            of buffing itself. No buff pending → no-op. */
-        var _tookFarmerBuff = false;
+        var _farmerBuffs = 0;   // HOW MANY +1s were taken (Meroe can arm two)
         if (SOG.abilities && typeof SOG.abilities.consumePendingIPBuff === 'function') {
-          if (SOG.abilities.consumePendingIPBuff(item.owner, rSd)) {
-            _tookFarmerBuff = true;
+          var _preFarmerIP = rSd ? effectiveIP(rSd) : null;
+          _farmerBuffs = SOG.abilities.consumePendingIPBuff(item.owner, rSd) || 0;
+          if (_farmerBuffs && rSd && _preFarmerIP !== null) {
+            /* HOLD THE BADGE AT THE PRE-BUFF NUMBER — release it on the bites below.
+               STATE IS NOT DELAYED: the +1s are already folded into the card's ipMod,
+               so its own At Once (fired just below) still sees its true buffed IP,
+               exactly as before. Only the DISPLAY waits — board.displayedIP serves
+               _ipHeldAt to the badge AND the location total, so the points can be
+               handed over one at a time by the onion bites that are meant to be
+               delivering them. Without this the number jumped to its final value
+               here and every bite landed on a card that had already scored: obvious
+               with Meroe's two bites, but wrong in the single-bite case too. */
+            rSd._ipDisplayHold = true;
+            rSd._ipHeldAt = _preFarmerIP;
             refreshSlotIPDisplays();
             updateScores();
-            if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(item.owner, item.cardId, 1);
           }
         }
         // rSi/rSd are THIS play's resolved coordinates (see the duplicate-safe
         // lookup above) — the At-Once handler needs the actor, not just the id.
         fireAtOnce(item.owner, item.cardId, rLocId, rSi, rSd, function () {
-          /* Egypt Farmer (55) PHASE 2 — the onion descends onto the card that just
+          /* Meso Farmer (39) PHASE 2 — the onion descends onto the card that just
              took the +1 and is eaten. Fired HERE, in the At-Once completion
              callback, because this is the point at which the buffed card has
              finished its OWN reveal animation: flipSlot's done only covers the flip
@@ -1591,9 +1521,41 @@
              the captured `slotEl`, because the card may have RELOCATED during its
              own At Once — the onion has to land on wherever it actually is now.
              Visual only; never gates the pipeline. */
-          if (_tookFarmerBuff && window.SOG && SOG.RevealFx &&
-              typeof SOG.RevealFx.farmerOnionBite === 'function') {
-            SOG.RevealFx.farmerOnionBite(_liveSlotElFor(item.owner, rSd) || slotEl);
+          if (_farmerBuffs > 0) {
+            /* ONE BITE PER +1, AND EACH BITE PAYS ITS OWN POINT. onBite fires on the
+               chomp beat itself (same instant as the bite sfx), stepping the held
+               number up by one and popping a +1 float — so a Farmer repeated by
+               Meroe bites twice and the card visibly climbs +1, then +1, instead of
+               arriving pre-scored. The slot is re-resolved on every bite rather than
+               captured once, because the card may have relocated during its own At
+               Once. The hold is dropped after the last bite, handing the badge back
+               to the real effectiveIP. */
+            var _biteFx = (window.SOG && SOG.RevealFx &&
+                           typeof SOG.RevealFx.farmerOnionBite === 'function')
+                          ? SOG.RevealFx.farmerOnionBite : null;
+            var _releaseHold = function () {
+              if (rSd) { delete rSd._ipDisplayHold; delete rSd._ipHeldAt; }
+              refreshSlotIPDisplays();
+              updateScores();
+            };
+            /* No bite animation available → release everything at once. The hold must
+               never outlive this block: a stranded _ipDisplayHold would freeze that
+               card's badge and its location's score for the rest of the battle. */
+            if (!_biteFx) { _releaseHold(); }
+            else {
+              (function _bite(left) {
+                if (left <= 0) { _releaseHold(); return; }
+                _biteFx(
+                  _liveSlotElFor(item.owner, rSd) || slotEl,
+                  { onBite: function () {
+                      if (rSd && typeof rSd._ipHeldAt === 'number') rSd._ipHeldAt += 1;
+                      if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(item.owner, item.cardId, 1);
+                      refreshSlotIPDisplays();
+                      updateScores();
+                    } },
+                  function () { _bite(left - 1); });
+              })(_farmerBuffs);
+            }
           }
           // (a) Per-slot play metadata (Scribe needs this on every revealed card)
           if (rSd && rLocId !== null) {
@@ -1709,7 +1671,6 @@
     G.aiMovedThisTurn        = {};
     G.moveLog                = [];
     G.playerActionLog        = [];
-    G.traderBarter           = null;   // Trader (68) barter preview/queue
     G.locationSnapshots      = {};
     G.reservedSlotsPerLoc    = {};
     G.deferredPlays          = {};
@@ -1759,6 +1720,15 @@
     _cancelUndoEndTurn();
     G.phase = 'over';
     refreshMoveableCards();
+    /* SUMMON_FROM_DISCARD_AT_END (The Royal Tomb): each side summons a card from
+       its discard pile into a free slot there. MUST run before tallyResult — the
+       summoned card's IP has to be on the board when the final score is taken,
+       which is the whole point of the location. It re-runs continuous itself, so
+       auras and location bonuses see the new bodies before the tally. Inert in
+       any battle with no location carrying the key. */
+    if (SOG.abilities && typeof SOG.abilities.applyRoyalTombSummon === 'function') {
+      SOG.abilities.applyRoyalTombSummon();
+    }
     var result = tallyResult();
     if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);
 
@@ -2250,7 +2220,6 @@
     isKenteProtected:      isKenteProtected,
     executeMove:           executeMove,
     executeMoveAnimated:   executeMoveAnimated,
-    executeBarter:         executeBarter,   // Trader (68) barter — reused by AI movement pass
     findSlotEl:            findSlotEl,
     refreshMoveableCards:  refreshMoveableCards,
     // Exposed for the Prehistory adventure module's reveal sequence.

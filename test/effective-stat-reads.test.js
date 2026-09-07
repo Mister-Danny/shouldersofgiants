@@ -85,6 +85,11 @@ const ALLOW = [
     why: 'handStats itself — this is where effective hand IP is DEFINED' },
   { needle: 'if (resurrectionIP(c.cardId, c.ip) > resurrectionIP(best.cardId, best.ip))',
     why: 'priestCandidates entries carry FROZEN pile stats; `c` here is an entry, not a definition' },
+  { needle: 'if (c.ip < bestIP) { bestIP = c.ip; bestIdx = i; }',
+    why: 'King Ezana (83) reads the opponent DECK — the one location with no other source of '
+       + 'truth. A deck card has no slot data (never played), no hand stats (never drawn) and '
+       + 'no pile entry (never discarded); its printed IP is all that exists. Ezana also moves '
+       + 'it deck->board directly, so the in-hand cardIPBonus stamps never apply to it.' },
 ];
 
 /* A definition read: `<obj>.ip` / `<obj>.cc` where <obj> is a card-definition-shaped

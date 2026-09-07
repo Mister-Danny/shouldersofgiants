@@ -589,6 +589,14 @@ SOG.DevPanel = (function () {
     ['mesopotamia', 'hammurabi'],
     ['mesopotamia', 'hanging-gardens'],
     ['egypt',       'narmer'],
+    /* The Hyksos ambush sits BETWEEN Narmer's Giant and Hatshepsut, and it is a
+       NODELESS stop: it is a scripted interception on the road south (see
+       overworld.js AMBUSH_HYKSOS), not a node anyone clicks, so there is nothing
+       in map-data.js for the [mapId, nodeId] form to resolve. It still owns a
+       one-time flag and still gates progress, so it belongs on the timeline —
+       without it the scrubber never cleared sog_hyksos_ambush_seen, and rewinding
+       to Narmer left the ambush permanently spent. */
+    { virtual: 'hyksos', label: 'Hyksos Invasion (ambush)', flag: 'sog_hyksos_ambush_seen' },
     ['upper-egypt', 'hatshepsut'],
     ['upper-egypt', 'ramses'],
     ['upper-egypt', 'akhenaten'],
@@ -644,6 +652,14 @@ SOG.DevPanel = (function () {
     var maps = (window.SOG_MAP_DATA && window.SOG_MAP_DATA.maps) || {};
     var stops = [];
     BATTLE_ORDER.forEach(function (ref) {
+      /* NODELESS STOP (object form): no map node to resolve, so it carries its own
+         label and flag. No hook either — _narrative is called without one, so it
+         gets no sog_node_encountered_* stamp, which is right: nothing was
+         encountered on a map. */
+      if (!Array.isArray(ref)) {
+        stops.push({ label: ref.label, flag: ref.flag, nar: _narrative(ref.virtual, 'single') });
+        return;
+      }
       var mapId = ref[0], nodeId = ref[1];
       var nodes = (maps[mapId] && maps[mapId].nodes) || [];
       var node = null;
@@ -768,6 +784,17 @@ SOG.DevPanel = (function () {
       // rewinding one stop back re-arms it, same rule as the node reveals above.
       giant: { set: ['sog_hatshepsut_transition_seen'] }
     },
+    /* The Hyksos card (67) IS the ambush's entire prize, and unlike every boss
+       card it has NO delivered-flag: sog-adventure-hyksos.js grants it through
+       Cards.unlock, whose "already owned" return is itself the once-only gate. So
+       the six boss cards' rule — leave them alone, clearing the beaten flag
+       re-arms SOG.rewards.consume — does NOT apply here. If a rewind left 67 in
+       the collection, the replayed ambush would still be winnable but Cards.unlock
+       would return false and the acquisition reveal would silently not play. Tying
+       the card to the ambush flag hands it back, so the replay is faithful. */
+    'hyksos': {
+      single: { cards: [{ id: 67, flag: 'sog_hyksos_ambush_seen' }] }
+    },
     'hatshepsut': {
       // The Merchant's two cards are delivered on the first SERF result (win or
       // loss). Declared as `cards` rather than a plain flag so the gate and the
@@ -776,7 +803,21 @@ SOG.DevPanel = (function () {
       serf:  { set: ['sog_met_hatshepsut', 'sog_hatshepsut_opening_seen'],
                cards: [{ id: 76,  flag: 'sog_hatshepsut_cards_delivered' },
                        { id: 75,  flag: 'sog_hatshepsut_cards_delivered' }] },
-      giant: { set: [] }
+      giant: { set: ['sog_ramses_node_revealed'] }   // earth-rise fires on the Giant win
+    },
+    /* THE EGYPT CHAIN'S NODE REVEALS, same rule as Mesopotamia's three above: each
+       transition attaches to the stop that PRECEDES it, so stepping one stop back
+       re-hides the node that stop revealed. These were missing entirely, and the
+       cost was not cosmetic — overworld.js only plays a reveal whose flag is unset,
+       so scrubbing forward past Hatshepsut left all three still pending and the
+       player had to fight three separate battles to drain them.
+       The Egypt nodes are GIANT-gated (data/map-data.js *-giant-beaten milestones),
+       which is why every one of these sits on a `giant` stop and not a `serf` one. */
+    'ramses': {
+      giant: { set: ['sog_akhenaten_node_revealed'] }
+    },
+    'akhenaten': {
+      giant: { set: ['sog_kush_node_revealed'] }
     }
   };
 
@@ -788,6 +829,25 @@ SOG.DevPanel = (function () {
     var e = (NARRATIVE[nodeId] && NARRATIVE[nodeId][tier]) || {};
     var set = (e.set || []).slice();
     if (hook && tier !== 'giant') set.push('sog_node_encountered_' + hook);
+    /* DATA-DRIVEN LEVELS (Ramses, Akhenaten, Kush, and every one after them)
+       keep their one-time dialogue behind three keys that ARE fully generic:
+       sog_level_<id>_node_intro_seen (the overworld walk-up, overworld.js
+       _runLevelNodeIntro) plus _opening_seen and _turn1_seen (level-runtime.js).
+       Derived here rather than hand-listed in NARRATIVE for exactly the reason
+       the encountered stamp above is: the pattern holds without exception, so
+       deriving it covers every level added to SOG_LEVEL_DATA later with no edit
+       to this panel — whereas the hand-authored bosses' flags genuinely do not
+       reduce to a pattern, which is why THEY are listed.
+       Attached to the boss's FIRST stop, same rule as the stamp: that is the
+       stop meaning "you have met them". Without this a rewind cleared the
+       beaten flags but left every line marked seen, so replaying Ramses walked
+       up in silence and dropped straight into the battle with no opening. */
+    if (tier !== 'giant' && window.SOG_LEVEL_DATA && SOG_LEVEL_DATA.levels &&
+        SOG_LEVEL_DATA.levels[nodeId]) {
+      set.push('sog_level_' + nodeId + '_node_intro_seen');
+      set.push('sog_level_' + nodeId + '_opening_seen');
+      set.push('sog_level_' + nodeId + '_turn1_seen');
+    }
     return { set: set, cards: e.cards || [], clear: e.clear || [] };
   }
 

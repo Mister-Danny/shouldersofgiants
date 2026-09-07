@@ -550,6 +550,27 @@
         });
       });
 
+      /* GRIOT (84) — "Living Memory": +1 IP to the owner's OTHER Cultural cards
+         here. Per side, self-excluded by slot identity ("your OTHER Cultural
+         cards"), and continuous — it tracks arrivals and departures live. Two
+         Griots at one location each buff the other, which is correct: each is
+         the other's "other". */
+      ['player', 'opp'].forEach(function (gOwn) {
+        var gSl = (gOwn === 'player' ? G.playerSlots : G.aiSlots)[loc.id] || [];
+        var griots = gSl.filter(function (s) { return s && s.revealed && abilityIdOf(s) === 84; });
+        if (!griots.length) return;
+        gSl.forEach(function (s) {
+          if (!s || !s.revealed) return;
+          var c = CARDS.find(function (x) { return x.id === abilityIdOf(s); });
+          if (!c || c.type !== 'Cultural') return;
+          var n = griots.filter(function (g) { return g !== s; }).length;   // "other"
+          if (n <= 0) return;
+          s.contMod = (s.contMod || 0) + n;
+          s.contModSources.push({ source: 'Griot', delta: n });
+          addBonus(s, n, 'card', 84, nextEventId(), 'A', true);
+        });
+      });
+
       // The Sahara (ALL_MINUS_ONE_IP): -1 IP to ALL revealed cards here (both sides)
       if (loc.abilityKey === 'ALL_MINUS_ONE_IP') {
         var saharaName = loc.name || 'The Sahara';
@@ -630,16 +651,24 @@
       // Tribe (id 36): "Next Turn — Gain +1 IP for every card you play here."
       // Delayed/continuous effect (NOT an At Once — its description no longer says
       // "At Once", so Pacal's text-based At-Once trigger skips it; the grant was
-      // always computed here, never via an onAtOnce handler). Starting the turn
-      // AFTER Tribe was played (turnPlayed >= tribe.turnPlayed + 1) — NOT just that
-      // one turn — Tribe gains +1 for every OTHER same-owner card revealed at
-      // Tribe's location. "This location" means wherever Tribe CURRENTLY sits: the
-      // whole block is scoped to sl[loc.id] for the location being evaluated THIS
-      // pass, so if Tribe moves, this same recompute (fresh every call — see the
-      // contMod/contModSources reset above) naturally re-finds it at its new
-      // location and counts THAT location's qualifying reveals — cards left behind
-      // at Tribe's old location stop counting the moment Tribe is no longer in
-      // that location's slot array, no separate move-tracking needed.
+      // always computed here, never via an onAtOnce handler). Tribe gains +1 for
+      // every OTHER same-owner card revealed at Tribe's location on the ONE turn
+      // immediately after Tribe itself (turnPlayed === tribe.turnPlayed + 1) —
+      // that turn only, per the card text. Cards played later grant nothing; the
+      // bonus already earned persists, because those turn-N+1 cards keep matching
+      // on every later recompute.
+      //   Do NOT loosen this to >=. It was >= between b84a853 and this comment, on
+      // the theory that the exact match "silently stopped counting" once Tribe
+      // moved — but that conflated two independent questions. WHICH LOCATION counts
+      // is settled entirely by the sl[loc.id] scoping, not by the turn gate: this
+      // block is scoped to the location being evaluated THIS pass, so if Tribe
+      // moves, the recompute (fresh every call — see the contMod/contModSources
+      // reset above) re-finds it at its new location and counts THAT location's
+      // qualifying reveals; cards left behind at Tribe's old location stop counting
+      // the moment Tribe leaves that slot array, no move-tracking needed. WHICH
+      // TURN counts is this gate, and the card says "Next Turn" — one turn.
+      // Loosening the turn gate to fix a movement concern made Tribe score off
+      // every card played there for the rest of the game.
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (tribe, tribeIdx) {
@@ -648,7 +677,7 @@
           var nextTurn = tribe.turnPlayed + 1;
           var count = 0;
           sl[loc.id].forEach(function (s, si) {
-            if (s && s.revealed && si !== tribeIdx && s.turnPlayed >= nextTurn) count++;
+            if (s && s.revealed && si !== tribeIdx && s.turnPlayed === nextTurn) count++;
           });
           if (count > 0) {
             tribe.contMod = (tribe.contMod || 0) + count;
@@ -875,6 +904,36 @@
           if (sl[loc.id].length && sl[loc.id].indexOf(null) === -1 && G.locationBoosts[loc.id]) {
             G.locationBoosts[loc.id][own].push({
               sourceCardId: null, sourceOwner: own, sourceLocId: loc.id, amount: 6
+            });
+          }
+        });
+      }
+
+      /* THE GREAT TEMPLE OF THE ATEN (SOLO_CARD_PLUS_4_HERE, Akhenaten battle):
+         +4 IP to a side's TOTAL here while that side has EXACTLY ONE card here.
+         Per side and symmetric — Akhenaten worshipped one god alone, and the
+         location pays you for keeping it that way.
+
+         A location-TOTAL bonus written to G.locationBoosts with sourceCardId
+         null, not a per-card contMod — same reading and same shape as Abu
+         Simbel directly above ("gain IP here" rewards the location, not a
+         card). That also means it cannot be doubled or stolen by a card effect
+         that keys on the single highest card.
+
+         OCCUPIED, not revealed — `.filter(Boolean).length === 1`, matching
+         CAPITAL_WHEN_FULL's own `indexOf(null)` check and Abu Simbel's. A card
+         played here face-down already counts, so the +4 switches OFF the moment
+         a second card is COMMITTED, not when it flips.
+
+         Fully re-derived every evaluateContinuous pass (G.locationBoosts is
+         rebuilt from scratch each time), so it switches on and off live as
+         cards arrive, move away, or are destroyed. Nothing is accumulated. */
+      if (loc.abilityKey === 'SOLO_CARD_PLUS_4_HERE') {
+        ['player', 'opp'].forEach(function (own) {
+          var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+          if ((sl[loc.id] || []).filter(Boolean).length === 1 && G.locationBoosts[loc.id]) {
+            G.locationBoosts[loc.id][own].push({
+              sourceCardId: null, sourceOwner: own, sourceLocId: loc.id, amount: 4
             });
           }
         });
@@ -1361,17 +1420,21 @@
     return stamps;
   }
 
-  /* Farmer (39) — "Harvest". At Once: grant the OWNER +1 capital next turn via
-     the shared accumulator above. No board reads, so nothing to animate beyond
-     the standard At-Once pulse/chime; harmlessly no-ops where capital is off.
-     Also used by the Nubian Gold token (73). NOT the Egypt Farmer (55) — that one
-     buffs the next card played, see abilityFarmerEgypt. */
-  function abilityFarmer(owner, locId, slotIndex, sd, done) {
+  /* "Harvest" — the CAPITAL half. At Once: grant the OWNER +1 capital next turn
+     via the shared accumulator. As of the Farmer swap this is the EGYPT Farmer
+     (55); the Meso Farmer (39) took the pending-IP half below. Nubian Gold (73)
+     also registers this function — it is the generic capital grant, not a
+     card-specific one, which is why the swap is done by REMAPPING THE REGISTRY
+     rather than exchanging the two function bodies (that would have silently
+     turned the Nubian Gold token into an IP-buff). */
+function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     grantCapitalNextTurn(owner, 1);
     done();
   }
 
-  /* ── Farmer — Egypt (55) "Harvest": +1 IP to the NEXT card you play ──────────
+  /* ── "Harvest" — the PENDING-IP half: +1 IP to the NEXT card you play ───────
+     As of the Farmer swap this is the MESOPOTAMIAN Farmer (39); the Egypt Farmer
+     (55) took the capital half above.
      A PENDING ONE-SHOT buff, per side, held in G.pendingIPBuff — deliberately not
      G.cardIPBonus (which is a permanent per-cardId in-hand accumulator) and not the
      next-turn capital accumulator (which nextTurn clears). Semantics:
@@ -1379,35 +1442,63 @@
        • consumed by the NEXT card that card's owner reveals, wherever it is played;
        • the +1 it grants is PERMANENT on that card (addIPMod);
        • it PERSISTS ACROSS TURNS until something is played to consume it;
-       • it is a FLAG, not a counter — two Farmers do not stack into +2. A second
-         Farmer played while a buff is pending consumes it (taking the +1 itself,
-         since the consume hook runs BEFORE At Once) and re-arms a fresh one.
-     The Farmer never buffs itself: the consume hook reads the flag before this
-     ability sets it. */
+       • TWO SEPARATE FARMERS STILL DO NOT STACK into +2, even though this is a
+         COUNTER and not a flag. That rule is enforced by ORDERING, not by the
+         type: the consume hook runs BEFORE At Once, so a second Farmer revealed
+         while a buff is pending eats it (taking the +1 itself) and only then arms
+         a fresh 1 — the count is back to 1, never 2.
+       • The count therefore only exceeds 1 when ONE Farmer's At Once fires more
+         than once: Meroe's REPEAT_LABOR_ECONOMIC_AT_ONCE (Farmer is Labor), or an
+         Apedemak / Pacal re-fire. Each firing arms another +1 and the next card
+         takes them all. This is why it is a counter: as a flag, arming twice was
+         indistinguishable from arming once and Meroe's repeat was silently
+         swallowed.
+     The Farmer never buffs itself: the consume hook reads the count before this
+     ability increments it. */
   function armPendingIPBuff(owner) {
-    if (!G.pendingIPBuff) G.pendingIPBuff = { player: false, opp: false };
-    G.pendingIPBuff[owner === 'player' ? 'player' : 'opp'] = true;
+    if (!G.pendingIPBuff) G.pendingIPBuff = { player: 0, opp: 0 };
+    var side = owner === 'player' ? 'player' : 'opp';
+    G.pendingIPBuff[side] = (G.pendingIPBuff[side] || 0) + 1;
+    return G.pendingIPBuff[side];        // the count AFTER this arming
   }
 
   /* Consume the pending Farmer buff for `owner` onto the slot that is revealing.
      Called from the reveal pipeline (game.js revealNext) IMMEDIATELY BEFORE the
-     card's own At Once fires — that ordering is what lets an Egypt Farmer take the
-     pending +1 and then arm the next one. Returns true if a buff was spent. */
+     card's own At Once fires — that ordering is what lets a second Farmer take the
+     pending +1 and then arm the next one. Consumes the WHOLE pending count and
+     applies that many separate +1s (separate addIPMod calls, so the IP breakdown
+     lists each Farmer grant rather than one lumped entry). Returns the NUMBER of
+     +1s spent — 0 when none were pending. Callers that only need "did anything
+     happen" can still treat the result as truthy. */
   function consumePendingIPBuff(owner, sd) {
-    if (!sd || !G.pendingIPBuff) return false;
+    if (!sd || !G.pendingIPBuff) return 0;
     var side = owner === 'player' ? 'player' : 'opp';
-    if (!G.pendingIPBuff[side]) return false;
-    G.pendingIPBuff[side] = false;
-    addIPMod(sd, 1, 'Farmer');
-    return true;
+    var n = G.pendingIPBuff[side] || 0;
+    if (!n) return 0;
+    G.pendingIPBuff[side] = 0;
+    for (var i = 0; i < n; i++) addIPMod(sd, 1, 'Farmer');
+    return n;
   }
 
-  function abilityFarmerEgypt(owner, locId, slotIndex, sd, done) {
-    armPendingIPBuff(owner);
-    // No sound here: the Farmer's reveal voice is the onion pop's boing, owned by
-    // reveal-fx handler 55 (same division as the Meso Farmer 39, whose handler owns
-    // its coin cha-ching). The old ipGained ping fired at the same instant and would
-    // simply talk over it.
+  function abilityHarvestPendingIP(owner, locId, slotIndex, sd, done) {
+    var armed = armPendingIPBuff(owner);
+    /* ONE POP PER ARMING. The reveal-FX registry entry already played a pop for the
+       FIRST arming as the Farmer flipped, so only ADDITIONAL armings need one here —
+       and additional armings happen whenever something re-fires this At Once, which
+       today means Meroe's REPEAT_LABOR_ECONOMIC_AT_ONCE (the Farmer is Labor).
+       `armed` is the pending count AFTER this arming, so >= 2 is exactly "not the
+       first" without this function needing to know which mechanic re-fired it.
+       The two pops read as two rather than one doubled: the reveal pipeline waits
+       out the first pop's 1400ms hold before the At Once runs at all, and this
+       call defers done() until the second pop has finished.
+       No sound line of its own — the pop's boing IS this Farmer's voice (the Egypt
+       Farmer 55 owns the coin cha-ching). The old ipGained ping fired at the same
+       instant and talked over it. */
+    var rfx = window.SOG && SOG.RevealFx;
+    if (armed >= 2 && rfx && typeof rfx.farmerOnionPop === 'function') {
+      var popEl = actorSlotEl(owner, locId, sd, slotIndex);
+      if (popEl) { rfx.farmerOnionPop(popEl, done); return; }
+    }
     done();
   }
 
@@ -2335,6 +2426,27 @@
       }
       var gain = 3 + (isCultural(hostSd) ? 1 : 0);   // +3 base (its IP), +1 if Cultural
       addIPMod(hostSd, gain, 'The Phoenicians');
+      /* THE PASSENGERS RIDE ALONG. `gain` is only Phoenicians' BASE IP; anything
+         that had accrued ON the Phoenicians slot before it dissolved — a Meso
+         Farmer's pending +1 taken at reveal, a resurrection bonus folded in at
+         commit, a location's arrival grant — was being annihilated with the slot.
+         Phoenicians is CONSUMED INTO the host, so what it was carrying arrives
+         with it. Re-applied one source at a time, under the ORIGINAL source name,
+         so the host's IP breakdown still reads "Farmer +1" rather than burying it
+         inside a fattened Phoenicians line. */
+      var carried = 0;
+      (sd && sd.ipModSources || []).forEach(function (src) {
+        if (!src || !src.delta) return;
+        addIPMod(hostSd, src.delta, src.source);
+        carried += src.delta;
+      });
+      /* Forwarding pointer for PRESENTATION. Effects that the reveal pipeline
+         still owes this card (the Farmer onion bite, fired after the At Once)
+         resolve their slot element through game.js's _liveSlotElFor, which finds a
+         slot by object identity — and this one is no longer in any slot. Naming
+         the host lets those effects land on the card the IP actually went to
+         instead of animating over the empty space Phoenicians left behind. */
+      if (sd) sd._mergedInto = hostSd;
       // Transfer Phoenicians' "last played here" position onto the host. Phoenicians
       // is the most-recent card the owner played at this location, and it dissolves
       // INTO the host — so downstream "last card played here" readers (Pyramid 57,
@@ -2344,7 +2456,7 @@
       // (game.js assigns it AFTER the At-Once, by which point it is consumed), so we
       // mint a fresh play-order token here to outrank every earlier card here.
       hostSd.playTime = ++G.playOrderCounter;
-      SOG.ui.showIPFloat(owner, hostSd.cardId, gain);
+      SOG.ui.showIPFloat(owner, hostSd.cardId, gain + carried);
       evaluateContinuous();
       refreshSlotIPDisplays();
       updateScores();
@@ -3281,8 +3393,8 @@
      fires once per card that LANDS at Tribe's location, AFTER that card's reveal +
      At Once have resolved (the fireOnCardLandedHere dispatcher runs post-reveal).
      We gate on the EXACT same condition evaluateContinuous uses for Tribe's bonus
-     — the landed card is same-owner as Tribe AND was played on or after the turn
-     right after Tribe (turnPlayed >= tribe.turnPlayed + 1) — so the bounce fires
+     — the landed card is same-owner as Tribe AND was played on the one turn
+     right after Tribe (turnPlayed === tribe.turnPlayed + 1) — so the bounce fires
      exactly when Tribe gains bonus IP from that card. ctx.locId is Tribe's
      CURRENT location (wherever this dispatch is firing for), so a card landing
      at Tribe's location after Tribe has moved there still bounces correctly.
@@ -3298,7 +3410,7 @@
     for (var i = 0; i < slots.length; i++) {
       if (slots[i] && slots[i].cardId === ctx.landedCardId) { landed = slots[i]; break; }
     }
-    if (!landed || landed.turnPlayed < tribe.turnPlayed + 1) { done(); return; }  // this card grants Tribe no bonus
+    if (!landed || landed.turnPlayed !== tribe.turnPlayed + 1) { done(); return; }  // this card grants Tribe no bonus
     var el = getSlotEl(ctx.owner, ctx.locId, ctx.slotIndex);
     if (el && window.SOG && SOG.RevealFx && typeof SOG.RevealFx.reactBounce === 'function') {
       // AWAIT the bounce: hold the reveal pipeline until it finishes so the
@@ -3577,6 +3689,365 @@
     });
   }
 
+  /* ═══════════════════════════════════════════════════════════════════════════
+     KUSH SET (78-87) — shared helpers
+  ═══════════════════════════════════════════════════════════════════════════ */
+
+  /* Draw a SPECIFIC card id from the owner's deck into hand. Mirrors
+     drawTypeFromDeck exactly (hand-size gate, rebuild, id-or-null return) —
+     Kashta and Amenirdis both need "fetch Piye", which is by id, not type. */
+  function drawIdFromDeck(owner, cardId) {
+    var deck = owner === 'player' ? G.playerDeck : G.aiDeck;
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    if (!deck || !hand) return null;
+    var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
+    if (hand.length >= maxHand) return null;                 // hand full
+    var idx = deck.indexOf(cardId);
+    if (idx === -1) return null;                             // not in deck
+    var drawn = deck.splice(idx, 1)[0];
+    hand.push(drawn);
+    if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+    return drawn;
+  }
+
+  /* A location OTHER than `notLocId` with a free slot on `owner`'s side, or null.
+     Piye's copy must land somewhere else; this is the fizzle test. */
+  function kushOtherOpenLoc(owner, notLocId) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var open = [];
+    G.locations.forEach(function (l) {
+      if (l.id === notLocId) return;
+      if ((slots[l.id] || []).indexOf(null) !== -1) open.push(l.id);
+    });
+    return open.length ? open[Math.floor(Math.random() * open.length)] : null;
+  }
+
+  /* ── PIYE (78) — "Lord of Two Lands" ────────────────────────────────────────
+     At Once: place a second Piye at a DIFFERENT location on the owner's side.
+
+     THE LOOP GUARD IS STRUCTURAL, not a flag: placeRevealedCard puts the card
+     down already revealed and never runs the At-Once dispatcher (verified — it
+     has no fireAtOnce call), so the copy cannot copy itself. A Piye copy
+     acquired some other way (Papyrus 54, Rosetta 58) and PLAYED normally goes
+     through the reveal pipeline and fires normally, which is correct: the guard
+     belongs to THIS placement, not to the card. */
+  function abilityPiye(owner, locId, slotIndex, sd, done) {
+    var dest = kushOtherOpenLoc(owner, locId);
+    if (dest == null) { done(); return; }                    // nowhere else → fizzle
+    /* The copy inherits the ORIGINAL's ipMod via placeRevealedCard's extraIpMod.
+       That is what makes Napata's +1 a STAMP rather than an aura: play Piye at
+       Napata, and the copy he sends elsewhere carries the +1 with it. Without
+       this the copy is built from the card definition and arrives at base IP.
+       cardIPBonus (Amenirdis' in-hand +1) is added by placeRevealedCard itself,
+       so it is not passed here — doing so would count it twice. */
+    SOG.board.placeRevealedCard(owner, dest, 78, sd ? (sd.ipMod || 0) : 0);
+    done();
+  }
+
+  /* ── KASHTA (79) / AMENIRDIS I (80) — the two Piye setup cards ──────────────
+     Both "draw Piye from your deck and buff him". Shared resolution, reported
+     rules:
+       • Piye in DECK  → drawn into hand, buff applied.
+       • Piye in HAND  → no draw (nothing to draw), buff still applied. The buff
+                         is the point; refusing it because he arrived early
+                         would punish a good draw.
+       • Piye ON BOARD or absent → full fizzle. The buffs are IN-HAND stamps
+                         (they price a card at the moment it is played), so
+                         there is nothing for them to attach to.
+     The two STACK: play both and Piye is 5 CC / 6 IP. They write to different
+     accumulators (CC discount vs IP bonus) and neither clamps the other. */
+  function kushFetchPiye(owner) {
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    if (hand && hand.indexOf(78) !== -1) return 78;          // already in hand
+    return drawIdFromDeck(owner, 78);                        // else try the deck
+  }
+  function abilityKashta(owner, locId, slotIndex, sd, done) {
+    if (kushFetchPiye(owner) !== 78) { done(); return; }      // not retrievable → fizzle
+    if (!G.kushCCDiscount) G.kushCCDiscount = { player: {}, opp: {} };
+    var bag = G.kushCCDiscount[owner] || (G.kushCCDiscount[owner] = {});
+    bag[78] = (bag[78] || 0) + 1;                             // -1 CC, cumulative
+    if (window.SOG && SOG.input && typeof SOG.input.refreshHandCostDisplays === 'function') {
+      SOG.input.refreshHandCostDisplays();
+    }
+    done();
+  }
+  /* AMENIRDIS reaches Piye WHEREVER HE IS — unlike Kashta above, which stays an
+     in-hand-only stamp. The split is deliberate and not an oversight: Kashta grants
+     -1 CC, and a Piye already on the board has BEEN PAID FOR, so there is nothing
+     for a discount to attach to. Amenirdis grants +1 IP, and IP is live on a
+     revealed card, so she can. She therefore hits, in one firing:
+       • the unplayed Piye (deck -> hand fetch, then the in-hand accumulator), AND
+       • every REVEALED Piye the owner already has out — which is both the original
+         and the copy Piye's own At Once sends to another location, since that copy
+         is placed as a real 78.
+     Matched by cardId, not abilityIdOf: a Rosetta TRANSCRIBING Piye holds his text
+     but is not him, and "Piye gains +1" names the card.
+     Fizzles only when there is no Piye anywhere — deck, hand, or board. */
+  function abilityAmenirdis(owner, locId, slotIndex, sd, done) {
+    var inHand = (kushFetchPiye(owner) === 78);               // deck -> hand, or already there
+    var bag    = owner === 'player' ? G.cardIPBonus : G.aiCardIPBonus;
+    if (inHand && bag) bag[78] = (bag[78] || 0) + 1;          // +1 IP, the existing accumulator
+
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var onBoard = 0;
+    G.locations.forEach(function (l) {
+      (slots[l.id] || []).forEach(function (s) {
+        if (!s || !s.revealed || s.cardId !== 78) return;
+        addIPMod(s, 1, 'Amenirdis I');
+        onBoard++;
+        if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(owner, 78, 1);
+      });
+    });
+
+    if (!inHand && !onBoard) { done(); return; }              // no Piye anywhere -> fizzle
+    if (onBoard) { evaluateContinuous(); refreshSlotIPDisplays(); updateScores(); }
+    if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+    done();
+  }
+
+  /* ── APEDEMAK (81) — "Lion of War" ──────────────────────────────────────────
+     At Once: re-fire the At Once of every MILITARY card the owner has revealed
+     at this location.
+
+     TWO GUARDS.
+     (1) Never himself: he is Religious, so the type filter already excludes him,
+         but the filter is written to exclude by SLOT IDENTITY too so a future
+         re-type cannot turn him into an infinite loop.
+     (2) Re-entrancy: a triggered card whose own ability lands another card here
+         could reach Apedemak again. `G._apedemakFiring` makes the second entry a
+         no-op. The military list is also SNAPSHOT before any firing, because the
+         abilities being fired mutate the board underneath us. */
+  function abilityApedemak(owner, locId, slotIndex, sd, done) {
+    if (G._apedemakFiring) { done(); return; }
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var targets = [];
+    (slots[locId] || []).forEach(function (s, i) {
+      if (!s || !s.revealed || s === sd) return;              // identity guard
+      var c = CARDS.find(function (x) { return x.id === abilityIdOf(s); });
+      if (!c || c.type !== 'Military') return;
+      var spec = CARD_ABILITIES[abilityIdOf(s)];
+      if (spec && typeof spec.onAtOnce === 'function') targets.push({ s: s, i: i });
+    });
+    if (!targets.length) { done(); return; }
+    G._apedemakFiring = true;
+    var pending = targets.length;
+    var one = function () { if (--pending === 0) { G._apedemakFiring = false; done(); } };
+    /* Through fireAtOnce, THE FUNNEL — not CARD_ABILITIES[...].onAtOnce directly.
+       A re-fire is a genuine second firing and has to READ as one: the direct call
+       skipped fireAtOnce's presentation entirely, so a re-fired card just silently
+       did its thing again with no tell that Apedemak had set it off.
+       WHAT THAT ACTUALLY BUYS, precisely: the yellow At-Once pulse, and nothing
+       else audible. Of the Military cards carrying an At Once, only Soldier (42) is
+       in the dispatcher's sfx list at all, and 42's generic chime is deliberately
+       suppressed there because it owns its own charge-impact sfx (which fires from
+       its ability either way). So no card gains a sound from this change — the gain
+       is the visual beat that says "this one is going off again".
+       Meroe's repeat cannot engage on this path, and not by accident: Apedemak
+       filters type === 'Military' while Meroe repeats Labor/Economic, and `type` is
+       a single field, so the two sets are disjoint by construction. Routing through
+       the funnel is therefore purely additive here — presentation, not rules.
+       abilityIdOf, not cardId: a Rosetta that TRANSCRIBED a Military At Once is the
+       ability being fired, and the dispatcher must be handed that id. */
+    targets.forEach(function (t) {
+      try { fireAtOnce(owner, abilityIdOf(t.s), locId, t.i, t.s, one); }
+      catch (e) { one(); }
+    });
+  }
+
+  /* ── QUEEN SHANAKHDAKHETO (82) — "Son of Ra" ────────────────────────────────
+     At Once: +1 IP per EGYPT card at this location.
+
+     BOTH SIDES, deliberately. The text is "each Egypt card here", not "each of
+     YOUR Egypt cards" — the same both-sides reading ALL_MINUS_ONE_IP and the
+     Ramses contests use. It also reads better: Kush counts the Egypt it stands
+     over, whoever played it. Permanent (addIPMod), not continuous — an At Once
+     stamps once and does not track later arrivals. */
+  function abilityShanakhdakheto(owner, locId, slotIndex, sd, done) {
+    var n = 0;
+    ['player', 'opp'].forEach(function (side) {
+      var sl = (side === 'player' ? G.playerSlots : G.aiSlots)[locId] || [];
+      sl.forEach(function (s) {
+        if (!s || !s.revealed) return;
+        var c = CARDS.find(function (x) { return x.id === abilityIdOf(s); });
+        if (c && c.era === 'Egypt') n++;
+      });
+    });
+    if (n > 0) addIPMod(sd, n, 'Queen Shanakhdakheto', nextEventId());
+    done();
+  }
+
+  /* ── KING EZANA (83) — "Conversion" ─────────────────────────────────────────
+     At Once: take the opponent's LOWEST-IP Religious or Political card out of
+     their DECK, permanently, and stand it at Ezana's location on Ezana's side,
+     revealed.
+
+     THE ONLY DECK-READ IN THE GAME. Everything else reads hand, board or pile,
+     so there is no precedent to follow; the rules chosen here:
+       • Source is the opponent's DECK ONLY — not hand, not board. A card they
+         were going to draw simply never arrives.
+       • Lowest printed IP among Religious/Political; ties break to the one
+         nearest the top of the deck (deck order is already shuffled, so this is
+         arbitrary without being random-on-random).
+       • FREE-SLOT CHECK FIRST. The card is only removed from their deck once we
+         know it has somewhere to stand — otherwise a fizzle would destroy a
+         card and show nothing for it.
+       • Arrives via placeRevealedCard, so it does NOT fire its own At Once. It
+         is a convert, not a play. */
+  function abilityEzana(owner, locId, slotIndex, sd, done) {
+    var mySlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
+    /* The landing slot is captured BEFORE placing, not scanned for afterwards:
+       placeRevealedCard fills the first null here, so this is exactly where the
+       convert ends up, and an index can never be confused by a duplicate of the
+       same card id already sitting at this location. */
+    var nsi = (mySlots[locId] || []).indexOf(null);
+    if (nsi === -1) { done(); return; }                        // no room → fizzle
+    var oppDeck = owner === 'player' ? G.aiDeck : G.playerDeck;
+    if (!oppDeck || !oppDeck.length) { done(); return; }
+    var bestIdx = -1, bestIP = Infinity;
+    oppDeck.forEach(function (id, i) {
+      var c = CARDS.find(function (x) { return x.id === id; });
+      if (!c || (c.type !== 'Religious' && c.type !== 'Political')) return;
+      if (c.ip < bestIP) { bestIP = c.ip; bestIdx = i; }
+    });
+    if (bestIdx === -1) { done(); return; }                    // nothing qualifies → fizzle
+    var stolen = oppDeck.splice(bestIdx, 1)[0];                // gone from their deck for good
+    if (!SOG.board.placeRevealedCard(owner, locId, stolen)) { done(); return; }
+    if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
+
+    /* THE CONVERT RESOLVES AS IF JUST PLAYED — its own At Once fires. Without this
+       the card arrived as a mute body: correct IP, no ability, which reads as a
+       broken card rather than a converted one. Matches Trade Network (86), the
+       other card that puts a deck card straight onto the board; Piye's self-copy
+       is the deliberate exception, and only because re-firing it would copy
+       forever.
+       Routed through fireAtOnce rather than calling spec.onAtOnce directly so the
+       convert gets the full dispatcher: Meroe's repeat, the Akhenaten discard
+       pulses, the At-Once sfx and pulse. A direct call would silently opt out of
+       all of it.
+       DEPTH CAP: converting another Ezana would otherwise let conversions chain.
+       Each steal permanently shrinks a deck so it could not run forever, but the
+       guard keeps it to depth 2, the same shape as Apedemak's _apedemakFiring and
+       Trade Network's _tradeNetworkFiring. Note the guard suppresses only the
+       nested RE-FIRE, never the conversion itself — a converted Ezana still
+       converts, so no card is ever silently robbed of its printed effect. */
+    var nsd = (mySlots[locId] || [])[nsi];
+    if (!nsd || G._ezanaFiring) { done(); return; }
+    G._ezanaFiring = true;
+    fireAtOnce(owner, stolen, locId, nsi, nsd, function () {
+      G._ezanaFiring = false;
+      done();
+    });
+  }
+
+  /* ── NUBIAN ARCHERS (85) — "Volley" ─────────────────────────────────────────
+     At Once: -2 IP to ONE random revealed opponent card, at ANY location — the
+     text says "a random opponent's card", not "here". Permanent (addIPMod).
+     Fizzles silently with no opponent card on the board. */
+  function abilityNubianArchers(owner, locId, slotIndex, sd, done) {
+    var oppSlots = owner === 'player' ? G.aiSlots : G.playerSlots;
+    var pool = [];
+    G.locations.forEach(function (l) {
+      (oppSlots[l.id] || []).forEach(function (s, i) {
+        if (s && s.revealed) pool.push({ s: s, locId: l.id, i: i });
+      });
+    });
+    if (!pool.length) { done(); return; }                      // nothing to shoot → fizzle
+    var t = pool[Math.floor(Math.random() * pool.length)];
+    addIPMod(t.s, -2, 'Nubian Archers', nextEventId());
+    done();
+  }
+
+  /* ── TRADE NETWORK (86) — "The Nile Corridor" ───────────────────────────────
+     A TRIGGER, not an At Once. When its OWNER plays a card at its location whose
+     abilityName is "Natural Resource", that card is swapped back into the deck
+     and a random card is drawn from the deck to replace it in the same slot,
+     arriving revealed and resolving as if just played.
+
+     CHAIN GUARD: `G._tradeNetworkFiring`. If the drawn replacement is ITSELF a
+     Natural Resource, it must not re-trigger the swap — otherwise a deck with
+     several of them walks itself in a loop. The guard is held across the whole
+     resolution, including the replacement's own At Once, and cleared in the
+     completion so a LATER, genuinely separate play still triggers normally.
+
+     Gates, in order: owner's play only (the dispatcher fires reactors on both
+     sides); abilityName === 'Natural Resource' (a subset of Economic, so the
+     Merchant's Economic gate is deliberately not reused). */
+  function abilityTradeNetwork(ctx, done) {
+    done = typeof done === 'function' ? done : function () {};
+    var owner = ctx.owner;
+    if (ctx.landedOwner !== owner) { done(); return; }         // only my controller's plays
+    if (G._tradeNetworkFiring) { done(); return; }              // chain guard
+    var landedCard = CARDS.find(function (c) { return c.id === ctx.landedCardId; });
+    if (!landedCard || landedCard.abilityName !== 'Natural Resource') { done(); return; }
+
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var deck  = owner === 'player' ? G.playerDeck  : G.aiDeck;
+    var arr   = slots[ctx.locId] || [];
+    // Locate the landed card's slot by id (it is the one that just revealed).
+    var si = -1;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] && arr[i].cardId === ctx.landedCardId) { si = i; break; }
+    }
+    if (si === -1 || !deck || !deck.length) { done(); return; } // nothing to swap with → fizzle
+
+    G._tradeNetworkFiring = true;
+    arr[si] = null;
+    /* DRAW FIRST, then return the played card. Returning it first put it in the
+       same pool the draw samples, so the swap could hand back the very card that
+       triggered it — a self-swap that reads on screen as "nothing happened".
+       Draw-then-return guarantees a different card comes out (barring a genuine
+       duplicate id in the deck, which is a legitimate outcome). */
+    var drawnId = deck.splice(Math.floor(Math.random() * deck.length), 1)[0];
+    deck.push(ctx.landedCardId);                                // the played card goes back
+    /* Landing slot captured BEFORE placing, not scanned for afterwards. This used to
+       hunt the array for the first slot holding drawnId — the duplicate-id trap: with
+       a second copy of that card already revealed here (Papyrus copies, Nubian Gold
+       tokens, a repeated deck id), the scan resolved to the WRONG card and fired the
+       twin's At Once from the twin's position. placeRevealedCard fills the first null,
+       so reading that index first names exactly the card that is about to arrive. */
+    var nsi = arr.indexOf(null);
+    var finish = function () {
+      G._tradeNetworkFiring = false;
+      if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+      if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
+      done();
+    };
+    if (nsi === -1 || !SOG.board.placeRevealedCard(owner, ctx.locId, drawnId)) { finish(); return; }
+    var nsd = arr[nsi];
+    if (!nsd) { finish(); return; }
+
+    /* Resolve the replacement as if just played — through fireAtOnce, THE FUNNEL,
+       not CARD_ABILITIES[drawnId].onAtOnce directly. A direct call quietly opted the
+       swap-in out of everything the dispatcher adds: Meroe's REPEAT_LABOR_ECONOMIC_AT
+       _ONCE (so a Labor/Economic card swapped in AT Meroe fired once when the location
+       says twice), the Akhenaten discard-pulse flush, and the At-Once sfx + pulse. The
+       dispatcher's own comment already named "Trade Network's swap-in" as one of the
+       routes passing through it — this is what makes that true.
+       The chain guard is unchanged and still does its job: _tradeNetworkFiring stays
+       set for the whole nested resolution (finish is the only thing that clears it),
+       so a swapped-in Natural Resource cannot re-trigger this swap. Meroe repeating
+       the swap-in's At Once happens strictly INSIDE that window, so the repeat cannot
+       widen the chain either. */
+    try { fireAtOnce(owner, drawnId, ctx.locId, nsi, nsd, finish); }
+    catch (e) { finish(); }
+  }
+
+  /* ── THE IRON FURNACE (87) — "Forges of Meroe" ──────────────────────────────
+     End of Turn: +1 IP to the owner's LABOR cards at this location. Permanent
+     and cumulative (addIPMod), the same shape as the Megalith/Obelisk end-of-turn
+     grants. Includes itself only if it were Labor — it is, so it forges itself
+     too, which matches "Labor cards here" reading plainly. */
+  function abilityIronFurnace(owner, locId, slotIndex, sd, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var n = 0;
+    (slots[locId] || []).forEach(function (s) {
+      if (!s || !s.revealed) return;
+      var c = CARDS.find(function (x) { return x.id === abilityIdOf(s); });
+      if (c && c.type === 'Labor') { addIPMod(s, 1, 'The Iron Furnace', nextEventId()); n++; }
+    });
+    done();
+  }
+
   /* Draw the first card of a given TYPE from the owner's deck into their hand
      (respecting maxHandSize). Minimal reusable helper — the engine's first mid-turn
      draw (Khufu 60). Rebuilds the player's visible hand; the AI hand is face-down,
@@ -3754,6 +4225,203 @@
       if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
     }
     return granted;
+  }
+
+  /* ── NAPATA (POLITICAL_PLUS_1_STAMP, Kush battle) ───────────────────────────
+     "Political cards gain +1 IP." An AT-ONCE STAMP, not a continuous aura —
+     the distinction matters and is the whole point of the location.
+
+     addIPMod writes the +1 into the card's OWN ipMod, so it travels with the
+     card: a Piye revealed here carries the stamp, and the copy his At Once
+     places is built from his slot data, so the copy inherits it too. A
+     continuous aura would be recomputed per location and would evaporate the
+     moment the copy landed anywhere else.
+
+     Reveal-end and once per turn, on the per-turn `newlyRevealed` list — the
+     same slot and the same gate as applyRiverAtOnce, so a Political card that
+     later RELOCATES onto Napata is never stamped (it is in no later turn's
+     list). Both sides. Inert without the key. */
+  function applyNapataStamp(newlyRevealed) {
+    if (!G.locations || !newlyRevealed || !newlyRevealed.length) return 0;
+    var n = 0;
+    newlyRevealed.forEach(function (r) {
+      if (r.locId == null) return;
+      var loc = G.locations.find(function (l) { return l.id === r.locId; });
+      if (!loc || loc.abilityKey !== 'POLITICAL_PLUS_1_STAMP') return;
+      var card = CARDS.find(function (c) { return c.id === r.cardId; });
+      if (!card || card.type !== 'Political') return;
+      var slots = r.owner === 'player' ? G.playerSlots : G.aiSlots;
+      var sd = (slots[r.locId] || [])[r.slotIndex];
+      if (!sd || sd.cardId !== r.cardId) {          // slot moved under us — re-find by id
+        sd = (slots[r.locId] || []).find(function (x) { return x && x.cardId === r.cardId; });
+      }
+      if (!sd) return;
+      addIPMod(sd, 1, 'Napata', nextEventId());
+      n++;
+    });
+    return n;
+  }
+
+  /* ── NUBIAN GOLD MINES (GOLD_CHANCE_ON_PLAY, Kush battle) ───────────────────
+     "50% chance of receiving gold when you play a card here." A per-card,
+     probabilistic sibling of NUBIAN_GOLD_ON_PLAY: same token, same hand-full
+     rule (dropped silently, never queued), but rolled once per card played
+     rather than granted once per side.
+
+     EDITABLE: MINES_GOLD_CHANCE below. 0.5 today; drop it to 0.33 or 0.25 by
+     changing this one number. */
+  var MINES_GOLD_CHANCE = 0.33;
+  function applyGoldChanceOnPlay(newlyRevealed) {
+    if (!G.locations || !newlyRevealed || !newlyRevealed.length) return 0;
+    var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
+    var granted = 0;
+    var hits = [];
+    newlyRevealed.forEach(function (r) {
+      if (r.locId == null) return;
+      var loc = G.locations.find(function (l) { return l.id === r.locId; });
+      if (!loc || loc.abilityKey !== 'GOLD_CHANCE_ON_PLAY') return;
+      if (Math.random() >= MINES_GOLD_CHANCE) return;          // the roll
+      var hand = r.owner === 'player' ? G.playerHand : G.aiHand;
+      if (!hand || hand.length >= maxHand) return;             // full → dropped, no queue
+      hand.push(73);                                           // Nubian Gold
+      granted++;
+      hits.push({ owner: r.owner, locId: r.locId });           // for the emerge FX below
+    });
+    if (granted > 0) {
+      if (typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+      if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
+      _playGoldEmergeFx(hits);                                 // presentation only
+    }
+    return granted;
+  }
+
+  /* Throw one nugget per successful roll, from the mine to the hand card it became.
+     STATE IS ALREADY COMMITTED before this runs (the tokens are in hand and both
+     hands have been rebuilt), so this is pure presentation and nothing waits on it.
+     Each side's new tokens are the LAST cards in that side's hand row, in push
+     order — the same "pushed, so it is last" assumption abilityPapyrus relies on.
+     Every target is hidden UP FRONT rather than by each flight as it begins, or the
+     staggered ones would sit visible in the hand for their whole delay and the
+     nugget would arrive at a card that was already there. */
+  function _playGoldEmergeFx(hits) {
+    var rfx = window.SOG && SOG.RevealFx;
+    if (!rfx || typeof rfx.nubianGoldEmerge !== 'function' || !hits || !hits.length) return;
+    var bySide = { player: [], opp: [] };
+    hits.forEach(function (h) { bySide[h.owner === 'player' ? 'player' : 'opp'].push(h); });
+    Object.keys(bySide).forEach(function (side) {
+      var list = bySide[side];
+      if (!list.length) return;
+      var els = document.querySelectorAll(side === 'player'
+        ? '#battle-player-hand .battle-hand-card'
+        : '#battle-opp-hand .battle-card-back');
+      var targets = list.map(function (h, i) {
+        return els[els.length - list.length + i] || null;
+      });
+      targets.forEach(function (el) { if (el) el.style.visibility = 'hidden'; });
+      list.forEach(function (h, i) {
+        var loc = document.querySelector('.battle-location[data-loc-id="' + h.locId + '"]');
+        setTimeout(function () {
+          rfx.nubianGoldEmerge(loc, targets[i], { sfx: 'sfx/scholar-officials-coin.mp3' });
+        }, i * 260);
+      });
+    });
+  }
+
+  /* ── THE CLOSED TEMPLES (RELIGIOUS_PLAY_DISCARDS, Akhenaten battle) ──────────
+     "When you play a Religious card here, discard a card from your hand."
+     A COST on play, per side and symmetric. Called once per turn from the
+     reveal-phase completion with the same `newlyRevealed` list applyRiverAtOnce
+     and applyNubianGoldOnPlay use — so it fires exactly when a Religious card
+     REVEALS here, and a card that later relocates onto the location is never
+     charged (it is in no later turn's list). Inert without the key.
+
+     WHICH CARD IS DISCARDED: RANDOM from the owner's hand. There is no
+     precedent for a location handing the player a chooser — the existing
+     discard chooser is a CARD ability with its own UI, and this location can
+     fire several times in one reveal phase (the Akhenaten AI deck runs five
+     Religious cards), so a modal per trigger would repeatedly interrupt the
+     reveal. Random is symmetric, needs no UI, and costs the AI the same.
+
+     Routed through discardFromHand deliberately, NOT a hand splice: that is the
+     one place G.discardCount increments, and Akhenaten (77) reads that counter
+     for his +2-per-discard scaling. Feeding his engine is the point of pairing
+     this location with him. It also means If/When-discarded triggers still fire
+     (Book of the Dead, Jan Hus, Jesus) exactly as they would from any discard. */
+  function applyClosedTemplesOnPlay(newlyRevealed) {
+    if (!G.locations || !newlyRevealed || !newlyRevealed.length) return 0;
+    var fired = 0;
+    newlyRevealed.forEach(function (r) {
+      if (r.locId == null) return;
+      var loc = G.locations.find(function (l) { return l.id === r.locId; });
+      if (!loc || loc.abilityKey !== 'RELIGIOUS_PLAY_DISCARDS') return;
+      var card = CARDS.find(function (c) { return c.id === r.cardId; });
+      if (!card || card.type !== 'Religious') return;
+      var hand = r.owner === 'player' ? G.playerHand : G.aiHand;
+      if (!hand || !hand.length) return;            // empty hand → nothing to pay
+      /* Akhenaten (77) is never the victim. He is the boss this location belongs
+         to and the engine it feeds: a random discard could take him out of the
+         battle entirely, and because a resurrection brings a card back as a
+         Mummy (stat-only, no ability), he would not even return as himself.
+         Observed in a scripted run before this guard existed. Filtering rather
+         than re-rolling keeps the choice uniform over the cards that CAN be
+         taken; if he is the only card left, the cost simply goes unpaid. */
+      var payable = hand.filter(function (id) { return id !== 77; });
+      if (!payable.length) return;
+      var victim = payable[Math.floor(Math.random() * payable.length)];
+      discardFromHand(r.owner, victim, function () {}, { animate: true });
+      fired++;
+    });
+    return fired;
+  }
+
+  /* ── THE ROYAL TOMB (SUMMON_FROM_DISCARD_AT_END, Akhenaten battle) ───────────
+     "At the end of the game, summon a card from your discard pile here."
+     Per side, once, at game end. Fizzles silently when the side's pile is empty
+     or its slots here are full.
+
+     ORDERING IS THE WHOLE POINT: called from game.js endGame() BEFORE
+     tallyResult(), so the summoned card is standing in its slot with its IP
+     when the final score is counted. Called after G.phase = 'over' but before
+     the tally — the only window where the board is final and the score is not
+     yet taken.
+
+     WHICH CARD: RANDOM from the owner's discard pile. Picking the best would
+     make the location a reliable finisher rather than a gamble, and the pile is
+     largely shaped by what the Closed Temples took at random anyway.
+
+     Summons via createMummy — the shared pile-to-board primitive the Priest (71)
+     and Book of the Dead (66) already use. It returns false when there is no
+     free slot (that IS the fizzle), inherits the pile entry's frozen IP/CC so
+     the score is right, and marks the card revealed so the tally counts it. The
+     card comes back as a Mummy token wearing its source's stats, which is what
+     resurrection means everywhere else in this engine — and a tomb is the one
+     location where that reads as intended rather than incidental. */
+  function applyRoyalTombSummon() {
+    if (!G.locations) return 0;
+    var summoned = 0;
+    G.locations.forEach(function (loc) {
+      if (loc.abilityKey !== 'SUMMON_FROM_DISCARD_AT_END') return;
+      ['player', 'opp'].forEach(function (own) {
+        var pile  = own === 'player' ? G.playerDiscard : G.aiDiscard;
+        var slots = own === 'player' ? G.playerSlots   : G.aiSlots;
+        if (!pile || !pile.length) return;                        // nothing to summon
+        if ((slots[loc.id] || []).indexOf(null) === -1) return;    // no room → fizzle
+        var entry = pile[Math.floor(Math.random() * pile.length)];
+        if (!entry) return;
+        if (!createMummy(own, loc.id, entry.cardId, entry.ip, entry.cc)) return;
+        popDiscard(own, entry);                                    // consume the entry
+        summoned++;
+      });
+    });
+    if (summoned > 0) {
+      /* Re-run continuous so the new bodies are seen by every location and aura
+         BEFORE the tally — the Great Temple's solo +4 in particular must switch
+         off if the Tomb's arrival is a side's second card there. */
+      evaluateContinuous();
+      if (typeof refreshSlotIPDisplays === 'function') refreshSlotIPDisplays();
+      if (typeof updateScores === 'function') updateScores();
+    }
+    return summoned;
   }
 
   /* ── Batch B: copy/transcribe cards + the "Next Turn:" timing class ────────── */
@@ -4524,7 +5192,7 @@
        Phase C cards (37 Sargon, 43 Gilgamesh) remain stubbed.      */
     37: { onAtOnce: abilitySargon },  // Sargon — Continuous +3 (evaluateContinuous); At-Once = beam+glow flourish
     38: { onAtOnce: abilityPriest       },
-    39: { onAtOnce: abilityFarmer       },  // Harvest — +1 capital next turn (shared accumulator)
+    39: { onAtOnce: abilityHarvestPendingIP },  // Farmer (MESO) — arms +1 IP for the NEXT card played (swapped from Egypt)
     40: { onAtOnce: abilityScribe },  // Record Keeper — At Once: stamps +1 IP onto owner's other cards here
     41: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Canals   — Continuous only
     42: { onAtOnce: abilitySoldier      },
@@ -4545,7 +5213,7 @@
     52: { onAtOnce: abilityHatshepsut      },             // Hatshepsut — At Once: send a Merchant to another location
     53: { onAtOnce: abilityRamses          },             // Ramses II — At Once: -1 CC to Egypt cards in your hand
     54: { onAtOnce: abilityPapyrus         },             // Papyrus — At Once: copy last-played card (with its permanent buffed state) to hand
-    55: { onAtOnce: abilityFarmerEgypt     },             // Farmer (EGY) — arms +1 IP for the NEXT card played (own fn; Meso Farmer 39 untouched)
+    55: { onAtOnce: abilityHarvestCapital   },             // Farmer (EGY) — +1 capital next turn (swapped from Meso; a 3rd route to landing Piye)
     56: { endOfTurn: scribeEgyptEndOfTurn  },             // Scribe (EGY) — End of Turn: +1 IP to OTHER Economic cards here
     57: { onAtOnce: abilityPyramid         },             // Pyramid — At Once: gain the IP of the last card played here
     58: { onAtOnce: abilityRosetta         },             // Rosetta Stone — adopt the SLOT-0 card's ability here
@@ -4561,7 +5229,20 @@
     69: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Chariots — movement card; arrival -2 strike in executeMoveAnimated
     70: { onAtOnce: abilitySoldierEgypt    },             // Soldier (EGY) — destroy an opponent 1-CC card here
     71: { onAtOnce: abilityPriestEgypt     },             // Priest (EGY) — revive a discarded OR destroyed card as a Mummy here
-    73: { onAtOnce: abilityFarmer          }              // Nubian Gold (token) — +1 capital next turn (Farmer machinery)
+    73: { onAtOnce: abilityHarvestCapital  },             // Nubian Gold — +1 capital next turn (same generic grant; unaffected by the swap)
+
+    /* ── KUSH SET (78-87) ─────────────────────────────────────────────────
+       84 Griot is CONTINUOUS and has no entry here — it is handled inside
+       evaluateContinuous, like Hieroglyphics (62) and Akhenaten (77). */
+    78: { onAtOnce: abilityPiye              },           // Piye — copy itself to another location (the copy does NOT re-fire)
+    79: { onAtOnce: abilityKashta            },           // Kashta — fetch Piye from deck, -1 CC
+    80: { onAtOnce: abilityAmenirdis         },           // Amenirdis I — fetch Piye from deck, +1 IP
+    81: { onAtOnce: abilityApedemak          },           // Apedemak — re-fire the owner's Military At Onces here
+    82: { onAtOnce: abilityShanakhdakheto    },           // Shanakhdakheto — +1 IP per Egypt card here (both sides)
+    83: { onAtOnce: abilityEzana             },           // Ezana — steal the lowest-IP Rel/Pol card from the opponent's DECK
+    85: { onAtOnce: abilityNubianArchers     },           // Nubian Archers — -2 IP to a random opponent card, any location
+    86: { onCardLandedHere: abilityTradeNetwork },        // Trade Network — Natural Resource played here → swap for a deck draw
+    87: { endOfTurn: abilityIronFurnace      }            // The Iron Furnace — End of Turn: +1 IP to Labor cards here
   };
 
   /* ═══════════════════════════════════════════════════════════════
@@ -4596,7 +5277,52 @@
     var _afterAtOnce = function () { flushAkhenatenPulses(done); };
     var spec = CARD_ABILITIES[cardId];
     if (spec && typeof spec.onAtOnce === 'function') {
-      spec.onAtOnce(owner, locId, slotIndex, sd, _afterAtOnce);
+      /* MEROE (REPEAT_LABOR_ECONOMIC_AT_ONCE, Kush battle): a Labor or Economic
+         card revealed here fires its At Once TWICE. Hooked in the dispatcher
+         rather than the reveal loop deliberately — this is the funnel every At
+         Once passes through (the reveal pipeline, Apedemak's re-fires, Pacal's
+         chains, Trade Network's swap-in, Ezana's convert), so a card that reaches
+         Meroe by any route is repeated, and there is exactly one place to reason
+         about it.
+
+         THE ONE DELIBERATE BYPASS IS ROSETTA (58). abilityRosetta calls the
+         TRANSCRIBED card's onAtOnce directly, and must keep doing so. Routing it
+         here would hand this function the transcribed card's id, so a Rosetta
+         carrying a Farmer's text would be repeated at Meroe — but the location's
+         rule is about the type of the card REVEALED here, and that card is Rosetta,
+         which is Scientific. Her bypass is load-bearing: it is what stops her
+         inheriting an eligibility she does not have. Anything else calling
+         onAtOnce directly is a bug, not an exception — it silently opts that firing
+         out of this repeat, out of the Akhenaten pulse flush, and out of the
+         At-Once sfx and pulse.
+
+         RE-ENTRANCY: _meroeRepeating is held across the second firing, so the
+         repeat cannot repeat itself. That also caps the chain at depth 2 for any
+         nesting — a card whose ability lands another card at Meroe still gets
+         its own single repeat, but no branch can recurse.
+
+         Trade Network (86) is untouched: it is an onCardLandedHere TRIGGER, not
+         an At Once, so it never enters this function. A card it SWAPS IN does,
+         and is repeated if it qualifies — which is the intended reading. */
+      var _repeat = false;
+      if (!G._meroeRepeating && locId != null && G.locations) {
+        var mLoc = G.locations.find(function (l) { return l.id === locId; });
+        if (mLoc && mLoc.abilityKey === 'REPEAT_LABOR_ECONOMIC_AT_ONCE') {
+          var mCard = CARDS.find(function (c) { return c.id === cardId; });
+          if (mCard && (mCard.type === 'Labor' || mCard.type === 'Economic')) _repeat = true;
+        }
+      }
+      if (_repeat) {
+        spec.onAtOnce(owner, locId, slotIndex, sd, function () {
+          G._meroeRepeating = true;
+          spec.onAtOnce(owner, locId, slotIndex, sd, function () {
+            G._meroeRepeating = false;
+            _afterAtOnce();
+          });
+        });
+      } else {
+        spec.onAtOnce(owner, locId, slotIndex, sd, _afterAtOnce);
+      }
     } else {
       _afterAtOnce();
     }
@@ -4725,6 +5451,10 @@
     applyCapitalWhenFull:      applyCapitalWhenFull,
     applyRiverAtOnce:          applyRiverAtOnce,
     applyNubianGoldOnPlay:     applyNubianGoldOnPlay,
+    applyNapataStamp:          applyNapataStamp,          // Kush — Napata +1 Political stamp
+    applyGoldChanceOnPlay:     applyGoldChanceOnPlay,     // Kush — Nubian Gold Mines roll
+    applyClosedTemplesOnPlay:  applyClosedTemplesOnPlay,   // Akhenaten — Closed Temples cost
+    applyRoyalTombSummon:      applyRoyalTombSummon,       // Akhenaten — Royal Tomb, pre-tally
     applyNextTurnRevealEffects: applyNextTurnRevealEffects,
     createMummy:               createMummy,       // Batch C — resurrection
     pushDiscard:               pushDiscard,
@@ -4733,7 +5463,7 @@
     priestCandidates:          priestCandidates,  // merged discard ∪ destroyed (Priest 71 / AI scoring)
     resurrectionIP:            resurrectionIP,
     staysDead:                 staysDead,         // shared pile-eligibility predicate
-    consumePendingIPBuff:      consumePendingIPBuff,  // Egypt Farmer (55) — reveal-pipeline hook
+    consumePendingIPBuff:      consumePendingIPBuff,  // Meso Farmer (39) — reveal-pipeline hook
     effectiveCC:               effectiveCC,       // CC honoring a Mummy's inherited sd.cc
     handStats:                 handStats,         // {ip,cc} for a card SITTING IN HAND — the badge truth,
                                                   // shared with the AI scorers so a prediction and the

@@ -42,8 +42,11 @@ window.SOG_MAP_DATA = {
     { id: 'neb-beaten', label: 'Nebuchadnezzar defeated → Egypt opens', flag: 'sog_egypt_node_live' },
     { id: 'narmer-beaten', label: 'Narmer defeated', flag: 'sog_node_narmer_serf_beaten' },
     { id: 'hatshepsut-beaten', label: 'Hatshepsut defeated', flag: 'sog_node_hatshepsut_serf_beaten' },
+    { id: 'hatshepsut-giant-beaten', label: 'Hatshepsut Giant beaten → Ramses rises', flag: 'sog_node_hatshepsut_giant_beaten' },
     { id: 'ramses-beaten', label: 'Ramses defeated', flag: 'sog_node_ramses_serf_beaten' },
+    { id: 'ramses-giant-beaten', label: 'Ramses Giant beaten → Akhenaten rises', flag: 'sog_node_ramses_giant_beaten' },
     { id: 'akhenaten-beaten', label: 'Akhenaten defeated', flag: 'sog_node_akhenaten_serf_beaten' },
+    { id: 'akhenaten-giant-beaten', label: 'Akhenaten Giant beaten → Kush rises', flag: 'sog_node_akhenaten_giant_beaten' },
     { id: 'kush-beaten', label: 'Kush defeated', flag: 'sog_node_kush_serf_beaten' },
     { id: 'egypt-complete', label: 'Kush Giant beaten → opens what follows', flag: 'sog_node_kush_giant_beaten' },
     { id: 'greatbath-beaten', label: 'The Great Bath defeated', flag: 'sog_node_greatbath_serf_beaten' },
@@ -226,9 +229,9 @@ window.SOG_MAP_DATA = {
         name:  'Hatshepsut',
         kind:  'battle',
         image: 'images/metaworld/civilization nodes/hatshepsut.png',
-        x: 74.28, y: 31.58,
-        scale: 1.3,
-        rotation: 64,
+        x: 71.11, y: 24.08,
+        scale: 1,
+        rotation: 11,
         hook:  'hatshepsut',
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
@@ -246,9 +249,9 @@ window.SOG_MAP_DATA = {
         rotation: -3,
         hook:  'ramses',
         tiers: 2,
-        flagNudge: { dx: 0, dy: 0 },
+        flagNudge: { dx: 0, dy: -7 },
         serfFlagOn: 'encounter',
-        showFrom: 'hatshepsut-beaten',
+        showFrom: 'hatshepsut-giant-beaten',
         note: 'Scaffolded position on the new Upper Egypt map — drag into place.'
       },
       {
@@ -262,7 +265,7 @@ window.SOG_MAP_DATA = {
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
-        showFrom: 'ramses-beaten',
+        showFrom: 'ramses-giant-beaten',
         note: 'Scaffolded position on the new Upper Egypt map — drag into place.'
       },
       {
@@ -276,7 +279,7 @@ window.SOG_MAP_DATA = {
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
-        showFrom: 'akhenaten-beaten',
+        showFrom: 'akhenaten-giant-beaten',
         note: 'Scaffolded position on the new Upper Egypt map — drag into place.'
       }
     ],

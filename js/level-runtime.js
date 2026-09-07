@@ -187,10 +187,34 @@ SOG.LevelRuntime = (function () {
 
   /* ── Result scoreboard (mirrors the boss files' shared markup/classes) ── */
   var RESULT_ID = 'adv-level-result';
+  var SHOW_RESULTS_ID = 'adv-level-show-results';
 
   function _removeResultPopup() {
     var el = document.getElementById(RESULT_ID);
     if (el && el.parentNode) el.parentNode.removeChild(el);
+    _removeFloatingResultsBtn();     // never strand the toggle after the card is gone
+  }
+  function _removeFloatingResultsBtn() {
+    var b = document.getElementById(SHOW_RESULTS_ID);
+    if (b && b.parentNode) b.parentNode.removeChild(b);
+  }
+  /* GAMEBOARD / SHOW RESULTS toggle — the same review affordance every
+     hand-built boss module already had (see Narmer's _hideResultForReview).
+     It was missing here, so EVERY data-driven level (Ramses, Akhenaten, Kush)
+     offered CONTINUE alone and the player could not look back at the final
+     board before leaving. */
+  function _hideResultForReview() {
+    var el = document.getElementById(RESULT_ID);
+    if (el) el.style.display = 'none';
+    if (document.getElementById(SHOW_RESULTS_ID)) return;
+    var btn = document.createElement('button');
+    btn.id = SHOW_RESULTS_ID; btn.className = 'btn-primary'; btn.textContent = 'SHOW RESULTS';
+    btn.style.cssText = 'position:fixed;top:14px;right:14px;z-index:10060;';
+    btn.addEventListener('click', function () {
+      var r = document.getElementById(RESULT_ID); if (r) r.style.display = '';
+      _removeFloatingResultsBtn();
+    });
+    document.body.appendChild(btn);
   }
   function _buildLocRow(locName, pIP, aIP, oppName) {
     var winner = pIP > aIP ? 'player' : aIP > pIP ? 'ai' : 'tie';
@@ -226,14 +250,40 @@ SOG.LevelRuntime = (function () {
     (locResults || []).forEach(function (r) { locs.appendChild(_buildLocRow(r.loc.name, r.playerIP, r.aiIP, 'Opponent')); });
     var actions = document.createElement('div');
     actions.className = 'result-actions';
-    var btn = document.createElement('button');
-    btn.className = 'btn-primary';
-    btn.textContent = 'CONTINUE';
-    btn.addEventListener('click', onContinue);
-    actions.appendChild(btn);
+    function mkBtn(label, cb) {
+      var b = document.createElement('button');
+      b.className = 'btn-primary';
+      b.textContent = label;
+      b.addEventListener('click', cb);
+      actions.appendChild(b);
+      return b;
+    }
+    /* WIN gets CONTINUE + GAMEBOARD; anything else gets the full retry set, in
+       the order the boss modules already use (see Narmer's non-firstWin branch):
+       PLAY AGAIN, GAMEBOARD, BACK TO MAP. A TIE counts as "not a win" here — the
+       player did not clear the tier and wants the same three choices a loss
+       offers, which is exactly how the hand-built bosses treat it too. */
+    if (won) {
+      mkBtn('CONTINUE',  onContinue);
+      mkBtn('GAMEBOARD', function () { _hideResultForReview(); });
+    } else {
+      mkBtn('PLAY AGAIN',  function () { _restartBattle(levelId, level); });
+      mkBtn('GAMEBOARD',   function () { _hideResultForReview(); });
+      mkBtn('BACK TO MAP', onContinue);
+    }
     wrap.appendChild(headline); wrap.appendChild(locs); wrap.appendChild(actions);
     overlay.appendChild(wrap);
     document.body.appendChild(overlay);
+  }
+
+  /* PLAY AGAIN. Same three steps every boss module's _restartBattle does: drop
+     the scoreboard, tear the battle down, start it again. launch() rebuilds the
+     config from live save state, so a Serf loss replays the Serf and a Giant
+     rematch replays the Giant — see _buildConfig's own note. */
+  function _restartBattle(levelId, level) {
+    _removeResultPopup();
+    _teardown(levelId, level);
+    launch(levelId);
   }
 
   function _teardown(levelId, level) {

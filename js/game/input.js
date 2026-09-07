@@ -556,13 +556,6 @@
     var slotIndex = parseInt(slotEl.dataset.slotIndex, 10);
     if (isNaN(locId) || isNaN(slotIndex)) return;
 
-    // Trader (68) barter affordance → open the picker (not a move).
-    if (slotEl.classList.contains('trader-barterable')) {
-      e.preventDefault();
-      openTraderBarter(locId, slotIndex);
-      return;
-    }
-
     // Moveable revealed slot → toggle select-for-move
     if (slotEl.classList.contains('moveable')) {
       var mvCardId = parseInt(slotEl.dataset.cardId, 10);
@@ -991,11 +984,20 @@
       var snapshot = G.locationSnapshots[lid];
       if (!snapshot) return;
 
-      // New plays are unrevealed cards NOT present in the snapshot
-      var snapIds  = snapshot.filter(Boolean).map(function (s) { return s.cardId; });
+      /* New plays are unrevealed cards NOT present in the snapshot — matched by
+         OBJECT IDENTITY, never by cardId. The snapshot holds the very same slot
+         objects, so identity is exact; cardId is not. A hand can legitimately hold
+         a SECOND copy of a card already sitting at this location (a Papyrus copy, a
+         Nubian Gold token). Playing that copy here while a move was queued away from
+         this location made the id test report "already in the snapshot", so the copy
+         was left out of newPlays — and the next line overwrites the slot array with
+         the snapshot, DESTROYING it. The card vanished outright: not on the board,
+         not deferred, not back in hand, and gone at reveal-start as well as on reset
+         (both run this). Same duplicate-id trap the reveal pipeline already avoids
+         by resolving a play through its slotIndex rather than its cardId. */
       var newPlays = [];
       G.playerSlots[lid].forEach(function (s) {
-        if (s && !s.revealed && snapIds.indexOf(s.cardId) === -1) newPlays.push(s);
+        if (s && !s.revealed && snapshot.indexOf(s) === -1) newPlays.push(s);
       });
 
       // Restore snapshot (same object references — card data unchanged)
@@ -1074,9 +1076,6 @@
 
     // 2. Snap queued-move previews back to their origin slots
     snapBack();
-
-    // 2b. Clear any Trader barter (display-only preview + queued action-log entry).
-    clearTraderBarter();
 
     // 3. Return any deferred new plays (didn't fit at snap-back) to hand
     Object.keys(G.deferredPlays).forEach(function (lidStr) {
@@ -1183,6 +1182,10 @@
       if (card.type === 'Cultural'    && cosimoOnBoard)          displayCC = Math.max(0, displayCC - 1);
       if (card.era  === 'Mesopotamia' && nebDiscount[cardId])    displayCC = Math.max(0, displayCC - 1);
       if (card.era  === 'Egypt'        && ramsesDiscount[cardId]) displayCC = Math.max(0, displayCC - 1);
+      // Kashta (79) stamp on Piye (78) — keyed by ID, cumulative. Mirrors
+      // board.js effectiveCost; badge and charge must resolve the same way.
+      var kushDiscount = (G.kushCCDiscount && G.kushCCDiscount.player) || {};
+      if (kushDiscount[cardId]) displayCC = Math.max(0, displayCC - kushDiscount[cardId]);
       if (card.cc   === 5             && babylonOnBoard)         displayCC = Math.max(0, displayCC - 1);
       var hEl = playerHandEl.querySelector('.battle-hand-card[data-id="' + cardId + '"] .db-overlay-cc');
       if (hEl) hEl.textContent = displayCC;
@@ -1256,97 +1259,8 @@
         }
       });
     });
-
-    // Trader (68, Egypt) — barter affordance. Distinct from a move: tagged
-    // '.trader-barterable' (its own pulse, NOT '.moveable' — so it never enters
-    // the drag / move-select machinery); the dblclick handler opens the picker.
-    // Eligible when revealed, hasn't bartered this battle (_advTraderBartered),
-    // and has a revealed partner card at ANOTHER location.
-    G.locations.forEach(function (loc) {
-      (G.playerSlots[loc.id] || []).forEach(function (s, si) {
-        if (!s || !s.revealed || s.cardId !== 68 || s._advTraderBartered) return;
-        if (!_traderHasPartner(loc.id)) return;
-        var el = getSlotEl('player', loc.id, si);
-        if (el) el.classList.add('trader-barterable');
-      });
-    });
   }
 
-  /* True if the player has any revealed card at a location OTHER than traderLocId
-     (a valid Trader barter partner). */
-  function _traderHasPartner(traderLocId) {
-    var has = false;
-    G.locations.forEach(function (loc) {
-      if (has || loc.id === traderLocId) return;
-      (G.playerSlots[loc.id] || []).forEach(function (s) { if (s && s.revealed) has = true; });
-    });
-    return has;
-  }
-
-  /* Open the Trader barter picker: the player's OWN revealed cards at OTHER
-     locations are the valid swap partners. Picking one defines the swap. Reuses
-     the shared showDiscardChooser. Re-opening replaces any prior choice. */
-  function openTraderBarter(traderLocId, traderIdx) {
-    var traderSd = G.playerSlots[traderLocId] && G.playerSlots[traderLocId][traderIdx];
-    if (!traderSd || traderSd.cardId !== 68 || traderSd._advTraderBartered) return;
-    var partners = [];
-    G.locations.forEach(function (loc) {
-      if (loc.id === traderLocId) return;
-      (G.playerSlots[loc.id] || []).forEach(function (s) { if (s && s.revealed) partners.push(s.cardId); });
-    });
-    if (!partners.length) return;
-    clearSelection();
-    if (SOG.abilities && typeof SOG.abilities.showDiscardChooser === 'function') {
-      SOG.abilities.showDiscardChooser('Choose a card to barter with Trader', partners, function (chosenId) {
-        _setTraderBarter(traderLocId, traderIdx, traderSd.cardId, chosenId);
-      });
-    }
-  }
-
-  /* Record/replace the barter choice: queue a {type:'barter'} action-log entry
-     (executes at reveal) and let the display-only preview re-skin the two slots
-     (via syncPlayerSlots → _applyTraderPreview). G is NOT mutated. */
-  function _setTraderBarter(traderLocId, traderIdx, traderCardId, partnerCardId) {
-    // Resolve the partner's slot COORDINATES now (first match — the same slot the
-    // preview skins) and carry them through the action log, so execution swaps
-    // the exact previewed slot even with duplicate cardIds on board. (The picker
-    // itself is id-based, so twin partners are indistinguishable in the chooser —
-    // first-match keeps preview and execution consistent.)
-    var partnerLocId = null, partnerIdx = null;
-    G.locations.forEach(function (loc) {
-      (G.playerSlots[loc.id] || []).forEach(function (s, i) {
-        if (partnerLocId === null && s && s.cardId === partnerCardId) { partnerLocId = loc.id; partnerIdx = i; }
-      });
-    });
-    if (partnerLocId === null) return;
-    var prev = G.traderBarter;
-    // Replace-old: drop any prior barter entry (queuing a new choice replaces it).
-    G.playerActionLog = G.playerActionLog.filter(function (a) { return a.type !== 'barter'; });
-    G.traderBarter = { traderCardId: traderCardId, partnerCardId: partnerCardId,
-                       traderLocId: traderLocId, partnerLocId: partnerLocId };
-    G.playerActionLog.push({ type: 'barter', cardId: traderCardId, partnerCardId: partnerCardId,
-                             barterCoords: { traderLocId: traderLocId, traderIdx: traderIdx,
-                                             partnerLocId: partnerLocId, partnerIdx: partnerIdx } });
-    // Re-render the involved locations (+ the previous choice's locs, to restore
-    // their true faces) so the preview shows the current swap only.
-    var locs = [traderLocId, partnerLocId];
-    if (prev) { locs.push(prev.traderLocId); locs.push(prev.partnerLocId); }
-    locs.filter(function (v, i) { return locs.indexOf(v) === i; })
-        .forEach(function (lid) { syncPlayerSlots(lid); });
-    updateScores();
-    refreshMoveableCards();
-  }
-
-  /* Clear the barter (reset / re-choose teardown): drop the action-log entry +
-     preview state and restore the two slots' true faces. */
-  function clearTraderBarter() {
-    var tb = G.traderBarter;
-    if (!tb) return;
-    G.traderBarter = null;
-    G.playerActionLog = G.playerActionLog.filter(function (a) { return a.type !== 'barter'; });
-    syncPlayerSlots(tb.traderLocId);
-    syncPlayerSlots(tb.partnerLocId);
-  }
 
   /* ═══════════════════════════════════════════════════════════════
      QUEUE MOVE

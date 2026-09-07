@@ -38,6 +38,9 @@ var Overworld = (function () {
   var KEY_FIRST_MARKET_INTERSTITIAL = 'sog_first_market_interstitial_seen'; // one-time "building a collection" beat on the first market return
   var KEY_SARGON_NODE_REVEALED      = 'sog_sargon_node_revealed';       // dust-storm reveal played → node persists, no replay
   var KEY_HAMMURABI_NODE_REVEALED   = 'sog_hammurabi_node_revealed';    // earth-rise reveal played (after beating Sargon) → node persists, no replay
+  var KEY_RAMSES_NODE_REVEALED      = 'sog_ramses_node_revealed';       // Hatshepsut GIANT → Ramses earth-rise played once
+  var KEY_AKHENATEN_NODE_REVEALED   = 'sog_akhenaten_node_revealed';    // Ramses GIANT → Akhenaten earth-rise played once
+  var KEY_KUSH_NODE_REVEALED        = 'sog_kush_node_revealed';         // Akhenaten→Kush transition + earth-rise played once
   var KEY_HANGING_GARDENS_REVEALED  = 'sog_hanging_gardens_revealed';   // sparkle reveal played (after beating Hammurabi) → node persists, no replay
   // Egypt on-ramp (post-Nebuchadnezzar)
   var KEY_NEB_COMPLETE              = 'sog_battle_nebuchadnezzar_complete'; // set on the Nebuchadnezzar (Hanging Gardens) win
@@ -336,7 +339,8 @@ var Overworld = (function () {
   var D7_MERCHANT_WIN_DELIVERY_C = [
     { who: 'merchant', text: 'And purple dye, from Mesopotamia. Merchants live off foreign goods.' },
     { who: 'explorer', text: 'Thank you!' },
-    { who: 'merchant', text: "Go build them in. She'll be tougher next time — count on it." }
+    { who: 'merchant', text: "Go build them in. She'll be tougher next time — count on it." },
+    { who: 'explorer', text: 'Thanks! I bet I could put these into a deck before I take on Hatshepsut again.' }
   ];
 
   /* HAMMURABI INTERSTITIAL — the post-Serf-win beat, bookending the Hanging
@@ -1557,6 +1561,20 @@ var Overworld = (function () {
            Once-only, on its own flag, independent of the battle's opening: the
            player meets a boss at their node once, however many times they then
            fight them. */
+        /* SERF FLAG ERECTS ON ARRIVAL. The hand-authored bosses do this inline at
+           their encounter start (see _runHatshepsutEncounter): stamp the engagement,
+           re-render the cluster, erect the flag. A data-driven level had no
+           equivalent, so a node carrying serfFlagOn:'encounter' — which every Egypt
+           node does — held its Serf flag back forever and it only ever appeared
+           silently on some later full re-render. Runs BEFORE the node intro so the
+           flag goes up as the walk-up conversation begins, exactly as it does for
+           Gilgamesh/Narmer/Hatshepsut. Once only: the engagement stamp gates it. */
+        var _lvHook = node.hook || node.id;
+        if (_lvHook && !_nodeEncountered(_lvHook)) {
+          try { localStorage.setItem('sog_node_encountered_' + _lvHook, 'true'); } catch (e) {}
+          _refreshNodeFlags();
+          _erectSerfFlagFor(_lvHook);
+        }
         _runLevelNodeIntro(node.id, function () {
           _fireWipeFromNode(node.id, function () {
             if (!SOG.LevelRuntime.launch(node.id)) {
@@ -1893,6 +1911,40 @@ var Overworld = (function () {
       if (onDone) setTimeout(onDone, 0);
     }
   }
+
+  /* HATSHEPSUT(GIANT) → RAMSES and RAMSES(GIANT) → AKHENATEN transitions. Same
+     split-around-the-rise shape as the Kush pair below: lines, earth-rise, lines.
+     EDITABLE in the map editor like every other overworld dialogue array.
+     [source: overworld.js → D_RAMSES_BEFORE/_AFTER, D_AKHENATEN_BEFORE/_AFTER] */
+  var D_RAMSES_BEFORE = [
+    { who: 'explorer', text: "Okay. I think she's finally done with me." },
+    { who: 'explorer', text: 'So which way is out?' }
+  ];
+  var D_RAMSES_AFTER = [
+    { who: 'explorer', text: '...That is a very large statue.' },
+    { who: 'explorer', text: 'Of a very large man.' }
+  ];
+  var D_AKHENATEN_BEFORE = [
+    { who: 'explorer', text: "I've beaten a queen and a king now." },
+    { who: 'explorer', text: 'Surely that earns me a rest.' }
+  ];
+  var D_AKHENATEN_AFTER = [
+    { who: 'explorer', text: "That one doesn't look like the others." },
+    { who: 'explorer', text: 'Not even a little.' }
+  ];
+
+  /* AKHENATEN → KUSH transition. Three Explorer lines, the node earth-rise, then
+     two more — the beat is deliberately split AROUND the animation so the node
+     appearing is the answer to "Is it time to go home?". */
+  var D_KUSH_BEFORE = [
+    { who: 'explorer', text: "Well, the sun's still up." },
+    { who: 'explorer', text: "That's good." },
+    { who: 'explorer', text: 'Is it time to go home?' }
+  ];
+  var D_KUSH_AFTER = [
+    { who: 'explorer', text: "Or it's time for more pyramids." },
+    { who: 'explorer', text: "I've never seen one like this before." }
+  ];
 
   function _runLinesKeepOpen(lines, onDone) {
     var hud = window.SOG && window.SOG.HUD;
@@ -2925,13 +2977,14 @@ var Overworld = (function () {
                                okMerchant, 'dye:', okDye, '— delivery left re-armed');
                 }
                 if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
-                // Deck builder → back to the map, right where she was standing.
-                openDeckBuilderThen(function () {
-                  if (typeof showScreen === 'function') showScreen('screen-overworld');
-                  if (window.Overworld && typeof window.Overworld.resumeAfterBattle === 'function') {
-                    window.Overworld.resumeAfterBattle();
-                  }
-                }, '&#8592; Back to Map');
+                /* NO DECK-BUILDER CUT ON THE WIN PATH. The LOSS path force-opens the
+                   builder because the player is bounced straight back into the
+                   rematch and would otherwise never get to slot the two new cards
+                   in. A winner is standing on the overworld with the deck-builder
+                   button right there, so the forced screen change is just a
+                   detour — the Explorer's closing line points at it instead. */
+                isDialogueLocked = false;
+                scheduleIdle();
                 if (onDone) onDone();
               });
             });
@@ -3514,24 +3567,33 @@ var Overworld = (function () {
      Self-cleaning (dirt layer removed at the end). Mirrors _dustStormRevealSargon's
      node-element creation, but rises from below instead of fading in. */
   function _earthRiseRevealHammurabi(onDone) {
-    var node = _findMesoNode('hammurabi');
+    _earthRiseRevealNode('mesopotamia', 'hammurabi', onDone);
+  }
+
+  /* GENERALISED earth-rise. The body is unchanged from the Hammurabi-only
+     original — only the node lookup and the two hardcoded 'hammurabi' literals
+     became parameters — so Kush (upper-egypt) reuses the exact same
+     choreography: earthspell.mp3, dirt-clod burst, rise-with-settle,
+     self-cleaning dirt layer. */
+  function _earthRiseRevealNode(mapId, nodeId, onDone) {
+    var node = _findNodeOn(mapId, nodeId);
     if (!overlayEl || !node) { if (onDone) onDone(); return; }
 
     var riseAudio = null;
     try { riseAudio = new Audio('sfx/earthspell.mp3'); riseAudio.volume = (window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1; riseAudio.play(); } catch (e) {}
 
     // 1) Build (or find) the Hammurabi node element, hidden, ready to rise.
-    var nodeEl = overlayEl.querySelector('[data-id="hammurabi"]');
+    var nodeEl = overlayEl.querySelector('[data-id="' + nodeId + '"]');
     if (!nodeEl) {
       nodeEl = document.createElement('div');
       nodeEl.className = 'overworld-node';
-      nodeEl.dataset.id = 'hammurabi';
+      nodeEl.dataset.id = nodeId;
       nodeEl.style.left = node.x + '%';
       nodeEl.style.top  = node.y + '%';
       nodeEl.style.transform = _nodeTransform(node);
       var img = document.createElement('img');
       img.src = node.image;   // from the map data, never a literal
-      img.alt = node.name || 'Babylon';
+      img.alt = node.name || nodeId;
       img.draggable = false;
       nodeEl.appendChild(img);
       nodeEl.addEventListener('click', (function (nd) {
@@ -3580,7 +3642,7 @@ var Overworld = (function () {
     setTimeout(function () {
       if (dirt.parentNode) dirt.parentNode.removeChild(dirt);
       nodeEl.style.opacity = '1';
-      log('[D4] Hammurabi node earth-revealed');
+      log('[reveal] ' + nodeId + ' node earth-revealed');
       // Let the earth-rise sfx fully finish before the Explorer's reflection line
       // (mirrors the Sargon reveal), so the dialogue never talks over it.
       _afterAudioEnds(riseAudio, function () { if (onDone) onDone(); });
@@ -3890,6 +3952,17 @@ var Overworld = (function () {
   function _findMesoNode(id) {
     var found = null;
     MAPS.mesopotamia.nodes.forEach(function (n) { if (n.id === id) found = n; });
+    return found;
+  }
+
+  /* Map-agnostic sibling of _findMesoNode. The earth-rise reveal was written for
+     Mesopotamia and hardcoded that map; Kush lives on upper-egypt, so the reveal
+     needed a finder that carries the map with it. */
+  function _findNodeOn(mapId, id) {
+    var m = MAPS[mapId];
+    if (!m || !m.nodes) return null;
+    var found = null;
+    m.nodes.forEach(function (n) { if (n.id === id) found = n; });
     return found;
   }
 
@@ -4209,7 +4282,6 @@ var Overworld = (function () {
     { label: 'Tier 1', cards: [        // TOP row — 5g staples
       { id: 55, price:  5 },   // Farmer
       { id: 56, price:  5 },   // Scribe
-      { id: 68, price:  5 },   // Trader
       { id: 70, price:  5 },   // Soldier
       { id: 71, price:  5 },   // Priest
       { id: 69, price:  5 }    // Chariots
@@ -5695,6 +5767,65 @@ var Overworld = (function () {
         return;
       }
 
+      /* ── EGYPT CHAIN NODE REVEALS — DRAINED AS A QUEUE ───────────────────────
+         THE EGYPT CHAIN IS GIANT-GATED, and it is the one region that is. Everywhere
+         else a boss's SERF win opens the next node (_bossClearedForUnlock); here each
+         node waits for the previous boss's GIANT. The node's own visibility in
+         data/map-data.js is gated on the matching *-giant-beaten milestone, and the
+         reveal below is gated on the SAME flag — THE TWO MUST ALWAYS AGREE. If a node
+         becomes visible on a tier this does not fire on, it simply pops into existence
+         with no animation the next time the map renders, which is the bug these
+         reveals were added to fix.
+
+         ALL PENDING REVEALS PLAY ON ONE RETURN, in chain order. This used to be three
+         separate blocks each ending in `return`, so a save with more than one reveal
+         outstanding played exactly ONE per battle and silently deferred the rest — the
+         player beat Akhenaten, watched the *Akhenaten* node re-reveal, and Kush never
+         came. More than one is outstanding more often than it looks: any dev-panel
+         jump down the chain, and any save that predates these flags existing, arrives
+         with the whole queue pending. Draining it here means the number of reveals a
+         save owes can never again be the number of battles it must fight.
+
+         Each entry still sets its own flag at the END of its own beat, so an interrupted
+         run resumes cleanly at the first one it did not finish. ORDER within a beat:
+         Explorer lines -> earth-rise -> more lines; the node arriving mid-conversation
+         is the point, so the dialogue is split around the animation rather than run
+         before or after it as a block. */
+      var _egyptReveals = [];
+      if (currentMapId === 'upper-egypt') {
+        [['hatshepsut', 'ramses',    KEY_RAMSES_NODE_REVEALED,    D_RAMSES_BEFORE,    D_RAMSES_AFTER],
+         ['ramses',     'akhenaten', KEY_AKHENATEN_NODE_REVEALED, D_AKHENATEN_BEFORE, D_AKHENATEN_AFTER],
+         ['akhenaten',  'kush',      KEY_KUSH_NODE_REVEALED,      D_KUSH_BEFORE,      D_KUSH_AFTER]
+        ].forEach(function (r) {
+          var seen = false;
+          try { seen = localStorage.getItem(r[2]) === 'true'; } catch (e) {}
+          if (_tierBeaten(r[0], 'giant') && !seen) {
+            _egyptReveals.push({ opener: r[0], node: r[1], key: r[2], before: r[3], after: r[4] });
+          }
+        });
+      }
+      if (_egyptReveals.length) {
+        isDialogueLocked = true;
+        setTimeout(function () {
+          (function _runReveal(i) {
+            if (i >= _egyptReveals.length) { isDialogueLocked = false; scheduleIdle(); return; }
+            var r = _egyptReveals[i];
+            runDialogue(r.before, function () {
+              _earthRiseRevealNode('upper-egypt', r.node, function () {
+                _refreshNodeFlags();             // give the fresh node its flags
+                runDialogue(r.after, function () {
+                  try { localStorage.setItem(r.key, 'true'); } catch (e) {}
+                  _runReveal(i + 1);
+                });
+              });
+            });
+          })(0);
+        }, 350);
+        log('resumeAfterBattle() — Egypt chain reveals: ' +
+            _egyptReveals.map(function (r) { return r.opener + '(Giant)→' + r.node; }).join(', '));
+        return;
+      }
+
       // Catch-up Hanging Gardens reveal. Same robust pattern as the Hammurabi node
       // above: fires on return to Mesopotamia whether it's the FIRST Hammurabi win
       // or a return on an already-beaten save. Gated once via the reveal flag. (By
@@ -5791,6 +5922,9 @@ var Overworld = (function () {
         sargonNodeRevealed: flag(KEY_SARGON_NODE_REVEALED),
         hammurabiNodeRevealed: flag(KEY_HAMMURABI_NODE_REVEALED),
         hangingGardensRevealed: flag(KEY_HANGING_GARDENS_REVEALED),
+        ramsesNodeRevealed: flag(KEY_RAMSES_NODE_REVEALED),
+        akhenatenNodeRevealed: flag(KEY_AKHENATEN_NODE_REVEALED),
+        kushNodeRevealed: flag(KEY_KUSH_NODE_REVEALED),
         egyptNodeLive: flag(KEY_EGYPT_NODE_LIVE),
         egyptNodeArrivalSeen: flag(KEY_EGYPT_NODE_ARRIVAL),
         metNarmer: flag(KEY_MET_NARMER),
@@ -5828,6 +5962,9 @@ var Overworld = (function () {
       setFlag(KEY_SARGON_NODE_REVEALED, snap.sargonNodeRevealed);
       setFlag(KEY_HAMMURABI_NODE_REVEALED, snap.hammurabiNodeRevealed);
       setFlag(KEY_HANGING_GARDENS_REVEALED, snap.hangingGardensRevealed);
+      setFlag(KEY_RAMSES_NODE_REVEALED, snap.ramsesNodeRevealed);
+      setFlag(KEY_AKHENATEN_NODE_REVEALED, snap.akhenatenNodeRevealed);
+      setFlag(KEY_KUSH_NODE_REVEALED, snap.kushNodeRevealed);
       setFlag(KEY_EGYPT_NODE_LIVE, snap.egyptNodeLive);
       setFlag(KEY_EGYPT_NODE_ARRIVAL, snap.egyptNodeArrivalSeen);
       setFlag(KEY_MET_NARMER, snap.metNarmer);

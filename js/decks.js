@@ -114,6 +114,31 @@
   // Always remove the legacy key — it's owned by this module now
   try { localStorage.removeItem(LEGACY_KEY); } catch (e) {}
 
+  /* ── RETIRED CARD IDS ──────────────────────────────────────────────────────
+     Cards deleted from CARDS after players may already have saved them. Saved
+     decks are deliberately NON-DESTRUCTIVE (see deckbuilder initDeckBuilder) —
+     an id stays in a slot even when it is not in the current pool, so a
+     not-yet-collected card survives. That is right for a card that still
+     exists, and wrong for one that does not: the id would be dealt into a hand
+     and resolve to `undefined`.
+
+     So retired ids are pruned here, once, on load. This is the only place a
+     saved deck is edited destructively, and only for ids that can never come
+     back — a retired id is never reused for a different card.
+
+       68  Trader — replaced by the Merchant (76). */
+  var RETIRED_CARD_IDS = [68];
+  (function pruneRetired() {
+    if (!_decks || !RETIRED_CARD_IDS.length) return;
+    var changed = false;
+    _decks.forEach(function (d) {
+      if (!d || !Array.isArray(d.cards)) return;
+      var kept = d.cards.filter(function (id) { return RETIRED_CARD_IDS.indexOf(id) === -1; });
+      if (kept.length !== d.cards.length) { d.cards = kept; changed = true; }
+    });
+    if (changed) persistDecks(_decks);
+  })();
+
   // ── Public API ────────────────────────────────────────────────
 
   function getActiveSlot() { return _active; }

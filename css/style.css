@@ -2873,6 +2873,45 @@ body.ramses-battle .battle-col[data-loc-id="131"]::before { background: url('../
 body.ramses-battle .battle-col[data-loc-id="132"]::before { background: url('../images/locations/karnaktemple.jpg') center / cover no-repeat; } /* Karnak Temple — DOUBLE_HIGHEST_IP_HERE */
 body.ramses-battle .battle-col[data-loc-id="133"]::before { background: url('../images/locations/abusimbel.jpg')  center / cover no-repeat; } /* Abu Simbel    — FULL_SLOTS_PLUS_6_HERE */
 
+/* ── AKHENATEN BATTLE location art (body.akhenaten-battle) ─────────────────
+   Custom loc ids 141-143, so — as the Ramses / Hatshepsut / Hammurabi blocks
+   above note — these must declare the FULL pseudo-element themselves, not just
+   the background. Same 0.5 dim so the cards stay legible over the art.
+
+   Art is real and on disk (464x576 each), matching the nile_delta.jpg /
+   aswan_cataract.jpg snake_case convention. Note temple_of_aten.jpg — NOT the
+   great_temple_aten.jpg this block originally guessed at while the files were
+   still placeholders. */
+body.akhenaten-battle .battle-col[data-loc-id="141"]::before,
+body.akhenaten-battle .battle-col[data-loc-id="142"]::before,
+body.akhenaten-battle .battle-col[data-loc-id="143"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.akhenaten-battle .battle-col[data-loc-id="141"]::before { background: url('../images/locations/closed_temples.jpg')   center / cover no-repeat; } /* The Closed Temples      — RELIGIOUS_PLAY_DISCARDS */
+body.akhenaten-battle .battle-col[data-loc-id="142"]::before { background: url('../images/locations/temple_of_aten.jpg')   center / cover no-repeat; } /* Great Temple of the Aten — SOLO_CARD_PLUS_4_HERE */
+body.akhenaten-battle .battle-col[data-loc-id="143"]::before { background: url('../images/locations/royal_tomb.jpg')       center / cover no-repeat; } /* The Royal Tomb          — SUMMON_FROM_DISCARD_AT_END */
+
+/* ── KUSH BATTLE location art (body.kush-battle) ───────────────────────────
+   Custom loc ids 151-153 — same reason as the Ramses / Akhenaten blocks above:
+   outside the base .battle-col[data-loc-id="1..8"] rules, so these declare the
+   FULL pseudo-element, not just the background. Same 0.5 dim. */
+body.kush-battle .battle-col[data-loc-id="151"]::before,
+body.kush-battle .battle-col[data-loc-id="152"]::before,
+body.kush-battle .battle-col[data-loc-id="153"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.kush-battle .battle-col[data-loc-id="151"]::before { background: url('../images/locations/meroe.jpg')             center / cover no-repeat; } /* Meroe             — REPEAT_LABOR_ECONOMIC_AT_ONCE */
+body.kush-battle .battle-col[data-loc-id="152"]::before { background: url('../images/locations/napata.jpg')            center / cover no-repeat; } /* Napata            — POLITICAL_PLUS_1_STAMP */
+body.kush-battle .battle-col[data-loc-id="153"]::before { background: url('../images/locations/nubian_gold_mines.jpg') center / cover no-repeat; } /* Nubian Gold Mines — GOLD_CHANCE_ON_PLAY */
+
 /* FLOOD crossfade layer (Stage 4c) — a ::after over the river art (101/103 only),
    opacity 0 normally, fading to the river ::before's 0.5 dim when JS adds .hg-flooded.
    ::after paints above the ::before river art (tree order) but stays behind the
@@ -3412,28 +3451,6 @@ body.hanging-gardens-battle .battle-col .hg-flood-tint {
 
 .battle-card-slot.moveable:active {
   cursor: grabbing;
-}
-
-/* Trader (68, Egypt) barter affordance — its own cyan pulse, distinct from the
-   gold move pulse, so a barterable card reads as a different interaction. */
-@keyframes trader-barterable-pulse {
-  0%   { box-shadow: 0 0 0 2px var(--snes-cyan), inset 0 0 0 1px var(--snes-cyan); }
-  50%  { box-shadow: 0 0 8px 3px rgba(64,224,224,0.6), inset 0 0 0 1px var(--snes-cyan); }
-  100% { box-shadow: 0 0 0 2px var(--snes-cyan), inset 0 0 0 1px var(--snes-cyan); }
-}
-
-.battle-card-slot.trader-barterable {
-  border-color: var(--snes-cyan);
-  border-style: solid;
-  cursor: pointer;
-  animation: trader-barterable-pulse 1.4s ease-in-out infinite;
-}
-
-/* Trader barter PREVIEW — a slot displaying the OTHER card during selection.
-   Subtle cyan tint marks it as a not-yet-committed display swap. */
-.battle-card-slot.trader-preview {
-  outline: 2px dashed rgba(64,224,224,0.75);
-  outline-offset: -3px;
 }
 
 /* Queued move indicator — card stays in place with pulsing arrow overlay */
@@ -10486,7 +10503,7 @@ body.otzi-battle .adv-bubble .adv-bubble-hint {
    default spots (opponent top-right 20/20, ally bottom-left 40/40), matching
    these anchors.
 
-   HYKSOS AND RAMSES SHARE THIS BLOCK rather than each getting a byte-identical copy.
+   HYKSOS, RAMSES, AKHENATEN AND KUSH SHARE THIS BLOCK rather than each getting a copy.
    EVERY battle must opt in by body class — the bare .adv-bubble default is a
    plain parchment box with the portrait inside, which is NOT the game's dialogue
    look and should never be seen. A new battle that forgets to add itself here
@@ -10496,7 +10513,9 @@ body.otzi-battle .adv-bubble .adv-bubble-hint {
    another pass, deliberately not done here to avoid touching shipped battles.) */
 body.sargon-battle #adv-bubble-otzi,
 body.hyksos-battle #adv-bubble-otzi,
-body.ramses-battle #adv-bubble-otzi {
+body.ramses-battle #adv-bubble-otzi,
+body.akhenaten-battle #adv-bubble-otzi,
+body.kush-battle #adv-bubble-otzi {
   top: 80px;
   transform: translateY(-50%);
   right: 152px;
@@ -10514,7 +10533,9 @@ body.ramses-battle #adv-bubble-otzi {
 }
 body.sargon-battle #adv-bubble-otzi::before,
 body.hyksos-battle #adv-bubble-otzi::before,
-body.ramses-battle #adv-bubble-otzi::before {
+body.ramses-battle #adv-bubble-otzi::before,
+body.akhenaten-battle #adv-bubble-otzi::before,
+body.kush-battle #adv-bubble-otzi::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -10525,7 +10546,9 @@ body.ramses-battle #adv-bubble-otzi::before {
 }
 body.sargon-battle #adv-bubble-otzi::after,
 body.hyksos-battle #adv-bubble-otzi::after,
-body.ramses-battle #adv-bubble-otzi::after {
+body.ramses-battle #adv-bubble-otzi::after,
+body.akhenaten-battle #adv-bubble-otzi::after,
+body.kush-battle #adv-bubble-otzi::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -10536,7 +10559,9 @@ body.ramses-battle #adv-bubble-otzi::after {
 }
 body.sargon-battle #adv-bubble-explorer,
 body.hyksos-battle #adv-bubble-explorer,
-body.ramses-battle #adv-bubble-explorer {
+body.ramses-battle #adv-bubble-explorer,
+body.akhenaten-battle #adv-bubble-explorer,
+body.kush-battle #adv-bubble-explorer {
   top: 624px;
   transform: translateY(-50%);
   left: 168px;
@@ -10554,7 +10579,9 @@ body.ramses-battle #adv-bubble-explorer {
 }
 body.sargon-battle #adv-bubble-explorer::before,
 body.hyksos-battle #adv-bubble-explorer::before,
-body.ramses-battle #adv-bubble-explorer::before {
+body.ramses-battle #adv-bubble-explorer::before,
+body.akhenaten-battle #adv-bubble-explorer::before,
+body.kush-battle #adv-bubble-explorer::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -10565,7 +10592,9 @@ body.ramses-battle #adv-bubble-explorer::before {
 }
 body.sargon-battle #adv-bubble-explorer::after,
 body.hyksos-battle #adv-bubble-explorer::after,
-body.ramses-battle #adv-bubble-explorer::after {
+body.ramses-battle #adv-bubble-explorer::after,
+body.akhenaten-battle #adv-bubble-explorer::after,
+body.kush-battle #adv-bubble-explorer::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -10576,10 +10605,14 @@ body.ramses-battle #adv-bubble-explorer::after {
 }
 body.sargon-battle .adv-bubble .adv-bubble-portrait,
 body.hyksos-battle .adv-bubble .adv-bubble-portrait,
-body.ramses-battle .adv-bubble .adv-bubble-portrait { display: none; }
+body.ramses-battle .adv-bubble .adv-bubble-portrait,
+body.akhenaten-battle .adv-bubble .adv-bubble-portrait,
+body.kush-battle .adv-bubble .adv-bubble-portrait { display: none; }
 body.sargon-battle .adv-bubble .adv-bubble-text,
 body.hyksos-battle .adv-bubble .adv-bubble-text,
-body.ramses-battle .adv-bubble .adv-bubble-text {
+body.ramses-battle .adv-bubble .adv-bubble-text,
+body.akhenaten-battle .adv-bubble .adv-bubble-text,
+body.kush-battle .adv-bubble .adv-bubble-text {
   font-size: 18px;
   line-height: 1.45;
   color: #111;
@@ -10588,7 +10621,9 @@ body.ramses-battle .adv-bubble .adv-bubble-text {
 }
 body.sargon-battle .adv-bubble .adv-bubble-hint,
 body.hyksos-battle .adv-bubble .adv-bubble-hint,
-body.ramses-battle .adv-bubble .adv-bubble-hint {
+body.ramses-battle .adv-bubble .adv-bubble-hint,
+body.akhenaten-battle .adv-bubble .adv-bubble-hint,
+body.kush-battle .adv-bubble .adv-bubble-hint {
   color: #666;
   margin-top: 6px;
 }
@@ -12594,6 +12629,22 @@ body[data-screen="overworld"] #overworld-overlay {
     rgba(110, 78, 48, 0.95) 50%,
     rgba(72, 50, 30, 0.9) 100%);
   box-shadow: 0 0 3px rgba(60, 42, 24, 0.7);
+}
+
+/* The nugget struck out of the Nubian Gold Mines (nubianGoldEmerge). Same
+   throwaway-particle contract as .reveal-fx-dirt-clod above: position/size/z-index
+   are set inline by the FX, this rule owns only the look. Irregular ore silhouette
+   rather than a disc so it reads as raw gold, not a coin. */
+.reveal-fx-gold-nugget {
+  border-radius: 46% 58% 42% 62% / 55% 44% 60% 45%;
+  background: radial-gradient(circle at 32% 28%,
+    #fff6cf 0%,
+    #f3cf5e 34%,
+    #d1a02c 66%,
+    #8a6410 100%);
+  box-shadow: 0 0 10px rgba(247, 208, 96, 0.85),
+              0 0 22px rgba(214, 160, 40, 0.5),
+              inset -2px -2px 4px rgba(96, 68, 12, 0.55);
 }
 
 /* The OUTGOING number in an IP badge swap (ipBadgeSwap). A clone of the badge

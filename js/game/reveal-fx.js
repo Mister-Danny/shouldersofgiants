@@ -348,35 +348,26 @@ SOG.RevealFx = (function () {
       return holdFor(450);   // drop-in settle 0.42s (fits the gap → no extra wait)
     },
 
-    // Farmer (39): "Harvest" coin SFX + an onion that POPS UP from the card's
-    // centre and DISSIPATES as it rises. Pure overlay: an <img> appended to the
-    // slot, animated by CSS (rise + fade via @keyframes revealFxOnionPop), then
-    // self-removed so it re-triggers cleanly on the next Farmer reveal. Returns 0
-    // — overlays the reveal without stalling the turn loop.
+    /* Farmer — MESO (39): PHASE 1 of a two-phase effect (SWAPPED here from the
+       Egypt Farmer along with the ability). The onion pops from the card's centre
+       and dissipates as it rises — an <img> overlay animated by CSS, self-removing
+       so it re-triggers cleanly. A BOING, not the coin cha-ching, and no number:
+       the "+1" belongs to the card this Farmer BUFFS, not to the Farmer. Phase 2
+       (the onion descending onto that buffed card and being bitten) is
+       farmerOnionBite below, fired from the reveal pipeline once the buffed card
+       has finished its own reveal. */
     39: function (ctx) {
-      playSfx('sfx/scholar-officials-coin.mp3');
-      var onion = document.createElement('img');
-      onion.className = 'reveal-fx-onion';
-      onion.src = 'images/assets/onion@0.25x.png';
-      onion.draggable = false;
-      onion.setAttribute('aria-hidden', 'true');
-      ctx.slotEl.appendChild(onion);
-      // Remove after the pop+fade finishes (must outlast revealFxOnion's duration).
-      setTimeout(function () {
-        if (onion.parentNode) onion.parentNode.removeChild(onion);
-      }, 1400);
+      farmerOnionPop(ctx.slotEl);
       return holdFor(1400);   // onion pop + rise/fade ~1.4s
     },
 
-    /* Farmer — EGYPT (55): PHASE 1 of a two-phase effect. The same onion pop the
-       Meso Farmer (39) above uses — an <img> overlay on the slot, popped and
-       dissipated by CSS, self-removing — but with a boing instead of the coin
-       cha-ching, and no number: the "+1" belongs to the card this Farmer BUFFS,
-       not to the Farmer. Phase 2 (the onion descending onto that buffed card and
-       being bitten) is farmerOnionBite below, fired from the reveal pipeline once
-       the buffed card has finished its own reveal. */
+    /* Farmer — EGYPT (55): the CAPITAL grant's flourish (SWAPPED here from the
+       Meso Farmer). Coin cha-ching plus the same onion-pop overlay — ONE phase
+       only: the capital arrives next turn, so there is no card for an onion to
+       descend onto. Note grantCapitalNextTurn has no float of its own, so this
+       handler is the entire visible feedback for the grant. */
     55: function (ctx) {
-      playSfx('sfx/boingjump.mp3');
+      playSfx('sfx/scholar-officials-coin.mp3');
       var onion = document.createElement('img');
       onion.className = 'reveal-fx-onion';
       onion.src = 'images/assets/onion@0.25x.png';
@@ -460,8 +451,8 @@ SOG.RevealFx = (function () {
     30: 2340,   // Cave Art scribble + fade
     32: 1850,   // Domesticated Animal howl
     34: 450,    // Neanderthal drop-in
-    39: 1400,   // Farmer onion pop
-    55: 1400,   // Farmer (Egypt) onion pop
+    39: 1400,   // Farmer (Meso) onion pop — phase 1 of the pending-IP buff
+    55: 1400,   // Farmer (Egypt) onion pop — capital-grant flourish
     43: 2530,   // Gilgamesh pulse
     44: 1850,   // Enkidu howl
     45: 1150    // Ziggurat ring-out
@@ -1446,6 +1437,61 @@ SOG.RevealFx = (function () {
      unroll into — the scroll rolls, travels toward the opponent's hand strip and
      FADES. Same asymmetry nebuchadnezzarShimmer already uses for the hidden hand.
        opts: { sfx, handEl, isPlayer } */
+  /* NUBIAN GOLD MINES (GOLD_CHANCE_ON_PLAY, Kush battle) — the gold is STRUCK OUT
+     of the mine and thrown to its owner's hand. Fires only on a successful roll, so
+     the animation IS the tell that the chance paid off; a failed roll shows nothing,
+     which is what makes the location feel like a gamble.
+
+     Presentation only, and deliberately fire-and-forget: applyGoldChanceOnPlay has
+     already pushed the token into the hand and is synchronous, so nothing waits on
+     this. The one piece of state it touches is the destination hand card's
+     visibility — held back so the card does not simply blink into existence before
+     the nugget that is supposedly becoming it has arrived. Every early return
+     restores that visibility first, so a missing element or absent GSAP can never
+     strand an invisible card in the hand. */
+  function nubianGoldEmerge(locEl, handEl, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+    function revealHandCard() { if (handEl) handEl.style.visibility = ''; }
+
+    if (!locEl || typeof gsap === 'undefined') { revealHandCard(); finish(); return; }
+    var lr = locEl.getBoundingClientRect();
+    if (!lr.width) { revealHandCard(); finish(); return; }
+
+    if (handEl) handEl.style.visibility = 'hidden';
+
+    var cx = lr.left + lr.width / 2;
+    var cy = lr.top  + lr.height / 2;
+
+    dirtBurst(cx, cy + lr.height * 0.16, lr.width * 0.55, 16);
+    if (opts.sfx) playSfx(opts.sfx);
+
+    var nug = document.createElement('div');
+    nug.className = 'reveal-fx-gold-nugget';
+    nug.style.cssText =
+      'position:fixed;left:' + (cx - 11) + 'px;top:' + (cy - 11) + 'px;' +
+      'width:22px;height:22px;margin:0;pointer-events:none;z-index:9999;opacity:0;';
+    document.body.appendChild(nug);
+
+    // Land on the hand card when there is one; otherwise just arc up and fade.
+    var hr = handEl ? handEl.getBoundingClientRect() : null;
+    var haveDest = !!(hr && hr.width);
+    var destX = haveDest ? hr.left + hr.width  / 2 - 11 : cx - 11;
+    var destY = haveDest ? hr.top  + hr.height / 2 - 11 : cy - 130;
+
+    var tl = gsap.timeline({ onComplete: function () {
+      if (nug.parentNode) nug.parentNode.removeChild(nug);
+      revealHandCard();
+      finish();
+    } });
+    tl.to(nug, { opacity: 1, scale: 1.4, duration: 0.20, ease: 'back.out(2.4)' })
+      .to(nug, { top: '-=30', duration: 0.24, ease: 'power2.out' }, '>-0.05')
+      .to(nug, { rotation: 260, duration: 0.85, ease: 'none' }, '<')
+      .to(nug, { left: destX, top: destY, scale: 0.5, duration: 0.58, ease: 'power2.inOut' }, '>-0.02')
+      .to(nug, { opacity: 0, duration: 0.18, ease: 'power1.in' }, '>-0.16');
+  }
+
   function papyrusCopyFlourish(papyrusEl, targetEl, card, opts, onComplete) {
     opts = opts || {};
     var fired = false;
@@ -1533,7 +1579,7 @@ SOG.RevealFx = (function () {
     }
   }
 
-  /* Farmer — EGYPT (55): PHASE 2. The onion the Farmer launched comes back DOWN
+  /* Farmer — MESO (39): PHASE 2. The onion the Farmer launched comes back DOWN
      onto whichever card actually took the +1, and is eaten.
 
      Deliberately NOT a reveal-fx handler: it does not belong to the buffed card's
@@ -1551,8 +1597,41 @@ SOG.RevealFx = (function () {
      bite lands, and the element is removed outright on the next frame. No fade —
      the onion is gone, not fading.
      Overlay only; never gates the pipeline, and no-ops without a slot element. */
-  function farmerOnionBite(slotEl, onComplete) {
+  /* Farmer (39) PHASE 1 — the onion pops out of the Farmer as it ARMS the pending
+     +1. Extracted from the reveal-FX registry entry that used to own it inline,
+     because arming is no longer a once-per-reveal event: Meroe re-fires the At
+     Once, so the Farmer arms twice and the pop has to be replayable on demand.
+     The registry entry still plays the first one at reveal time; abilities.js
+     replays it for each additional arming. */
+  function farmerOnionPop(slotEl, onComplete) {
     function finish() { if (typeof onComplete === 'function') onComplete(); }
+    if (!slotEl) { finish(); return; }
+    playSfx('sfx/boingjump.mp3');
+    var onion = document.createElement('img');
+    onion.className = 'reveal-fx-onion';
+    onion.src = 'images/assets/onion@0.25x.png';
+    onion.draggable = false;
+    onion.setAttribute('aria-hidden', 'true');
+    slotEl.appendChild(onion);
+    // Remove after the pop+fade finishes (must outlast revealFxOnion's duration).
+    setTimeout(function () {
+      if (onion.parentNode) onion.parentNode.removeChild(onion);
+      finish();
+    }, 1400);
+  }
+
+  function farmerOnionBite(slotEl, opts, onComplete) {
+    opts = opts || {};
+    /* onBite fires ON THE BITE — the same beat as the chomp sfx — and is what the
+       caller uses to apply the actual +1. Same contract as scribeAccountingSequence's
+       onLand below: the number the player sees and the number the engine records are
+       one event, never a faked pop followed by a silent write. It must still run when
+       the visual cannot (no element, no geometry, no GSAP), or the IP would be
+       silently dropped whenever the animation is skipped. */
+    var bitten = false;
+    function bite() { if (bitten) return; bitten = true;
+                      if (typeof opts.onBite === 'function') opts.onBite(); }
+    function finish() { bite(); if (typeof onComplete === 'function') onComplete(); }
     if (!slotEl || typeof gsap === 'undefined') { finish(); return; }
     var r = slotEl.getBoundingClientRect();
     if (!r.width) { finish(); return; }                  // no geometry → skip the visual
@@ -1589,7 +1668,7 @@ SOG.RevealFx = (function () {
       .to(onion, { y: 0, scale: 1.06, duration: 0.46, ease: 'power2.in' }, 0)
       // land: a small squash, then the bite
       .to(onion, { scale: 1, duration: 0.1, ease: 'power2.out' })
-      .add(function () { playSfx('sfx/bite.mp3'); })
+      .add(function () { playSfx('sfx/bite.mp3'); bite(); })   // sfx + the real +1, same beat
       // sits bitten for a beat, then vanishes in ONE FRAME — no fade.
       // Scheduled with a position offset rather than an empty .to(): a tween with
       // no vars still takes GSAP's DEFAULT 0.5s duration, which stretched this
@@ -2704,9 +2783,11 @@ SOG.RevealFx = (function () {
            rosettaTranscribe: rosettaTranscribe,
            scribeAccountingSequence: scribeAccountingSequence,
            farmerOnionBite: farmerOnionBite,
+           farmerOnionPop: farmerOnionPop,
            boatSplashBurst: boatSplashBurst,
            papyrusScrollRoll: papyrusScrollRoll,
            papyrusCopyFlourish: papyrusCopyFlourish,
+           nubianGoldEmerge: nubianGoldEmerge,
            imhotepSandSculpt: imhotepSandSculpt,
            endOfTurnShimmer: endOfTurnShimmer };
 })();

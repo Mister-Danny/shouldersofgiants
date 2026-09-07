@@ -312,7 +312,7 @@ const CARDS = [
   {
     id: 39, name: "Farmer", cc: 1, ip: 1,
     type: "Labor", type2: null, era: "Mesopotamia",
-    abilityName: "Harvest", ability: "At Once:\nProvides +1 Capital next turn.",
+    abilityName: "Harvest", ability: "At Once:\nProvides +1 IP to the next card you play.",
     image: "images/cards/mesopotamiacards/farmer@0.5x.jpg", locked: true
   },
   {
@@ -437,10 +437,10 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/papyrus@0.3x.jpg", locked: true
   },
   {
-    id: 55, name: "Farmer", cc: 1, ip: 1,                       // WIRED (arms a pending +1 IP for the next card played) — distinct from Meso Farmer(39), which still grants capital
+    id: 55, name: "Farmer", cc: 1, ip: 1,                       // WIRED (+1 capital next turn) — SWAPPED with Meso Farmer (39), which now arms the pending +1 IP
     type: "Labor", type2: null, era: "Egypt",
     abilityName: "Harvest",
-    ability: "At Once:\nProvides +1 IP to the next card you play.",
+    ability: "At Once:\nProvides +1 Capital next turn.",
     image:   "images/cards/egyptcards/egyptfarmer@0.5x.jpg",
     imageSm: "images/cards/egyptcards/egyptfarmer@0.3x.jpg", locked: true
   },
@@ -547,14 +547,11 @@ const CARDS = [
     image:   "images/cards/egyptcards/hyksos@0.5x.jpg",
     imageSm: "images/cards/egyptcards/hyksos@0.3x.jpg", locked: true
   },
-  {
-    id: 68, name: "Trader", cc: 1, ip: 1,                       // TODO (Egypt): NOT YET WIRED — trade; NEW "Economic" type
-    type: "Economic", type2: null, era: "Egypt",
-    abilityName: "Barter",
-    ability: "Trade goods for advantage.\n(Not yet wired.)",
-    image:   "images/cards/egyptcards/trader@0.5x.jpg",
-    imageSm: "images/cards/egyptcards/trader@0.3x.jpg", locked: true
-  },
+  /* id 68 "Trader" REMOVED — the Merchant (76) was built to replace it and does.
+     The id is retired, NOT reused: an id is a save-file key (unlocked cards,
+     saved deck slots, the shop's stock queue), so handing 68 to a different card
+     would silently turn every stranded Trader into that card. Numbering skips
+     from 67 to 69 on purpose. See decks.js RETIRED_CARD_IDS for the save prune. */
   {
     id: 69, name: "Chariots", cc: 2, ip: 2,                     // WIRED (once-per-battle move + arrival strike -2; Sphinx protection applies)
     type: "Military", type2: null, era: "Egypt",
@@ -591,16 +588,37 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/mummy@0.3x.jpg", locked: true, token: true
   },
   {
-    // TOKEN — NOT DECKABLE. Granted to a side's hand by the NUBIAN_GOLD_ON_PLAY
-    // location key (see applyNubianGoldOnPlay). Free to play (cc 0); on reveal it
-    // grants +1 Capital next turn via the Farmer machinery (grantCapitalNextTurn).
-    // Type "Economic" (chosen over typeless so the popup shows a consistent type).
-    id: 73, name: "Nubian Gold", cc: 0, ip: 1,                  // TOKEN (WIRED: +1 capital next turn)
-    type: "Economic", type2: null, era: "Egypt",
-    abilityName: "Tribute",
+    /* GENERATED **AND** DECKABLE. Still granted to a side's hand by the
+       NUBIAN_GOLD_ON_PLAY location key (applyNubianGoldOnPlay pushes id 73
+       straight into hand and never consults `token`, so that path is unchanged)
+       — but `token: true` has been LIFTED so it can also be built into a deck
+       and sold in the shop.
+
+       What that flag gated, all of it verified: deckbuilder.js isCardAvailable
+       (`if (card.token) return false`) hid it from the builder entirely; the dev
+       panel grouped it under "Tokens (not deckable)" and treated it as a fixed,
+       non-toggleable entry. Nothing in deck VALIDATION, save-state or the shop
+       reads it — the Egypt market is a hand-curated id list with no token
+       filter — so lifting it is exactly a deck-builder + dev-panel change.
+       The Mummy (72) keeps its flag: it is a pure in-game construct with no
+       standalone card of its own.
+
+       Era moved Egypt -> Kush: it is Nubian tribute, and it now sits with the
+       set it belongs to. Nothing switches on era except lane derivation
+       (ADVENTURE_ERAS, which lists neither) and the Ramses/Neb CC discounts,
+       which key on 'Egypt'/'Mesopotamia' — so this REMOVES it from Ramses'
+       "-1 CC to Egypt cards in your hand" aura. At 0 CC that discount was
+       already a no-op, so nothing changes in play.
+
+       Free to play (cc 0); on reveal grants +1 Capital next turn via the Farmer
+       machinery (grantCapitalNextTurn). Type "Economic" so the popup shows a
+       consistent type. */
+    id: 73, name: "Nubian Gold", cc: 0, ip: 1,                  // WIRED (+1 capital next turn) — generated AND deckable
+    type: "Economic", type2: null, era: "Kush",
+    abilityName: "Natural Resource",
     ability: "Next Turn:\nReceive +1 Capital.",
     image:   "images/cards/egyptcards/nubiangold@0.5x.jpg",
-    imageSm: "images/cards/egyptcards/nubiangold@0.3x.jpg", locked: true, token: true
+    imageSm: "images/cards/egyptcards/nubiangold@0.3x.jpg", locked: true
   },
 
   // ─── NATURAL RESOURCES (Economic) ─────────────────────────────────────────
@@ -679,6 +697,106 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/akhenaten_sm.jpg", locked: true
   },
 
+  /* ═══════════════════════════════════════════════════════════════════════════
+     KUSH (78-87) — the Nubian set. All locked:true and in no player deck: they
+     are battle rewards / shop stock, not starters.
+
+     ART: every card points at the plain .jpg (366x527), NOT the .jpeg master
+     (731x1054) sitting beside it. buildCardImg derives the small variant with
+     .replace(/\.jpg$/, '@sm.jpg'), a regex that does NOT match ".jpeg" — a
+     .jpeg path would silently resolve its own full-size art as the thumbnail.
+     Because the full-size is a plain .jpg, no card here needs an explicit
+     imageSm; @sm.jpg (241x348) derives automatically.
+
+     ERA: "Kush" throughout except King Ezana, who is "Aksumite" (Aksum
+     conquered Kush; he is the end of it, not part of it). Era strings are
+     free-form — nothing validates them — but see ADVENTURE_ERAS below: neither
+     string is listed there, so these cards sit in the 'arcadium' lane exactly
+     as the Egypt set does today.
+  ═══════════════════════════════════════════════════════════════════════════ */
+  {
+    id: 78, name: "Piye (Piankhi)", cc: 6, ip: 5,               // WIRED (At Once: copy itself to another location)
+    type: "Political", type2: null, era: "Kush",
+    abilityName: "Lord of Two Lands",
+    ability: "At Once:\nAdd a copy of itself to another location.",
+    /* The copy is placed ALREADY REVEALED and does not fire its own At Once —
+       that is the loop guard, and it is structural: placeRevealedCard never
+       runs the At-Once dispatcher. A Piye copy acquired another way (Papyrus,
+       Rosetta) and PLAYED normally goes through the normal reveal pipeline and
+       fires normally. */
+    image:   "images/cards/kushcards/kush_piye_piankhi.jpg", locked: true
+  },
+  {
+    id: 79, name: "Kashta", cc: 3, ip: 3,                       // WIRED (At Once: draw Piye, -1 CC)
+    type: "Political", type2: null, era: "Kush",
+    abilityName: "Tablesetter",
+    ability: "At Once:\nDraw Piye from your deck and give him -1 CC.",
+    image:   "images/cards/kushcards/kush_kashta.jpg", locked: true
+  },
+  {
+    id: 80, name: "Amenirdis I", cc: 3, ip: 4,                  // WIRED (At Once: draw Piye, +1 IP)
+    type: "Religious", type2: null, era: "Kush",
+    abilityName: "Religious Legitimacy",
+    ability: "At Once:\nDraw Piye from your deck and give him +1 IP.",
+    image:   "images/cards/kushcards/kush_amenirdis_i.jpg", locked: true
+  },
+  {
+    id: 81, name: "Apedemak", cc: 3, ip: 3,                     // WIRED (At Once: re-trigger own Military At Onces here)
+    type: "Religious", type2: null, era: "Kush",
+    abilityName: "Lion of War",
+    ability: "At Once:\nTrigger the At Once abilities of all your Military cards here.",
+    image:   "images/cards/kushcards/kush_apedemak.jpg", locked: true
+  },
+  {
+    id: 82, name: "Queen Shanakhdakheto", cc: 4, ip: 3,         // WIRED (At Once: +1 IP per Egypt card here)
+    type: "Political", type2: null, era: "Kush",
+    abilityName: "Son of Ra",
+    ability: "At Once:\nGain +1 IP for each Egypt card here.",
+    image:   "images/cards/kushcards/kush_queen_shanakhdakheto.jpg", locked: true
+  },
+  {
+    id: 83, name: "King Ezana", cc: 4, ip: 4,                   // WIRED (At Once: steal lowest-IP Rel/Pol from opponent DECK)
+    type: "Religious", type2: null, era: "Aksumite",
+    abilityName: "Conversion",
+    ability: "At Once:\nConvert the lowest-IP Religious or Political card from your opponent's deck to this location.",
+    /* THE ONLY CARD IN THE GAME THAT READS A DECK. Everything else reads hand,
+       board, or a pile. The stolen card is removed from the opponent's deck
+       PERMANENTLY (it can never be drawn) and arrives revealed on Ezana's side. */
+    image:   "images/cards/kushcards/kush_king_ezana.jpg", locked: true
+  },
+  {
+    id: 84, name: "Griot", cc: 1, ip: 1,                        // WIRED (Continuous: +1 IP to your OTHER Cultural cards here)
+    type: "Cultural", type2: null, era: "Kush",
+    abilityName: "Living Memory",
+    /* NAME COLLISION, deliberate: card 16 "Griots" (plural) is the West African
+       Societies card in the base set. Distinct card, distinct era, distinct id. */
+    ability: "Continuous:\nYour other Cultural cards here gain +1 IP.",
+    image:   "images/cards/kushcards/kush_griot.jpg", locked: true
+  },
+  {
+    id: 85, name: "Nubian Archers", cc: 2, ip: 2,               // WIRED (At Once: -2 IP to a random opponent card)
+    type: "Military", type2: null, era: "Kush",
+    abilityName: "Volley",
+    ability: "At Once:\nAfflict a random opponent's card with -2 IP.",
+    image:   "images/cards/kushcards/kush_nubian_archers.jpg", locked: true
+  },
+  {
+    id: 86, name: "Trade Network", cc: 3, ip: 1,                // WIRED (onCardLandedHere: swap a Natural Resource for a deck draw)
+    type: "Economic", type2: null, era: "Kush",
+    abilityName: "The Nile Corridor",
+    /* A TRIGGER, not an At Once: it reacts to the owner playing a card here
+       whose abilityName is "Natural Resource". Registered under
+       onCardLandedHere, the same hook Otzi's flee uses. */
+    ability: "When you play a Natural Resource here, swap it with a card from your deck.",
+    image:   "images/cards/kushcards/kush_trade_network.jpg", locked: true
+  },
+  {
+    id: 87, name: "The Iron Furnace", cc: 2, ip: 1,             // WIRED (End of Turn: +1 IP to Labor cards here)
+    type: "Labor", type2: null, era: "Kush",
+    abilityName: "Forges of Meroe",
+    ability: "End of Turn:\nLabor cards here gain +1 IP.",
+    image:   "images/cards/kushcards/kush_the_iron_furnace.jpg", locked: true
+  }
 
 ];
 

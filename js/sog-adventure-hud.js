@@ -69,7 +69,17 @@ SOG.HUD = (function () {
     // battle. The battle itself uses its own bubbles (body.ramses-battle), so
     // this entry exists purely for the OVERWORLD half. Low-but-not-Hyksos bleep:
     // he is imperious rather than brutish.
-    ramses:      { portrait: 'images/portraits/ramsesIIportrait.jpeg', bleepHz: 220, side: 'npc', flip: true }
+    ramses:      { portrait: 'images/portraits/ramsesIIportrait.jpeg', bleepHz: 220, side: 'npc', flip: true },
+    // Akhenaten — registered ahead of his node intro being written, so the
+    // dialogue can name him as a speaker the moment it lands. No `flip`: his
+    // portrait faces forward and is symmetric, unlike the Hyksos/Ramses art.
+    // High, thin bleep — he is the zealot, not another booming pharaoh.
+    akhenaten:   { portrait: 'images/portraits/akhenaten.jpg', bleepHz: 340, side: 'npc' },
+    // Piye of Kush. Keyed on the CHARACTER ('piye'), not the node/hook id
+    // ('kush') — the dialogue names the man, and every other entry here is a
+    // character too. Note the .jpeg: portraits are mixed (hyksos.jpeg likewise)
+    // and, unlike card art, nothing derives an @sm variant from a portrait path.
+    piye:        { portrait: 'images/portraits/piye.jpeg', bleepHz: 250, side: 'npc' }
   };
 
   /* ══════════════════════════════════════════════════════════════

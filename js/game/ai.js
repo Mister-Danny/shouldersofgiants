@@ -375,6 +375,61 @@
      location with a matching neighbour. `side` = the AI's side key ('opp' in the
      engine's frame). `tentative` = this turn's not-yet-committed plays
      [{cardId,locId}], so same-turn context counts. */
+  /* ── LOCATION ABILITIES THAT DRIVE CARD MECHANICS ───────────────────────────
+     A card scorer that forecasts "how much more of X can I cause?" naturally
+     scans CARD ids, because that is where those engines have always lived.
+     A LOCATION can be an engine too, and it is completely invisible to that
+     scan — the scorer under-prices any card that scales off the mechanic, on
+     exactly the board built to reward it.
+
+     This bit Akhenaten (77) first: he forecasts discard engines as [63,66,38,8,9]
+     and so had no idea The Closed Temples discards a card every time he plays a
+     Religious one — the biggest discard source on his own map. He was played in
+     1 of 4 scripted runs.
+
+     Generalised deliberately rather than special-cased. Keyed by MECHANIC, so a
+     future scaling card asks "what location sources of my mechanic are on this
+     board?" and gets an answer without knowing any abilityKey itself. Adding a
+     location ability that drives an existing mechanic means one entry here, not
+     a scorer edit. */
+  var LOCATION_ENGINES = {
+    discard: ['RELIGIOUS_PLAY_DISCARDS']      // The Closed Temples (Akhenaten)
+    // capital: ['CAPITAL_WHEN_FULL', 'MOVE_HERE_CAPITAL'],   // no scaling card reads these yet
+    // revive:  ['SUMMON_FROM_DISCARD_AT_END']                 // ditto
+  };
+
+  /* Forecast how many more times the board's LOCATIONS can fire `mechanic` for
+     `side` this battle. Returns a count in the same units the card-engine scan
+     uses, so a scorer can simply add them.
+
+     For discard-by-Religious-play the forecast is "Religious cards I can still
+     land there", bounded by the free slots there — a location cannot charge me
+     more often than I can play into it. Deck cards count half, matching the
+     existing in-hand-vs-in-deck weighting. */
+  function locationEngineCount(mechanic, G, side) {
+    if (!G || !G.locations) return 0;
+    var keys = LOCATION_ENGINES[mechanic];
+    if (!keys || !keys.length) return 0;
+    var hand = (side === 'opp' ? G.aiHand : G.playerHand) || [];
+    var deck = (side === 'opp' ? G.aiDeck : G.playerDeck) || [];
+    var slots = side === 'opp' ? G.aiSlots : G.playerSlots;
+    var total = 0;
+    G.locations.forEach(function (loc) {
+      if (keys.indexOf(loc.abilityKey) === -1) return;
+      var free = ((slots && slots[loc.id]) || []).filter(function (x) { return x === null; }).length;
+      if (free <= 0) return;
+      if (loc.abilityKey === 'RELIGIOUS_PLAY_DISCARDS') {
+        var isRel = function (id) {
+          var c = CARDS.find(function (x) { return x.id === id; });
+          return !!c && c.type === 'Religious';
+        };
+        var supply = hand.filter(isRel).length + deck.filter(isRel).length * 0.5;
+        total += Math.min(supply, free);
+      }
+    });
+    return total;
+  }
+
   function cardLocBias(cardId, locId, G, side, tentative) {
     if (!G) return 0;
     side = side || 'opp';
@@ -535,6 +590,13 @@
         // so it counts at half. Deliberately simple — same weighting spirit as
         // Priest's `Math.min(bestDisc, 6) * 0.4`.
         var support = aHand.filter(isEngine).length + aDeck.filter(isEngine).length * 0.5;
+        /* LOCATION engines count here too — see locationEngineCount. NOTE this
+           branch is the ARCADIUM path only (cardLocBias is reached solely via
+           _giantScorePlay ← aiGiantStrategy ← aiDifficulty === 'hard'); the
+           adventure battles score through _serfValue / _giantSelectPlays and
+           never call it. The adventure-side fix is the akhenaten Giant
+           signature below, which uses the same helper. */
+        support += locationEngineCount('discard', G, side);
         // WHIFF: no discards yet and no way to cause one. He is a 4-CC 1-IP body
         // whose whole text is dead — worse than a vanilla card of the same cost,
         // so he must score BELOW one, not merely at zero.
@@ -1031,7 +1093,7 @@
        • it must be SETTLED — not played this very turn (moving a card the turn it
          lands is an illegal same-turn move);
        • it must not have ALREADY MOVED this turn (sd._movedOnTurn, stamped by
-         game.js applyMove / executeBarter). A card relocated during the REVEAL by
+         game.js applyMove). A card relocated during the REVEAL by
          another card's ability — the Merchant's trade move being the live case —
          was not at this location when the AI picked its movements in the selection
          phase, so choosing it now would be a decision made with knowledge the AI
@@ -1086,7 +1148,7 @@
         }
       });
     });
-    if (!eligible.length) { _tryAiBarter(G, onDone); return; }   // no Chariot → still consider a Trader barter
+    if (!eligible.length) { onDone(); return; }   // no Chariot mover this turn
 
     // Movement decision: the battle's chariotMoveDecision (Narmer weighs the home
     // re-lock) EXCEPT on the FINAL turn — no future plays remain, so the re-lock
@@ -1109,7 +1171,7 @@
        to the next — holding never ends the pass. */
     var _i = 0;
     (function nextMover() {
-      if (_i >= eligible.length) { _tryAiBarter(G, onDone); return; }
+      if (_i >= eligible.length) { onDone(); return; }
       var f = eligible[_i++];
       // Re-validate against the live board: a previous move this pass may have
       // relocated or spent this card (defected cards are excluded by the gather's
@@ -1124,61 +1186,6 @@
     })();
   }
 
-  /* Light AI Trader (68) barter (reuses SOG.game.executeBarter, the same queued-
-     barter resolution the player's reveal uses). Once per battle per Trader
-     (_advTraderBartered), only when swapping the Trader to a location the AI is
-     LOSING would FLIP that location to a win — and doing so doesn't surrender a
-     location the AI currently holds. No eligible Trader / no flipping swap → no-op. */
-  function _tryAiBarter(G, onDone) {
-    onDone = onDone || function () {};
-    if (!SOG.game || typeof SOG.game.executeBarter !== 'function') { onDone(); return; }
-
-    var trader = null;
-    G.locations.forEach(function (loc) {
-      (G.aiSlots[loc.id] || []).forEach(function (s, si) {
-        if (trader || !s || !s.revealed) return;
-        // Same gate as the movers — a barter IS a relocation, so a Trader that has
-        // already moved this turn cannot barter on top of it.
-        if (s.cardId === 68 && !s._advTraderBartered && _aiSlotMovableNow(G, s)) {
-          trader = { locId: loc.id, idx: si, sd: s };
-        }
-      });
-    });
-    if (!trader) { onDone(); return; }
-
-    var tEff  = helpers.effectiveIP(trader.sd);
-    var aiT   = _advLocIP(G.aiSlots, trader.locId);
-    var pT    = _advLocIP(G.playerSlots, trader.locId);
-
-    var best = null;
-    G.locations.forEach(function (loc) {
-      if (loc.id === trader.locId) return;
-      var aiL = _advLocIP(G.aiSlots, loc.id);
-      var pL  = _advLocIP(G.playerSlots, loc.id);
-      if (aiL - pL >= 0) return;                       // only interested in locations we're losing
-      (G.aiSlots[loc.id] || []).forEach(function (s, si) {
-        if (!s || !s.revealed) return;
-        var pEff = helpers.effectiveIP(s);
-        if (pEff >= tEff) return;                       // swap must raise this location's total
-        var marginAfterL = (aiL - pEff + tEff) - pL;    // Trader replaces partner here
-        if (marginAfterL < 0) return;                   // must actually flip to a win
-        // Don't surrender the Trader's current location if we're currently holding it.
-        var marginAfterT = (aiT - tEff + pEff) - pT;
-        if (aiT - pT >= 0 && marginAfterT < 0) return;
-        if (!best || marginAfterL > best.margin) {
-          best = { partnerCardId: s.cardId, locId: loc.id, idx: si, margin: marginAfterL };
-        }
-      });
-    });
-
-    if (!best) { onDone(); return; }
-    trader.sd._advTraderBartered = true;
-    // Coordinates pin the exact trader + partner slots — duplicate-cardId safe
-    // (twin partners can carry diverged ipMods; the scored one must swap).
-    SOG.game.executeBarter('opp', trader.sd.cardId, best.partnerCardId, onDone,
-                           { traderLocId: trader.locId, traderIdx: trader.idx,
-                             partnerLocId: best.locId, partnerIdx: best.idx });
-  }
 
   /* ═══════════════════════════════════════════════════════════════
      SERF TIER — one shared generic adventure AI (Stage A)
@@ -1507,7 +1514,7 @@
        4. Reveal-order optimisation — sequences the returned plays so
           discounts/auras reveal before beneficiaries and grabbers
           (Papyrus/Pyramid) reveal last (_giantRevealOrder).
-       5. Movement judgment — the Giant repositions movers (Chariot/Trader)
+       5. Movement judgment — the Giant repositions movers (Chariot)
           via the existing reveal-time runAdventureMovements, which game.js
           now gates OFF for the Serf tier (Serf leaves movers in place).
 
@@ -1741,6 +1748,15 @@
        holdCard(id, ctx) → bool                       dynamic hold (skip non-final turns)
        choosePlacement(id, legalLocs, ctx) → locId    override WHERE it lands (null = default)
      Placement/hold hooks call the shared _giant* helpers above — no duplication. */
+  /* Does this card actually have an AT ONCE? Meroe repeats At Onces, not card
+     TYPES — a Labor card whose only hook is endOfTurn gains nothing there.
+     Reads the live registry so it cannot drift from what the engine fires. */
+  function _kushHasAtOnce(cardId) {
+    var reg = (window.SOG && SOG.abilities && SOG.abilities.CARD_ABILITIES) || null;
+    if (reg) return !!(reg[cardId] && typeof reg[cardId].onAtOnce === 'function');
+    return [74, 55, 73].indexOf(cardId) !== -1;   // fallback: the deck's known At-Once Labor/Economic
+  }
+
   var _GIANT_SIGNATURES = {
 
     // GILGAMESH — gentlest Giant: hold Gilgamesh-the-card for the endgame + a light
@@ -2023,6 +2039,158 @@
           var filled = (G.aiSlots[abu] || []).filter(Boolean).length;
           if (filled < 4) return abu;
         }
+        return null;
+      }
+    },
+
+    /* AKHENATEN — the evaluator cannot see him. _serfValue prices a card by its
+       marginal board IP, so Akhenaten reads as a 4-CC 1-IP body: the worst play
+       in the deck. His real worth is 1 + 2 per discard THIS side has made, and
+       on his own map the biggest discard source is a LOCATION (The Closed
+       Temples charges one for every Religious card played there) — invisible to
+       an evaluator that models synergy as a whitelist of card ids.
+
+       This is the same shape as the Merchant trade-engine model above, and takes
+       the same remedy: compute the value in a helper and feed it through the
+       Giant-only signature seam, rather than teaching _serfValue, which the Serf
+       shares and which is deliberately kept simple. The Serf therefore still
+       misplays him — that is the tier difference working as intended, not a gap.
+
+       Measured before this signature: played in 0 of 8 scripted runs. */
+    akhenaten: {
+      cardBias: function (cardId, ctx) {
+        if (cardId !== 77) return 0;
+        var count = (G.discardCount && G.discardCount.opp) || 0;
+        /* Discards still to come, from CARDS and from LOCATIONS alike. The
+           location half is the part the evaluator misses entirely. */
+        var ENGINES = [63, 66, 38, 8, 9];
+        var hand = (ctx && ctx.hand) || G.aiHand || [];
+        var deck = G.aiDeck || [];
+        var cards = hand.filter(function (id) { return ENGINES.indexOf(id) !== -1; }).length
+                  + deck.filter(function (id) { return ENGINES.indexOf(id) !== -1; }).length * 0.5;
+        var locs  = locationEngineCount('discard', G, 'opp');
+        /* +2 per discard is his actual rate. Banked discards are certain, so they
+           price at full; forecast ones are discounted — they need the engine to
+           be drawn, afforded and played. */
+        return 2 * count + 2 * 0.6 * (cards + locs);
+      }
+    },
+
+    /* KUSH / PIYE — the deck is a Piye-delivery machine and _serfValue cannot
+       see any of it: Kashta (79) and Amenirdis I (80) read as ordinary 3-CC
+       bodies, and the board's three locations each reward a placement the
+       evaluator has no concept of.
+
+       Same seam and same reasoning as Akhenaten's signature above and the
+       Merchant model at ai.js:1711 — computed here, fed through the Giant-only
+       hooks, with _serfValue (shared by every battle) untouched.
+
+       SERF NOTE: the Serf gets NONE of this by design, and the Piye-enabling
+       priority asked for at that tier has no seam that does not edit the shared
+       evaluator. See the report. */
+    kush: {
+      cardBias: function (cardId, ctx) {
+        var hand = (ctx && ctx.hand) || G.aiHand || [];
+        var deck = G.aiDeck || [];
+        var piyeReachable = hand.indexOf(78) !== -1 || deck.indexOf(78) !== -1;
+        /* The two setup cards are worth far more than their bodies while Piye is
+           still gettable — they FETCH him and discount/buff him. Once he is on
+           the board they are just 3-CC bodies again. */
+        if ((cardId === 79 || cardId === 80) && piyeReachable) return 4;
+        /* Piye himself: the payoff. He is 6 CC (5 after Kashta), so he competes
+           with two cheaper plays — the bias is what stops the evaluator taking
+           the two. */
+        if (cardId === 78) return 5;
+        /* Trade Network and the Natural Resources are the second route into the
+           deck: each swap is another draw, and the deck is where Piye is. */
+        if (cardId === 86 && piyeReachable) return 2.5;
+        var c = _serfCardOf(cardId);
+        if (c && c.abilityName === 'Natural Resource' && piyeReachable) return 1.5;
+        return 0;
+      },
+
+      playBias: function (cardId, locId, ctx) {
+        var c = _serfCardOf(cardId);
+        if (!c) return 0;
+
+        /* KING EZANA (83) NEEDS TWO OPENINGS HERE, NOT ONE. His At Once converts
+           a card out of the opponent's deck TO THIS LOCATION, so a slot has to
+           still be free AFTER he has taken one himself. Checked before the
+           location-ability lookup below because it is not about the location's
+           ability at all — it applies on every location, including plain ones
+           (which return 0 early and would skip this).
+           WHY THIS IS AI-ONLY IN PRACTICE: the player picks a slot by hand and
+           can see the board fill up; the evaluator just takes the best-scoring
+           opening, which is very often the LAST one at a contested location —
+           and Ezana then landed with nowhere to put the convert and fizzled
+           silently, every time. Same class as the location-ability blind spot:
+           a card whose payoff depends on board SPACE is invisible to a scorer
+           that only prices IP.
+           Soft, not a veto: if every location is this tight he is still
+           playable as a 4-IP body, which is the correct fallback. */
+        if (cardId === 83) {
+          var _free = 0;
+          (G.aiSlots[locId] || []).forEach(function (s) { if (!s) _free++; });
+          if (_free < 2) return -6;
+        }
+
+        var key = null;
+        for (var i = 0; i < G.locations.length; i++) {
+          if (G.locations[i].id === locId) { key = G.locations[i].abilityKey; break; }
+        }
+        if (!key) return 0;
+
+        // NAPATA — Piye here carries the +1 stamp into the copy he makes.
+        if (key === 'POLITICAL_PLUS_1_STAMP') {
+          if (cardId === 78) return 4;                       // the stamp doubles on him
+          return (c.type === 'Political') ? 1.5 : -0.5;
+        }
+        /* MEROE — repeats AT ONCE abilities only. Being Labor/Economic is not
+           enough: The Iron Furnace (87) is Labor but its hook is endOfTurn, and
+           Trade Network (86) is Economic but its hook is onCardLandedHere — the
+           spec excludes it explicitly. Neither gains anything here, so neither is
+           biased toward it. The real targets in this deck are Papyrus-Economic
+           (74) and the Egypt Farmer (55), both Labor/Economic WITH an onAtOnce. */
+        if (key === 'REPEAT_LABOR_ECONOMIC_AT_ONCE') {
+          var qualifies = (c.type === 'Labor' || c.type === 'Economic') &&
+                          _kushHasAtOnce(cardId);
+          return qualifies ? 3 : -0.5;
+        }
+        // NUBIAN GOLD MINES — Apedemak wants to stand where the Archers are, so
+        // his trigger re-fires Volley. Track where the Archers actually are
+        // rather than assuming a location.
+        if (key === 'GOLD_CHANCE_ON_PLAY') {
+          if (cardId === 81) {                               // Apedemak
+            var archersHere = (G.aiSlots[locId] || []).some(function (sd) {
+              return sd && sd.revealed && sd.cardId === 85;
+            });
+            return archersHere ? 4 : 0.5;
+          }
+          if (cardId === 85) return 1;                       // Archers seed the combo
+        }
+        return 0;
+      },
+
+      choosePlacement: function (cardId, legalLocs, ctx) {
+        var byKey = function (k) {
+          for (var i = 0; i < G.locations.length; i++) {
+            if (G.locations[i].abilityKey === k) return G.locations[i].id;
+          }
+          return null;
+        };
+        var napata = byKey('POLITICAL_PLUS_1_STAMP');
+        var meroe  = byKey('REPEAT_LABOR_ECONOMIC_AT_ONCE');
+        var mines  = byKey('GOLD_CHANCE_ON_PLAY');
+        // Piye takes Napata whenever it is open — the stamp is the whole plan.
+        if (cardId === 78 && napata != null && legalLocs.indexOf(napata) !== -1) return napata;
+        // Apedemak follows the Archers.
+        if (cardId === 81 && mines != null && legalLocs.indexOf(mines) !== -1 &&
+            (G.aiSlots[mines] || []).some(function (sd) { return sd && sd.revealed && sd.cardId === 85; })) {
+          return mines;
+        }
+        var c = _serfCardOf(cardId);
+        if (c && (c.type === 'Labor' || c.type === 'Economic') && _kushHasAtOnce(cardId) &&
+            meroe != null && legalLocs.indexOf(meroe) !== -1) return meroe;
         return null;
       }
     }
