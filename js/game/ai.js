@@ -75,19 +75,10 @@
       if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(locId, 'ai')) return;
       var slotIndex = G.aiSlots[locId].indexOf(null);
       if (slotIndex === -1) return;
-      // Resurrection bonus stored as named ipMod entry (parity with player commitPlay)
-      var resBonus  = G.aiCardIPBonus[cardId] || 0;
-      var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
-      var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
-      // Papyrus (54) state-copy inheritance — consume the AI side's pending copy
-      // bonus into this play's ipMod (parity with the player's commitPlay).
-      var _copyB = (G.copyIPBonus && G.copyIPBonus.opp && G.copyIPBonus.opp[cardId]) || 0;
-      if (_copyB) {
-        resBonus += _copyB;
-        resSources.push({ source: 'Papyrus', delta: _copyB });
-        delete G.copyIPBonus.opp[cardId];
-      }
-      var _sd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
+      // In-hand bonuses (resurrection chain, stamps, Papyrus copy) folded in with
+      // attribution and consumed — parity with the player's commitPlay.
+      var _sd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
+      SOG.board.applyPrePlayBonuses(_sd, 'ai', cardId, { copy: true });
       // Adventure battles relocate a move-capable AI card (Chariot) post-reveal
       // via runAdventureMovements, whose "not on the card's OWN reveal turn" guard
       // reads turnPlayed (parity with the player's commitPlay; the removed bespoke
@@ -243,18 +234,10 @@
         ? SOG.board.effectiveCost(card, t.locId, 'ai') : card.cc;
       if (cost > budget) return;
 
-      // Resurrection bonus stored as named ipMod entry (parity with player commitPlay)
-      var resBonus  = G.aiCardIPBonus[cardId] || 0;
-      var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
-      var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
-      // Papyrus (54) state-copy inheritance — consume the AI side's pending bonus.
-      var _ecopyB = (G.copyIPBonus && G.copyIPBonus.opp && G.copyIPBonus.opp[cardId]) || 0;
-      if (_ecopyB) {
-        resBonus += _ecopyB;
-        resSources.push({ source: 'Papyrus', delta: _ecopyB });
-        delete G.copyIPBonus.opp[cardId];
-      }
-      G.aiSlots[t.locId][t.slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
+      // In-hand bonuses folded in with attribution and consumed (see commitPlay above).
+      var _esd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
+      SOG.board.applyPrePlayBonuses(_esd, 'ai', cardId, { copy: true });
+      G.aiSlots[t.locId][t.slotIndex] = _esd;
       // Remove ONE instance (filter would delete both copies of a duplicated id).
       var _ehi = G.aiHand.indexOf(cardId);
       if (_ehi !== -1) G.aiHand.splice(_ehi, 1);
@@ -2089,6 +2072,21 @@
        priority asked for at that tier has no seam that does not edit the shared
        evaluator. See the report. */
     kush: {
+      /* PLACEMENT IN THE SHARED LOOP, and why this signature is shaped the way it
+         is: sig.playBias feeds `adj`, which only RANKS cards — where a card lands is
+         decided by choosePlacement, or, when that returns null, by the shared
+         default, which on every non-positional turn is RANDOM among the legal
+         locations. So a steering rule that lives only in playBias never moves a
+         card. Piye→Napata worked because it was a choosePlacement rule; the
+         Furnace, Apedemak and Ezana rules were playBias-only (or keyed on
+         `revealed`, which same-turn stagings are not) and so never steered.
+         Every steer below is therefore a choosePlacement rule; playBias keeps
+         the ranking consistent with it; cardBias/holdCard fix the ORDER within a
+         turn so a card is picked after the cards it wants to stand beside. Same-
+         turn stagings are counted via _kushOwnAt (revealed OR _serfStub), which
+         is the board as it will stand at reveal. Slot reservations (Ezana's
+         convert, Piye's copy) live on ctx for the turn and are honoured by
+         choosePlacement for every later card. */
       cardBias: function (cardId, ctx) {
         var hand = (ctx && ctx.hand) || G.aiHand || [];
         var deck = G.aiDeck || [];
@@ -2104,97 +2102,173 @@
         /* Trade Network and the Natural Resources are the second route into the
            deck: each swap is another draw, and the deck is where Piye is. */
         if (cardId === 86 && piyeReachable) return 2.5;
+        /* THE IRON FURNACE (87): _serfValue prices it as a 1-IP body for 2 CC —
+           its End-of-Turn +1 to OTHER Labor here is invisible to the evaluator —
+           so it sat in hand all battle. Worth what it will forge: +1.5 per own
+           Labor card already down or staged this turn (it will stand beside them,
+           see choosePlacement). With nothing to forge it ranks BELOW the Farmers,
+           so they stage first and it follows them. */
+        if (cardId === 87) {
+          var labor = _kushOwnTotal(_kushIsLabor);
+          return labor ? Math.min(4.5, 1.5 * labor) : -0.75;
+        }
+        /* APEDEMAK (81): his whole value is re-firing Military At Onces at his
+           location. With none down or staged he is a 3-IP body that must NOT be
+           picked before the Archers — rank him under them; once they are staged
+           the loop re-scores and he rises, and choosePlacement puts him with
+           them. Selection order is commit order is reveal order (equal reveal
+           keys sort stably), so picking him AFTER the Archers also reveals him
+           after them — which his re-fire needs. */
+        if (cardId === 81) {
+          var mil = _kushOwnTotal(_kushIsMilAtOnce);
+          return mil ? Math.min(4, 2 * mil) : -4;
+        }
+        /* KING EZANA (83): claim a roomy location EARLY, before this turn's other
+           plays fill it (the reservation in choosePlacement then keeps the second
+           slot open). With no location holding two openings he stays a body. */
+        if (cardId === 83) return _kushAnyLocWithFree(2) ? 1.5 : 0;
         var c = _serfCardOf(cardId);
         if (c && c.abilityName === 'Natural Resource' && piyeReachable) return 1.5;
         return 0;
       },
 
+      /* Do not spend a turn on a card that can do nothing yet. Non-final turns
+         only (the shared loop always plays on the last turn). */
+      holdCard: function (cardId, ctx) {
+        var hand = (ctx && ctx.hand) || G.aiHand || [];
+        if (cardId === 81) {   // Apedemak: nothing Military on board or in hand → wait
+          return !_kushOwnTotal(_kushIsMilAtOnce) && !hand.some(function (id) { return id !== 81 && _kushIsMilAtOnce({ cardId: id }); });
+        }
+        if (cardId === 87) {   // Furnace: nothing Labor on board or in hand → wait
+          return !_kushOwnTotal(_kushIsLabor) && !hand.some(function (id) { return id !== 87 && _kushIsLabor({ cardId: id }); });
+        }
+        return false;
+      },
+
       playBias: function (cardId, locId, ctx) {
         var c = _serfCardOf(cardId);
         if (!c) return 0;
+        // A location holding a reservation for this turn is not a place for a
+        // card that would take the reserved slot (ranking half; placement half
+        // is in choosePlacement).
+        if (_kushFreeAt(locId) <= _kushReserved(ctx, locId)) return -9;
 
-        /* KING EZANA (83) NEEDS TWO OPENINGS HERE, NOT ONE. His At Once converts
-           a card out of the opponent's deck TO THIS LOCATION, so a slot has to
-           still be free AFTER he has taken one himself. Checked before the
-           location-ability lookup below because it is not about the location's
-           ability at all — it applies on every location, including plain ones
-           (which return 0 early and would skip this).
-           WHY THIS IS AI-ONLY IN PRACTICE: the player picks a slot by hand and
-           can see the board fill up; the evaluator just takes the best-scoring
-           opening, which is very often the LAST one at a contested location —
-           and Ezana then landed with nowhere to put the convert and fizzled
-           silently, every time. Same class as the location-ability blind spot:
-           a card whose payoff depends on board SPACE is invisible to a scorer
-           that only prices IP.
-           Soft, not a veto: if every location is this tight he is still
-           playable as a 4-IP body, which is the correct fallback. */
-        if (cardId === 83) {
-          var _free = 0;
-          (G.aiSlots[locId] || []).forEach(function (s) { if (!s) _free++; });
-          if (_free < 2) return -6;
-        }
+        /* KING EZANA (83) NEEDS TWO OPENINGS HERE, NOT ONE — his At Once converts
+           a card TO THIS LOCATION, so a slot has to be free AFTER he takes one.
+           Soft: with every location this tight he is still a 4-IP body. */
+        if (cardId === 83 && _kushFreeAt(locId) < 2) return -6;
+        // The Furnace ranks by the Labor it would forge here (see choosePlacement).
+        if (cardId === 87) return 1.5 * _kushOwnAt(locId, _kushIsLabor);
+        // Apedemak ranks by the Military At Onces he would re-fire here.
+        if (cardId === 81) return 2 * _kushOwnAt(locId, _kushIsMilAtOnce);
 
         var key = null;
         for (var i = 0; i < G.locations.length; i++) {
           if (G.locations[i].id === locId) { key = G.locations[i].abilityKey; break; }
         }
         if (!key) return 0;
-
         // NAPATA — Piye here carries the +1 stamp into the copy he makes.
         if (key === 'POLITICAL_PLUS_1_STAMP') {
           if (cardId === 78) return 4;                       // the stamp doubles on him
           return (c.type === 'Political') ? 1.5 : -0.5;
         }
         /* MEROE — repeats AT ONCE abilities only. Being Labor/Economic is not
-           enough: The Iron Furnace (87) is Labor but its hook is endOfTurn, and
-           Trade Network (86) is Economic but its hook is onCardLandedHere — the
-           spec excludes it explicitly. Neither gains anything here, so neither is
-           biased toward it. The real targets in this deck are Papyrus-Economic
-           (74) and the Egypt Farmer (55), both Labor/Economic WITH an onAtOnce. */
+           enough: the Furnace's hook is endOfTurn and Trade Network's is
+           onCardLandedHere. The real targets are Papyrus-Economic (74) and the
+           Egypt Farmer (55), Labor/Economic WITH an onAtOnce. */
         if (key === 'REPEAT_LABOR_ECONOMIC_AT_ONCE') {
-          var qualifies = (c.type === 'Labor' || c.type === 'Economic') &&
-                          _kushHasAtOnce(cardId);
+          var qualifies = (c.type === 'Labor' || c.type === 'Economic') && _kushHasAtOnce(cardId);
           return qualifies ? 3 : -0.5;
         }
-        // NUBIAN GOLD MINES — Apedemak wants to stand where the Archers are, so
-        // his trigger re-fires Volley. Track where the Archers actually are
-        // rather than assuming a location.
-        if (key === 'GOLD_CHANCE_ON_PLAY') {
-          if (cardId === 81) {                               // Apedemak
-            var archersHere = (G.aiSlots[locId] || []).some(function (sd) {
-              return sd && sd.revealed && sd.cardId === 85;
-            });
-            return archersHere ? 4 : 0.5;
-          }
-          if (cardId === 85) return 1;                       // Archers seed the combo
-        }
+        if (key === 'GOLD_CHANCE_ON_PLAY' && cardId === 85) return 1;   // Archers seed the combo
         return 0;
       },
 
       choosePlacement: function (cardId, legalLocs, ctx) {
-        var byKey = function (k) {
-          for (var i = 0; i < G.locations.length; i++) {
-            if (G.locations[i].abilityKey === k) return G.locations[i].id;
-          }
+        var napata = _kushLocByKey('POLITICAL_PLUS_1_STAMP');
+        var meroe  = _kushLocByKey('REPEAT_LABOR_ECONOMIC_AT_ONCE');
+        var legal  = function (l) { return l != null && legalLocs.indexOf(l) !== -1; };
+
+        // Piye takes Napata whenever it is open — the stamp is the whole plan —
+        // and his copy needs a free slot SOMEWHERE ELSE at reveal: reserve one at
+        // the roomiest other location so this turn's later plays leave it.
+        if (cardId === 78) {
+          var pLoc = legal(napata) ? napata : null;
+          var home = (pLoc != null) ? pLoc : legalLocs[0];
+          var other = _kushBestLoc(legalLocs.filter(function (l) { return l !== home; }), _kushFreeAt);
+          if (other != null && _kushFreeAt(other) >= 1) _kushReserve(ctx, other, 1);
+          return pLoc;
+        }
+        // Apedemak stands where the most of his own Military At Onces are —
+        // down already or staged this turn. None anywhere → shared default.
+        if (cardId === 81) {
+          var aLoc = _kushBestLoc(legalLocs, function (l) { return _kushOwnAt(l, _kushIsMilAtOnce); });
+          return (aLoc != null && _kushOwnAt(aLoc, _kushIsMilAtOnce) > 0) ? aLoc : null;
+        }
+        // The Furnace stands where the most of its own Labor is (Meroe on a tie,
+        // since that is where the Farmers are steered). None anywhere → default.
+        if (cardId === 87) {
+          var fLoc = _kushBestLoc(legalLocs, function (l) { return _kushOwnAt(l, _kushIsLabor) + (l === meroe ? 0.1 : 0); });
+          return (fLoc != null && _kushOwnAt(fLoc, _kushIsLabor) > 0) ? fLoc : null;
+        }
+        // Ezana takes the roomiest location and RESERVES the second slot there for
+        // his convert. No location with two openings → he is a body; default.
+        if (cardId === 83) {
+          var eLoc = _kushBestLoc(legalLocs, _kushFreeAt);
+          if (eLoc != null && _kushFreeAt(eLoc) >= 2) { _kushReserve(ctx, eLoc, 1); return eLoc; }
           return null;
-        };
-        var napata = byKey('POLITICAL_PLUS_1_STAMP');
-        var meroe  = byKey('REPEAT_LABOR_ECONOMIC_AT_ONCE');
-        var mines  = byKey('GOLD_CHANCE_ON_PLAY');
-        // Piye takes Napata whenever it is open — the stamp is the whole plan.
-        if (cardId === 78 && napata != null && legalLocs.indexOf(napata) !== -1) return napata;
-        // Apedemak follows the Archers.
-        if (cardId === 81 && mines != null && legalLocs.indexOf(mines) !== -1 &&
-            (G.aiSlots[mines] || []).some(function (sd) { return sd && sd.revealed && sd.cardId === 85; })) {
-          return mines;
         }
         var c = _serfCardOf(cardId);
-        if (c && (c.type === 'Labor' || c.type === 'Economic') && _kushHasAtOnce(cardId) &&
-            meroe != null && legalLocs.indexOf(meroe) !== -1) return meroe;
-        return null;
+        if (c && (c.type === 'Labor' || c.type === 'Economic') && _kushHasAtOnce(cardId) && legal(meroe)) return meroe;
+
+        /* EVERYTHING ELSE: honour this turn's reservations, otherwise defer to the
+           shared default (null) so behaviour is byte-identical when nothing is
+           reserved. With a reservation live, choose only among locations that
+           keep their reserved slot: the shared spread on positional turns, random
+           before that — the same shapes the default would have used. */
+        var allowed = legalLocs.filter(function (l) { return _kushFreeAt(l) > _kushReserved(ctx, l); });
+        if (!allowed.length || allowed.length === legalLocs.length) return null;
+        var turns = (G.config && G.config.structure && G.config.structure.turns) || 5;
+        var turn  = (ctx && typeof ctx.turn === 'number') ? ctx.turn : G.turn;
+        if (turn >= turns - 1) return _giantLeastAheadLoc(allowed);
+        return allowed[Math.floor(Math.random() * allowed.length)];
       }
     }
   };
+
+  /* ── Kush signature helpers ─────────────────────────────────────────────
+     "Own" counts include cards STAGED this turn (_serfStub) as well as revealed
+     ones: that is the board as it will stand at reveal, which is what every
+     "stand beside X" rule cares about. Unrevealed real commits never exist
+     during selection (commitPlay runs after the selector returns). */
+  function _kushLocByKey(k) {
+    for (var i = 0; i < G.locations.length; i++) if (G.locations[i].abilityKey === k) return G.locations[i].id;
+    return null;
+  }
+  function _kushOwnAt(locId, pred) {
+    return (G.aiSlots[locId] || []).filter(function (s) { return s && (s.revealed || s._serfStub) && pred(s); }).length;
+  }
+  function _kushOwnTotal(pred) {
+    var n = 0; G.locations.forEach(function (l) { n += _kushOwnAt(l.id, pred); }); return n;
+  }
+  function _kushFreeAt(locId) { return (G.aiSlots[locId] || []).filter(function (s) { return s === null; }).length; }
+  function _kushAnyLocWithFree(n) { return G.locations.some(function (l) { return _kushFreeAt(l.id) >= n; }); }
+  function _kushIsLabor(s)     { var c = _serfCardOf(s.cardId); return !!(c && c.type === 'Labor') && s.cardId !== 87; }   // the Furnace forges OTHER Labor
+  function _kushIsMilAtOnce(s) { var c = _serfCardOf(s.cardId); return !!(c && c.type === 'Military' && _kushHasAtOnce(s.cardId)); }
+  /* Per-turn slot reservations, kept on ctx (one ctx object per selection
+     turn, so they clear themselves). reserved(loc) = how many slots must stay
+     open there after this turn's plays. */
+  function _kushReserved(ctx, locId) { return (ctx && ctx._kushReserve && ctx._kushReserve[locId]) || 0; }
+  function _kushReserve(ctx, locId, n) {
+    if (!ctx || locId == null) return;
+    if (!ctx._kushReserve) ctx._kushReserve = {};
+    ctx._kushReserve[locId] = Math.max(_kushReserved(ctx, locId), n);
+  }
+  function _kushBestLoc(locs, scoreFn) {
+    var best = null;
+    (locs || []).forEach(function (l) { var v = scoreFn(l); if (best === null || v > best.v) best = { l: l, v: v }; });
+    return best ? best.l : null;
+  }
 
   /* ── Ramses signature helpers ───────────────────────────────────────────
      Kept beside the signature rather than inline so the hooks stay readable.
