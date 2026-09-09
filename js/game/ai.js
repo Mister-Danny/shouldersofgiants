@@ -75,19 +75,10 @@
       if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(locId, 'ai')) return;
       var slotIndex = G.aiSlots[locId].indexOf(null);
       if (slotIndex === -1) return;
-      // Resurrection bonus stored as named ipMod entry (parity with player commitPlay)
-      var resBonus  = G.aiCardIPBonus[cardId] || 0;
-      var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
-      var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
-      // Papyrus (54) state-copy inheritance — consume the AI side's pending copy
-      // bonus into this play's ipMod (parity with the player's commitPlay).
-      var _copyB = (G.copyIPBonus && G.copyIPBonus.opp && G.copyIPBonus.opp[cardId]) || 0;
-      if (_copyB) {
-        resBonus += _copyB;
-        resSources.push({ source: 'Papyrus', delta: _copyB });
-        delete G.copyIPBonus.opp[cardId];
-      }
-      var _sd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
+      // In-hand bonuses (resurrection chain, stamps, Papyrus copy) folded in with
+      // attribution and consumed — parity with the player's commitPlay.
+      var _sd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
+      SOG.board.applyPrePlayBonuses(_sd, 'ai', cardId, { copy: true });
       // Adventure battles relocate a move-capable AI card (Chariot) post-reveal
       // via runAdventureMovements, whose "not on the card's OWN reveal turn" guard
       // reads turnPlayed (parity with the player's commitPlay; the removed bespoke
@@ -243,18 +234,10 @@
         ? SOG.board.effectiveCost(card, t.locId, 'ai') : card.cc;
       if (cost > budget) return;
 
-      // Resurrection bonus stored as named ipMod entry (parity with player commitPlay)
-      var resBonus  = G.aiCardIPBonus[cardId] || 0;
-      var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
-      var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
-      // Papyrus (54) state-copy inheritance — consume the AI side's pending bonus.
-      var _ecopyB = (G.copyIPBonus && G.copyIPBonus.opp && G.copyIPBonus.opp[cardId]) || 0;
-      if (_ecopyB) {
-        resBonus += _ecopyB;
-        resSources.push({ source: 'Papyrus', delta: _ecopyB });
-        delete G.copyIPBonus.opp[cardId];
-      }
-      G.aiSlots[t.locId][t.slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources };
+      // In-hand bonuses folded in with attribution and consumed (see commitPlay above).
+      var _esd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
+      SOG.board.applyPrePlayBonuses(_esd, 'ai', cardId, { copy: true });
+      G.aiSlots[t.locId][t.slotIndex] = _esd;
       // Remove ONE instance (filter would delete both copies of a duplicated id).
       var _ehi = G.aiHand.indexOf(cardId);
       if (_ehi !== -1) G.aiHand.splice(_ehi, 1);

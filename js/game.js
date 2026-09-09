@@ -3,7 +3,9 @@
  *
  * Slot ordering:     Cards fill left-to-right; gaps compact left on removal.
  * Reveal ordering:   Sequential, alternating player/AI, ~800 ms apart.
- * IP model:          slotData.ip  = base IP at time of play (card.ip + G.cardIPBonus)
+ * IP model:          slotData.ip  = the card's printed IP (G.cardIPBonus and every
+ *                    other pre-play bonus arrive as attributed ipMod entries — see
+ *                    board.applyPrePlayBonuses)
  *                    slotData.ipMod  = permanent modifier (reset by Justinian)
  *                    slotData.contMod = continuous modifier (recalculated each pass)
  *                    effectiveIP(s) = s.ip + s.ipMod + s.contMod
@@ -321,8 +323,13 @@
     // plays. A flag, not a counter (Farmers don't stack), and deliberately NOT
     // cleared by nextTurn — it waits across turns until a card consumes it.
     G.pendingIPBuff          = { player: 0, opp: 0 };
+    G.pendingIPBuffSources   = { player: [], opp: [] };   // one source descriptor per armed +1 (the arming Farmer, or the Rosetta acting as one)
     G.cardIPBonus            = {};
     G.aiCardIPBonus          = {};
+    // In-hand STAMPS on a card id (Amenirdis → Piye): side → { cardId: [ { type, id, delta } ] }.
+    // Parallel to cardIPBonus; each entry is one attributed +N, consumed when that
+    // card enters the board (board.applyPrePlayBonuses), re-credited on undo.
+    G.cardIPBonusSource      = { player: {}, opp: {} };
     // Papyrus (54) state-copy: PERMANENT ipMod inherited by a pending copy in
     // hand, keyed per side by cardId; consumed (deleted) when the copy is played.
     G.copyIPBonus            = { player: {}, opp: {} };
@@ -526,8 +533,10 @@
       if (!card) return;
       var locId = a.toLocId;
       if (locId == null || !G.aiSlots[locId]) return;
-      var baseIP = card.ip + (G.aiCardIPBonus[a.cardId] || 0);
-      var sd = { cardId: a.cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
+      // Base stays the printed IP; the remote side's in-hand bonuses arrive as
+      // attributed ipMod entries (same fold as ai.js commitPlay).
+      var sd = { cardId: a.cardId, ip: card.ip, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
+      SOG.board.applyPrePlayBonuses(sd, 'ai', a.cardId, { copy: true });
       var slotIndex = G.aiSlots[locId].indexOf(null);
       if (slotIndex === -1) {
         // Full here. Legal only if a move logged above vacates this location
@@ -846,9 +855,9 @@
     // Apply MOVE_IN_GAINS_IP at destination
     var dl = G.locations.find(function (l) { return l.id === toLocId; });
     if (dl && dl.abilityKey === 'MOVE_IN_GAINS_IP') {
-      addIPMod(sd, 1, 'The Cape of Good Hope');
+      addIPMod(sd, 1, dl);
       ipModAdded += 1;
-      ipModSourcesAdded.push({ source: 'The Cape of Good Hope', delta: 1 });
+      ipModSourcesAdded.push({ source: dl.name, delta: 1, type: 'location', id: dl.id });
     }
 
     toIndex = slots[toLocId].indexOf(null);
@@ -866,9 +875,9 @@
 
     // Magellan: +1 IP per move
     if (cardId === 24) {
-      addIPMod(sd, 1, 'Magellan');
+      addIPMod(sd, 1, 24);
       ipModAdded += 1;
-      ipModSourcesAdded.push({ source: 'Magellan', delta: 1 });
+      ipModSourcesAdded.push({ source: 'Magellan', delta: 1, type: 'card', id: 24 });
       if (owner === 'player') G.movedThisTurn[24]   = true;
       else                    G.aiMovedThisTurn[24]  = true;
       refreshSlotIPDisplays();
@@ -901,7 +910,7 @@
         oppSlots[toLocId].forEach(function (s) {
           if (!s || !s.revealed) return;
           var c = CARDS.find(function (x) { return x.id === s.cardId; });
-          if (c && (c.type === 'Cultural' || c.type === 'Political')) addIPMod(s, -1, 'Christopher Columbus');
+          if (c && (c.type === 'Cultural' || c.type === 'Political')) addIPMod(s, -1, 25);
         });
         refreshSlotIPDisplays();
         updateScores();
@@ -1001,14 +1010,14 @@
     var ipModSourcesAdded = [];
     var dl = G.locations.find(function (l) { return l.id === toLocId; });
     if (dl && dl.abilityKey === 'MOVE_IN_GAINS_IP') {
-      addIPMod(sd, 1, 'The Cape of Good Hope');
+      addIPMod(sd, 1, dl);
       ipModAdded += 1;
-      ipModSourcesAdded.push({ source: 'The Cape of Good Hope', delta: 1 });
+      ipModSourcesAdded.push({ source: dl.name, delta: 1, type: 'location', id: dl.id });
     }
     if (cardId === 24) {
-      addIPMod(sd, 1, 'Magellan');
+      addIPMod(sd, 1, 24);
       ipModAdded += 1;
-      ipModSourcesAdded.push({ source: 'Magellan', delta: 1 });
+      ipModSourcesAdded.push({ source: 'Magellan', delta: 1, type: 'card', id: 24 });
     }
 
     // Mark moveLog entry as executed — prefer the entry queued for THIS exact
@@ -1102,7 +1111,7 @@
           if (!s || !s.revealed) return;
           var c = CARDS.find(function (x) { return x.id === s.cardId; });
           if (c && (c.type === 'Cultural' || c.type === 'Political')) {
-            addIPMod(s, -1, 'Christopher Columbus');
+            addIPMod(s, -1, 25);
             var affSlotEl = getSlotEl(oppOwner, toLocId, si);
             if (affSlotEl) affectedSlotEls.push(affSlotEl);
           }

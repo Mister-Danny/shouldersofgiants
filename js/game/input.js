@@ -58,9 +58,7 @@
   var effectiveCost         = SOG.board.effectiveCost;
   var effectiveIP           = SOG.board.effectiveIP;
   var isLocationPlayable    = SOG.board.isLocationPlayable;
-  var nextEventId           = SOG.board.nextEventId;
   var addBonus              = SOG.board.addBonus;
-  var SOURCE_ID_MAP         = SOG.board.SOURCE_ID_MAP;
   var refreshSlotIPDisplays = SOG.board.refreshSlotIPDisplays;
   var updateScores          = SOG.board.updateScores;
   var updateHeader          = SOG.board.updateHeader;
@@ -152,28 +150,19 @@
 
   /* Build the synthetic slot used to render a hand card in the info popup. */
   function buildHandPopupSd(card) {
-    var bonus = (card.id === 15) ? G.destroyedIPTotal : (G.cardIPBonus[card.id] || 0);
-    // Papyrus state-copy: a pending copy's inherited IP shows in the hand popup.
-    bonus += (G.copyIPBonus && G.copyIPBonus.player && G.copyIPBonus.player[card.id]) || 0;
-    var sources = [];
-    var bonuses = [];
-    if (bonus) {
-      var label = card.id === 15 ? 'Destroyed cards (William)' :
-                  card.id === 10 ? 'Jesus'                     :
-                  card.id === 12 ? 'Samurai'                   : 'Bonus';
-      sources.push({ source: label, delta: bonus });
-    }
-    var sd = { cardId: card.id, ip: card.ip, ipMod: bonus, ipModSources: sources, contMod: 0, contModSources: [], revealed: true, bonuses: bonuses, turnPlayed: G.turn };
+    var sd = { cardId: card.id, ip: card.ip, ipMod: 0, ipModSources: [], contMod: 0, contModSources: [], revealed: true, bonuses: [], turnPlayed: G.turn };
     // William (Pattern B): one thumbnail per destroyed card
     if (card.id === 15 && G.destroyedIPTotal > 0) {
+      sd.ipMod += G.destroyedIPTotal;
+      sd.ipModSources.push({ source: 'Destroyed cards (William)', delta: G.destroyedIPTotal, type: 'card', id: 15 });
       G.destroyedCards.forEach(function (dc) {
         addBonus(sd, dc.ip, 'card', dc.cardId, dc.eventId, 'B', false);
       });
-    } else if (bonus > 0) {
-      // Jesus / Samurai resurrection chain (Pattern A — own portrait)
-      var info = SOURCE_ID_MAP[label];
-      if (info) addBonus(sd, bonus, info.type, info.id, nextEventId(), info.pattern, false);
     }
+    // The same fold commitPlay will perform, WITHOUT consuming anything: the
+    // Jesus / Samurai chain, every in-hand stamp under its stamper's portrait
+    // (Amenirdis on Piye), and a pending Papyrus copy bonus.
+    SOG.board.applyPrePlayBonuses(sd, 'player', card.id, { copy: true, dryRun: true });
     return sd;
   }
 
@@ -804,36 +793,17 @@
     }
     clearSelection();  // any click/keyboard selection becomes stale after commit
 
-    // Resurrection-chain bonus (Jesus +3/return, Samurai +2/return) lives in
-    // G.cardIPBonus[cardId]. Store it as a named ipMod entry so the popup
-    // breakdown shows "Base IP: 5  |  Jesus: +3  |  Total: 8" instead of
-    // collapsing it into base IP. sd.ip stays at the card's immutable base.
-    var resBonus  = G.cardIPBonus[cardId] || 0;
-    // Carry-forward bonus attribution: Jesus/Samurai are id-specific; a
-    // Cuneiform hand-boost (G.cardIPBonusSource) attributes to Cuneiform so
-    // the IP breakdown shows its portrait; otherwise a generic "Bonus".
-    var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai'
-                  : (G.cardIPBonusSource && G.cardIPBonusSource[cardId]) || 'Bonus';
-    var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
-    // Papyrus (54) state-copy inheritance: a pending copy's inherited PERMANENT
-    // IP rides G.copyIPBonus until played — fold it into this play's ipMod
-    // (labelled 'Papyrus') and CONSUME the entry (once; undoPlay re-credits it).
-    // With a plain twin of the same id also in hand, the first play of that id
-    // takes the bonus — conserved, never duplicated.
-    var _copyB = (G.copyIPBonus && G.copyIPBonus.player && G.copyIPBonus.player[cardId]) || 0;
-    if (_copyB) {
-      resBonus += _copyB;
-      resSources.push({ source: 'Papyrus', delta: _copyB });
-      delete G.copyIPBonus.player[cardId];
-    }
     // Capture hand position so undoPlay can restore the card to the slot it
     // came from rather than appending to the end of the hand.
     var handIndex = G.playerHand.indexOf(cardId);
-    var newSd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: resBonus, contMod: 0, ipModSources: resSources, bonuses: [], handIndex: handIndex, turnPlayed: G.turn };
-    if (resBonus > 0) {
-      var resInfo = SOURCE_ID_MAP[resLabel];
-      if (resInfo) addBonus(newSd, resBonus, resInfo.type, resInfo.id, nextEventId(), resInfo.pattern, false);
-    }
+    // sd.ip stays at the card's immutable base. Everything the card carried IN
+    // HAND — the Jesus / Samurai resurrection chain, in-hand stamps (Amenirdis
+    // on Piye, consumed here so no later Piye inherits them), a Papyrus copy's
+    // inherited IP (consumed here) — is folded in through addIPMod by
+    // applyPrePlayBonuses, each under its own attribution. undoPlay re-credits
+    // whatever was consumed.
+    var newSd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [], handIndex: handIndex, turnPlayed: G.turn };
+    SOG.board.applyPrePlayBonuses(newSd, 'player', cardId, { copy: true });
     G.playerSlots[locId][si] = newSd;
     G.capital -= cost;
     if (typeof SFX !== 'undefined') SFX.capitalSpent();
@@ -856,7 +826,7 @@
       slotEl.dataset.cardId = cardId;
       slotEl.className = 'battle-card-slot occupied face-up unplayed';
       slotEl.draggable = true;
-      buildCardFace(slotEl, card, card.ip + resBonus, SOG.board.SLOT_ART);
+      buildCardFace(slotEl, card, effectiveIP(newSd), SOG.board.SLOT_ART);
     }
     updateHeader();
 
@@ -909,15 +879,10 @@
       ? Math.min(sd.handIndex, G.playerHand.length)
       : G.playerHand.length;
     G.playerHand.splice(insertIdx, 0, sd.cardId);
-    // Re-credit a consumed Papyrus copy-bonus: if this play folded an inherited
-    // 'Papyrus' amount into its ipMod (see commitPlay), return it to the pending
-    // table so the copy keeps its buffed state back in hand.
-    (sd.ipModSources || []).forEach(function (src) {
-      if (src && src.source === 'Papyrus' && src.delta) {
-        if (!G.copyIPBonus) G.copyIPBonus = { player: {}, opp: {} };
-        G.copyIPBonus.player[sd.cardId] = (G.copyIPBonus.player[sd.cardId] || 0) + src.delta;
-      }
-    });
+    // Re-credit what commitPlay consumed: a Papyrus copy bonus and any in-hand
+    // stamps go back to their id-keyed tables so the card keeps its buffed
+    // state back in hand.
+    SOG.board.recreditPrePlayBonuses(sd, 'player');
     G.playerSlots[locId][slotIndex] = null;
     compactPlayerSlots(locId);
     syncPlayerSlots(locId);
@@ -1030,12 +995,7 @@
     // read the Papyrus source(s) off the sd's ipModSources and route the delta back
     // to the id-keyed side-table. resetTurn only ever returns PLAYER cards.
     function recreditCopyBonus(sd) {
-      (sd && sd.ipModSources || []).forEach(function (src) {
-        if (src && src.source === 'Papyrus' && src.delta) {
-          if (!G.copyIPBonus) G.copyIPBonus = { player: {}, opp: {} };
-          G.copyIPBonus.player[sd.cardId] = (G.copyIPBonus.player[sd.cardId] || 0) + src.delta;
-        }
-      });
+      SOG.board.recreditPrePlayBonuses(sd, 'player');   // copy bonus AND in-hand stamps
     }
 
     // 1. Reset move-tracking flags for any queued moves

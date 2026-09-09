@@ -81,7 +81,14 @@
   var addIPMod              = SOG.board.addIPMod;
   var nextEventId           = SOG.board.nextEventId;
   var addBonus              = SOG.board.addBonus;
-  var SOURCE_ID_MAP         = SOG.board.SOURCE_ID_MAP;
+  /* Attribution helpers (board.js). addIPMod takes a SOURCE DESCRIPTOR, never a
+     name: srcOf(sd, fallbackId) is "the acting slot" — for a Rosetta Stone
+     carrying a transcribed ability that is the Rosetta herself; a location
+     object attributes to that location; entrySource(e) replays a stored
+     ipModSources entry under its original attribution. */
+  var srcOf                 = SOG.board.srcOf;
+  var entrySource           = SOG.board.entrySource;
+  var stampHandBonus        = SOG.board.stampHandBonus;
   var placeRevealedCard     = SOG.board.placeRevealedCard;
   var makeBoardGhost        = SOG.board.makeBoardGhost;
   var removeEl              = SOG.board.removeEl;
@@ -1449,10 +1456,10 @@
       var c = CARDS.find(function (x) { return x.id === sd.cardId; });
       if (!c) return;
       if (key === 'LABOR_PLUS_2_HERE' && c.type === 'Labor') {
-        addIPMod(sd, 2, loc.name || 'Euphrates River');
+        addIPMod(sd, 2, loc);
         sd._riverStamped = true; stamps++;
       } else if (key === 'MILITARY_PLUS_1_HERE' && c.type === 'Military') {
-        addIPMod(sd, 1, loc.name || 'Tigris River');
+        addIPMod(sd, 1, loc);
         sd._riverStamped = true; stamps++;
       }
     });
@@ -1494,10 +1501,16 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
          swallowed.
      The Farmer never buffs itself: the consume hook reads the count before this
      ability increments it. */
-  function armPendingIPBuff(owner) {
+  /* `source` is the arming slot's descriptor (srcOf(sd, 39)) — kept in a
+     parallel per-side list so each consumed +1 is attributed to the Farmer (or
+     the Rosetta acting as one) that armed it, not to a fixed card id. */
+  function armPendingIPBuff(owner, source) {
     if (!G.pendingIPBuff) G.pendingIPBuff = { player: 0, opp: 0 };
+    if (!G.pendingIPBuffSources) G.pendingIPBuffSources = { player: [], opp: [] };
     var side = owner === 'player' ? 'player' : 'opp';
     G.pendingIPBuff[side] = (G.pendingIPBuff[side] || 0) + 1;
+    if (!G.pendingIPBuffSources[side]) G.pendingIPBuffSources[side] = [];
+    G.pendingIPBuffSources[side].push(source || { type: 'card', id: 39 });
     return G.pendingIPBuff[side];        // the count AFTER this arming
   }
 
@@ -1515,12 +1528,14 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var n = G.pendingIPBuff[side] || 0;
     if (!n) return 0;
     G.pendingIPBuff[side] = 0;
-    for (var i = 0; i < n; i++) addIPMod(sd, 1, 'Farmer');
+    var srcs = (G.pendingIPBuffSources && G.pendingIPBuffSources[side]) || [];
+    if (G.pendingIPBuffSources) G.pendingIPBuffSources[side] = [];
+    for (var i = 0; i < n; i++) addIPMod(sd, 1, srcs[i] || { type: 'card', id: 39 });
     return n;
   }
 
   function abilityHarvestPendingIP(owner, locId, slotIndex, sd, done) {
-    var armed = armPendingIPBuff(owner);
+    var armed = armPendingIPBuff(owner, srcOf(sd, 39));
     /* ONE POP PER ARMING. The reveal-FX registry entry already played a pop for the
        FIRST arming as the Farmer flipped, so only ADDITIONAL armings need one here —
        and additional armings happen whenever something re-fires this At Once, which
@@ -1566,7 +1581,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
         el: el,
         // The stamp LANDING is the +1: apply the real IP, refresh, score, float.
         onLand: function () {
-          addIPMod(s, 1, 'Scribe');                // permanent one-time +1 IP
+          addIPMod(s, 1, srcOf(sd, 40));           // permanent one-time +1 IP, from THIS Scribe (or the Rosetta acting as one)
           evaluateContinuous();
           refreshSlotIPDisplays();
           updateScores();
@@ -1973,7 +1988,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       afterFnsFB.forEach(function (fn) { fn(); });
       var cortesSdFB = (slots[locId].indexOf(sd) !== -1) ? sd : null;   // the ACTOR banks the IP
       if (cortesSdFB && ipGainedFB > 0) {
-        addIPMod(cortesSdFB, ipGainedFB, 'Cortes');
+        addIPMod(cortesSdFB, ipGainedFB, srcOf(cortesSdFB, 13));
         SOG.ui.showIPFloat(owner, 13, ipGainedFB);
         var cIdx = slots[locId].indexOf(cortesSdFB);
         var cEl  = getSlotEl(owner, locId, cIdx);
@@ -2015,7 +2030,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
         if (typeof SFX !== 'undefined') SFX.mute(false);
         var cortesSd = (slots[locId].indexOf(sd) !== -1) ? sd : null;   // the ACTOR banks the IP
         if (cortesSd && ipGained > 0) {
-          addIPMod(cortesSd, ipGained, 'Cortes');
+          addIPMod(cortesSd, ipGained, srcOf(cortesSd, 13));
           SOG.ui.showIPFloat(owner, 13, ipGained);
           var cIdx    = slots[locId].indexOf(cortesSd);
           var cSlotEl = getSlotEl(owner, locId, cIdx);
@@ -2157,7 +2172,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       var found = false;
       slots[adjLocId].forEach(function (s, si) {
         if (!found && s && s.revealed) {
-          addIPMod(s, 2, 'Zheng He');
+          addIPMod(s, 2, srcOf(sd, 23));
           // Bounce animation + float number (replaces plain showIPFloat)
           var adjSlotEl = getSlotEl(owner, adjLocId, si);
           if (adjSlotEl && typeof Anim !== 'undefined') {
@@ -2231,7 +2246,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       function strike() {   // the real, one-time IP reduction (shown at impact)
         // Sphinx guards the target owner's cards here — block the reduction.
         if (!isSphinxProtected(oppSide, locId)) {
-          addIPMod(targetSd, -1, 'Soldier');
+          addIPMod(targetSd, -1, srcOf(actorSd, soldierCardId));
           SOG.ui.showIPFloat(oppSide, targetSd.cardId, -1);
         }
         evaluateContinuous();
@@ -2407,7 +2422,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var eid = nextEventId();
     function applyBoost() {
       targets.forEach(function (t) {
-        addIPMod(t.sd, 1, 'Cuneiform', eid);
+        addIPMod(t.sd, 1, srcOf(sd, 46), eid);
         if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
           SOG.ui.showIPFloat(owner, t.sd.cardId, 1);
         }
@@ -2464,7 +2479,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
         else                    { compactOppSlots(locId);    syncOppSlots(locId);    }
       }
       var gain = 3 + (isCultural(hostSd) ? 1 : 0);   // +3 base (its IP), +1 if Cultural
-      addIPMod(hostSd, gain, 'The Phoenicians');
+      addIPMod(hostSd, gain, srcOf(sd, 49));
       /* THE PASSENGERS RIDE ALONG. `gain` is only Phoenicians' BASE IP; anything
          that had accrued ON the Phoenicians slot before it dissolved — a Meso
          Farmer's pending +1 taken at reveal, a resurrection bonus folded in at
@@ -2476,7 +2491,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       var carried = 0;
       (sd && sd.ipModSources || []).forEach(function (src) {
         if (!src || !src.delta) return;
-        addIPMod(hostSd, src.delta, src.source);
+        addIPMod(hostSd, src.delta, entrySource(src), undefined, src.kind ? { kind: src.kind } : undefined);
         carried += src.delta;
       });
       /* Forwarding pointer for PRESENTATION. Effects that the reveal pipeline
@@ -2564,7 +2579,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     // The real strike, applied at the arrow's IMPACT beat (same card, same event).
     function applyStrike() {
       if (!isSphinxProtected(oppSide, toLocId)) {   // Sphinx guards the target's cards
-        addIPMod(best, delta, 'Chariot');
+        addIPMod(best, delta, srcOf(sd, delta === -2 ? 69 : 48));   // the arriving Chariot (48 Meso / 69 Egypt), not a fixed id
         SOG.ui.showIPFloat(oppSide, best.cardId, delta);
       }
       evaluateContinuous();
@@ -2600,7 +2615,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       G.locations.forEach(function (loc) {
         slots[loc.id].forEach(function (s) {
           if (s && s.revealed) {
-            addIPMod(s, 1, 'Jan Hus');
+            addIPMod(s, 1, 7);
             affected.push({ owner: owner, cardId: s.cardId });
           }
         });
@@ -2684,23 +2699,22 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       // newBonus = cumulative resurrection chain (+2 per death).
       // savedMod may contain external bonuses (Zheng He, Columbus, etc.)
       // that lived alongside the prior chain bonus in the old slot's ipMod.
-      // Subtract the prior chain (prevBonus) from savedMod to isolate external-only mods.
-      var externalMod     = Math.max(0, (savedMod.ipMod || 0) - prevBonus);
-      var externalSources = savedMod.ipModSources.filter(function (s) { return s.source !== 'Samurai'; });
-      var totalMod = newBonus + externalMod;
-      var sources  = externalSources.slice();
-      sources.push({ source: 'Samurai', delta: newBonus });
-      sd.ipMod        = totalMod;
-      sd.ipModSources = sources;
-      // Rebuild bonuses[] to match: Samurai chain + any surviving external bonuses
+      // The prior chain entry is dropped and the new cumulative one written;
+      // every external entry is REPLAYED through addIPMod under its original
+      // attribution, so the badge is the sum of exactly what the popup lists
+      // (the old path clamped the external lump at 0 while still listing a
+      // negative entry — the two could disagree).
+      var externalSources = (savedMod.ipModSources || []).filter(function (s) {
+        return s && s.delta && s.kind !== 'chain' && s.source !== 'Samurai';
+      });
+      sd.ipMod        = 0;
+      sd.ipModSources = [];
       if (!sd.bonuses) sd.bonuses = [];
       sd.bonuses = sd.bonuses.filter(function (b) { return b.continuous; });
-      if (newBonus > 0) addBonus(sd, newBonus, 'card', 12, nextEventId(), 'A', false);
       externalSources.forEach(function (esrc) {
-        var info = SOURCE_ID_MAP[esrc.source];
-        if (info) addBonus(sd, esrc.delta, info.type, info.id, nextEventId(), info.pattern, false);
-        else      addBonus(sd, esrc.delta, 'unknown', null, nextEventId(), 'A', false);
+        addIPMod(sd, esrc.delta, entrySource(esrc), undefined, esrc.kind ? { kind: esrc.kind } : undefined);
       });
+      if (newBonus > 0) addIPMod(sd, newBonus, 12, undefined, { kind: 'chain' });
       if (slotEl) {
         var ipEl = slotEl.querySelector('.db-overlay-ip');
         if (ipEl) ipEl.textContent = effectiveIP(sd);
@@ -3154,7 +3168,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var loc = G.locations.find(function (l) { return l.id === destLocId; });
     if (!loc || !loc.abilityKey) return;
     if (loc.abilityKey === 'MOVE_HERE_IP' && movedSlot) {
-      addIPMod(movedSlot, 1, 'Punt');
+      addIPMod(movedSlot, 1, loc);
       evaluateContinuous();
       refreshSlotIPDisplays();
       updateScores();
@@ -3186,7 +3200,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
 
     // 1. Merchant's own +1 IP — UNCONDITIONAL, banked at the CURRENT location
     //    before the move.
-    addIPMod(ctx.slot, 1, 'Merchant');
+    addIPMod(ctx.slot, 1, srcOf(ctx.slot, MERCHANT_ID));
     if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
       SOG.ui.showIPFloat(owner, MERCHANT_ID, 1);
     }
@@ -3205,7 +3219,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       for (var i = 0; i < landedSlots.length; i++) {
         var ls = landedSlots[i];
         if (ls && ls.cardId === ctx.landedCardId) {
-          addIPMod(ls, 1, 'Merchant');
+          addIPMod(ls, 1, srcOf(ctx.slot, MERCHANT_ID));
           if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
             SOG.ui.showIPFloat(ctx.landedOwner, ctx.landedCardId, 1);
           }
@@ -3271,14 +3285,15 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
 
      They are otherwise ORDINARY Economic cards — the Merchant reacts to them
      as it does to any Economic play (single reaction, no At-Once re-fire). */
-  function _atOnceTypeBuffHere(owner, locId, type, amount, sourceName, done) {
+  function _atOnceTypeBuffHere(owner, locId, type, amount, source, done) {
     done = typeof done === 'function' ? done : function () {};
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var hits = 0;
+    var sourceName = SOG.board.resolveSource(source).name;
     forEachRevealedAt(slots, locId, function (s) {
       var c = CARDS.find(function (x) { return x.id === s.cardId; });
       if (!c || c.type !== type) return;
-      addIPMod(s, amount, sourceName);
+      addIPMod(s, amount, source);
       hits++;
       if (SOG.ui && typeof SOG.ui.showIPFloat === 'function') {
         SOG.ui.showIPFloat(owner, s.cardId, amount);
@@ -3350,11 +3365,11 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
   }
 
   function abilityPapyrusEconomic(owner, locId, slotIndex, sd, done) {
-    _atOnceTypeBuffHere(owner, locId, 'Scientific', 2, 'Papyrus', done);
+    _atOnceTypeBuffHere(owner, locId, 'Scientific', 2, srcOf(sd, 74), done);
   }
   /* Purple Dye (75). */
   function abilityPurpleDye(owner, locId, slotIndex, sd, done) {
-    _atOnceTypeBuffHere(owner, locId, 'Political', 2, 'Purple Dye', done);
+    _atOnceTypeBuffHere(owner, locId, 'Political', 2, srcOf(sd, 75), done);
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -3560,7 +3575,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var el = actorSlotEl(owner, locId, sd, slotIndex);
     var rfx = window.SOG && SOG.RevealFx;
     var tick = function () {
-      addIPMod(sd, 1, 'Megalith');            // permanent +1, cumulative across turns
+      addIPMod(sd, 1, srcOf(sd, 31));         // permanent +1, cumulative across turns
       if (typeof SFX !== 'undefined' && SFX.eotGain) SFX.eotGain();
       refreshSlotIPDisplays();                 // IP number updates in sync with the sweep
       updateScores();
@@ -3582,7 +3597,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var el  = actorSlotEl(owner, locId, sd, slotIndex);   // the actor, by identity
     var rfx = window.SOG && SOG.RevealFx;
     var tick = function () {
-      addIPMod(sd, 1, 'Obelisk');
+      addIPMod(sd, 1, srcOf(sd, 59));
       if (typeof SFX !== 'undefined' && SFX.eotGain) SFX.eotGain();
       refreshSlotIPDisplays();
       updateScores();
@@ -3619,7 +3634,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       targets.push({
         el: getSlotEl(owner, locId, i),
         onLand: function () {
-          addIPMod(s, 1, 'Scribe');                          // permanent one-time +1 IP
+          addIPMod(s, 1, srcOf(sd, 56));                     // permanent one-time +1 IP, from THIS Egypt Scribe
           evaluateContinuous();
           refreshSlotIPDisplays();
           updateScores();
@@ -3705,7 +3720,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
          back out of the badge after the engine wrote it. No separate float — the
          swap IS the indicator. */
       function absorb() {
-        if (raSd && gain !== 0) addIPMod(raSd, gain, 'Ra');
+        if (raSd && gain !== 0) addIPMod(raSd, gain, srcOf(raSd, 63));
         evaluateContinuous();
         refreshSlotIPDisplays();
         updateScores();
@@ -3773,15 +3788,21 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
   function abilityPiye(owner, locId, slotIndex, sd, done) {
     var dest = kushOtherOpenLoc(owner, locId);
     if (dest == null) { done(); return; }                    // nowhere else → fizzle
-    /* The copy inherits the ORIGINAL's ipMod via placeRevealedCard's extraIpMod.
-       That is what makes Napata's +1 a STAMP rather than an aura: play Piye at
-       Napata, and the copy he sends elsewhere carries the +1 with it. Without
-       this the copy is built from the card definition and arrives at base IP.
-       cardIPBonus (Amenirdis' in-hand +1) is added by placeRevealedCard itself,
-       so it is not passed here — doing so would count it twice. */
+    /* EVERYTHING TRANSFERS AT REVEAL, NOTHING AFTER. The copy REPLAYS the
+       original's ipModSources entry by entry (carrySources), so it carries every
+       permanent modifier the original has at this moment — Napata's stamp, a
+       Purple Dye's +2, Amenirdis' +1 — each under its own attribution, not as a
+       lump. That is what makes Napata's +1 a STAMP rather than an aura.
+       skipHandBonus: the original's Amenirdis stamp was CONSUMED when it was
+       played and already rides in its ipModSources; anything still sitting in
+       cardIPBonus[78] belongs to a different Piye in hand. (The old path passed
+       ipMod as an unattributed lump AND let placeRevealedCard re-add the in-hand
+       accumulator — the stamp was counted twice and the lump was invisible.)
+       Buffs applied to either Piye after this moment do not reach the other. */
     var pSlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
     var destIdx = (pSlots[dest] || []).indexOf(null);         // captured BEFORE placing (fills the first null)
-    if (!SOG.board.placeRevealedCard(owner, dest, 78, sd ? (sd.ipMod || 0) : 0)) { done(); return; }
+    var carry   = (sd && sd.ipModSources) ? sd.ipModSources.slice() : [];
+    if (!SOG.board.placeRevealedCard(owner, dest, 78, 0, { carrySources: carry, skipHandBonus: true })) { done(); return; }
     /* STATE COMMITTED. The bubble is presentation: the copy is already in its slot
        and is held hidden by the FX until the bubble lands there. Both players see
        it — it happens on the board. */
@@ -3890,34 +3911,59 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var inHand = (kushFetchPiye(owner) === 78);               // deck -> hand, or already there
     var handEl = (inHand && owner === 'player') ? _lastHandCardEl(78) : null;
     var from   = _badgeText(handEl, '.db-overlay-ip');        // the badge BEFORE the stamp
-    var bag    = owner === 'player' ? G.cardIPBonus : G.aiCardIPBonus;
-    if (inHand && bag) bag[78] = (bag[78] || 0) + 1;          // +1 IP, the existing accumulator — STATE
+    /* +1 IP as an ATTRIBUTED in-hand stamp — STATE. cardIPBonus[78] still carries
+       the number (the hand badge reads it), and the parallel cardIPBonusSource
+       ledger names THIS Amenirdis (or the Rosetta acting as her) so the play
+       folds it in under her portrait, once, and consumes it. */
+    if (inHand) stampHandBonus(owner, 78, 1, srcOf(sd, 80));
 
+    /* PIYE ALREADY ON THE BOARD (him and/or his copy): STATE FIRST — the +1 is
+       written now — but the badge is not repainted here. It morphs to the
+       recorded number under amenirdis.mp3 below (ipBadgeSwap reads the old
+       text, applyFn repaints, the new number pops in), so the sound and the IP
+       going up are one beat, the way the hand arrival already does it. */
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var onBoard = 0;
+    var boardPiyes = [];
     G.locations.forEach(function (l) {
-      (slots[l.id] || []).forEach(function (s) {
+      (slots[l.id] || []).forEach(function (s, i) {
         if (!s || !s.revealed || s.cardId !== 78) return;
-        addIPMod(s, 1, 'Amenirdis I');
-        onBoard++;
-        if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(owner, 78, 1);
+        addIPMod(s, 1, srcOf(sd, 80));
+        boardPiyes.push(getSlotEl(owner, l.id, i));
       });
     });
+    var onBoard = boardPiyes.length;
 
     if (!inHand && !onBoard) { done(); return; }              // no Piye anywhere -> fizzle
-    if (onBoard) { evaluateContinuous(); refreshSlotIPDisplays(); updateScores(); }
+    var boardSfxPlayed = false;
+    var afterBoard = function (next) {
+      if (!onBoard) { next(); return; }
+      var repaint = function () { evaluateContinuous(); refreshSlotIPDisplays(); updateScores(); };
+      var rfx = window.SOG && SOG.RevealFx;
+      var els = boardPiyes.filter(Boolean);
+      if (!rfx || typeof rfx.ipBadgeSwap !== 'function' || !els.length) { repaint(); next(); return; }
+      _kushSfx('sfx/amenirdis.mp3');                          // ONE clip for the batch
+      boardSfxPlayed = true;
+      var pending = els.length;
+      els.forEach(function (el) {                             // the original AND the copy morph together
+        rfx.ipBadgeSwap(el, repaint, function () { if (--pending === 0) next(); });
+      });
+    };
     /* Repaint the hand badge IN PLACE rather than rebuilding the hand: a rebuild
        would replace the very element the arrival flourish is about to fly into. */
     if (owner === 'player' && window.SOG && SOG.input && typeof SOG.input.refreshHandIPDisplays === 'function') {
       SOG.input.refreshHandIPDisplays();
     }
-    if (!inHand || owner !== 'player') {                     // nothing arrives in a hand the player can see
-      if (owner !== 'player' && SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
-      done(); return;
-    }
-    _piyeArrival(handEl, !wasInHand,
-      { sfx: 'sfx/amenirdis.mp3', badgeSel: '.db-overlay-ip', from: from, to: _badgeText(handEl, '.db-overlay-ip') },
-      done);
+    afterBoard(function () {
+      if (!inHand || owner !== 'player') {                   // nothing arrives in a hand the player can see
+        if (owner !== 'player' && SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
+        done(); return;
+      }
+      // Piye in hand as well as on the board: the clip already played for the
+      // board morph, so the arrival flourish runs its visual without a second one.
+      _piyeArrival(handEl, !wasInHand,
+        { sfx: boardSfxPlayed ? null : 'sfx/amenirdis.mp3', badgeSel: '.db-overlay-ip', from: from, to: _badgeText(handEl, '.db-overlay-ip') },
+        done);
+    });
   }
 
   /* ── APEDEMAK (81) — "Lion of War" ──────────────────────────────────────────
@@ -3997,7 +4043,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       });
     });
     if (n <= 0) { done(); return; }                          // no Egypt cards here -> silent
-    addIPMod(sd, n, 'Queen Shanakhdakheto', nextEventId());   // STATE FIRST
+    addIPMod(sd, n, srcOf(sd, 82), nextEventId());            // STATE FIRST
     /* The badge still shows the old number (nothing has repainted yet), so
        ipBadgeSwap captures it, the repaint inside applyFn writes the recorded
        one, and the morph is old -> recorded. done on the morph, not the clip:
@@ -4107,7 +4153,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var eid = nextEventId();
     var targets = picks.map(function (t) {
       var pre = effectiveIP(t.s);
-      addIPMod(t.s, -1, 'Nubian Archers', eid);               // STATE
+      addIPMod(t.s, -1, srcOf(sd, 85), eid);                  // STATE
       _holdBadgeAt(t.s, pre);                                  // …painted on impact
       return {
         el: getSlotEl(oppSide, t.locId, t.i),
@@ -4241,7 +4287,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       var c = CARDS.find(function (x) { return x.id === abilityIdOf(s); });
       if (!c || c.type !== 'Labor') return;
       var pre = effectiveIP(s);
-      addIPMod(s, 1, 'The Iron Furnace', nextEventId());     // STATE FIRST
+      addIPMod(s, 1, srcOf(sd, 87), nextEventId());          // STATE FIRST
       _holdBadgeAt(s, pre);                                    // …painted as the flame lights
       hits.push({ s: s, el: getSlotEl(owner, locId, i) });
     });
@@ -4467,7 +4513,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
         sd = (slots[r.locId] || []).find(function (x) { return x && x.cardId === r.cardId; });
       }
       if (!sd) return;
-      addIPMod(sd, 1, 'Napata', nextEventId());
+      addIPMod(sd, 1, loc, nextEventId());
       n++;
     });
     return n;
@@ -4768,7 +4814,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
        failure path in the flourish calls absorb() anyway, so the IP cannot be lost.
        Nothing mutates in between: the reveal pipeline is gated on this done(). */
     function absorb() {
-      addIPMod(pyramidSd, gain, 'Pyramid');
+      addIPMod(pyramidSd, gain, srcOf(pyramidSd, 57));
       // No +N float: the badge swap IS Pyramid's IP-change indicator, and stacking a
       // float on the same beat only crowds it. (showIPFloat also fired SFX.ipGained,
       // which was talking over earthspell/woodthud.) refreshSlotIPDisplays below is

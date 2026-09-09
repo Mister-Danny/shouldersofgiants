@@ -205,8 +205,20 @@
   }
 
   /**
-   * Place a card face-up at a location (for Samurai return, Joan summon, Wu push).
+   * Place a card face-up at a location (Samurai return, Joan summon, Wu push,
+   * Piye's copy, Ezana's convert, Trade Network's swap-in).
+   * @param {number}  [extraIpMod]  Legacy lump — recorded as an UNATTRIBUTED
+   *                                entry so it can never be invisible. Prefer
+   *                                opts.carrySources.
    * @param {boolean} [opts.skipLocationAbility] skip MOVE_IN_GAINS_IP
+   * @param {Array}   [opts.carrySources]  ipModSources entries from another slot
+   *                                to REPLAY here one by one, each under its own
+   *                                attribution (Piye's copy takes everything the
+   *                                original had at that moment).
+   * @param {boolean} [opts.skipHandBonus] do not fold the id-keyed in-hand
+   *                                accumulators (a copy of a card already on the
+   *                                board must not take a stamp that belongs to a
+   *                                twin still in hand).
    */
   function placeRevealedCard(owner, locId, cardId, extraIpMod, opts) {
     opts = opts || {};
@@ -215,25 +227,22 @@
     if (si === -1) return false;
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return false;
-    // Resurrection bonus stored as named ipMod entry; sd.ip stays at the
-    // card's immutable base so the popup breakdown is honest. Callers that
-    // need to suppress this (e.g. triggerSamurai, which assembles its own
-    // ipMod afterward) zero bonusDict[cardId] before calling.
-    var bonusDict = owner === 'player' ? G.cardIPBonus : G.aiCardIPBonus;
-    var resBonus  = bonusDict[cardId] || 0;
-    var resLabel  = cardId === 10 ? 'Jesus' : cardId === 12 ? 'Samurai' : 'Bonus';
-    var resSources = resBonus > 0 ? [{ source: resLabel, delta: resBonus }] : [];
-    var sd     = { cardId: cardId, ip: card.ip, revealed: true, ipMod: (extraIpMod || 0) + resBonus, contMod: 0, ipModSources: resSources, bonuses: [], turnPlayed: G.turn };
-    // Populate bonuses[] for the resurrection IP so the popup breakdown shows it.
-    // Pattern 'A' (own portrait) is used here since we don't have the original
-    // discard-trigger context; abilities.js may add a more accurate 'C' record.
-    if (resBonus > 0) {
-      var resInfo = SOURCE_ID_MAP[resLabel];
-      if (resInfo) addBonus(sd, resBonus, resInfo.type, resInfo.id, nextEventId(), resInfo.pattern, false);
+    // sd.ip stays at the card's immutable base so the popup breakdown is honest;
+    // every bonus below goes through addIPMod and lands with a record.
+    var sd = { cardId: cardId, ip: card.ip, revealed: true, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [], turnPlayed: G.turn };
+    // Chain accumulator (Jesus / Samurai) and in-hand stamps. Callers that
+    // assemble their own ipMod afterward (triggerSamurai) zero the dict first.
+    if (!opts.skipHandBonus) applyPrePlayBonuses(sd, owner, cardId, {});
+    if (opts.carrySources && opts.carrySources.length) {
+      opts.carrySources.forEach(function (e) {
+        if (!e || !e.delta) return;
+        addIPMod(sd, e.delta, entrySource(e), undefined, e.kind ? { kind: e.kind } : undefined);
+      });
     }
+    if (extraIpMod) addIPMod(sd, extraIpMod, { type: 'unknown', name: 'Bonus' });
     if (!opts.skipLocationAbility) {
       var dl = G.locations.find(function (l) { return l.id === locId; });
-      if (dl && dl.abilityKey === 'MOVE_IN_GAINS_IP') addIPMod(sd, 1, 'The Cape of Good Hope');
+      if (dl && dl.abilityKey === 'MOVE_IN_GAINS_IP') addIPMod(sd, 1, dl);
     }
     slots[locId][si] = sd;
     var slotEl = getSlotEl(owner, locId, si);
@@ -432,8 +441,84 @@
     'Nebuchadnezzar':        { type: 'card',     id: 50, pattern: 'A' },
     // At-Once river boosts (Hammurabi + Nebuchadnezzar battles both use loc 101/103)
     'Euphrates River':       { type: 'location', id: 101, pattern: 'A' },
-    'Tigris River':          { type: 'location', id: 103, pattern: 'A' }
+    'Tigris River':          { type: 'location', id: 103, pattern: 'A' },
+    // Names that used to fall through to 'unknown' (blank thumbnail). Every live
+    // call site now passes an id descriptor (see addIPMod), so these only serve
+    // string sources that survive in saved ipModSources entries.
+    'Christopher Columbus':  { type: 'card',     id: 25, pattern: 'A' },
+    'Merchant':              { type: 'card',     id: 76, pattern: 'A' },
+    'Purple Dye':            { type: 'card',     id: 75, pattern: 'A' },
+    'Papyrus':               { type: 'card',     id: 54, pattern: 'A' },   // the copier (54), not the resource (74)
+    'Amenirdis I':           { type: 'card',     id: 80, pattern: 'A' },
+    'Queen Shanakhdakheto':  { type: 'card',     id: 82, pattern: 'A' },
+    'Nubian Archers':        { type: 'card',     id: 85, pattern: 'A' },
+    'The Iron Furnace':      { type: 'card',     id: 87, pattern: 'A' }
+    // Battle-local locations (Punt, Napata, Thebes, …) are not listed: resolveSource
+    // finds them by name in G.locations, which is the only table that has them.
   };
+
+  /* ── Source descriptors ──────────────────────────────────────────
+     addIPMod attributes every permanent IP change to a SOURCE DESCRIPTOR,
+     never to a name string. Names collide (a Meso and an Egypt 'Scribe', a
+     'Farmer' in each era, 'Papyrus' twice) and the old string→id map could only
+     ever pick one of them; a descriptor names the exact card or location.
+       number            → { type: 'card', id }
+       { type, id }      → as given ('card' | 'location' | 'unknown')
+       location object   → { type: 'location', id: loc.id }  (has abilityKey/name)
+       string            → legacy: SOURCE_ID_MAP, then a card / location by name
+     `name` is derived for the legacy ipModSources readers that still key on it
+     (the Samurai chain filter; the debug logs). */
+  function _cardName(id) {
+    var c = (typeof CARDS !== 'undefined') && CARDS.find(function (x) { return x.id === id; });
+    return c ? c.name : null;
+  }
+  function _locName(id) {
+    var l = (G.locations || []).find(function (x) { return x.id === id; });
+    if (!l && typeof LOCATIONS !== 'undefined') l = LOCATIONS.find(function (x) { return x.id === id; });
+    return l ? l.name : null;
+  }
+  function resolveSource(source) {
+    if (typeof source === 'number') {
+      return { type: 'card', id: source, name: _cardName(source) || ('card ' + source) };
+    }
+    if (source && typeof source === 'object') {
+      if (source.type === 'card' || source.type === 'location') {
+        var nm = source.name || (source.type === 'card' ? _cardName(source.id) : _locName(source.id));
+        return { type: source.type, id: source.id, name: nm || (source.type + ' ' + source.id) };
+      }
+      if (source.type === 'unknown') return { type: 'unknown', id: null, name: source.name || 'Bonus' };
+      // A live location object (has an id and either abilityKey or region/name).
+      if (source.id != null && (source.abilityKey !== undefined || source.region !== undefined)) {
+        return { type: 'location', id: source.id, name: source.name || _locName(source.id) || ('location ' + source.id) };
+      }
+    }
+    if (typeof source === 'string') {
+      var info = SOURCE_ID_MAP[source];
+      if (info) return { type: info.type, id: info.id, name: source };
+      var c = (typeof CARDS !== 'undefined') && CARDS.find(function (x) { return x.name === source; });
+      if (c) return { type: 'card', id: c.id, name: source };
+      var l = (G.locations || []).find(function (x) { return x.name === source; });
+      if (!l && typeof LOCATIONS !== 'undefined') l = LOCATIONS.find(function (x) { return x.name === source; });
+      if (l) return { type: 'location', id: l.id, name: source };
+      return { type: 'unknown', id: null, name: source };
+    }
+    return { type: 'unknown', id: null, name: 'Bonus' };
+  }
+  /* The descriptor stored on an ipModSources entry — what carry / restore paths
+     replay through addIPMod so the entry keeps its exact attribution. */
+  function entrySource(e) {
+    if (!e) return { type: 'unknown' };
+    if (e.type === 'card' || e.type === 'location') return { type: e.type, id: e.id, name: e.source };
+    if (typeof e.source === 'string') return e.source;      // legacy name-only entry
+    return { type: 'unknown', name: e.source };
+  }
+  /* The ACTOR as a source: the slot that is doing the modifying. A Rosetta Stone
+     carrying a transcribed ability is the actor, so the attribution names HER
+     (the transcribed text is readable on her popup). fallbackId covers callers
+     that have no slot in hand. */
+  function srcOf(sd, fallbackId) {
+    return { type: 'card', id: (sd && sd.cardId != null) ? sd.cardId : fallbackId };
+  }
 
   /**
    * Return a unique event ID string.  Monotonic counter in G.nextEventId.
@@ -598,23 +683,113 @@
   }
 
   /**
-   * Add a named modifier to a slot's permanent IP.
-   * Also pushes a bonus record onto sd.bonuses[] for the display system.
+   * Add a modifier to a slot's permanent IP, attributed to `source`.
+   * THE ONLY WRITER of sd.ipMod outside the reset/restore paths. Every call
+   * records the same delta three ways so the popup can never disagree with
+   * the badge: sd.ipMod (the number), sd.ipModSources (name + descriptor, the
+   * carry/undo ledger) and sd.bonuses[] (the popup grid record).
+   * @param {number|object|string} source  See resolveSource. Pass srcOf(sd) for
+   *                            "the acting card", a location object for a
+   *                            location grant, a card id for a fixed source.
    * @param {string} [eventId]  Pre-allocated event ID to share across multiple
    *                            simultaneous addIPMod calls from one trigger.
    *                            Auto-generated when omitted.
+   * @param {object} [opts]     { kind } — 'stamp' (in-hand bonus consumed at
+   *                            play, re-credited on undo), 'copy' (Papyrus
+   *                            inheritance, likewise), 'chain' (Jesus / Samurai
+   *                            resurrection accumulator — never consumed).
    */
-  function addIPMod(sd, delta, sourceName, eventId) {
+  function addIPMod(sd, delta, source, eventId, opts) {
+    var desc = resolveSource(source);
     sd.ipMod = (sd.ipMod || 0) + delta;
     if (!sd.ipModSources) sd.ipModSources = [];
-    sd.ipModSources.push({ source: sourceName, delta: delta });
-    var info = SOURCE_ID_MAP[sourceName];
-    var eid  = eventId || nextEventId();
-    if (info) {
-      addBonus(sd, delta, info.type, info.id, eid, info.pattern, false);
-    } else {
-      addBonus(sd, delta, 'unknown', null, eid, 'A', false);
+    var entry = { source: desc.name, delta: delta, type: desc.type, id: desc.id };
+    if (opts && opts.kind) entry.kind = opts.kind;
+    sd.ipModSources.push(entry);
+    var eid = eventId || nextEventId();
+    addBonus(sd, delta, desc.type, desc.id, eid, 'A', false);
+  }
+
+  /* ── Pre-play bonuses (the id-keyed accumulators a card carries IN HAND) ──
+     Three kinds live on a card id before it reaches the board:
+       chain  — G.cardIPBonus[id] for Jesus (10) / Samurai (12): the resurrection
+                accumulator. Self-attributed, NEVER consumed (it must grow across
+                deaths), zeroed only by Justinian.
+       stamp  — G.cardIPBonus[id] with matching entries in G.cardIPBonusSource
+                [side][id]: an in-hand buff placed by ANOTHER card (Amenirdis → Piye).
+                Attributed to the stamper, one entry per stamp, CONSUMED when the
+                card enters the board so a later card of the same id (a copy, a
+                convert, a deck draw) never inherits it. Undo re-credits.
+       copy   — G.copyIPBonus[side][id]: a Papyrus (54) copy's inherited
+                permanent IP. Attributed to Papyrus, consumed at play, re-credited
+                on undo.
+     applyPrePlayBonuses folds all three into a fresh slot THROUGH addIPMod, so
+     each arrives with its own attribution record. Called by every slot-creation
+     path (player commit, AI commit, 2P remote commit, placeRevealedCard). */
+  function _sideOf(owner) { return owner === 'player' ? 'player' : 'opp'; }
+  function _bonusDictOf(owner) { return owner === 'player' ? G.cardIPBonus : G.aiCardIPBonus; }
+  function _stampBagOf(owner) {
+    if (!G.cardIPBonusSource) G.cardIPBonusSource = { player: {}, opp: {} };
+    var side = _sideOf(owner);
+    if (!G.cardIPBonusSource[side]) G.cardIPBonusSource[side] = {};
+    return G.cardIPBonusSource[side];
+  }
+  /** Record an in-hand stamp: +delta on cardId for owner, attributed to `source`. */
+  function stampHandBonus(owner, cardId, delta, source) {
+    var dict = _bonusDictOf(owner);
+    dict[cardId] = (dict[cardId] || 0) + delta;
+    var desc = resolveSource(source);
+    var bag  = _stampBagOf(owner);
+    if (!bag[cardId]) bag[cardId] = [];
+    bag[cardId].push({ type: desc.type, id: desc.id, delta: delta });
+  }
+  /**
+   * @param {object} opts  { copy: true }   also fold the Papyrus copy bonus
+   *                       { dryRun: true } attribute but do not consume (hand popup)
+   */
+  function applyPrePlayBonuses(sd, owner, cardId, opts) {
+    opts = opts || {};
+    var side   = _sideOf(owner);
+    var dict   = _bonusDictOf(owner);
+    var bag    = _stampBagOf(owner);
+    var total  = dict[cardId] || 0;
+    var stamps = (bag[cardId] || []).slice();
+    var stampSum = stamps.reduce(function (s, e) { return s + (e.delta || 0); }, 0);
+    var chain  = total - stampSum;
+    if (chain) {
+      var chainSrc = (cardId === 10 || cardId === 12) ? { type: 'card', id: cardId } : { type: 'unknown', name: 'Bonus' };
+      addIPMod(sd, chain, chainSrc, undefined, { kind: 'chain' });
     }
+    stamps.forEach(function (e) {
+      addIPMod(sd, e.delta, { type: e.type, id: e.id }, undefined, { kind: 'stamp' });
+    });
+    if (!opts.dryRun && stamps.length) {
+      dict[cardId] = chain;
+      delete bag[cardId];
+    }
+    if (opts.copy) {
+      var copyB = (G.copyIPBonus && G.copyIPBonus[side] && G.copyIPBonus[side][cardId]) || 0;
+      if (copyB) {
+        addIPMod(sd, copyB, 54, undefined, { kind: 'copy' });
+        if (!opts.dryRun) delete G.copyIPBonus[side][cardId];
+      }
+    }
+    return sd;
+  }
+  /** Undo of a play: return consumed stamps / copy bonus to the in-hand tables. */
+  function recreditPrePlayBonuses(sd, owner) {
+    if (!sd) return;
+    var side = _sideOf(owner);
+    (sd.ipModSources || []).forEach(function (e) {
+      if (!e || !e.delta) return;
+      if (e.kind === 'stamp') {
+        stampHandBonus(owner, sd.cardId, e.delta, { type: e.type, id: e.id });
+      } else if (e.kind === 'copy') {
+        if (!G.copyIPBonus) G.copyIPBonus = { player: {}, opp: {} };
+        if (!G.copyIPBonus[side]) G.copyIPBonus[side] = {};
+        G.copyIPBonus[side][sd.cardId] = (G.copyIPBonus[side][sd.cardId] || 0) + e.delta;
+      }
+    });
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -652,6 +827,16 @@
       if (pEl) { var o = parseInt(pEl.textContent,10)||0; pEl.textContent=pIP; if(pIP!==o)SOG.ui.flashScore(pEl); }
       if (aEl) { var o = parseInt(aEl.textContent,10)||0; aEl.textContent=aIP; if(aIP!==o)SOG.ui.flashScore(aEl); }
     });
+    _refreshOpenPopup();
+  }
+
+  /* The card-info modal is a LIVE view of its slot, not a snapshot: whenever
+     the badges repaint, an open popup re-renders its IP breakdown from the same
+     slot data (and the same displayedIP hold), so the grid it shows always sums
+     to the badge on the board. ui.js loads after this module — resolved at call
+     time. */
+  function _refreshOpenPopup() {
+    if (SOG.ui && typeof SOG.ui.refreshBattlePopup === 'function') SOG.ui.refreshBattlePopup();
   }
 
   function refreshSlotIPDisplays() {
@@ -673,6 +858,7 @@
         });
       });
     });
+    _refreshOpenPopup();
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -718,6 +904,12 @@
     nextEventId:           nextEventId,
     addBonus:              addBonus,
     addIPMod:              addIPMod,
+    resolveSource:         resolveSource,
+    entrySource:           entrySource,
+    srcOf:                 srcOf,
+    stampHandBonus:        stampHandBonus,
+    applyPrePlayBonuses:   applyPrePlayBonuses,
+    recreditPrePlayBonuses: recreditPrePlayBonuses,
     updateScores:          updateScores,
     refreshSlotIPDisplays: refreshSlotIPDisplays,
     updateHeader:          updateHeader

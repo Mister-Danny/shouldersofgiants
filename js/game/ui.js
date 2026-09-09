@@ -402,28 +402,56 @@
    * @param {number|null} sourceId    Card or location id
    * @param {object|null} [crop]      { bgSize, bgPos } — overrides location's thumbnailCrop
    */
-  function _thumbHTML(sourceType, sourceId, crop) {
+  /* Location art for a thumbnail. The module-load index only knows the global
+     LOCATIONS table (ids 1–8); every battle-local location (the rivers 101/103,
+     Napata, Punt, Thebes, Abu Simbel, …) lives only in G.locations, so fall back
+     to the live battle's table. */
+  function _locData(locId) {
+    if (_locationById[locId]) return _locationById[locId];
+    var l = (G.locations || []).find(function (x) { return x.id === locId; });
+    return l ? { image: l.image, thumbnailCrop: l.thumbnailCrop || null, name: l.name } : null;
+  }
+  function _attr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+  function _thumbHTML(sourceType, sourceId, crop, label) {
+    var titleAttr = label ? ' title="' + _attr(label) + '"' : '';
     if (sourceType === 'card' && sourceId != null && _cardById[sourceId]) {
       var safePath = _cardById[sourceId].image.replace(/'/g, '%27');
-      return '<div class="ip-thumb" style="background-image:url(\'' + safePath + '\')" aria-hidden="true"></div>';
+      if (!label) titleAttr = ' title="' + _attr(_cardById[sourceId].name) + '"';
+      return '<div class="ip-thumb" style="background-image:url(\'' + safePath + '\')"' + titleAttr + '></div>';
     }
-    if (sourceType === 'location' && sourceId != null && _locationById[sourceId]) {
-      var locData  = _locationById[sourceId];
+    var locData = (sourceType === 'location' && sourceId != null) ? _locData(sourceId) : null;
+    if (locData && locData.image) {
       var locCrop  = crop || locData.thumbnailCrop;
       var safePath = locData.image.replace(/'/g, '%27');
       var styleStr = 'background-image:url(\'' + safePath + '\')';
       if (locCrop) styleStr += ';background-size:' + locCrop.bgSize + ';background-position:' + locCrop.bgPos;
-      return '<div class="ip-thumb ip-thumb-loc" style="' + styleStr + '" aria-hidden="true"></div>';
+      if (!label && locData.name) titleAttr = ' title="' + _attr(locData.name) + '"';
+      return '<div class="ip-thumb ip-thumb-loc" style="' + styleStr + '"' + titleAttr + '></div>';
     }
-    return '<div class="ip-thumb ip-thumb-empty" aria-hidden="true"></div>';
+    return '<div class="ip-thumb ip-thumb-empty"' + titleAttr + '></div>';
   }
 
-  /** Legacy thumbnail builder for ipModSources / contModSources fallback path. */
-  function _thumbHTMLLegacy(sourceName, fallbackImg) {
-    var img = _cardNameToImage[sourceName] || fallbackImg || null;
-    if (!img) return '<div class="ip-thumb ip-thumb-empty" aria-hidden="true"></div>';
-    var safePath = img.replace(/'/g, '%27');
-    return '<div class="ip-thumb" style="background-image:url(\'' + safePath + '\')" aria-hidden="true"></div>';
+  /* Thumbnail for a legacy ipModSources / contModSources ENTRY. Entries written
+     by the current addIPMod carry { type, id } and resolve exactly; older
+     name-only entries resolve by card name, then location name, else render the
+     empty box. NEVER the popup card's own portrait — that fallback used to blame
+     a card for its own buff whenever the source name was not a card name. */
+  function _thumbHTMLLegacy(entry) {
+    if (entry && (entry.type === 'card' || entry.type === 'location')) {
+      return _thumbHTML(entry.type, entry.id, null, entry.source);
+    }
+    var name = entry && entry.source;
+    if (name && _cardNameToImage[name]) {
+      var safePath = _cardNameToImage[name].replace(/'/g, '%27');
+      return '<div class="ip-thumb" style="background-image:url(\'' + safePath + '\')" title="' + _attr(name) + '"></div>';
+    }
+    if (name) {
+      var l = (G.locations || []).find(function (x) { return x.name === name; });
+      if (!l && typeof LOCATIONS !== 'undefined') l = LOCATIONS.find(function (x) { return x.name === name; });
+      if (l) return _thumbHTML('location', l.id, null, name);
+    }
+    return '<div class="ip-thumb ip-thumb-empty"' + (name ? ' title="' + _attr(name) + '"' : '') + '></div>';
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -442,8 +470,29 @@
    */
   function buildIPBreakdown(sd, owner, card /* card whose popup this is */) {
     var baseIP  = sd.ip;
-    var total   = helpers.effectiveIP(sd);
-    var selfImg = (card && card.image) ? card.image : null;
+    var live    = helpers.effectiveIP(sd);
+    /* THE TOTAL IS THE BADGE'S NUMBER. While a flourish holds a slot's badge at
+       its pre-change value (board.displayedIP), the popup shows that same held
+       number — and hides the records that are still in flight, so the grid it
+       shows sums exactly to the total it shows. The pending records are the
+       LAST permanent ones written (state is written first, then the hold is
+       set), so they are peeled off the tail until the held delta is accounted
+       for. Continuous records are rebuilt every pass and never pending. If the
+       tail cannot be reconciled (a continuous change landed mid-hold), nothing
+       is hidden and the live total is shown instead: honest over pretty. */
+    var total   = live;
+    var hidden  = {};
+    var shown   = (SOG.board && typeof SOG.board.displayedIP === 'function') ? SOG.board.displayedIP(sd) : live;
+    if (shown !== live && sd.bonuses && sd.bonuses.length) {
+      var pending = live - shown;
+      for (var hi = sd.bonuses.length - 1; hi >= 0 && pending !== 0; hi--) {
+        var hb = sd.bonuses[hi];
+        if (hb.continuous || hb.reset) continue;
+        hidden[hi] = true;
+        pending -= hb.amount;
+      }
+      if (pending === 0) total = shown; else hidden = {};
+    }
 
     var html = '<div class="ip-grid">'
       + '<div class="ip-col ip-col-base">'
@@ -453,7 +502,8 @@
 
     // ── New system: bonuses[] ─────────────────────────────────
     if (sd.bonuses && sd.bonuses.length > 0) {
-      sd.bonuses.forEach(function (b) {
+      sd.bonuses.forEach(function (b, bi) {
+        if (hidden[bi]) return;                       // still in flight — arrives with the beat
         var isReset = !!b.reset;
         var modCls  = isReset ? ' ip-col-mod--reset' : '';
         var dltCls  = isReset ? ' ip-delta--reset'   : '';
@@ -491,7 +541,7 @@
       legacyBonuses.forEach(function (b) {
         var sign = b.delta >= 0 ? '+' : '−';
         html += '<div class="ip-col ip-col-mod">'
-              +   '<div class="ip-thumb-wrap">' + _thumbHTMLLegacy(b.source, selfImg) + '</div>'
+              +   '<div class="ip-thumb-wrap">' + _thumbHTMLLegacy(b) + '</div>'
               +   '<span class="ip-delta">' + sign + Math.abs(b.delta) + '</span>'
               + '</div>';
       });
@@ -606,14 +656,28 @@
    * Unchanged behaviour — it now just delegates the content rules to
    * fillPopupContent, which the hover panel shares.
    */
+  /* What the modal is currently showing, so it can re-render in place when the
+     numbers underneath it change (board.refreshSlotIPDisplays / updateScores
+     call refreshBattlePopup). `sd` is the LIVE slot object for a board card. */
+  var _modalView = null;
+
   function openBattlePopup(card, sd, owner, isBoard) {
+    _modalView = { card: card, sd: sd, owner: owner, isBoard: isBoard };
     fillPopupContent(MODAL_POPUP_ELS, card, sd, owner, isBoard);
     battlePopupEl.classList.add('visible');
     // A modal open always wins over the hover panel (they must never stack).
     if (SOG.cardHover && typeof SOG.cardHover.hide === 'function') SOG.cardHover.hide();
   }
 
-  function closeBattlePopup() { battlePopupEl.classList.remove('visible'); }
+  /** Re-render the open modal's IP breakdown from its live slot data. No-op
+      when the modal is closed or is showing a hand card (no board slot). */
+  function refreshBattlePopup() {
+    if (!_modalView || !_modalView.sd || !battlePopupEl.classList.contains('visible')) return;
+    if (!battlePopupIPBrkEl) return;
+    battlePopupIPBrkEl.innerHTML = buildIPBreakdown(_modalView.sd, _modalView.owner, _modalView.card);
+  }
+
+  function closeBattlePopup() { battlePopupEl.classList.remove('visible'); _modalView = null; }
 
   battlePopupCloseBtn.addEventListener('click', closeBattlePopup);
   battlePopupEl.addEventListener('click', function (e) { if (e.target === battlePopupEl) closeBattlePopup(); });
@@ -900,6 +964,7 @@
   ═══════════════════════════════════════════════════════════════ */
   SOG.ui = {
     openBattlePopup:    openBattlePopup,
+    refreshBattlePopup: refreshBattlePopup, // live re-render, called from board.js repaints
     fillPopupContent:   fillPopupContent,   // shared by SOG.cardHover (js/game/card-hover.js)
     openLocationPopup:  openLocationPopup,
     closeLocationPopup: closeLocationPopup,

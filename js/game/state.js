@@ -71,6 +71,9 @@
     aiBonusCapitalNextTurn: 0,   // Scholar-Officials (AI)
     cardIPBonus:            {},  // player cardId → cumulative bonus IP (Samurai, Jesus)
     aiCardIPBonus:          {},  // AI    cardId → cumulative bonus IP (Samurai, Jesus)
+    cardIPBonusSource: { player: {}, opp: {} },  // side → { cardId: [ {type,id,delta} ] } — attributed in-hand stamps
+                                                 // (Amenirdis → Piye); consumed at play, re-credited on undo
+    pendingIPBuffSources: { player: [], opp: [] },  // Meso Farmer: one source descriptor per pending +1
     nebCCDiscount: { player: {}, opp: {} },  // side → { cardId: 1 } — one-time -1 CC stamp on
                                              // the owner's in-hand Mesopotamia cards (Nebuchadnezzar At Once)
     destroyedIPTotal:       0,   // total IP of cards destroyed by player (William)
