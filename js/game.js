@@ -71,8 +71,8 @@
      input.js loads after board.js but before game.js. We alias
      each helper that game.js still calls (rebuildPlayerHand from
      init/abilities, refreshHand* and refreshMoveableCards from
-     reveal/abilities/turn-flow, commitPlay from applyOpponentActions,
-     snapBack from startReveal, resetTurn from the reset button). */
+     reveal/abilities/turn-flow, commitPlay/queueMove from the hand + board
+     handlers,     snapBack from startReveal, resetTurn from the reset button). */
   var rebuildPlayerHand       = SOG.input.rebuildPlayerHand;
   var refreshHandIPDisplays   = SOG.input.refreshHandIPDisplays;
   var refreshHandCostDisplays = SOG.input.refreshHandCostDisplays;
@@ -153,9 +153,10 @@
         maxHandSize:      MAX_HAND_SIZE
       },
       resource: { model: 'capital', capital: CAPITAL, resetEachTurn: true },
-      // Draw policy. 'replenish' = draw back exactly what was played last turn
-      // (deck permitting, deliberately uncapped — ability-granted cards ride
-      // above maxHandSize). The 'flat' variant (+N/turn) exists for future battles.
+      // Draw policy. 'replenish' = at the start of your turn, draw one card per
+      // DISTINCT LOCATION you played at last turn, minimum 1, capped so the hand
+      // never passes maxHandSize (see replenishDrawCount). The 'flat' variant
+      // (+N/turn) exists for future battles.
       draw: { model: 'replenish' },
       decks: {
         player: { source: 'active-deck' },                     // window.Decks.getActiveCards()
@@ -351,6 +352,7 @@
     G.locationSnapshots      = {};
     G.reservedSlotsPerLoc    = {};
     G.deferredPlays          = {};
+    G.deferredOppPlays       = {};   // 2P: remote plays parked behind a vacating move (applyOpponentActions)
     SOG.input.resetDragInfo();
 
     rebuildPlayerHand();
@@ -463,46 +465,87 @@
   }
 
   /**
-   * Apply serialised opponent actions to G.aiSlots / G.aiRevealQueue.
+   * Apply serialised opponent actions (the remote player's playerActionLog,
+   * in the order they happened) to this client's opponent side.
    * Called in 2P mode after both players have submitted their turn.
-   * Moves are applied first (already-revealed cards), then plays (new cards face-down).
+   *
+   * Plays are placed face-down NOW (exactly like ai.js commitPlay); moves are
+   * only RECORDED. Both are written into G.aiActionLog in the remote's original
+   * order — the same {type:'play', cardId, locId, slotIndex} / {type:'move',
+   * cardId, fromLocId, fromSlotIndex, toLocId} shapes runAiSelection and
+   * runAiMovements write — so buildRevealSequence interleaves the remote's
+   * actions with ours by index and revealNext animates their moves through
+   * executeMoveAnimated. That is what keeps BOTH clients revealing the same
+   * order: executing the moves synchronously here (the old path) put every
+   * remote move before every reveal on this client while the mover's own client
+   * ran it at its logged position.
+   *
+   * A play into a location that is FULL here but that a logged move vacates
+   * (legal on the remote: queueMove frees the slot during selection) can't be
+   * placed until that move resolves. It is parked in G.deferredOppPlays[locId]
+   * and popped into the vacated slot by revealNext right after the move lands —
+   * the opp-side twin of the player's deferredPlays/snapBack mechanism. The
+   * log entry for such a play carries slotIndex null; revealNext pins the real
+   * coordinates onto its sequence entry when it lands.
    */
   function applyOpponentActions(actions) {
     if (!actions) actions = [];
-    G.aiRevealQueue = [];
-    // Bug 16 scope note: multiplayer's executeMove path is preserved for now
-    // (bug 20). aiActionLog is reset here to keep state clean even though
-    // applyOpponentActions doesn't write to it yet.
-    G.aiActionLog   = [];
+    G.aiRevealQueue    = [];
+    G.aiActionLog      = [];
+    G.deferredOppPlays = {};
+    var vacating = {};   // locId → logged moves leaving it this turn
+    var deferred = {};   // locId → plays already parked behind those moves
 
-    /* ── Moves: delegate to executeMove so face-up render, IP mods
-          (Cape +1, Magellan +1, Columbus), and slot compaction all
-          run correctly for every movement card.                    ── */
-    actions.filter(function (a) { return a.type === 'move'; }).forEach(function (a) {
-      var fromSlots = G.aiSlots[a.fromLocId];
-      if (!fromSlots) return;
-      var fromIdx = -1;
-      fromSlots.forEach(function (s, i) { if (s && s.cardId === a.cardId) fromIdx = i; });
-      if (fromIdx === -1) return;
-      executeMove('opp', a.fromLocId, fromIdx, a.toLocId);
-    });
+    actions.forEach(function (a) {
+      if (!a) return;
 
-    /* ── Plays: place new cards face-down ───────────────────── */
-    actions.filter(function (a) { return a.type === 'play'; }).forEach(function (a) {
+      /* ── Move: validate the source, record, resolve at reveal ── */
+      if (a.type === 'move') {
+        var fromSlots = G.aiSlots[a.fromLocId];
+        if (!fromSlots || !G.aiSlots[a.toLocId] || a.fromLocId === a.toLocId) return;
+        // The remote's fromSlotIndex is trusted only if it holds this card here
+        // (slot arrays should mirror, but an earlier compaction can shift them);
+        // otherwise the first cardId match — the same rule executeMoveAnimated
+        // applies again at reveal time.
+        var fromIdx = -1;
+        if (a.fromSlotIndex != null && fromSlots[a.fromSlotIndex] &&
+            fromSlots[a.fromSlotIndex].cardId === a.cardId) fromIdx = a.fromSlotIndex;
+        for (var fi = 0; fromIdx === -1 && fi < fromSlots.length; fi++) {
+          if (fromSlots[fi] && fromSlots[fi].cardId === a.cardId) fromIdx = fi;
+        }
+        if (fromIdx === -1) return;
+        G.aiActionLog.push({ type: 'move', cardId: a.cardId, fromLocId: a.fromLocId,
+                             fromSlotIndex: fromIdx, toLocId: a.toLocId });
+        vacating[a.fromLocId] = (vacating[a.fromLocId] || 0) + 1;
+        return;
+      }
+
+      /* ── Play: place face-down now (or park it behind a vacating move) ── */
+      if (a.type !== 'play') return;
       var card = CARDS.find(function (c) { return c.id === a.cardId; });
       if (!card) return;
       var locId = a.toLocId;
       if (locId == null || !G.aiSlots[locId]) return;
-      var slotIndex = G.aiSlots[locId].indexOf(null);
-      if (slotIndex === -1) return;
       var baseIP = card.ip + (G.aiCardIPBonus[a.cardId] || 0);
-      G.aiSlots[locId][slotIndex] = { cardId: a.cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
+      var sd = { cardId: a.cardId, ip: baseIP, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
+      var slotIndex = G.aiSlots[locId].indexOf(null);
+      if (slotIndex === -1) {
+        // Full here. Legal only if a move logged above vacates this location
+        // (one parked play per vacating move); anything else is dropped as before.
+        if ((deferred[locId] || 0) >= (vacating[locId] || 0)) return;
+        deferred[locId] = (deferred[locId] || 0) + 1;
+        (G.deferredOppPlays[locId] = G.deferredOppPlays[locId] || []).push(sd);
+      } else {
+        G.aiSlots[locId][slotIndex] = sd;
+        var slotEl = getSlotEl('opp', locId, slotIndex);
+        if (slotEl) { slotEl.dataset.cardId = String(a.cardId); setSlotFaceDown(slotEl); }
+      }
       // Remove ONE instance (filter would delete both copies of a duplicated id).
       var _2phi = G.aiHand.indexOf(a.cardId);
       if (_2phi !== -1) G.aiHand.splice(_2phi, 1);
       G.aiRevealQueue.push(a.cardId);
-      var slotEl = getSlotEl('opp', locId, slotIndex);
-      if (slotEl) { slotEl.dataset.cardId = String(a.cardId); setSlotFaceDown(slotEl); }
+      G.aiActionLog.push({ type: 'play', cardId: a.cardId, locId: locId,
+                           slotIndex: (slotIndex === -1 ? null : slotIndex) });
     });
 
     SOG.ui.updateOppHand();
@@ -1224,8 +1267,9 @@
     // 'play' entries carry the commit-time slot COORDINATES (locId + slotIndex —
     // the player log stores the loc as toLocId, the AI log as locId) so revealNext
     // can resolve the exact slot even with DUPLICATE cardIds on board (Papyrus
-    // copies, Nubian Gold tokens). Entries without them (2P serialised actions)
-    // fall back to the cardId scan.
+    // copies, Nubian Gold tokens). A 2P play parked behind a vacating move is
+    // logged with slotIndex null until revealNext lands it; until then it falls
+    // back to the cardId scan.
     for (var i = 0; i < len; i++) {
       if (i < fQ.length) {
         var fi = fQ[i];
@@ -1415,6 +1459,29 @@
           if (fsi !== -1) {
             G.playerSlots[item.fromLocId][fsi] = sd;
             syncPlayerSlots(item.fromLocId);
+          }
+        }
+      }
+      // Same for a remote (2P) opponent's move: a play they made into the
+      // location this move just vacated was parked by applyOpponentActions.
+      // Land it face-down now and pin its coordinates onto its pending 'play'
+      // entry later in this sequence (logged with slotIndex null), so the
+      // reveal resolves the exact slot even beside a same-id twin.
+      if (item.type === 'move' && item.owner === 'opp' && G.deferredOppPlays) {
+        var oDeferred = G.deferredOppPlays[item.fromLocId];
+        if (oDeferred && oDeferred.length > 0) {
+          var osd = oDeferred.shift();
+          if (oDeferred.length === 0) delete G.deferredOppPlays[item.fromLocId];
+          var osi = G.aiSlots[item.fromLocId].indexOf(null);
+          if (osi !== -1) {
+            G.aiSlots[item.fromLocId][osi] = osd;
+            syncOppSlots(item.fromLocId);
+            for (var pk = i + 1; pk < seq.length; pk++) {
+              var pe = seq[pk];
+              if (pe.owner === 'opp' && pe.type === 'play' && pe.slotIndex == null && pe.cardId === osd.cardId) {
+                pe.locId = item.fromLocId; pe.slotIndex = osi; break;
+              }
+            }
           }
         }
       }
@@ -1622,6 +1689,38 @@
      back to the flat capital for any turn past the array's end, which won't
      happen for editor-authored levels (the form keeps the array's length in
      sync with structure.turns) but keeps this safe regardless. */
+  /* ── THE DRAW RULE (replenish) ──────────────────────────────────────────────
+     At the start of your turn you draw ONE CARD PER DISTINCT LOCATION you played
+     at last turn, with a floor of 1 — it is the number of LOCATIONS, not the
+     number of cards: four cards at one location still draw 1, nothing played
+     still draws 1. Capped so the hand never passes maxHandSize (at the cap you
+     draw nothing), and by the deck.
+     THE CAP IS LOAD-BEARING HERE where it never was for the old rule. The old
+     replenish drew back exactly what was played, so it could only refill what
+     had left the hand and could never exceed the cap on its own; this rule can
+     (play nothing at 7 -> the floor would draw an 8th), so the draw itself is
+     now capped, consistent with the ability grant sites (Tool, Khufu, Papyrus,
+     Nubian Gold) which already fizzle at the cap.
+     Pure and exported: the tutorial's own turn engine draws through this same
+     function, so the two can never drift the way the old per-card rule had —
+     the tutorial carried its own copy.
+     Replaces: one card per CARD played last turn. */
+  function distinctPlayLocations(actionLog) {
+    var seen = {}, n = 0;
+    (actionLog || []).forEach(function (e) {
+      if (!e || e.type !== 'play') return;
+      var loc = (e.locId != null) ? e.locId : e.toLocId;   // AI log stores locId, player log toLocId
+      if (loc == null || seen[loc]) return;
+      seen[loc] = true; n++;
+    });
+    return n;
+  }
+  function replenishDrawCount(distinctLocs, handLen, deckLen, maxHand) {
+    var want = Math.max(1, distinctLocs || 0);
+    var room = Math.max(0, (maxHand || MAX_HAND_SIZE) - handLen);
+    return Math.max(0, Math.min(want, room, deckLen));
+  }
+
   function _capitalForTurn(resource, turn) {
     var perTurn = resource.capitalByTurn;
     if (perTurn && perTurn[turn - 1] != null) return perTurn[turn - 1];
@@ -1659,8 +1758,17 @@
     G.bonusCapitalNextTurn = 0;
     SOG.input.resetDragInfo();
 
-    var playerDrew = G.playerRevealQueue.length;
-    var aiDrew     = G.aiRevealQueue.length;
+    /* Read last turn's plays BEFORE the logs are cleared a few lines down. The
+       action logs carry each play's LOCATION, which is what the draw rule counts.
+       Both sides' logs are complete: every writer of a reveal queue (the player's
+       commitPlay, ai.js commitPlay / the scripted profile, and applyOpponentActions
+       for a remote 2P opponent) pushes a matching 'play' entry, so there is no
+       side whose plays are known only by count. Cards placed by abilities (Piye's
+       copy, Ezana's convert, Trade Network's swap-in, the Royal Tomb summon) are
+       not plays and are not logged, so they do not count as "where you played a
+       card". */
+    var playerLocs = distinctPlayLocations(G.playerActionLog);
+    var aiLocs     = distinctPlayLocations(G.aiActionLog);
     G.playerRevealQueue = [];
     G.aiRevealQueue     = [];
     G.aiActionLog       = [];   // bug 16
@@ -1674,25 +1782,27 @@
     G.locationSnapshots      = {};
     G.reservedSlotsPerLoc    = {};
     G.deferredPlays          = {};
+    G.deferredOppPlays       = {};
 
     /* Draw policy via config.draw. 'flat' draws a fixed +N per side per turn
-       (future capital-less battles); 'replenish' draws back exactly what each
-       side PLAYED last turn, deck permitting — deliberately NOT capped at
-       maxHandSize (ability-granted cards like Tool's draw are net gains that
-       ride above the cap; grant sites enforce the cap where cards are added). */
+       (future capital-less battles); 'replenish' draws one card per DISTINCT
+       LOCATION each side played at last turn, minimum 1, capped at maxHandSize
+       and by the deck — see replenishDrawCount above for the rule and why the
+       cap now applies at the draw itself. */
     var _draw    = G.config.draw || { model: 'replenish' };
     if (_draw.model === 'flat') {
       var _n = _draw.perTurn || 1;
       G.playerDeck.splice(0, Math.min(_n, G.playerDeck.length)).forEach(function (id) { G.playerHand.push(id); });
       G.aiDeck.splice(0,     Math.min(_n, G.aiDeck.length)).forEach(function (id) { G.aiHand.push(id); });
     } else {
-      // Replenish draws back exactly what was PLAYED last turn (deck permitting).
-      // Deliberately NOT capped at maxHandSize: cards granted by abilities mid-turn
-      // (Tool's draw, Jesus' return, future Egypt grants) are NET gains that ride
-      // ABOVE the cap — the cap is enforced where cards are GRANTED (e.g.
-      // drawTypeFromDeck / applyNubianGoldOnPlay), not clawed back at the draw.
-      var playerCanDraw = Math.min(playerDrew, G.playerDeck.length);
-      var aiCanDraw     = Math.min(aiDrew,     G.aiDeck.length);
+      var _maxHand = (G.config.structure && G.config.structure.maxHandSize) || MAX_HAND_SIZE;
+      var playerCanDraw = replenishDrawCount(playerLocs, G.playerHand.length, G.playerDeck.length, _maxHand);
+      /* The opponent side follows the same rule in every mode. The old "empty
+         log beside a non-empty reveal queue" 2P fallback (per-card draw) is gone:
+         applyOpponentActions now logs each remote play, so that state can no
+         longer occur. In 2P this side's hand/deck are this client's local mirror
+         of the remote player; the remote computes its own real draw. */
+      var aiCanDraw = replenishDrawCount(aiLocs, G.aiHand.length, G.aiDeck.length, _maxHand);
       G.playerDeck.splice(0, playerCanDraw).forEach(function (id) { G.playerHand.push(id); });
       G.aiDeck.splice(0, aiCanDraw).forEach(function (id) { G.aiHand.push(id); });
     }
@@ -2225,7 +2335,10 @@
     // Exposed for the Prehistory adventure module's reveal sequence.
     flipSlot:              flipSlot,
     getSnapshot:           getSnapshot,
-    applySnapshot:         applySnapshot
+    applySnapshot:         applySnapshot,
+    // The draw rule, pure — shared with the tutorial's turn engine.
+    distinctPlayLocations: distinctPlayLocations,
+    replenishDrawCount:    replenishDrawCount
   };
 
 })();

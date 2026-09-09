@@ -249,7 +249,7 @@ window.SOG_MAP_DATA = {
         rotation: -3,
         hook:  'ramses',
         tiers: 2,
-        flagNudge: { dx: 0, dy: -7 },
+        flagNudge: { dx: 0, dy: -5 },
         serfFlagOn: 'encounter',
         showFrom: 'hatshepsut-giant-beaten',
         note: 'Scaffolded position on the new Upper Egypt map — drag into place.'

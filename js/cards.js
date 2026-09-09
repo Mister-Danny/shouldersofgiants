@@ -774,14 +774,14 @@ const CARDS = [
     image:   "images/cards/kushcards/kush_griot.jpg", locked: true
   },
   {
-    id: 85, name: "Nubian Archers", cc: 2, ip: 2,               // WIRED (At Once: -2 IP to a random opponent card)
+    id: 85, name: "Nubian Archers", cc: 2, ip: 2,               // WIRED (At Once: -1 IP to two random DISTINCT opponent cards; one target -> one arrow, -1)
     type: "Military", type2: null, era: "Kush",
     abilityName: "Volley",
-    ability: "At Once:\nAfflict a random opponent's card with -2 IP.",
+    ability: "At Once:\nAfflict 2 opponent cards with -1 IP.",
     image:   "images/cards/kushcards/kush_nubian_archers.jpg", locked: true
   },
   {
-    id: 86, name: "Trade Network", cc: 3, ip: 1,                // WIRED (onCardLandedHere: swap a Natural Resource for a deck draw)
+    id: 86, name: "Trade Network", cc: 2, ip: 0,                // WIRED (onCardLandedHere: swap a Natural Resource for a deck draw) — 2 CC / 0 IP (was 3/1)
     type: "Economic", type2: null, era: "Kush",
     abilityName: "The Nile Corridor",
     /* A TRIGGER, not an At Once: it reacts to the owner playing a card here
@@ -791,10 +791,10 @@ const CARDS = [
     image:   "images/cards/kushcards/kush_trade_network.jpg", locked: true
   },
   {
-    id: 87, name: "The Iron Furnace", cc: 2, ip: 1,             // WIRED (End of Turn: +1 IP to Labor cards here)
+    id: 87, name: "The Iron Furnace", cc: 2, ip: 1,             // WIRED (End of Turn: +1 IP to the owner's OTHER Labor cards here — never itself)
     type: "Labor", type2: null, era: "Kush",
     abilityName: "Forges of Meroe",
-    ability: "End of Turn:\nLabor cards here gain +1 IP.",
+    ability: "End of Turn:\nOther Labor cards here gain +1 IP.",
     image:   "images/cards/kushcards/kush_the_iron_furnace.jpg", locked: true
   }
 

@@ -1597,6 +1597,276 @@ SOG.RevealFx = (function () {
      bite lands, and the element is removed outright on the next frame. No fade —
      the onion is gone, not fading.
      Overlay only; never gates the pipeline, and no-ops without a slot element. */
+  /* ═══════════════════════════════════════════════════════════════════════
+     KUSH (78-87) — shared helpers + the per-card flourishes.
+     Every one of these is PRESENTATION over state the ability layer has ALREADY
+     committed: the numbers they show are either read back out of a badge the
+     engine wrote, or morph into one. Every flyer and particle self-removes, every
+     early return falls through to onComplete, and none of them needs GSAP to be
+     correct — without it the visual is skipped and the state stands.
+     Flyers are CLONES of real card elements (a slot, a hand card), never bare
+     divs, so .battle-card-slot / .battle-hand-card and their container-type ride
+     along and the cqw-sized CC/IP badges resolve against the card, not the
+     viewport — the Imhotep / judgment-card lesson. */
+  var KUSH_SFX_MS = {          // measured with decodeAudioData; used as fallback timers
+    piye: 2142, kashta: 1358, amenirdis: 1907, apedemak: 1192, shanakhdakheto: 3291,
+    ezana: 1411, lowfail: 1332, griot: 1646, nubianarchers: 1600, nubianarchersingle: 1340,
+    ironfurnace1: 2064, ironfurnace2: 2560, ironfurnace3: 3030, tradewoosh: 1045
+  };
+
+  /* Play a clip and call onEnd when it actually ENDS, with a fallback timer so a
+     blocked, silent or missing file still releases whatever is waiting — Cave
+     Art's shape. Goes through SOG.sfx.play (which hands back the Audio) so the
+     volume axes apply. Single-fire. Returns the Audio, or null. */
+  function playSfxThen(src, fallbackMs, onEnd) {
+    var fired = false;
+    function end() { if (fired) return; fired = true; if (typeof onEnd === 'function') onEnd(); }
+    var a = null;
+    try {
+      if (window.SOG && SOG.sfx && typeof SOG.sfx.play === 'function') a = SOG.sfx.play(src);
+      else { a = new Audio(src); var pr = a.play(); if (pr && pr.catch) pr.catch(function () {}); }
+    } catch (e) { a = null; }
+    if (a && typeof a.addEventListener === 'function') a.addEventListener('ended', end);
+    setTimeout(end, (fallbackMs || 1500) + 120);
+    return a;
+  }
+
+  /* The deck pile element for a side — the player's sits in the player hand row,
+     the AI's in the opp hand row (see ui.js buildDeckPile / updateOppHand). */
+  function deckPileEl(side) {
+    var host = document.getElementById(side === 'player' ? 'battle-player-hand' : 'battle-opp-hand');
+    return host ? host.querySelector('.battle-deck-pile') : null;
+  }
+  function hideFaces(el) {
+    var kids = el ? [].slice.call(el.children) : [];
+    kids.forEach(function (n) { n.style.opacity = '0'; });
+    return kids;
+  }
+  function showFaces(kids) { (kids || []).forEach(function (n) { n.style.opacity = ''; }); }
+  /* A fixed, body-level clone of a real card element at rect r. Keeps the source's
+     classes (plus extraClass) so container-type / cqw badges keep resolving. */
+  function fixedClone(el, extraClass, r) {
+    var c = el.cloneNode(true);
+    c.className = (el.className || '') + ' ' + (extraClass || '');
+    c.setAttribute('aria-hidden', 'true');
+    c.style.cssText =
+      'position:fixed;margin:0;pointer-events:none;z-index:9997;transition:none;visibility:visible;' +
+      'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px;';
+    document.body.appendChild(c);
+    return c;
+  }
+  function pileStart(p, w, h, fallbackLeft, fallbackTop) {
+    if (p && p.width) return { left: p.left + (p.width - w) / 2, top: p.top + (p.height - h) / 2 };
+    return { left: fallbackLeft, top: fallbackTop };
+  }
+
+  /* Piye (78) — the copy separates from him like one bubble budding off another:
+     it swells out of his card from a point (elastic overshoot), rises up and out,
+     then floats to its destination slot and settles. piye.mp3 rides the bud.
+     STATE FIRST: the copy is already in destEl; its faces are held hidden until the
+     bubble lands, so the card is never seen at both ends at once. */
+  function piyeBubbleCopy(sourceEl, destEl, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+    /* The clip is the ability's audible tell and plays regardless; only the VISUAL
+       needs geometry and GSAP (chariotArrow's onImpact-without-geometry rule). */
+    if (opts.sfx) playSfx(opts.sfx);
+    if (!sourceEl || !destEl || typeof gsap === 'undefined') { finish(); return; }
+    var r = sourceEl.getBoundingClientRect(), d = destEl.getBoundingClientRect();
+    if (!r.width || !d.width) { finish(); return; }
+    var kids = hideFaces(destEl);
+    var bub  = fixedClone(sourceEl, 'reveal-fx-piye-bubble', r);
+    function cleanup() { if (bub.parentNode) bub.parentNode.removeChild(bub); showFaces(kids); }
+    gsap.set(bub, { scale: 0.18, opacity: 0, transformOrigin: '50% 60%' });
+    gsap.timeline({ onComplete: function () { cleanup(); finish(); } })
+      .to(bub, { opacity: 1, duration: 0.22, ease: 'power1.out' }, 0)                 // bud: fade in…
+      .to(bub, { scale: 1.08, duration: 0.55, ease: 'elastic.out(1, 0.55)' }, 0)      // …and swell out of him
+      .to(bub, { top: r.top - r.height * 0.55, scale: 1, duration: 0.42, ease: 'power2.out' }, '>-0.15')   // separate: up and out
+      .to(bub, { left: d.left, top: d.top, width: d.width, height: d.height,
+                 duration: 0.70, ease: 'power2.inOut' })                              // float to the destination
+      .to(bub, { scaleY: 0.94, duration: 0.08, ease: 'power1.in' })                    // settle
+      .to(bub, { scaleY: 1,    duration: 0.16, ease: 'back.out(3)' });
+  }
+
+  /* Kashta (79) / Amenirdis (80) — Piye is drawn out of the OWNER's deck pile and
+     travels into his hand slot; on landing, the stat the card just stamped morphs on
+     his badge from the pre-stamp value to the recorded one (badgeSwap). OWNER-ONLY
+     by design — the Papyrus precedent for hidden-hand arrivals — so the caller only
+     invokes this for the player. The real hand card already carries `to` (the hand
+     refresh painted it); it is held hidden and shown when the flyer lands. The flyer
+     is a CLONE of that hand card, so .battle-hand-card and its container-type ride
+     along and the cqw badge resolves.
+       opts: { sfx, badgeSel: '.db-overlay-cc' | '.db-overlay-ip', from, to } */
+  function deckCardToHand(pileEl, handEl, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() {
+      if (handEl) handEl.style.visibility = '';
+      if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete();
+    }
+    if (opts.sfx) playSfx(opts.sfx);                   // the tell plays even when the visual cannot
+    if (!handEl || typeof gsap === 'undefined') { finish(); return; }
+    var h = handEl.getBoundingClientRect();
+    if (!h.width) { finish(); return; }
+    handEl.style.visibility = 'hidden';
+    var fly   = fixedClone(handEl, 'reveal-fx-deck-fly', h);
+    var sel   = opts.badgeSel || '.db-overlay-ip';
+    var badge = fly.querySelector(sel);
+    if (badge && opts.from != null) badge.textContent = opts.from;   // show the PRE-stamp number in flight
+    var st = pileStart(pileEl ? pileEl.getBoundingClientRect() : null, h.width, h.height, h.left, h.top + 40);
+    gsap.set(fly, { left: st.left, top: st.top, scale: 0.55, opacity: 0, transformOrigin: '50% 50%' });
+    gsap.timeline()
+      .to(fly, { opacity: 1, scale: 0.8, top: st.top - h.height * 0.5, duration: 0.30, ease: 'power2.out' })   // out of the deck
+      .to(fly, { left: h.left, top: h.top, scale: 1, duration: 0.60, ease: 'power2.inOut' })                  // into the hand slot
+      .add(function () {
+        badgeSwap(fly, sel,
+          function () { if (badge && opts.to != null) badge.textContent = opts.to; },   // the recorded number
+          function () { if (fly.parentNode) fly.parentNode.removeChild(fly); finish(); });
+      });
+  }
+
+  /* A card drawn out of a DECK PILE and landed in a board slot. STATE FIRST: the
+     card is already in destEl (the ability placed it); its faces are held hidden
+     until the flyer lands. The flyer is a clone of destEl (so .battle-card-slot and
+     its container-type ride along). With opts.faceDown its face is swapped for a
+     card back and the real slot flips in on landing (Anim.cardReveal) — the
+     "lands face down, then reveals as if just played" beat.
+       opts: { sfx (at launch), landSfx (on landing), faceDown, onLand } */
+  function deckCardToSlot(pileEl, destEl, opts, onComplete) {
+    opts = opts || {};
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+    function landNow() {
+      if (opts.landSfx) playSfx(opts.landSfx);
+      if (typeof opts.onLand === 'function') opts.onLand();
+      finish();
+    }
+    if (opts.sfx) playSfx(opts.sfx);                   // launch clip: the tell, visual or not
+    if (!destEl || typeof gsap === 'undefined') { landNow(); return; }
+    var d = destEl.getBoundingClientRect();
+    if (!d.width) { landNow(); return; }
+    var kids = hideFaces(destEl);
+    var fly  = fixedClone(destEl, 'reveal-fx-deck-fly', d);
+    if (opts.faceDown) {
+      fly.innerHTML = '';
+      var back = document.createElement('div');
+      back.className = 'battle-card-back reveal-fx-card-back-fly';
+      fly.appendChild(back);
+    } else {
+      [].slice.call(fly.children).forEach(function (n) { n.style.opacity = ''; });   // the clone shows its face
+    }
+    var st = pileStart(pileEl ? pileEl.getBoundingClientRect() : null, d.width, d.height, d.left, d.top + 60);
+    gsap.set(fly, { left: st.left, top: st.top, scale: 0.5, opacity: 0, transformOrigin: '50% 50%' });
+    gsap.timeline()
+      .to(fly, { opacity: 1, scale: 0.75, top: st.top - d.height * 0.45, duration: 0.28, ease: 'power2.out' })   // emerge
+      .to(fly, { left: d.left, top: d.top, scale: 1, duration: 0.62, ease: 'power2.inOut' })                     // travel + land
+      .add(function () {
+        if (fly.parentNode) fly.parentNode.removeChild(fly);
+        showFaces(kids);
+        if (opts.landSfx) playSfx(opts.landSfx);
+        if (opts.faceDown && typeof Anim !== 'undefined' && Anim.cardReveal) Anim.cardReveal(destEl);   // flip in
+        if (typeof opts.onLand === 'function') opts.onLand();
+        finish();
+      });
+  }
+
+  /* Trade Network (86) — the played Natural Resource dives down into the owner's
+     deck pile under tradewoosh.mp3 while the replacement is pulled out and lands
+     FACE DOWN in the same slot; demedici-money.mp3 marks the landing and the slot
+     flips in. The caller resolves the arrival through fireAtOnce afterwards.
+     `nrFlight` is a hyksosLiftOff clone taken BEFORE the state swap overwrote the
+     slot's DOM; destEl already holds the replacement (held hidden throughout). */
+  function tradeNetworkSwap(nrFlight, pileEl, destEl, opts, onComplete) {
+    opts = opts || {};
+    var arrive = function () {
+      deckCardToSlot(pileEl, destEl, { faceDown: true, landSfx: opts.landSfx, onLand: opts.onLand }, onComplete);
+    };
+    if (opts.sfx) playSfx(opts.sfx);         // the woosh is the swap's tell; plays even without the dive
+    if (!nrFlight || !nrFlight.clone || typeof gsap === 'undefined') {
+      if (nrFlight && nrFlight.clone && nrFlight.clone.parentNode) nrFlight.clone.parentNode.removeChild(nrFlight.clone);
+      arrive();
+      return;
+    }
+    var r  = nrFlight.rect;
+    var to = pileStart(pileEl ? pileEl.getBoundingClientRect() : null, r.width, r.height, r.left, r.top + 120);
+    hideFaces(destEl);                       // the replacement is already there — hold it (deckCardToSlot re-shows it)
+    gsap.timeline()
+      .to(nrFlight.clone, { left: to.left, top: to.top, scale: 0.45, opacity: 0.15,
+                            duration: 0.55, ease: 'power2.in', transformOrigin: '50% 50%' })   // dive into the deck
+      .add(function () {
+        if (nrFlight.clone.parentNode) nrFlight.clone.parentNode.removeChild(nrFlight.clone);
+        arrive();                                                                              // …as the new card is pulled out
+      }, '>-0.18');
+  }
+
+  /* Nubian Archers (85) — Volley. ONE clip for the whole volley (nubianarchers.mp3
+     already carries two arrows, one slightly before the other), then the Chariot's
+     arrow-fire visual at each target 200ms apart; the Archers' card never moves.
+     One target -> nubianarchersingle.mp3 and a single arrow. Each target's onImpact
+     is the caller's real beat (it releases that card's held -1).
+       targets: [{ el, onImpact }] in fire order.   opts: { gapMs } */
+  function nubianArchersVolley(fromEl, targets, opts, onComplete) {
+    opts = opts || {};
+    targets = (targets || []).slice(0, 2);
+    var n = targets.length;
+    function finish() { if (typeof onComplete === 'function') onComplete(); }
+    if (!n) { finish(); return; }
+    playSfx(n >= 2 ? 'sfx/nubianarchers.mp3' : 'sfx/nubianarchersingle.mp3');
+    var pending = n;
+    var one = function () { if (--pending === 0) setTimeout(finish, 120); };
+    targets.forEach(function (t, i) {
+      setTimeout(function () { chariotArrow(fromEl, t.el, { onImpact: t.onImpact }, one); }, i * (opts.gapMs || 200));
+    });
+  }
+
+  /* The Iron Furnace (87) — End-of-Turn ignite. The Furnace pops up with sparks
+     (spawnEmbers), and a red flame burns UNDER each boosted Labor card for the
+     DURATION of the clip, which is chosen by how many are boosted: 1/2/3 (three is
+     the ceiling — the Furnace boosts OTHER Labor cards only and holds the fourth
+     slot itself; the min(3) here is just a guard). opts.onIgnite fires as the
+     flames light; the caller releases the held +1s there, so the numbers change as
+     the fire touches the cards. onComplete when the clip ends (fallback-timed). */
+  function ironFurnaceIgnite(furnaceEl, laborEls, opts, onComplete) {
+    opts = opts || {};
+    laborEls = (laborEls || []).filter(Boolean);
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+    var n   = Math.max(1, Math.min(3, opts.count || laborEls.length || 1));
+    var key = 'ironfurnace' + n;
+    var flames = [];
+    function ignite() {
+      laborEls.forEach(function (el) {
+        var f = document.createElement('div');
+        f.className = 'reveal-fx-furnace-flame';
+        f.setAttribute('aria-hidden', 'true');
+        el.appendChild(f);
+        flames.push(f);
+      });
+      if (typeof opts.onIgnite === 'function') opts.onIgnite();
+    }
+    function douse() { flames.forEach(function (f) { if (f.parentNode) f.parentNode.removeChild(f); }); flames = []; }
+    if (furnaceEl) { flashClass(furnaceEl, 'reveal-fx-furnace-pop', 460); spawnEmbers(furnaceEl); }
+    setTimeout(ignite, 260);
+    playSfxThen('sfx/' + key + '.mp3', KUSH_SFX_MS[key], function () { douse(); finish(); });
+  }
+
+  /* Griot (84) — the edge pulse. griot.mp3 plays; at its END the cards that just
+     started receiving the boost pop up and down (the shared bounce) with the IP
+     badge flash, and onAtEnd fires — the caller releases the display holds there,
+     so the number changes on the pop. */
+  function griotPulse(els, onAtEnd) {
+    els = (els || []).filter(Boolean);
+    playSfxThen('sfx/griot.mp3', KUSH_SFX_MS.griot, function () {
+      els.forEach(function (el) {
+        flashClass(el, 'reveal-fx-bounce', 480);
+        var ip = el.querySelector('.db-overlay-ip');
+        if (ip) flashClass(ip, 'reveal-fx-ip-gain', 520);
+      });
+      if (typeof onAtEnd === 'function') onAtEnd();
+    });
+  }
+
   /* Farmer (39) PHASE 1 — the onion pops out of the Farmer as it ARMS the pending
      +1. Extracted from the reveal-FX registry entry that used to own it inline,
      because arming is no longer a once-per-reveal event: Meroe re-fires the At
@@ -1839,9 +2109,14 @@ SOG.RevealFx = (function () {
      rendered independently. A faked display over a silent write is not possible
      here by construction.
      No badge or no GSAP → applyFn still runs, so the IP is never skipped. */
-  function ipBadgeSwap(slotEl, applyFn, onDone) {
+  /* badgeSwap — the old number falls away as the new one pops in, on ANY badge
+     (badgeSel: '.db-overlay-ip' or '.db-overlay-cc'). applyFn is the real write,
+     called between capturing the old text and animating the new one in, so what
+     arrives is read back out of the badge after the engine wrote it. ipBadgeSwap
+     below is the IP-only wrapper every existing caller uses. */
+  function badgeSwap(slotEl, badgeSel, applyFn, onDone) {
     function finish() { if (typeof onDone === 'function') onDone(); }
-    var badge = slotEl && slotEl.querySelector('.db-overlay-ip');
+    var badge = slotEl && slotEl.querySelector(badgeSel || '.db-overlay-ip');
     if (!badge || typeof gsap === 'undefined') {
       if (typeof applyFn === 'function') applyFn();
       finish();
@@ -1852,7 +2127,7 @@ SOG.RevealFx = (function () {
 
     // The old number, lifted out as its own element so it can fall independently.
     var ghost = document.createElement('div');
-    ghost.className = 'db-overlay-ip reveal-fx-ip-old';
+    ghost.className = (badge.className || 'db-overlay-ip') + ' reveal-fx-ip-old';   // same corner as the badge it mimics
     ghost.textContent = oldText;
     ghost.setAttribute('aria-hidden', 'true');
     slotEl.appendChild(ghost);
@@ -1869,6 +2144,7 @@ SOG.RevealFx = (function () {
         onComplete: function () { gsap.set(badge, { clearProps: 'transform,opacity' }); finish(); } }
     );
   }
+  function ipBadgeSwap(slotEl, applyFn, onDone) { return badgeSwap(slotEl, '.db-overlay-ip', applyFn, onDone); }
 
   /* Pyramid (57) "Monumental Legacy" — it takes the IP of the last card played at
      its location, so the animation goes and GETS it: the Pyramid slides over onto
@@ -2788,6 +3064,16 @@ SOG.RevealFx = (function () {
            papyrusScrollRoll: papyrusScrollRoll,
            papyrusCopyFlourish: papyrusCopyFlourish,
            nubianGoldEmerge: nubianGoldEmerge,
+           badgeSwap: badgeSwap,
+           playSfxThen: playSfxThen,
+           deckPileEl: deckPileEl,
+           piyeBubbleCopy: piyeBubbleCopy,
+           deckCardToHand: deckCardToHand,
+           deckCardToSlot: deckCardToSlot,
+           tradeNetworkSwap: tradeNetworkSwap,
+           nubianArchersVolley: nubianArchersVolley,
+           ironFurnaceIgnite: ironFurnaceIgnite,
+           griotPulse: griotPulse,
            imhotepSandSculpt: imhotepSandSculpt,
            endOfTurnShimmer: endOfTurnShimmer };
 })();

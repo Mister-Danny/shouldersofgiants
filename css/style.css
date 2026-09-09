@@ -12631,6 +12631,73 @@ body[data-screen="overworld"] #overworld-overlay {
   box-shadow: 0 0 3px rgba(60, 42, 24, 0.7);
 }
 
+/* ── KUSH (78-87) flourishes ──────────────────────────────────────────────
+   Flyers below are CLONES of real card elements (a slot or a hand card), so they
+   keep .battle-card-slot / .battle-hand-card and the container-type that makes
+   the cqw CC/IP badges resolve; these rules only add the in-flight look.
+   Position, size and z-index are set inline by the FX. */
+
+/* Piye's copy budding off him (piyeBubbleCopy): a soap-film rim + lift shadow. */
+.reveal-fx-piye-bubble {
+  box-shadow: 0 0 0 2px rgba(140, 210, 255, 0.55), 0 12px 28px rgba(0, 0, 0, 0.6);
+  filter: saturate(1.1) brightness(1.05);
+  border-radius: 6px;
+}
+/* A card in flight between a deck pile and a slot / hand (deckCardToHand,
+   deckCardToSlot). */
+.reveal-fx-deck-fly {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.65);
+}
+/* The face-down flyer's back fills its clone (Trade Network's replacement
+   arriving face down). Later than .battle-card-back, so these win. */
+.reveal-fx-card-back-fly {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: inherit;
+}
+
+/* The Iron Furnace (87): the quick pop on ignite (ironFurnaceIgnite; sparks are
+   the shared spawnEmbers layer). */
+.battle-card-slot.reveal-fx-furnace-pop {
+  animation: revealFxFurnacePop 0.46s cubic-bezier(0.3, 0.7, 0.4, 1);
+  z-index: 6;
+}
+@keyframes revealFxFurnacePop {
+  0%   { transform: translateY(0)     scale(1); }
+  30%  { transform: translateY(-16px) scale(1.06); }
+  60%  { transform: translateY(0)     scale(1); }
+  80%  { transform: translateY(-5px); }
+  100% { transform: translateY(0); }
+}
+/* The red flame burning UNDER each boosted Labor card for the clip's duration.
+   Appended to the slot (clipped to the card); screen-blended so it reads as fire
+   on top of the art rather than a red block. Removed by the FX when the clip ends. */
+.battle-card-slot .reveal-fx-furnace-flame {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: -2%;
+  height: 44%;
+  pointer-events: none;
+  z-index: 9;
+  background: radial-gradient(ellipse at 50% 100%,
+    rgba(255, 214, 90, 0.95) 0%,
+    rgba(255, 112, 30, 0.90) 26%,
+    rgba(222, 32, 20, 0.78) 54%,
+    rgba(120, 0, 0, 0) 78%);
+  filter: blur(1.5px);
+  mix-blend-mode: screen;
+  transform-origin: 50% 100%;
+  animation: revealFxFurnaceFlame 0.28s ease-in-out infinite alternate;
+}
+@keyframes revealFxFurnaceFlame {
+  0%   { transform: scaleY(0.82) scaleX(1.04); opacity: 0.8; }
+  100% { transform: scaleY(1.12) scaleX(0.96); opacity: 1; }
+}
+
 /* The nugget struck out of the Nubian Gold Mines (nubianGoldEmerge). Same
    throwaway-particle contract as .reveal-fx-dirt-clod above: position/size/z-index
    are set inline by the FX, this rule owns only the look. Irregular ore silhouette

@@ -327,6 +327,41 @@
     }
   }
 
+  /* ── GRIOT (84) boost pulse — EDGE-TRIGGERED, the Hieroglyphics shape ────────
+     LEVEL-driven boost (evaluateContinuous applies it live, like Juvenal's penalty,
+     not deferred like the Egypt Farmer's grant) with an EDGE-driven pulse on top:
+     gained = _griotNow && !_griotBoosted, so it fires on Griot's reveal for the
+     Cultural cards already there, again for each Cultural card that later reveals
+     or MOVES in, and never on an unrelated recompute — the flags travel with the
+     slot data, so a card carrying its boost to another location does not re-pulse.
+     The number lands ON the pop: each gained card's badge is held at its pre-boost
+     value (its true IP minus Griot's share, which the aura block recorded) while
+     griot.mp3 plays, and released as the cards bounce at the clip's end. A card
+     already under some other hold is left to that hold. */
+  function pulseGriotGains() {
+    var gained = [];
+    ['player', 'opp'].forEach(function (own) {
+      var slots = own === 'player' ? G.playerSlots : G.aiSlots;
+      G.locations.forEach(function (loc) {
+        (slots[loc.id] || []).forEach(function (s, si) {
+          if (!s) return;
+          var now = !!s._griotNow, was = !!s._griotBoosted;
+          if (now && !was && !s._ipDisplayHold) {
+            _holdBadgeAt(s, effectiveIP(s) - (s._griotDelta || 0));
+            gained.push({ s: s, el: getSlotEl(own, loc.id, si) });
+          }
+          s._griotBoosted = now;      // remember for the next pass
+          s._griotNow     = false;    // clear this pass's mark
+        });
+      });
+    });
+    if (!gained.length) return;
+    var release = function () { gained.forEach(function (g) { _releaseBadge(g.s); }); _repaint(); };
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.griotPulse === 'function') rfx.griotPulse(gained.map(function (g) { return g.el; }), release);
+    else release();
+  }
+
   /* ── NARMER (51) "The Unifier" — persistent red glow ─────────────────────────
      Lights Narmer's own card and, for HIS OWNER'S SIDE ONLY, the score number at
      his location and at each ADJACENT location, for as long as his Continuous
@@ -568,6 +603,8 @@
           s.contMod = (s.contMod || 0) + n;
           s.contModSources.push({ source: 'Griot', delta: n });
           addBonus(s, n, 'card', 84, nextEventId(), 'A', true);
+          s._griotNow   = true;        // this pass's boost set — see pulseGriotGains
+          s._griotDelta = n;           // Griot's share of this card's IP, for the display hold
         });
       });
 
@@ -1132,6 +1169,8 @@
       updateNarmerGlows();
       // Flash any card that JUST gained the Hieroglyphics aura (edge-triggered)
       pulseHieroglyphicsGains();
+      // Griot's boost, same edge rule: pulse the cards that JUST started receiving it
+      pulseGriotGains();
     }
   }
 
@@ -3740,7 +3779,60 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
        this the copy is built from the card definition and arrives at base IP.
        cardIPBonus (Amenirdis' in-hand +1) is added by placeRevealedCard itself,
        so it is not passed here — doing so would count it twice. */
-    SOG.board.placeRevealedCard(owner, dest, 78, sd ? (sd.ipMod || 0) : 0);
+    var pSlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var destIdx = (pSlots[dest] || []).indexOf(null);         // captured BEFORE placing (fills the first null)
+    if (!SOG.board.placeRevealedCard(owner, dest, 78, sd ? (sd.ipMod || 0) : 0)) { done(); return; }
+    /* STATE COMMITTED. The bubble is presentation: the copy is already in its slot
+       and is held hidden by the FX until the bubble lands there. Both players see
+       it — it happens on the board. */
+    var rfx   = window.SOG && SOG.RevealFx;
+    var srcEl = actorSlotEl(owner, locId, sd, slotIndex);
+    var dstEl = destIdx !== -1 ? getSlotEl(owner, dest, destIdx) : null;
+    if (rfx && typeof rfx.piyeBubbleCopy === 'function') rfx.piyeBubbleCopy(srcEl, dstEl, { sfx: 'sfx/piye.mp3' }, done);
+    else done();
+  }
+
+  /* ── Kush presentation helpers ───────────────────────────────────────────
+     Display HOLDS pin a badge (and that card's share of the location total —
+     board.displayedIP serves _ipHeldAt to both) at a pre-change number until the
+     animation beat that is supposed to deliver the change. State is never
+     delayed: the ipMod is already written; only what is PAINTED waits. Every
+     hold is released by the FX's own beat callback, and every FX has a fallback
+     that still fires it, so a hold can never outlive its animation. */
+  function _holdBadgeAt(sd, value) { if (sd) { sd._ipDisplayHold = true; sd._ipHeldAt = value; } }
+  function _releaseBadge(sd) { if (sd) { delete sd._ipDisplayHold; delete sd._ipHeldAt; } }
+  function _repaint() { refreshSlotIPDisplays(); updateScores(); }
+  function _kushSfx(src) {
+    try { if (window.SOG && SOG.sfx && typeof SOG.sfx.play === 'function') SOG.sfx.play(src); } catch (e) {}
+  }
+  /* Piye's element in the PLAYER's hand — the LAST match, because a freshly drawn
+     card is pushed onto the end of the hand (duplicate-id safe: the newest one). */
+  function _lastHandCardEl(cardId) {
+    var all = document.querySelectorAll('#battle-player-hand .battle-hand-card[data-id="' + cardId + '"]');
+    return all.length ? all[all.length - 1] : null;
+  }
+  function _badgeText(el, sel) { var b = el && el.querySelector(sel); return b ? b.textContent : null; }
+  /* Kashta / Amenirdis arrival, OWNER-ONLY (the caller has already returned for
+     the AI). `drawn` = Piye came out of the deck this firing -> deck-to-hand flight;
+     otherwise he was already in hand and the badge just morphs in place. `from` /
+     `to` are the badge's text before and after the stamp — both read from the real
+     hand card, so the flyer shows nothing the engine has not recorded. */
+  function _piyeArrival(handEl, drawn, opts, done) {
+    var rfx = window.SOG && SOG.RevealFx;
+    if (!handEl || !rfx) { done(); return; }
+    if (drawn && typeof rfx.deckCardToHand === 'function') {
+      rfx.deckCardToHand(rfx.deckPileEl('player'), handEl, opts, done);
+      return;
+    }
+    if (typeof rfx.badgeSwap === 'function') {
+      var badge = handEl.querySelector(opts.badgeSel);
+      if (badge && opts.from != null) badge.textContent = opts.from;     // rewind to the pre-stamp number…
+      if (opts.sfx) _kushSfx(opts.sfx);
+      rfx.badgeSwap(handEl, opts.badgeSel,
+        function () { if (badge && opts.to != null) badge.textContent = opts.to; },   // …and morph to the recorded one
+        done);
+      return;
+    }
     done();
   }
 
@@ -3762,14 +3854,23 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     return drawIdFromDeck(owner, 78);                        // else try the deck
   }
   function abilityKashta(owner, locId, slotIndex, sd, done) {
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    var wasInHand = !!(hand && hand.indexOf(78) !== -1);
     if (kushFetchPiye(owner) !== 78) { done(); return; }      // not retrievable → fizzle
+    var handEl = owner === 'player' ? _lastHandCardEl(78) : null;
+    var from   = _badgeText(handEl, '.db-overlay-cc');        // the badge BEFORE the stamp
     if (!G.kushCCDiscount) G.kushCCDiscount = { player: {}, opp: {} };
     var bag = G.kushCCDiscount[owner] || (G.kushCCDiscount[owner] = {});
-    bag[78] = (bag[78] || 0) + 1;                             // -1 CC, cumulative
+    bag[78] = (bag[78] || 0) + 1;                             // -1 CC, cumulative — STATE
     if (window.SOG && SOG.input && typeof SOG.input.refreshHandCostDisplays === 'function') {
-      SOG.input.refreshHandCostDisplays();
+      SOG.input.refreshHandCostDisplays();                    // the real hand badge now reads the new cost
     }
-    done();
+    /* OWNER-ONLY from here (the Papyrus precedent): a hidden-hand arrival is the
+       owner's to see. The AI's side gets its hand count refreshed and nothing else. */
+    if (owner !== 'player') { if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand(); done(); return; }
+    _piyeArrival(handEl, !wasInHand,
+      { sfx: 'sfx/kashta.mp3', badgeSel: '.db-overlay-cc', from: from, to: _badgeText(handEl, '.db-overlay-cc') },
+      done);
   }
   /* AMENIRDIS reaches Piye WHEREVER HE IS — unlike Kashta above, which stays an
      in-hand-only stamp. The split is deliberate and not an oversight: Kashta grants
@@ -3784,9 +3885,13 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
      but is not him, and "Piye gains +1" names the card.
      Fizzles only when there is no Piye anywhere — deck, hand, or board. */
   function abilityAmenirdis(owner, locId, slotIndex, sd, done) {
+    var hand0     = owner === 'player' ? G.playerHand : G.aiHand;
+    var wasInHand = !!(hand0 && hand0.indexOf(78) !== -1);
     var inHand = (kushFetchPiye(owner) === 78);               // deck -> hand, or already there
+    var handEl = (inHand && owner === 'player') ? _lastHandCardEl(78) : null;
+    var from   = _badgeText(handEl, '.db-overlay-ip');        // the badge BEFORE the stamp
     var bag    = owner === 'player' ? G.cardIPBonus : G.aiCardIPBonus;
-    if (inHand && bag) bag[78] = (bag[78] || 0) + 1;          // +1 IP, the existing accumulator
+    if (inHand && bag) bag[78] = (bag[78] || 0) + 1;          // +1 IP, the existing accumulator — STATE
 
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
     var onBoard = 0;
@@ -3801,8 +3906,18 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
 
     if (!inHand && !onBoard) { done(); return; }              // no Piye anywhere -> fizzle
     if (onBoard) { evaluateContinuous(); refreshSlotIPDisplays(); updateScores(); }
-    if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
-    done();
+    /* Repaint the hand badge IN PLACE rather than rebuilding the hand: a rebuild
+       would replace the very element the arrival flourish is about to fly into. */
+    if (owner === 'player' && window.SOG && SOG.input && typeof SOG.input.refreshHandIPDisplays === 'function') {
+      SOG.input.refreshHandIPDisplays();
+    }
+    if (!inHand || owner !== 'player') {                     // nothing arrives in a hand the player can see
+      if (owner !== 'player' && SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
+      done(); return;
+    }
+    _piyeArrival(handEl, !wasInHand,
+      { sfx: 'sfx/amenirdis.mp3', badgeSel: '.db-overlay-ip', from: from, to: _badgeText(handEl, '.db-overlay-ip') },
+      done);
   }
 
   /* ── APEDEMAK (81) — "Lion of War" ──────────────────────────────────────────
@@ -3828,10 +3943,8 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       var spec = CARD_ABILITIES[abilityIdOf(s)];
       if (spec && typeof spec.onAtOnce === 'function') targets.push({ s: s, i: i });
     });
-    if (!targets.length) { done(); return; }
+    if (!targets.length) { done(); return; }                // nothing qualifies -> no roar, no animation
     G._apedemakFiring = true;
-    var pending = targets.length;
-    var one = function () { if (--pending === 0) { G._apedemakFiring = false; done(); } };
     /* Through fireAtOnce, THE FUNNEL — not CARD_ABILITIES[...].onAtOnce directly.
        A re-fire is a genuine second firing and has to READ as one: the direct call
        skipped fireAtOnce's presentation entirely, so a re-fired card just silently
@@ -3848,10 +3961,21 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
        the funnel is therefore purely additive here — presentation, not rules.
        abilityIdOf, not cardId: a Rosetta that TRANSCRIBED a Military At Once is the
        ability being fired, and the dispatcher must be handed that id. */
-    targets.forEach(function (t) {
-      try { fireAtOnce(owner, abilityIdOf(t.s), locId, t.i, t.s, one); }
-      catch (e) { one(); }
-    });
+    /* ORDERED, NOT SIMULTANEOUS. apedemak.mp3 plays to its end (the roar is the
+       command), then the Military cards fire ONE AT A TIME in slot order — `targets`
+       was collected in slot order — each re-fire fully resolving (its own done)
+       before the next, with a short gap so two pulses never read as one. The old
+       forEach fired them all in the same tick and they blurred together. */
+    var rfx = window.SOG && SOG.RevealFx;
+    var k = 0;
+    function fireNext() {
+      if (k >= targets.length) { G._apedemakFiring = false; done(); return; }
+      var t = targets[k++];
+      try { fireAtOnce(owner, abilityIdOf(t.s), locId, t.i, t.s, function () { setTimeout(fireNext, 160); }); }
+      catch (e) { fireNext(); }
+    }
+    if (rfx && typeof rfx.playSfxThen === 'function') rfx.playSfxThen('sfx/apedemak.mp3', 1192, fireNext);
+    else fireNext();
   }
 
   /* ── QUEEN SHANAKHDAKHETO (82) — "Son of Ra" ────────────────────────────────
@@ -3872,8 +3996,18 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
         if (c && c.era === 'Egypt') n++;
       });
     });
-    if (n > 0) addIPMod(sd, n, 'Queen Shanakhdakheto', nextEventId());
-    done();
+    if (n <= 0) { done(); return; }                          // no Egypt cards here -> silent
+    addIPMod(sd, n, 'Queen Shanakhdakheto', nextEventId());   // STATE FIRST
+    /* The badge still shows the old number (nothing has repainted yet), so
+       ipBadgeSwap captures it, the repaint inside applyFn writes the recorded
+       one, and the morph is old -> recorded. done on the morph, not the clip:
+       shanakhdakheto.mp3 is 3.3s and plays out on its own. */
+    var rfx = window.SOG && SOG.RevealFx;
+    var el  = actorSlotEl(owner, locId, sd, slotIndex);
+    if (el && rfx && typeof rfx.ipBadgeSwap === 'function') {
+      _kushSfx('sfx/shanakhdakheto.mp3');
+      rfx.ipBadgeSwap(el, _repaint, done);
+    } else { _repaint(); done(); }
   }
 
   /* ── KING EZANA (83) — "Conversion" ─────────────────────────────────────────
@@ -3933,16 +4067,31 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var nsd = (mySlots[locId] || [])[nsi];
     if (!nsd || G._ezanaFiring) { done(); return; }
     G._ezanaFiring = true;
-    fireAtOnce(owner, stolen, locId, nsi, nsd, function () {
-      G._ezanaFiring = false;
-      done();
-    });
+    var resolve = function () {
+      fireAtOnce(owner, stolen, locId, nsi, nsd, function () { G._ezanaFiring = false; done(); });
+    };
+    /* PRESENTATION (both players see it): ezana.mp3 as the convert rises out of the
+       OPPONENT's deck pile and crosses to Ezana's slot — the slot already holds it,
+       held hidden by the FX — then lowfail.mp3 on landing, and only then does it
+       resolve as if just revealed (the fireAtOnce above). Fizzles above make no
+       sound at all: the clip is the tell that the conversion took. The opp pile is
+       queried AFTER updateOppHand rebuilt it. */
+    var rfx   = window.SOG && SOG.RevealFx;
+    var dstEl = getSlotEl(owner, locId, nsi);
+    if (rfx && typeof rfx.deckCardToSlot === 'function' && dstEl) {
+      rfx.deckCardToSlot(rfx.deckPileEl(owner === 'player' ? 'opp' : 'player'), dstEl,
+        { sfx: 'sfx/ezana.mp3', landSfx: 'sfx/lowfail.mp3' }, resolve);
+    } else resolve();
   }
 
   /* ── NUBIAN ARCHERS (85) — "Volley" ─────────────────────────────────────────
-     At Once: -2 IP to ONE random revealed opponent card, at ANY location — the
-     text says "a random opponent's card", not "here". Permanent (addIPMod).
-     Fizzles silently with no opponent card on the board. */
+     At Once: -1 IP to TWO random, DISTINCT revealed opponent cards, at ANY
+     location (the text names opponent cards, not "here"). Permanent (addIPMod).
+     One opponent card on the board -> that card takes -1 and the second arrow
+     fizzles (never -2 to the same card). No opponent card -> silent fizzle.
+     STATE FIRST, then the volley: both -1s are written up front and each target's
+     badge is HELD at its pre-strike number, released by that arrow's impact — the
+     Chariot's arrow visual, twice, 200ms apart, the Archers never moving. */
   function abilityNubianArchers(owner, locId, slotIndex, sd, done) {
     var oppSlots = owner === 'player' ? G.aiSlots : G.playerSlots;
     var pool = [];
@@ -3952,9 +4101,27 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
       });
     });
     if (!pool.length) { done(); return; }                      // nothing to shoot → fizzle
-    var t = pool[Math.floor(Math.random() * pool.length)];
-    addIPMod(t.s, -2, 'Nubian Archers', nextEventId());
-    done();
+    var picks = [pool.splice(Math.floor(Math.random() * pool.length), 1)[0]];   // first, then a DIFFERENT one
+    if (pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    var oppSide = owner === 'player' ? 'opp' : 'player';
+    var eid = nextEventId();
+    var targets = picks.map(function (t) {
+      var pre = effectiveIP(t.s);
+      addIPMod(t.s, -1, 'Nubian Archers', eid);               // STATE
+      _holdBadgeAt(t.s, pre);                                  // …painted on impact
+      return {
+        el: getSlotEl(oppSide, t.locId, t.i),
+        onImpact: function () {
+          _releaseBadge(t.s); _repaint();
+          if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(oppSide, t.s.cardId, -1);
+        }
+      };
+    });
+    _repaint();                                                // shows the held (pre-strike) numbers
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.nubianArchersVolley === 'function') {
+      rfx.nubianArchersVolley(actorSlotEl(owner, locId, sd, slotIndex), targets, {}, done);
+    } else { targets.forEach(function (t) { t.onImpact(); }); done(); }
   }
 
   /* ── TRADE NETWORK (86) — "The Nile Corridor" ───────────────────────────────
@@ -3991,6 +4158,14 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     if (si === -1 || !deck || !deck.length) { done(); return; } // nothing to swap with → fizzle
 
     G._tradeNetworkFiring = true;
+    /* Lift the Natural Resource's face NOW — the state swap two lines down
+       overwrites this slot's DOM with the replacement, and the dive needs the
+       card that is leaving. Its own reveal animation has already played: this
+       reactor runs post-reveal, after the landed card's flip, reveal-fx and At
+       Once have all resolved (see fireOnCardLandedHere). */
+    var rfx0     = window.SOG && SOG.RevealFx;
+    var nrFlight = (rfx0 && typeof rfx0.hyksosLiftOff === 'function')
+                   ? rfx0.hyksosLiftOff(getSlotEl(owner, ctx.locId, si)) : null;
     arr[si] = null;
     /* DRAW FIRST, then return the played card. Returning it first put it in the
        same pool the draw samples, so the swap could hand back the very card that
@@ -4028,8 +4203,24 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
        so a swapped-in Natural Resource cannot re-trigger this swap. Meroe repeating
        the swap-in's At Once happens strictly INSIDE that window, so the repeat cannot
        widen the chain either. */
-    try { fireAtOnce(owner, drawnId, ctx.locId, nsi, nsd, finish); }
-    catch (e) { finish(); }
+    var resolve = function () {
+      try { fireAtOnce(owner, drawnId, ctx.locId, nsi, nsd, finish); }
+      catch (e) { finish(); }
+    };
+    /* PRESENTATION (both players see it), state already swapped: the Natural
+       Resource dives into the owner's deck pile under tradewoosh.mp3 while the
+       replacement is pulled out; it lands FACE DOWN in the slot (demedici-money.mp3),
+       flips in, and only then resolves as if just played there — the fireAtOnce
+       above, which is what makes Meroe's repeat and the At-Once pulse apply to it.
+       The deck pile's rect is read before finish() rebuilds the hand rows. */
+    var dstEl = getSlotEl(owner, ctx.locId, nsi);
+    if (rfx0 && typeof rfx0.tradeNetworkSwap === 'function' && dstEl) {
+      rfx0.tradeNetworkSwap(nrFlight, rfx0.deckPileEl(owner), dstEl,
+        { sfx: 'sfx/tradewoosh.mp3', landSfx: 'sfx/demedici-money.mp3' }, resolve);
+    } else {
+      if (nrFlight && nrFlight.clone && nrFlight.clone.parentNode) nrFlight.clone.parentNode.removeChild(nrFlight.clone);
+      resolve();
+    }
   }
 
   /* ── THE IRON FURNACE (87) — "Forges of Meroe" ──────────────────────────────
@@ -4039,13 +4230,33 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
      too, which matches "Labor cards here" reading plainly. */
   function abilityIronFurnace(owner, locId, slotIndex, sd, done) {
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var n = 0;
-    (slots[locId] || []).forEach(function (s) {
+    var hits = [];
+    (slots[locId] || []).forEach(function (s, i) {
       if (!s || !s.revealed) return;
+      /* "OTHER Labor cards here": the Furnace is Labor itself and must never forge
+         itself. Excluded by IDENTITY, not by id (the Scribe / Apedemak rule): a
+         second Furnace at this location is a legitimate "other" and each forges the
+         other, while a Rosetta carrying this text is the actor and is skipped. */
+      if (s === sd) return;
       var c = CARDS.find(function (x) { return x.id === abilityIdOf(s); });
-      if (c && c.type === 'Labor') { addIPMod(s, 1, 'The Iron Furnace', nextEventId()); n++; }
+      if (!c || c.type !== 'Labor') return;
+      var pre = effectiveIP(s);
+      addIPMod(s, 1, 'The Iron Furnace', nextEventId());     // STATE FIRST
+      _holdBadgeAt(s, pre);                                    // …painted as the flame lights
+      hits.push({ s: s, el: getSlotEl(owner, locId, i) });
     });
-    done();
+    if (!hits.length) { done(); return; }                     // nothing to forge -> no sound, no fire
+    _repaint();
+    var release = function () { hits.forEach(function (h) { _releaseBadge(h.s); }); _repaint(); };
+    /* The clip is chosen by the boosted count (1/2/3). Three is the natural
+       ceiling now that the Furnace excludes itself: four slots, one of them its
+       own. The min(3) in the FX is only a guard. done() when the clip ends, so the
+       next end-of-turn card (and the tally) waits for the fire to burn out. */
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.ironFurnaceIgnite === 'function') {
+      rfx.ironFurnaceIgnite(actorSlotEl(owner, locId, sd, slotIndex),
+        hits.map(function (h) { return h.el; }), { count: hits.length, onIgnite: release }, done);
+    } else { release(); done(); }
   }
 
   /* Draw the first card of a given TYPE from the owner's deck into their hand

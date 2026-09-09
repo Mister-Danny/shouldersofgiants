@@ -85,10 +85,11 @@
     aiMovedThisTurn:        {},
     moveLog:                [],  // player moves this turn [{cardId,fromLocId,toLocId,toSlotIndex,ipModAdded,isColumbus,queued}]
     playerActionLog:        [],  // ordered: {type:'play'|'move', cardId, fromLocId?, fromSlotIndex?, toLocId?}
-    aiActionLog:            [],  // ordered: {type:'play',cardId} and {type:'move',cardId,fromLocId,fromSlotIndex,toLocId} entries — mirrors playerActionLog for buildRevealSequence symmetry (bug 16)
+    aiActionLog:            [],  // ordered: {type:'play',cardId,locId,slotIndex} and {type:'move',cardId,fromLocId,fromSlotIndex,toLocId} entries — mirrors playerActionLog for buildRevealSequence symmetry (bug 16); written by ai.js (AI battles) and applyOpponentActions (2P)
     locationSnapshots:      {},  // locId → slot-array copy taken at first queueMove from that loc
     reservedSlotsPerLoc:    {},  // locId → count of snap-back slots reserved (one per queued move FROM that loc)
     deferredPlays:          {},  // locId → [slotData] new plays that couldn't fit at snap-back; inserted after queued card moves away
+    deferredOppPlays:       {},  // locId → [slotData] 2P remote plays into a location a logged remote move vacates; landed by revealNext after that move
 
     // ── Adventure Mode ────────────────────────────────────────
     prehistoryMode:         false  // when true, all CC costs are overridden to 0
