@@ -393,6 +393,10 @@ window.SOG.Adventure.Prehistory = (function () {
     ai: { profile: 'scriptedSequence',
           settings: { playOrder: [27, 28, 31, 34], faceDown: true,
                       handPadding: [29, 30, 32, 36, 26] } },
+    // Opt out of the engine's unified opening (dialogue → rules + PLAY → deal):
+    // the hands are dealt during the build, before onBattleStart, exactly as
+    // before — this module's coaching cinematic needs the hand on the table.
+    opening: { dealBeforeIntro: true },
     // The battle runs through game.js's initGame lifecycle + the registered
     // 'prehistory' script (below), which supplies all narrative via the hooks.
     scriptHook: 'prehistory'

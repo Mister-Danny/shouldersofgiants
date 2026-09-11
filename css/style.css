@@ -1468,6 +1468,26 @@ img    { display: block; }
 .tier-pick-btn:active {
   box-shadow: 0 0 0 #1a0c04, 0 1px 0 #000;
 }
+
+/* ── Opening-flow PLAY button (SOG.BattleRulesPopup playButton mode, shown by
+   js/game.js's opening rules gate before the hands are dealt). Same bronze/
+   parchment re-tint as the tier picker so it reads as part of the panel. */
+.rules-popup-actions { display: flex; justify-content: center; margin: 18px auto 2px; }
+.rules-play-btn {
+  min-width: 200px; padding: 12px 30px; font-size: 26px; letter-spacing: 0.08em;
+  background: #3a200c;
+  border-color: #d4aa50;
+  color: #f3e6c4;
+  box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000;
+}
+.rules-play-btn:hover {
+  background: #4a2a10;
+  border-color: #f0cf6c;
+  color: #fff5d8;
+}
+.rules-play-btn:active {
+  box-shadow: 0 0 0 #1a0c04, 0 1px 0 #000;
+}
 .tier-pick-name { font-size: 18px; letter-spacing: 0.08em; }
 .tier-pick-sub  { font-size: 11px; text-transform: none; letter-spacing: 0.02em; opacity: 0.85; }
 

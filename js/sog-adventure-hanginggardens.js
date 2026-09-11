@@ -948,6 +948,7 @@ SOG.HangingGardensBattle = (function () {
       ai:       { profile: 'heuristic', tier: _aiTier, movement: 'adventure', settings: { selectPlays: hgSelectPlays } },
       presentation: HG_PRESENTATION,
       rewards:  {},                       // none yet (placeholder build)
+      rulesPopup: { title: RULES_TITLE, body: RULES_BODY },   // engine opening gate (rules + PLAY → deal)
       scriptHook: 'hanging-gardens'
     };
   }

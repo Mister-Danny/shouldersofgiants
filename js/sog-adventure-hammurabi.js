@@ -991,6 +991,7 @@ SOG.HammurabiBattle = (function () {
       ai:       { profile: 'heuristic', tier: _aiTier, movement: 'adventure', settings: { selectPlays: hammurabiSelectPlays } },
       presentation: HAMMURABI_PRESENTATION,
       rewards:  {},                 // none yet — card-47 grant + gold come in Stage 5
+      rulesPopup: { title: RULES_TITLE, body: RULES_BODY },   // engine opening gate (rules + PLAY → deal)
       scriptHook: 'hammurabi'       // scripted battle (presentation now; dialogue/scoreboard in Stage 4/5)
     };
   }

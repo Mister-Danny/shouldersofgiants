@@ -43,10 +43,20 @@ SOG.BattleRulesPopup = (function () {
     return '<div class="rules-popup-prose">' + (body || '') + '</div>';
   }
 
+  /* show(opts)
+       title / body / panelClass / onDismiss — as before (X button or backdrop
+       click closes; onDismiss fires once on close).
+       playButton: true — OPENING-FLOW mode (js/game.js _openingRulesGate): a
+       PLAY button is rendered under the body, the X is omitted and backdrop
+       clicks are ignored, so the only way on is Play. Play closes the popup and
+       calls opts.onPlay. onDismiss is NOT fired by Play (a teardown hide() while
+       the gate is up fires onDismiss, never onPlay — nothing deals into a
+       battle that has been left). */
   function show(opts) {
     opts = opts || {};
     hide();                       // close any existing instance (no dismiss cb)
     _onDismiss = opts.onDismiss || null;
+    var playMode = !!opts.playButton;
 
     var backdrop = document.createElement('div');
     backdrop.id = BACKDROP_ID;
@@ -68,15 +78,35 @@ SOG.BattleRulesPopup = (function () {
     bodyEl.className = 'rules-popup-body';
     bodyEl.innerHTML = _buildBodyHTML(opts.body);
 
-    panel.appendChild(closeBtn);
+    if (!playMode) panel.appendChild(closeBtn);
     panel.appendChild(titleEl);
     panel.appendChild(bodyEl);
+    if (playMode) {
+      var actions = document.createElement('div');
+      actions.className = 'popup-actions rules-popup-actions';
+      var playBtn = document.createElement('button');
+      playBtn.type = 'button';
+      playBtn.className = 'btn-snes rules-play-btn';
+      playBtn.textContent = 'PLAY';
+      actions.appendChild(playBtn);
+      panel.appendChild(actions);
+      playBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var onPlay = opts.onPlay;
+        _onDismiss = null;          // Play is not a dismiss
+        hide();
+        if (typeof onPlay === 'function') onPlay();
+      });
+    }
     backdrop.appendChild(panel);
     document.body.appendChild(backdrop);
 
     // Dismiss: X button, or click outside the panel (mirrors the card popup).
-    closeBtn.addEventListener('click', function (e) { e.stopPropagation(); hide(); });
-    backdrop.addEventListener('click', function (e) { if (e.target === backdrop) hide(); });
+    // Play mode has neither — the Play button is the only way on.
+    if (!playMode) {
+      closeBtn.addEventListener('click', function (e) { e.stopPropagation(); hide(); });
+      backdrop.addEventListener('click', function (e) { if (e.target === backdrop) hide(); });
+    }
 
     // Force reflow then add .visible so the CSS fade/scale transition runs.
     void backdrop.offsetHeight;

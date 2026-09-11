@@ -113,59 +113,21 @@ SOG.GilgameshBattle = (function () {
   function _unwireOpponentPortraitClick() {
     var el = _opponentAvatarEl();
     if (el && _portraitClickHandler) el.removeEventListener('click', _portraitClickHandler);
-    if (el) el.classList.remove('gilgamesh-clickable', 'gilgamesh-portrait-glow');
+    if (el) el.classList.remove('gilgamesh-clickable');
     _portraitClickHandler = null;
-    _removeClickHereIndicator();
   }
 
-  function _addClickHereIndicator() {
-    var el = _opponentAvatarEl();
-    if (!el || document.getElementById('gilgamesh-clickhere')) return;
-    var tag = document.createElement('div');
-    tag.id = 'gilgamesh-clickhere';
-    tag.className = 'gilgamesh-clickhere';
-    tag.textContent = 'Click Here';
-    el.appendChild(tag);
-  }
-  function _removeClickHereIndicator() {
-    var t = document.getElementById('gilgamesh-clickhere');
-    if (t && t.parentNode) t.parentNode.removeChild(t);
-  }
-  function _glowOpponentPortrait(on) {
-    var el = _opponentAvatarEl();
-    if (!el) return;
-    if (on) { el.classList.add('gilgamesh-portrait-glow', 'gilgamesh-clickable'); _addClickHereIndicator(); }
-    else    { el.classList.remove('gilgamesh-portrait-glow'); _removeClickHereIndicator(); }
-  }
-
-  /* Show one opponent-bubble line (typewriter + bleep) that stays visible
-     with NO click-to-advance — used for the interactive "Click on me" beat. */
-  function _showOpponentLine(text, onReady) {
-    var el = getBubbleEl('otzi');
-    if (!el) { if (onReady) onReady(); return; }
-    var ex = getBubbleEl('explorer'); if (ex) ex.classList.remove('is-visible', 'is-ready');
-    var textEl = el.querySelector('.adv-bubble-text');
-    if (!textEl) { if (onReady) onReady(); return; }
-    textEl.textContent = '';
-    el.classList.add('is-visible'); el.classList.remove('is-ready');
-    var i = 0, bleepCount = 0;
-    var timer = setInterval(function () {
-      i++; textEl.textContent = text.slice(0, i);
-      var c = text.charAt(i - 1);
-      if (c && c !== ' ' && c !== '\n') { bleepCount++; if (bleepCount >= 2) { bleepCount = 0; playBleep('otzi'); } }
-      if (i >= text.length) { clearInterval(timer); el.classList.add('is-ready'); if (onReady) onReady(); }
-    }, TYPE_SPEED_MS);
-  }
-
-  /* Opening in-battle dialogue (Battle 1 Attempt 1 only). Lines 1-5 advance
-     normally; "Click on me" pauses for a portrait click → rules popup → resume
-     with "Thank you". Skipped on Attempt 2+ / re-entries. */
-  var OPENING_PRE = [
+  /* Opening in-battle dialogue (Battle 1 Attempt 1 only). Four lines, then
+     onComplete; the rules popup that used to hang off an interactive portrait
+     click here is now the engine's opening gate (js/game.js: dialogue → rules
+     + PLAY → deal), fed by the config's rulesPopup — the "reminder" line leads
+     straight into it. Skipped on Attempt 2+ / re-entries. */
+  var OPENING_DIALOGUE = [
     { who: 'otzi',     text: 'Prepare to be smited into the great beyond.' },
     { who: 'explorer', text: 'Gulp.' },
-    { who: 'explorer', text: 'How do you play this, again?' }
+    { who: 'explorer', text: 'How do you play this, again?' },
+    { who: 'otzi',     text: 'Click on me, if you need a reminder.' }
   ];
-  var OPENING_PROMPT = 'Click on me, if you need a reminder.';
 
   function _runOpeningDialogue(onComplete) {
     var seen = false, cun = false;
@@ -173,24 +135,9 @@ SOG.GilgameshBattle = (function () {
     try { cun  = localStorage.getItem(KEY_CUNEIFORM_GRANTED) === 'true'; } catch (e) {}
     if (seen || cun) { if (onComplete) onComplete(); return; }
 
-    runLines(OPENING_PRE, function () {
-      _showOpponentLine(OPENING_PROMPT, function () {
-        _glowOpponentPortrait(true);
-        var el = _opponentAvatarEl();
-        var oneShot = function () {
-          if (el) el.removeEventListener('click', oneShot);
-          _openRulesPopup(function () {
-            _glowOpponentPortrait(false);
-            var ot = getBubbleEl('otzi'); if (ot) ot.classList.remove('is-visible', 'is-ready');
-            runLines([{ who: 'explorer', text: 'Thank you!' }], function () {
-              try { localStorage.setItem('sog_gilgamesh_opening_seen', 'true'); } catch (e) {}
-              if (onComplete) onComplete();
-            });
-          });
-        };
-        if (el) el.addEventListener('click', oneShot);
-        else oneShot();
-      });
+    runLines(OPENING_DIALOGUE, function () {
+      try { localStorage.setItem('sog_gilgamesh_opening_seen', 'true'); } catch (e) {}
+      if (onComplete) onComplete();
     });
   }
 
@@ -236,54 +183,6 @@ SOG.GilgameshBattle = (function () {
       .to(el, { x:  -7, y:  3, duration: 0.05, ease: 'none' })
       .to(el, { x:   5, y: -2, duration: 0.05, ease: 'none' })
       .to(el, { x:   0, y:  0, duration: 0.05, ease: 'none' });
-  }
-
-  /* ── Card deal animation ─────────────────────────────────────── */
-  function dealCards(onDone) {
-    // Lift the pre-deal visibility:hidden — elements now render
-    document.body.classList.remove('otzi-pre-deal');
-
-    if (typeof gsap === 'undefined') {
-      if (onDone) onDone();
-      return;
-    }
-
-    var handCards = document.querySelectorAll('#battle-player-hand .battle-hand-card');
-    var deckPile  = document.querySelector('#battle-player-hand .battle-deck-pile');
-    var oppHand   = document.getElementById('battle-opp-hand');
-    var hudBR     = document.querySelector('.battle-hud-bottomright');
-
-    // Player hand cards fly up from below, staggered
-    for (var i = 0; i < handCards.length; i++) {
-      gsap.fromTo(handCards[i],
-        { y: 220, opacity: 0, scale: 0.55, rotate: -12 },
-        { y: 0,   opacity: 1, scale: 1,    rotate: 0,
-          duration: 0.55, ease: 'power2.out', delay: i * 0.10 });
-    }
-
-    // Deck pile slides in from the right
-    if (deckPile) {
-      gsap.fromTo(deckPile,
-        { x: 120, opacity: 0 },
-        { x: 0,   opacity: 1, duration: 0.45, ease: 'power2.out', delay: 0.45 });
-    }
-
-    // Opp hand drops down from above
-    if (oppHand) {
-      gsap.fromTo(oppHand,
-        { y: -130, opacity: 0 },
-        { y: 0,    opacity: 1, duration: 0.50, ease: 'power2.out', delay: 0.10 });
-    }
-
-    // Reset + End Turn buttons slide in from the right
-    if (hudBR) {
-      gsap.fromTo(hudBR,
-        { x: 160, opacity: 0 },
-        { x: 0,   opacity: 1, duration: 0.50, ease: 'power2.out', delay: 0.20 });
-    }
-
-    // All animations complete by ~0.85s; give them 1s to settle
-    setTimeout(function () { if (onDone) onDone(); }, 1000);
   }
 
   /* ── AI: card-aware play selection (D3a.2 ST2) ────────────────────
@@ -1144,9 +1043,9 @@ SOG.GilgameshBattle = (function () {
     // Route through game.js's engine: buildGilgameshConfig + the registered
     // 'gilgamesh' script (scriptHook) supply ALL setup + narrative via the
     // lifecycle hooks — onIntro (body classes + screen switch under the
-    // overworld wipe), onBattleStart (avatars + fade cover + deal + the
-    // Attempt-1 opening dialogue with the interactive portrait/rules-popup pause
-    // + wire the persistent rules click), onTurnStart/onPlayerPlayed/
+    // overworld wipe), onBattleStart (avatars + fade cover + the Attempt-1
+    // opening dialogue + wire the persistent rules click; the engine then runs
+    // the shared rules-popup/PLAY gate and the deal), onTurnStart/onPlayerPlayed/
     // onBeforeReveal/isInputBlocked, and onWin/onLoss/onTie. The AI is the
     // heuristic seam (gilgameshSelectPlays) + adventure Chariot movement.
     if (typeof window.initGame === 'function') window.initGame(buildGilgameshConfig());
@@ -1269,7 +1168,6 @@ SOG.GilgameshBattle = (function () {
       presentation: {
         bodyClass:        'gilgamesh-battle',                  // Mesopotamia location art
         bodyClassExtra:   'otzi-battle',                       // shared adventure-battle styling
-        preCoachingClass: 'otzi-pre-deal',                     // hides hand until the deal
         allyAvatar:       'player',   // selected adventurer, resolved at render time
         opponentAvatar:   'images/portraits/gilgameshportrait.jpeg',
         popAlly:          true
@@ -1278,6 +1176,7 @@ SOG.GilgameshBattle = (function () {
       // grant; gold + market in part 4) and sets the completion flags itself;
       // the engine never consumes this since onWin/onLoss/onTie don't proceed().
       rewards:   { onWin: { completionFlag: KEY_PHASE1_COMPLETE } },
+      rulesPopup: { title: RULES_TITLE, body: RULES_BODY },   // engine opening gate (rules + PLAY → deal)
       scriptHook: 'gilgamesh'
     };
   }
@@ -1319,34 +1218,34 @@ SOG.GilgameshBattle = (function () {
       done();   // → engine builds the board (decks/locations from config) under the cover
     },
 
-    // Board built (hidden by otzi-pre-deal). Avatars + turn-1 presentation, then
-    // fade the cover → deal → (Attempt-1 only) opening dialogue + INTERACTIVE
-    // PAUSE (glow portrait → await click → BattleRulesPopup → resume) → wire the
-    // persistent rules-popup portrait click. done() begins turn 1.
+    // Board built (hands still empty — the engine deals after this hook).
+    // Avatars + turn-1 presentation, fade the cover, (Attempt-1 only) opening
+    // dialogue, wire the persistent rules-popup portrait click. done() hands
+    // off to the engine's opening tail: rules popup + PLAY → the deal-in (this
+    // battle's original fly-up, now shared by every Adventure battle) → turn 1.
     onBattleStart: function (ctx, done) {
       if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(ctx.config && ctx.config.presentation);
       setTurnCounter(1, TOTAL_TURNS);
       _gDisableButtons();
       fadeOutCover(function () {
-        dealCards(function () {
-          var finishStart = function () { _wireOpponentPortraitClick(); done(); };
-          // GIANT REMATCH → in-battle dominance intro (BLOCK 2), then straight to
-          // play. No portrait pause / rules popup (the player learned the rules in
-          // battle 1). Takes precedence over the opening-skip check below.
-          if (_isGilgameshRematch()) {
-            _gScriptDialogueActive = true;
-            runLines(GILGAMESH_REMATCH_INTRO, function () {
-              _gScriptDialogueActive = false;
-              finishStart();
-            });
-            return;
-          }
-          if (_gBattleSkippedOpening) { finishStart(); return; }
+        var finishStart = function () { _wireOpponentPortraitClick(); done(); };
+        // GIANT REMATCH → in-battle dominance intro (BLOCK 2), then straight to
+        // play. No rules popup (the player learned the rules in battle 1; the
+        // engine skips its gate on a Giant rematch). Takes precedence over the
+        // opening-skip check below.
+        if (_isGilgameshRematch()) {
           _gScriptDialogueActive = true;
-          _runOpeningDialogue(function () {   // 5 lines → portrait pause → rules popup → "Thank you"
+          runLines(GILGAMESH_REMATCH_INTRO, function () {
             _gScriptDialogueActive = false;
             finishStart();
           });
+          return;
+        }
+        if (_gBattleSkippedOpening) { finishStart(); return; }
+        _gScriptDialogueActive = true;
+        _runOpeningDialogue(function () {   // 4 lines → (engine) rules popup + PLAY → deal
+          _gScriptDialogueActive = false;
+          finishStart();
         });
       });
     },

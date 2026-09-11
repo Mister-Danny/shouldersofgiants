@@ -341,6 +341,9 @@ SOG.LevelRuntime = (function () {
       },
       presentation: level.presentation,
       rewards:      {},
+      // Opening rules gate (engine-owned, js/game.js): shown with a PLAY button
+      // after the opening dialogue, before the deal. Absent → no gate.
+      rulesPopup:   level.rulesPopup || null,
       scriptHook:   levelId
     };
   }
@@ -358,13 +361,15 @@ SOG.LevelRuntime = (function () {
     });
     var runLines = function (lines, onAllDone) { st.runner.runLines(lines, onAllDone); };
 
+    /* Opening dialogue only. The rules popup that used to follow it is now the
+       engine's opening gate (js/game.js: dialogue → rules + PLAY → deal), fed by
+       level.rulesPopup through _buildConfig; _openRulesPopup remains for the
+       on-demand portrait click. */
     function _runOpeningDialogue(onComplete) {
       if (_has(KEY_OPENING_SEEN) || !dlg.opening || !dlg.opening.length) { if (onComplete) onComplete(); return; }
       runLines(dlg.opening, function () {
-        _openRulesPopup(level, function () {
-          _set(KEY_OPENING_SEEN);
-          if (onComplete) onComplete();
-        });
+        _set(KEY_OPENING_SEEN);
+        if (onComplete) onComplete();
       });
     }
     function _runLinesIfAny(lines, onDone) {
@@ -379,10 +384,10 @@ SOG.LevelRuntime = (function () {
        Why not onTurnStart: that hook fires for turns 2+ only (js/game.js —
        "start of a selection phase (turns 2+)"), so turn 1 can never reach it.
        Nebuchadnezzar's flood interjection rides onTurnStart precisely because
-       it lands on turns 3-5. Rather than change when the engine fires that hook
-       — which would touch every shipped battle — this schedules off the tail of
-       onBattleStart, where the board is already built and the hand already
-       dealt. The input block / release is Neb's exact pattern.
+       it lands on turns 3-5. This schedules off onHandDealt instead — the
+       engine fires it right after the opening deal (dialogue → rules gate →
+       deal → onHandDealt → turn 1), so the beat can never land over the rules
+       popup or an empty hand. The input block / release is Neb's exact pattern.
 
        Fires ONCE, ever: the seen-flag is localStorage, so a rematch, a Play
        Again, or a return visit weeks later all skip it. It is also skipped
@@ -476,8 +481,7 @@ SOG.LevelRuntime = (function () {
             _dialogueActive = false;
             _enableButtons();
             _wireOpponentPortraitClick(levelId, level);
-            done();                          // turn 1 goes live here
-            _scheduleTurn1Interjection();    // ...then the beat lands on top of it
+            done();                          // → engine: rules gate → deal → onHandDealt → turn 1
           };
           _dialogueActive = true;
           // GIANT rematch → in-battle dominance intro instead of the Serf
@@ -489,6 +493,9 @@ SOG.LevelRuntime = (function () {
           }
         });
       },
+      // Hands are on the table (engine, after the rules gate) — the turn-1 beat
+      // may now refer to them.
+      onHandDealt: function () { _scheduleTurn1Interjection(); },
       isInputBlocked: function () { return !!_dialogueActive; },
       onWin:  function (ctx, result) { _onWin(result.locResults); },
       onLoss: function (ctx, result) { _onDefeatOrTie(false, result.locResults); },

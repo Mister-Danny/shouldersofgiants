@@ -252,7 +252,7 @@
       var deckIds = (window.Decks && window.Decks.getActiveCards()) || [];
       G.playerDeck = shuffle(deckIds.slice());
     }
-    G.playerHand = G.playerDeck.splice(0, cfg.structure.handStart);
+    G.playerHand = [];   // dealt by _dealOpeningHands (below, or after the opening gate)
 
     /* AI deck: cfg.decks.ai. 'explicit' → fixed ids (2P); 'scripted' → seed the
        hand with ai.settings.playOrder and the deck with handPadding (scripted
@@ -262,15 +262,22 @@
     var aiDeckCfg = cfg.decks.ai;
     if (aiDeckCfg.source === 'explicit' && aiDeckCfg.ids && aiDeckCfg.ids.length) {
       G.aiDeck = shuffle(aiDeckCfg.ids.slice());
-      G.aiHand = G.aiDeck.splice(0, cfg.structure.handStart);
     } else if (aiDeckCfg.source === 'scripted') {
       var aiSettings = (cfg.ai && cfg.ai.settings) || {};
-      G.aiHand = (aiSettings.playOrder   || []).slice();   // hand = scripted sequence
-      G.aiDeck = (aiSettings.handPadding || []).slice();   // deck = cosmetic padding
+      G.aiDeck = (aiSettings.handPadding || []).slice();   // deck = cosmetic padding (hand = playOrder, at the deal)
     } else {
       G.aiDeck = buildAiDeck();
-      G.aiHand = G.aiDeck.splice(0, cfg.structure.handStart);
     }
+    G.aiHand = [];
+
+    /* THE DEAL. Every battle's opening runs the same sequence (see the
+       onBattleStart continuation at the end of this build): dialogue over an
+       EMPTY hand → rules popup with a PLAY button → the hands are dealt. The
+       two prehistory modules (Neanderthal, Ötzi) opt out with
+       cfg.opening.dealBeforeIntro and keep their bespoke pre-deal cinematics:
+       for them the deal happens right here, exactly where it always did. */
+    var _dealsEarly = !!(cfg.opening && cfg.opening.dealBeforeIntro);
+    if (_dealsEarly) _dealOpeningHands();
 
     // Stage 1 preload: warm both decks' card art + reveal-fx overlays + this
     // battle's SFX into cache now, so the reveal sequence plays from cache instead
@@ -381,16 +388,132 @@
     refreshMoveableCards();
 
     /* onBattleStart (async script hook): the board is built and the gameplay UI
-       is in place; a script can run its opening sequence (coaching, dialogue,
-       interactive pause) and gate turn 1 until done(). With no script present
-       the turn-1 activation tail runs immediately — behaviour-identical. */
-    SOG.BattleHooks.runAsyncOr('onBattleStart', [], function _activateTurn1() {
-      // (Battle music already started at battle entry in _initGameBuild.)
-      _startSelectionTimer();
-      if (typeof Analytics !== 'undefined') {
-        Analytics.gameStarted(window.aiDifficulty);
-      }
+       is in place; a script can run its opening sequence (avatars, cover fade,
+       dialogue) and gate the rest of the opening until done(). With no script
+       present the continuation runs immediately.
+
+       The continuation is the ENGINE-OWNED opening tail, identical for every
+       battle that has not opted out:
+         1. rules gate — cfg.rulesPopup shown with a PLAY button (skipped when the
+            battle has no rules content, or on a Giant rematch — the player
+            learned the rules in the Serf battle, and every boss's rematch intro
+            goes straight to play);
+         2. the deal — both hands dealt + rendered, with a shared deal-in
+            animation on Adventure battles;
+         3. onHandDealt (sync script hook) — the moment a script may run a beat
+            that refers to the dealt hand (level-runtime's turn-1 interjection);
+         4. turn-1 activation (selection timer, analytics).
+       Opt-out battles (cfg.opening.dealBeforeIntro) dealt during the build and
+       go straight from done() to turn-1 activation — behaviour-identical. */
+    SOG.BattleHooks.runAsyncOr('onBattleStart', [], function () {
+      if (_dealsEarly) { _activateTurn1(); return; }
+      _openingRulesGate(cfg, function () {
+        _dealIn(cfg, function () {
+          SOG.BattleHooks.fire('onHandDealt', []);
+          _activateTurn1();
+        });
+      });
     });
+  }
+
+  function _activateTurn1() {
+    // (Battle music already started at battle entry in _initGameBuild.)
+    _startSelectionTimer();
+    if (typeof Analytics !== 'undefined') {
+      Analytics.gameStarted(window.aiDifficulty);
+    }
+  }
+
+  /* Deal the opening hands from the decks _initGameBuild built. Player: the
+     top handStart cards. AI: the same, except a 'scripted' opponent whose hand
+     IS its play order (the deck is cosmetic padding). Pure state — rendering
+     is the caller's job. */
+  function _dealOpeningHands() {
+    var cfg = G.config;
+    G.playerHand = G.playerDeck.splice(0, cfg.structure.handStart);
+    var aiDeckCfg = cfg.decks.ai;
+    if (aiDeckCfg.source === 'scripted') {
+      var aiSettings = (cfg.ai && cfg.ai.settings) || {};
+      G.aiHand = (aiSettings.playOrder || []).slice();
+    } else {
+      G.aiHand = G.aiDeck.splice(0, cfg.structure.handStart);
+    }
+  }
+
+  /* Giant rematch = the Giant-tier battle the player has not yet won. Mirrors
+     every boss module's own predicate (_isSargonGiantRematch etc.) and
+     level-runtime's _isGiantRematch, reading the same sog_node_<hook>_giant_beaten
+     flag endGame stamps. */
+  function _isGiantRematchFor(cfg) {
+    if (!cfg || cfg.flagTier !== 'giant' || !cfg.scriptHook) return false;
+    try { return localStorage.getItem('sog_node_' + cfg.scriptHook + '_giant_beaten') !== 'true'; }
+    catch (e) { return true; }
+  }
+
+  /* Opening rules gate: cfg.rulesPopup ({ title, body }) with a PLAY button;
+     proceed() runs when the player presses Play. No content / no popup module /
+     Giant rematch → proceed() at once. A battle with no rules content today
+     (Hatshepsut, Hyksos) picks the gate up automatically once its config
+     carries rulesPopup. */
+  function _openingRulesGate(cfg, proceed) {
+    var rp = cfg.rulesPopup;
+    var popup = window.SOG && SOG.BattleRulesPopup;
+    if (!rp || !rp.body || !popup || typeof popup.show !== 'function' || _isGiantRematchFor(cfg)) {
+      proceed();
+      return;
+    }
+    popup.show({ title: rp.title, body: rp.body, playButton: true, onPlay: proceed });
+  }
+
+  /* The deal, rendered. Deals + rebuilds both hands, then (Adventure battles
+     only — cfg.scriptHook set — so Arcadium / 2P stay as they were) plays the
+     shared deal-in: the player's cards fly up from below, staggered, and the
+     opponent's card backs drop in from above — Gilgamesh's original flourish,
+     promoted. End Turn / Reset are held disabled and input is blocked until
+     the cards have settled, then the buttons go back to whatever the script's
+     opening left them (Gilgamesh keeps them off until the first play). Bails
+     if the battle was torn down while the gate was up. */
+  function _dealIn(cfg, onDone) {
+    if (G.config !== cfg) return;
+    var endWasDisabled   = !!endTurnBtn.disabled;
+    var resetWasDisabled = !!resetTurnBtn.disabled;
+    endTurnBtn.disabled   = true;
+    resetTurnBtn.disabled = true;
+    SOG.BattleHooks.services.blockInput();
+
+    _dealOpeningHands();
+    rebuildPlayerHand();
+    SOG.ui.updateOppHand();
+    updateHeader();
+    refreshMoveableCards();
+
+    var settleMs = 0;
+    if (cfg.scriptHook && typeof gsap !== 'undefined') {
+      var handCards = document.querySelectorAll('#battle-player-hand .battle-hand-card');
+      var oppBacks  = document.querySelectorAll('#battle-opp-hand .battle-card-back');
+      for (var i = 0; i < handCards.length; i++) {
+        gsap.fromTo(handCards[i],
+          { y: 220, opacity: 0, scale: 0.55, rotate: -12 },
+          { y: 0,   opacity: 1, scale: 1,    rotate: 0,
+            duration: 0.55, ease: 'power2.out', delay: i * 0.10 });
+      }
+      for (var j = 0; j < oppBacks.length; j++) {
+        gsap.fromTo(oppBacks[j],
+          { y: -130, opacity: 0 },
+          { y: 0,    opacity: 1, duration: 0.50, ease: 'power2.out', delay: 0.10 + j * 0.06 });
+      }
+      // Last card lands at ~0.55 + (n-1)*0.10 s; give the flight a moment to settle.
+      settleMs = Math.max(1000, 700 + handCards.length * 100);
+    }
+
+    var finish = function () {
+      if (G.config !== cfg) return;
+      SOG.BattleHooks.services.unblockInput();
+      endTurnBtn.disabled   = endWasDisabled;
+      resetTurnBtn.disabled = resetWasDisabled;
+      onDone();
+    };
+    if (settleMs) setTimeout(finish, settleMs); else finish();
   }
 
   /* ── Utilities ───────────────────────────────────────────────── */

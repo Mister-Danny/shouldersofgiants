@@ -6,8 +6,9 @@
  * engine's initGame(config); the registered 'sargon' script owns presentation:
  *   • onIntro       — context body class + showScreen, BEFORE the board builds.
  *   • onBattleStart — Sargon portrait avatars, fade the overworld radial-wipe
- *                     cover away, then the opening capital-tutorial dialogue +
- *                     rules popup, gating turn 1 until done().
+ *                     cover away, then the opening capital-tutorial dialogue,
+ *                     gating done(); the engine then runs the shared rules
+ *                     popup + PLAY gate and deals the hands (js/game.js).
  *   • onWin/onLoss/onTie — route to the Sargon end-game scoreboard (own the
  *                     screen; never proceed()). Buttons differ for the first
  *                     win (Continue / Game Board) vs every subsequent battle
@@ -256,16 +257,17 @@ SOG.SargonBattle = (function () {
     _portraitClickHandler = null;
   }
 
-  /* Opening capital tutorial: dialogue → rules popup → onComplete. Plays once
-     per browser; skipped (immediate onComplete) on re-entry. */
+  /* Opening capital tutorial: dialogue → onComplete. Plays once per browser;
+     skipped (immediate onComplete) on re-entry. The rules popup that used to
+     follow it is now the engine's opening gate (js/game.js: dialogue → rules +
+     PLAY → deal), fed by the config's rulesPopup; _openRulesPopup remains for
+     the on-demand portrait click. */
   function _runOpeningDialogue(onComplete) {
     // Skip once seen OR once Sargon is beaten (entry dialogue never replays after a win).
     if (_has(KEY_OPENING_SEEN) || _has(KEY_SARGON_COMPLETE)) { if (onComplete) onComplete(); return; }
     runLines(OPENING_DIALOGUE, function () {
-      _openRulesPopup(function () {
-        _set(KEY_OPENING_SEEN);
-        if (onComplete) onComplete();
-      });
+      _set(KEY_OPENING_SEEN);
+      if (onComplete) onComplete();
     });
   }
 
@@ -860,6 +862,7 @@ SOG.SargonBattle = (function () {
       ai:       { profile: 'heuristic', tier: _aiTier, movement: 'adventure', settings: { selectPlays: sargonSelectPlays } },
       presentation: SARGON_PRESENTATION,
       rewards:  {},                 // none yet — win/loss/reward flow comes with the script later
+      rulesPopup: { title: RULES_TITLE, body: RULES_BODY },   // engine opening gate (rules + PLAY → deal)
       scriptHook: 'sargon'          // scripted battle (presentation + opening tutorial + scoreboard)
     };
   }

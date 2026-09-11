@@ -240,6 +240,10 @@ SOG.OtziBattle = (function () {
     },
     rewards: { onWin: { cards: [35], completionFlag: KEY_BATTLE_OTZI_COMPLETE,
                         acquisitionFlag: KEY_CARD_OTZI_UNLOCKED } },
+    // Opt out of the engine's unified opening (dialogue → rules + PLAY → deal):
+    // the hands are dealt during the build, before onBattleStart, exactly as
+    // before — this module owns its own deal (dealCards) inside its opening.
+    opening: { dealBeforeIntro: true },
     scriptHook: 'otzi'
   };
 

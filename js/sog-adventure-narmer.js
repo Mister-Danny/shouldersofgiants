@@ -513,13 +513,14 @@ SOG.NarmerBattle = (function () {
 
   /* Opening dialogue → rules popup → play. First-time only (skipped after seen
      or after a win). Mirrors Sargon's dialogue→rules→onComplete. */
+  /* Opening dialogue only. The rules popup that used to follow it is now the
+     engine's opening gate (js/game.js: dialogue → rules + PLAY → deal), fed by
+     the config's rulesPopup; _openRulesPopup remains for the portrait click. */
   function _runOpeningDialogue(onComplete) {
     if (_has(KEY_NARMER_OPENING_SEEN) || _has(KEY_NARMER_COMPLETE)) { if (onComplete) onComplete(); return; }
     runLines(OPENING_DIALOGUE, function () {
-      _openRulesPopup(function () {
-        _set(KEY_NARMER_OPENING_SEEN);
-        if (onComplete) onComplete();
-      });
+      _set(KEY_NARMER_OPENING_SEEN);
+      if (onComplete) onComplete();
     });
   }
 
@@ -877,6 +878,7 @@ SOG.NarmerBattle = (function () {
       // config → reshuffled active/AI decks) instead of falling through to an
       // Arcadium game. Read by game.js's result-play-again handler.
       replay: function () { start(); },
+      rulesPopup: { title: RULES_TITLE, body: RULES_BODY },   // engine opening gate (rules + PLAY → deal)
       scriptHook: 'narmer'
     };
   }
