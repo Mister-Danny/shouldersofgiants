@@ -607,18 +607,19 @@ const CARDS = [
        set it belongs to. Nothing switches on era except lane derivation
        (ADVENTURE_ERAS, which lists neither) and the Ramses/Neb CC discounts,
        which key on 'Egypt'/'Mesopotamia' — so this REMOVES it from Ramses'
-       "-1 CC to Egypt cards in your hand" aura. At 0 CC that discount was
-       already a no-op, so nothing changes in play.
+       "-1 CC to Egypt cards in your hand" aura. Now that it costs 1 CC that
+       is a real difference: Ramses does NOT discount it.
 
-       Free to play (cc 0); on reveal grants +1 Capital next turn via the Farmer
-       machinery (grantCapitalNextTurn). Type "Economic" so the popup shows a
-       consistent type. */
-    id: 73, name: "Nubian Gold", cc: 0, ip: 1,                  // WIRED (+1 capital next turn) — generated AND deckable
+       1 CC (was free); on reveal grants +1 Capital next turn via the Farmer
+       machinery (grantCapitalNextTurn), so on its own it pays back its cost a
+       turn late and leaves a 1-IP body. Type "Economic" so the popup shows a
+       consistent type. Art is the Kush framing (images/cards/kushcards); the
+       @sm thumbnail derives from the image path, like the other Kush cards. */
+    id: 73, name: "Nubian Gold", cc: 1, ip: 1,                  // WIRED (+1 capital next turn) — generated AND deckable
     type: "Economic", type2: null, era: "Kush",
     abilityName: "Natural Resource",
     ability: "Next Turn:\nReceive +1 Capital.",
-    image:   "images/cards/egyptcards/nubiangold@0.5x.jpg",
-    imageSm: "images/cards/egyptcards/nubiangold@0.3x.jpg", locked: true
+    image:   "images/cards/kushcards/nubiangold.jpg", locked: true
   },
 
   // ─── NATURAL RESOURCES (Economic) ─────────────────────────────────────────
@@ -781,7 +782,7 @@ const CARDS = [
     image:   "images/cards/kushcards/kush_nubian_archers.jpg", locked: true
   },
   {
-    id: 86, name: "Trade Network", cc: 2, ip: 0,                // WIRED (onCardLandedHere: swap a Natural Resource for a deck draw) — 2 CC / 0 IP (was 3/1)
+    id: 86, name: "Trade Network", cc: 2, ip: 1,                // WIRED (onCardLandedHere: swap a Natural Resource for a deck draw) — 2 CC / 1 IP (was 3/1, then 2/0)
     type: "Economic", type2: null, era: "Kush",
     abilityName: "The Nile Corridor",
     /* A TRIGGER, not an At Once: it reacts to the owner playing a card here

@@ -4520,68 +4520,71 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
   }
 
   /* ── NUBIAN GOLD MINES (GOLD_CHANCE_ON_PLAY, Kush battle) ───────────────────
-     "50% chance of receiving gold when you play a card here." A per-card,
+     "33% chance of receiving gold when you play a card here." A per-card,
      probabilistic sibling of NUBIAN_GOLD_ON_PLAY: same token, same hand-full
      rule (dropped silently, never queued), but rolled once per card played
      rather than granted once per side.
 
-     EDITABLE: MINES_GOLD_CHANCE below. 0.5 today; drop it to 0.33 or 0.25 by
-     changing this one number. */
+     ROLLED PER CARD, AT THAT CARD'S OWN BEAT — not batched at reveal-end. The
+     reveal pipeline (js/game.js revealNext) calls rollGoldChanceForCard once
+     per play, after the card's flip, reveal-fx, At Once (with everything that
+     gates on it: Farmer bites, Akhenaten pulses) and its landing reactors
+     (Trade Network's swap, Ötzi's flee) have ALL finished, and the pipeline
+     WAITS for the nugget to arrive before the next card reveals — the Egypt
+     Farmer's phase-2 sequencing, applied to a location. Each play is one
+     independent roll; both sides pass through the same call.
+
+     ELIGIBILITY IS "WHERE THE CARD IS NOW". The card is located by identity
+     (never by id — twins exist), so a card that left the board during its own
+     landing never rolls: a Natural Resource Trade Network swapped back into the
+     deck, or a Phoenicians dissolved into a host. The swapped-in replacement
+     does not roll either (it resolves inside the swap, not as a play of its
+     own). A card that is destroyed or moved by a LATER reveal this turn HAS
+     already rolled — it was on the Mines when its own beat came.
+
+     EDITABLE: MINES_GOLD_CHANCE below. 0.33 today; change this one number. */
   var MINES_GOLD_CHANCE = 0.33;
-  function applyGoldChanceOnPlay(newlyRevealed) {
-    if (!G.locations || !newlyRevealed || !newlyRevealed.length) return 0;
-    var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
-    var granted = 0;
-    var hits = [];
-    newlyRevealed.forEach(function (r) {
-      if (r.locId == null) return;
-      var loc = G.locations.find(function (l) { return l.id === r.locId; });
-      if (!loc || loc.abilityKey !== 'GOLD_CHANCE_ON_PLAY') return;
-      if (Math.random() >= MINES_GOLD_CHANCE) return;          // the roll
-      var hand = r.owner === 'player' ? G.playerHand : G.aiHand;
-      if (!hand || hand.length >= maxHand) return;             // full → dropped, no queue
-      hand.push(73);                                           // Nubian Gold
-      granted++;
-      hits.push({ owner: r.owner, locId: r.locId });           // for the emerge FX below
-    });
-    if (granted > 0) {
-      if (typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
-      if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
-      _playGoldEmergeFx(hits);                                 // presentation only
+  function rollGoldChanceForCard(owner, sd, done) {
+    done = typeof done === 'function' ? done : function () {};
+    if (!sd || !G.locations) { done(); return; }
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var locId = null;
+    for (var li = 0; li < G.locations.length && locId === null; li++) {
+      var arr = slots[G.locations[li].id];
+      if (arr && arr.indexOf(sd) !== -1) locId = G.locations[li].id;
     }
-    return granted;
+    if (locId === null) { done(); return; }                    // left the board during its own landing
+    var loc = G.locations.find(function (l) { return l.id === locId; });
+    if (!loc || loc.abilityKey !== 'GOLD_CHANCE_ON_PLAY') { done(); return; }
+    if (Math.random() >= MINES_GOLD_CHANCE) { done(); return; }   // the roll
+    var maxHand = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    if (!hand || hand.length >= maxHand) { done(); return; }   // full → dropped silently, no queue
+    hand.push(73);                                             // Nubian Gold
+    if (typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+    if (SOG.ui && SOG.ui.updateOppHand) SOG.ui.updateOppHand();
+    _playGoldEmergeFx(owner, locId, done);                     // presentation; the pipeline waits on it
   }
 
-  /* Throw one nugget per successful roll, from the mine to the hand card it became.
-     STATE IS ALREADY COMMITTED before this runs (the tokens are in hand and both
-     hands have been rebuilt), so this is pure presentation and nothing waits on it.
-     Each side's new tokens are the LAST cards in that side's hand row, in push
-     order — the same "pushed, so it is last" assumption abilityPapyrus relies on.
-     Every target is hidden UP FRONT rather than by each flight as it begins, or the
-     staggered ones would sit visible in the hand for their whole delay and the
-     nugget would arrive at a card that was already there. */
-  function _playGoldEmergeFx(hits) {
+  /* Throw the nugget from the mine to the hand card it just became. STATE IS
+     ALREADY COMMITTED before this runs (the token is in hand and the hand has
+     been rebuilt), so this is presentation — but the reveal pipeline waits for
+     onDone so the next card's reveal never overlaps the flight. The new token is
+     the LAST card in its side's hand row — the same "pushed, so it is last"
+     assumption abilityPapyrus relies on. The target is hidden up front so the
+     card does not sit visible in the hand before the nugget that is supposedly
+     becoming it has arrived (nubianGoldEmerge restores it on every exit). */
+  function _playGoldEmergeFx(owner, locId, onDone) {
+    onDone = typeof onDone === 'function' ? onDone : function () {};
     var rfx = window.SOG && SOG.RevealFx;
-    if (!rfx || typeof rfx.nubianGoldEmerge !== 'function' || !hits || !hits.length) return;
-    var bySide = { player: [], opp: [] };
-    hits.forEach(function (h) { bySide[h.owner === 'player' ? 'player' : 'opp'].push(h); });
-    Object.keys(bySide).forEach(function (side) {
-      var list = bySide[side];
-      if (!list.length) return;
-      var els = document.querySelectorAll(side === 'player'
-        ? '#battle-player-hand .battle-hand-card'
-        : '#battle-opp-hand .battle-card-back');
-      var targets = list.map(function (h, i) {
-        return els[els.length - list.length + i] || null;
-      });
-      targets.forEach(function (el) { if (el) el.style.visibility = 'hidden'; });
-      list.forEach(function (h, i) {
-        var loc = document.querySelector('.battle-location[data-loc-id="' + h.locId + '"]');
-        setTimeout(function () {
-          rfx.nubianGoldEmerge(loc, targets[i], { sfx: 'sfx/scholar-officials-coin.mp3' });
-        }, i * 260);
-      });
-    });
+    if (!rfx || typeof rfx.nubianGoldEmerge !== 'function') { onDone(); return; }
+    var els = document.querySelectorAll(owner === 'player'
+      ? '#battle-player-hand .battle-hand-card'
+      : '#battle-opp-hand .battle-card-back');
+    var target = els[els.length - 1] || null;
+    if (target) target.style.visibility = 'hidden';
+    var loc = document.querySelector('.battle-location[data-loc-id="' + locId + '"]');
+    rfx.nubianGoldEmerge(loc, target, { sfx: 'sfx/scholar-officials-coin.mp3' }, onDone);
   }
 
   /* ── THE CLOSED TEMPLES (RELIGIOUS_PLAY_DISCARDS, Akhenaten battle) ──────────
@@ -5709,7 +5712,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     applyRiverAtOnce:          applyRiverAtOnce,
     applyNubianGoldOnPlay:     applyNubianGoldOnPlay,
     applyNapataStamp:          applyNapataStamp,          // Kush — Napata +1 Political stamp
-    applyGoldChanceOnPlay:     applyGoldChanceOnPlay,     // Kush — Nubian Gold Mines roll
+    rollGoldChanceForCard:     rollGoldChanceForCard,     // Kush — Nubian Gold Mines roll (per card, at its own beat)
     applyClosedTemplesOnPlay:  applyClosedTemplesOnPlay,   // Akhenaten — Closed Temples cost
     applyRoyalTombSummon:      applyRoyalTombSummon,       // Akhenaten — Royal Tomb, pre-tally
     applyNextTurnRevealEffects: applyNextTurnRevealEffects,

@@ -1442,13 +1442,14 @@ SOG.RevealFx = (function () {
      the animation IS the tell that the chance paid off; a failed roll shows nothing,
      which is what makes the location feel like a gamble.
 
-     Presentation only, and deliberately fire-and-forget: applyGoldChanceOnPlay has
-     already pushed the token into the hand and is synchronous, so nothing waits on
-     this. The one piece of state it touches is the destination hand card's
-     visibility — held back so the card does not simply blink into existence before
-     the nugget that is supposedly becoming it has arrived. Every early return
-     restores that visibility first, so a missing element or absent GSAP can never
-     strand an invisible card in the hand. */
+     Presentation only: rollGoldChanceForCard has already pushed the token into the
+     hand before this runs. The reveal pipeline DOES wait on onComplete (the next
+     card's reveal is scheduled behind the flight), so every exit path must finish.
+     The one piece of state it touches is the destination hand card's visibility —
+     held back so the card does not simply blink into existence before the nugget
+     that is supposedly becoming it has arrived. Every early return restores that
+     visibility first, so a missing element or absent GSAP can never strand an
+     invisible card in the hand. */
   function nubianGoldEmerge(locEl, handEl, opts, onComplete) {
     opts = opts || {};
     var fired = false;

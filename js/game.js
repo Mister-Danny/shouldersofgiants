@@ -1480,20 +1480,17 @@
          Same reveal-end slot and the same `revealed` list as the two appliers
          above. Routed through discardFromHand, so G.discardCount rises and
          Akhenaten (77) scales off it. Inert without the key. */
-      /* KUSH reveal-end location keys, same slot and same `revealed` list as the
-         appliers above. Napata stamps +1 onto Political cards played there (an
-         addIPMod on the card, so it travels with a Piye copy); the Mines roll a
-         chance of a Nubian Gold token per card played there. Both inert without
-         their key. */
+      /* KUSH reveal-end location key, same slot and same `revealed` list as the
+         appliers above: Napata stamps +1 onto Political cards played there (an
+         addIPMod on the card, so it travels with a Piye copy). Inert without
+         the key. (The Mines' gold roll is NOT here — it is per card, at each
+         card's own beat: see the rollGoldChanceForCard call in the play branch.) */
       if (SOG.abilities && typeof SOG.abilities.applyNapataStamp === 'function') {
         if (SOG.abilities.applyNapataStamp(revealed) > 0) {
           evaluateContinuous();
           refreshSlotIPDisplays();
           updateScores();
         }
-      }
-      if (SOG.abilities && typeof SOG.abilities.applyGoldChanceOnPlay === 'function') {
-        SOG.abilities.applyGoldChanceOnPlay(revealed);
       }
       if (SOG.abilities && typeof SOG.abilities.applyClosedTemplesOnPlay === 'function') {
         if (SOG.abilities.applyClosedTemplesOnPlay(revealed) > 0) {
@@ -1781,10 +1778,23 @@
           //     flee slide) fully finishes before proceed() schedules the next
           //     reveal, so the flee never overlaps a card reveal. With no reactor,
           //     proceed runs immediately (behaviour-identical for other battles).
+          /* (e) NUBIAN GOLD MINES (GOLD_CHANCE_ON_PLAY): this card's own roll, at
+             this card's own beat — after its flip, reveal-fx, At Once and every
+             landing reactor above have finished, so the nugget never flies over
+             a swap dive or a flee. AWAITED like the reactors: on a hit the
+             emergence plays out before proceed() schedules the next reveal.
+             Inert (immediate proceed) unless the card now sits on a Mines. */
+          var _afterLanded = function () {
+            if (SOG.abilities && typeof SOG.abilities.rollGoldChanceForCard === 'function') {
+              SOG.abilities.rollGoldChanceForCard(item.owner, rSd, proceed);
+            } else {
+              proceed();
+            }
+          };
           if (SOG.abilities && typeof SOG.abilities.fireOnCardLandedHere === 'function') {
-            SOG.abilities.fireOnCardLandedHere(item.owner, item.cardId, rLocId, proceed);
+            SOG.abilities.fireOnCardLandedHere(item.owner, item.cardId, rLocId, _afterLanded);
           } else {
-            proceed();
+            _afterLanded();
           }
         });
       });
