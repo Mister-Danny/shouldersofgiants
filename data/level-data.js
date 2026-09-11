@@ -435,9 +435,10 @@ window.SOG_LEVEL_DATA = {
       },
 
       rulesPopup: {
-        title: 'Piye of Kush',
+        title: 'The Lord of Two Lands',
         body: [
           '5 Turns',
+          '5 Capital per turn',
           'Each card costs Capital (CC) to play.',
           '<u>Win Condition</u> — Gain the most IP at the most locations.'
         ]
