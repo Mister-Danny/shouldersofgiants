@@ -3036,7 +3036,7 @@ SOG.RevealFx = (function () {
     }
   }
 
-  return { fire: fire, has: has, reactBounce: reactBounce,
+  return { fire: fire, has: has, fullRevealMs: fullRevealMs, reactBounce: reactBounce,
            scribeStampSequence: scribeStampSequence,
            soldierCharge: soldierCharge,
            hammurabiStrike: hammurabiStrike,

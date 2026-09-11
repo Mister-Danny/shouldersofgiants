@@ -5611,6 +5611,15 @@ body.tut-locked #battle-reset-turn {
 }
 .tut-loc-glow { animation: tut-loc-nameplate-glow 0.7s ease-in-out 3; }
 
+/* ── Napata At-Once stamp: the nameplate glows light gold as a Political card
+   reveals there and takes its +1 (abilities.applyNapataStampForCard). ──── */
+@keyframes napata-stamp-glow {
+  0%   { color: var(--snes-yellow); }
+  35%  { color: #fff3c4; text-shadow: 0 0 6px #ffe9a0, 0 0 16px rgba(240, 200, 90, 0.95), 1px 1px 3px rgba(0,0,0,0.95); }
+  100% { color: var(--snes-yellow); text-shadow: 1px 1px 3px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.8); }
+}
+.battle-loc-name.napata-stamp-glow { animation: napata-stamp-glow 1.0s ease-out 1; }
+
 /* ── Magellan moveable board slot ─────────────────────────────── */
 .tut-moveable { cursor: grab; }
 .tut-moveable:active { cursor: grabbing; }

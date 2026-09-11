@@ -230,6 +230,10 @@
     // sd.ip stays at the card's immutable base so the popup breakdown is honest;
     // every bonus below goes through addIPMod and lands with a record.
     var sd = { cardId: cardId, ip: card.ip, revealed: true, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [], turnPlayed: G.turn };
+    // A copy of a TRANSCRIBED Rosetta (Piye's At Once fired by a Rosetta that
+    // adopted him) keeps the adoption, so it lands showing the same text as the
+    // card it was copied from. Set before the face is built below.
+    if (opts.transcribedFrom != null) sd.transcribedFrom = opts.transcribedFrom;
     // Chain accumulator (Jesus / Samurai) and in-hand stamps. Callers that
     // assemble their own ipMod afterward (triggerSamurai) zero the dict first.
     if (!opts.skipHandBonus) applyPrePlayBonuses(sd, owner, cardId, {});

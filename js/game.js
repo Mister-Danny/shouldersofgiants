@@ -873,6 +873,10 @@
           card: card, slotEl: slotEl, getSlotEl: getSlotEl
         });
         extraDelay = Math.max(extraDelay, fxDelay || 0);
+        // When this card's registry animation started — a RE-FIRE of its At Once
+        // (abilities.replayRevealFx) waits for it to finish before replaying it,
+        // so two firings read as two animations, not one doubled.
+        if (sd && typeof SOG.RevealFx.has === 'function' && SOG.RevealFx.has(cardId)) sd._revealFxAt = Date.now();
       }
 
       // Signal done after per-card effects have had time to play
@@ -1480,18 +1484,9 @@
          Same reveal-end slot and the same `revealed` list as the two appliers
          above. Routed through discardFromHand, so G.discardCount rises and
          Akhenaten (77) scales off it. Inert without the key. */
-      /* KUSH reveal-end location key, same slot and same `revealed` list as the
-         appliers above: Napata stamps +1 onto Political cards played there (an
-         addIPMod on the card, so it travels with a Piye copy). Inert without
-         the key. (The Mines' gold roll is NOT here — it is per card, at each
-         card's own beat: see the rollGoldChanceForCard call in the play branch.) */
-      if (SOG.abilities && typeof SOG.abilities.applyNapataStamp === 'function') {
-        if (SOG.abilities.applyNapataStamp(revealed) > 0) {
-          evaluateContinuous();
-          refreshSlotIPDisplays();
-          updateScores();
-        }
-      }
+      /* (The Kush location keys are NOT here. Napata's +1 stamp lands at each
+         Political card's own flip, before its ability; the Mines' gold roll is
+         per card at each card's own beat — see the play branch below.) */
       if (SOG.abilities && typeof SOG.abilities.applyClosedTemplesOnPlay === 'function') {
         if (SOG.abilities.applyClosedTemplesOnPlay(revealed) > 0) {
           evaluateContinuous();          // Akhenaten's counter just moved
@@ -1679,80 +1674,76 @@
       // After the card's own At Once resolves, run the play-from-hand hooks
       // (in order): play-order metadata, Cultural counter.
       flipSlot(slotEl, function () {
-        /* Meso Farmer (39) pending +1 IP: consume it onto THIS card BEFORE its own
-           At Once runs. That ordering is load-bearing — a second Farmer revealing
-           here takes the pending +1 itself and only then arms the next one, instead
-           of buffing itself. No buff pending → no-op. */
-        var _farmerBuffs = 0;   // HOW MANY +1s were taken (Meroe can arm two)
-        if (SOG.abilities && typeof SOG.abilities.consumePendingIPBuff === 'function') {
-          var _preFarmerIP = rSd ? effectiveIP(rSd) : null;
-          _farmerBuffs = SOG.abilities.consumePendingIPBuff(item.owner, rSd) || 0;
-          if (_farmerBuffs && rSd && _preFarmerIP !== null) {
-            /* HOLD THE BADGE AT THE PRE-BUFF NUMBER — release it on the bites below.
-               STATE IS NOT DELAYED: the +1s are already folded into the card's ipMod,
-               so its own At Once (fired just below) still sees its true buffed IP,
-               exactly as before. Only the DISPLAY waits — board.displayedIP serves
-               _ipHeldAt to the badge AND the location total, so the points can be
-               handed over one at a time by the onion bites that are meant to be
-               delivering them. Without this the number jumped to its final value
-               here and every bite landed on a card that had already scored: obvious
-               with Meroe's two bites, but wrong in the single-bite case too. */
-            rSd._ipDisplayHold = true;
-            rSd._ipHeldAt = _preFarmerIP;
+        /* PRE-ABILITY BEATS — two location/pending effects land on the card
+           BEFORE its own At Once fires, each awaited, in this order:
+             1. NAPATA's +1 stamp (Political card revealed there): nameplate
+                glow, +1 float, badge steps up — see applyNapataStampForCard.
+             2. The MESO FARMER's pending +1(s): consumed onto THIS card and
+                delivered by the onion bites, one point per bite.
+           So the card's ability fires on a card that has ALREADY taken its +1s
+           — Piye's copy carries them, a Scribe's stamps land on a scored card.
+           Neither is a buff to the Farmer itself: a second Farmer revealing
+           here takes the pending +1 and only then arms the next one. */
+        var _napataBeat = function (next) {
+          if (SOG.abilities && typeof SOG.abilities.applyNapataStampForCard === 'function') {
+            SOG.abilities.applyNapataStampForCard(item.owner, rSd, next);
+          } else { next(); }
+        };
+        var _farmerBeat = function (next) {
+          var _farmerBuffs = 0;   // HOW MANY +1s were taken (Meroe can arm two)
+          if (SOG.abilities && typeof SOG.abilities.consumePendingIPBuff === 'function') {
+            var _preFarmerIP = rSd ? effectiveIP(rSd) : null;
+            _farmerBuffs = SOG.abilities.consumePendingIPBuff(item.owner, rSd) || 0;
+            if (_farmerBuffs && rSd && _preFarmerIP !== null) {
+              /* HOLD THE BADGE AT THE PRE-BUFF NUMBER — released by the bites.
+                 STATE IS NOT DELAYED: the +1s are already folded into the card's
+                 ipMod. Only the DISPLAY waits — board.displayedIP serves _ipHeldAt
+                 to the badge AND the location total, so the points are handed over
+                 one at a time by the onion bites that deliver them. */
+              rSd._ipDisplayHold = true;
+              rSd._ipHeldAt = _preFarmerIP;
+              refreshSlotIPDisplays();
+              updateScores();
+            }
+          }
+          if (!_farmerBuffs) { next(); return; }
+          /* ONE BITE PER +1, AND EACH BITE PAYS ITS OWN POINT. onBite fires on the
+             chomp beat itself (same instant as the bite sfx), stepping the held
+             number up by one and popping a +1 float — so a Farmer repeated by
+             Meroe bites twice and the card visibly climbs +1, then +1. The slot
+             is re-resolved on every bite because the card may sit in a rebuilt
+             element. The hold is dropped after the last bite, handing the badge
+             back to the real effectiveIP, and only then does the card's own At
+             Once fire. */
+          var _biteFx = (window.SOG && SOG.RevealFx &&
+                         typeof SOG.RevealFx.farmerOnionBite === 'function')
+                        ? SOG.RevealFx.farmerOnionBite : null;
+          var _releaseHold = function () {
+            if (rSd) { delete rSd._ipDisplayHold; delete rSd._ipHeldAt; }
             refreshSlotIPDisplays();
             updateScores();
-          }
-        }
+          };
+          /* No bite animation available → release everything at once. The hold must
+             never outlive this block: a stranded _ipDisplayHold would freeze that
+             card's badge and its location's score for the rest of the battle. */
+          if (!_biteFx) { _releaseHold(); next(); return; }
+          (function _bite(left) {
+            if (left <= 0) { _releaseHold(); next(); return; }
+            _biteFx(
+              _liveSlotElFor(item.owner, rSd) || slotEl,
+              { onBite: function () {
+                  if (rSd && typeof rSd._ipHeldAt === 'number') rSd._ipHeldAt += 1;
+                  if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(item.owner, item.cardId, 1);
+                  refreshSlotIPDisplays();
+                  updateScores();
+                } },
+              function () { _bite(left - 1); });
+          })(_farmerBuffs);
+        };
+        _napataBeat(function () { _farmerBeat(function () {
         // rSi/rSd are THIS play's resolved coordinates (see the duplicate-safe
         // lookup above) — the At-Once handler needs the actor, not just the id.
         fireAtOnce(item.owner, item.cardId, rLocId, rSi, rSd, function () {
-          /* Meso Farmer (39) PHASE 2 — the onion descends onto the card that just
-             took the +1 and is eaten. Fired HERE, in the At-Once completion
-             callback, because this is the point at which the buffed card has
-             finished its OWN reveal animation: flipSlot's done only covers the flip
-             and reveal-fx overlays, whereas Ramses' shimmer, Hatshepsut's Merchant
-             boat and Papyrus' scroll are ABILITY animations gated on this callback.
-             A card with no animation reaches here immediately, so the onion just
-             arrives at once. The slot element is re-resolved rather than reusing
-             the captured `slotEl`, because the card may have RELOCATED during its
-             own At Once — the onion has to land on wherever it actually is now.
-             Visual only; never gates the pipeline. */
-          if (_farmerBuffs > 0) {
-            /* ONE BITE PER +1, AND EACH BITE PAYS ITS OWN POINT. onBite fires on the
-               chomp beat itself (same instant as the bite sfx), stepping the held
-               number up by one and popping a +1 float — so a Farmer repeated by
-               Meroe bites twice and the card visibly climbs +1, then +1, instead of
-               arriving pre-scored. The slot is re-resolved on every bite rather than
-               captured once, because the card may have relocated during its own At
-               Once. The hold is dropped after the last bite, handing the badge back
-               to the real effectiveIP. */
-            var _biteFx = (window.SOG && SOG.RevealFx &&
-                           typeof SOG.RevealFx.farmerOnionBite === 'function')
-                          ? SOG.RevealFx.farmerOnionBite : null;
-            var _releaseHold = function () {
-              if (rSd) { delete rSd._ipDisplayHold; delete rSd._ipHeldAt; }
-              refreshSlotIPDisplays();
-              updateScores();
-            };
-            /* No bite animation available → release everything at once. The hold must
-               never outlive this block: a stranded _ipDisplayHold would freeze that
-               card's badge and its location's score for the rest of the battle. */
-            if (!_biteFx) { _releaseHold(); }
-            else {
-              (function _bite(left) {
-                if (left <= 0) { _releaseHold(); return; }
-                _biteFx(
-                  _liveSlotElFor(item.owner, rSd) || slotEl,
-                  { onBite: function () {
-                      if (rSd && typeof rSd._ipHeldAt === 'number') rSd._ipHeldAt += 1;
-                      if (SOG.ui && SOG.ui.showIPFloat) SOG.ui.showIPFloat(item.owner, item.cardId, 1);
-                      refreshSlotIPDisplays();
-                      updateScores();
-                    } },
-                  function () { _bite(left - 1); });
-              })(_farmerBuffs);
-            }
-          }
           // (a) Per-slot play metadata (Scribe needs this on every revealed card)
           if (rSd && rLocId !== null) {
             rSd.playTime      = ++G.playOrderCounter;
@@ -1797,6 +1788,7 @@
             _afterLanded();
           }
         });
+        }); });   // ← _farmerBeat / _napataBeat
       });
     } else {
       proceed();

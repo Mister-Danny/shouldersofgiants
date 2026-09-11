@@ -1535,24 +1535,16 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
   }
 
   function abilityHarvestPendingIP(owner, locId, slotIndex, sd, done) {
-    var armed = armPendingIPBuff(owner, srcOf(sd, 39));
-    /* ONE POP PER ARMING. The reveal-FX registry entry already played a pop for the
-       FIRST arming as the Farmer flipped, so only ADDITIONAL armings need one here —
-       and additional armings happen whenever something re-fires this At Once, which
-       today means Meroe's REPEAT_LABOR_ECONOMIC_AT_ONCE (the Farmer is Labor).
-       `armed` is the pending count AFTER this arming, so >= 2 is exactly "not the
-       first" without this function needing to know which mechanic re-fired it.
-       The two pops read as two rather than one doubled: the reveal pipeline waits
-       out the first pop's 1400ms hold before the At Once runs at all, and this
-       call defers done() until the second pop has finished.
-       No sound line of its own — the pop's boing IS this Farmer's voice (the Egypt
-       Farmer 55 owns the coin cha-ching). The old ipGained ping fired at the same
-       instant and talked over it. */
-    var rfx = window.SOG && SOG.RevealFx;
-    if (armed >= 2 && rfx && typeof rfx.farmerOnionPop === 'function') {
-      var popEl = actorSlotEl(owner, locId, sd, slotIndex);
-      if (popEl) { rfx.farmerOnionPop(popEl, done); return; }
-    }
+    armPendingIPBuff(owner, srcOf(sd, 39));
+    /* ONE POP PER ARMING — but not from here. The reveal-FX registry entry plays
+       the pop as the Farmer flips, and every RE-FIRE of an At Once (Meroe's
+       repeat, Apedemak's volley) replays the card's registry entry before firing
+       it again (replayRevealFx), so the second arming gets its second pop the
+       same way every repeated ability gets its animation back. This used to pop
+       on its own when the pending count reached 2, which was the one card that
+       animated its repeat while every other repeated card stayed silent.
+       No sound line of its own — the pop's boing IS this Farmer's voice (the
+       Egypt Farmer 55 owns the coin cha-ching). */
     done();
   }
 
@@ -3802,7 +3794,15 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var pSlots  = owner === 'player' ? G.playerSlots : G.aiSlots;
     var destIdx = (pSlots[dest] || []).indexOf(null);         // captured BEFORE placing (fills the first null)
     var carry   = (sd && sd.ipModSources) ? sd.ipModSources.slice() : [];
-    if (!SOG.board.placeRevealedCard(owner, dest, 78, 0, { carrySources: carry, skipHandBonus: true })) { done(); return; }
+    /* THE COPY IS A COPY OF THE ACTOR, not of "Piye". When a Rosetta has
+       transcribed him, the actor is the Rosetta (the dispatcher hands her slot
+       data in), so the card that lands is a Rosetta — the same card the bubble
+       lifted — still carrying her adoption. A hard-coded 78 here landed a second
+       Piye under a Rosetta bubble. */
+    var selfId  = (sd && sd.cardId) || 78;
+    var copyOpts = { carrySources: carry, skipHandBonus: true };
+    if (sd && sd.transcribedFrom != null) copyOpts.transcribedFrom = sd.transcribedFrom;
+    if (!SOG.board.placeRevealedCard(owner, dest, selfId, 0, copyOpts)) { done(); return; }
     /* STATE COMMITTED. The bubble is presentation: the copy is already in its slot
        and is held hidden by the FX until the bubble lands there. Both players see
        it — it happens on the board. */
@@ -4017,8 +4017,11 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     function fireNext() {
       if (k >= targets.length) { G._apedemakFiring = false; done(); return; }
       var t = targets[k++];
-      try { fireAtOnce(owner, abilityIdOf(t.s), locId, t.i, t.s, function () { setTimeout(fireNext, 160); }); }
-      catch (e) { fireNext(); }
+      // The re-fire is seen: replay the target's reveal animation, then fire it.
+      replayRevealFx(owner, abilityIdOf(t.s), locId, t.i, t.s, function () {
+        try { fireAtOnce(owner, abilityIdOf(t.s), locId, t.i, t.s, function () { setTimeout(fireNext, 160); }); }
+        catch (e) { fireNext(); }
+      });
     }
     if (rfx && typeof rfx.playSfxThen === 'function') rfx.playSfxThen('sfx/apedemak.mp3', 1192, fireNext);
     else fireNext();
@@ -4488,35 +4491,52 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
      "Political cards gain +1 IP." An AT-ONCE STAMP, not a continuous aura —
      the distinction matters and is the whole point of the location.
 
-     addIPMod writes the +1 into the card's OWN ipMod, so it travels with the
-     card: a Piye revealed here carries the stamp, and the copy his At Once
-     places is built from his slot data, so the copy inherits it too. A
-     continuous aura would be recomputed per location and would evaporate the
-     moment the copy landed anywhere else.
+     AT THE CARD'S OWN REVEAL, BEFORE ITS ABILITY. The reveal pipeline
+     (js/game.js revealNext) calls this right after the flip and waits for it,
+     ahead of the Meso Farmer's bites and ahead of the card's At Once. That
+     ordering is what makes the stamp a stamp: Piye revealed here goes 5 → 6
+     first, and the copy his At Once then places is built from his slot data,
+     so it carries the +1 (and every other modifier he has taken by then). The
+     old reveal-end batch stamped him AFTER the copy had landed, so only the
+     original wore it — an aura in everything but name.
 
-     Reveal-end and once per turn, on the per-turn `newlyRevealed` list — the
-     same slot and the same gate as applyRiverAtOnce, so a Political card that
-     later RELOCATES onto Napata is never stamped (it is in no later turn's
-     list). Both sides. Inert without the key. */
-  function applyNapataStamp(newlyRevealed) {
-    if (!G.locations || !newlyRevealed || !newlyRevealed.length) return 0;
-    var n = 0;
-    newlyRevealed.forEach(function (r) {
-      if (r.locId == null) return;
-      var loc = G.locations.find(function (l) { return l.id === r.locId; });
-      if (!loc || loc.abilityKey !== 'POLITICAL_PLUS_1_STAMP') return;
-      var card = CARDS.find(function (c) { return c.id === r.cardId; });
-      if (!card || card.type !== 'Political') return;
-      var slots = r.owner === 'player' ? G.playerSlots : G.aiSlots;
-      var sd = (slots[r.locId] || [])[r.slotIndex];
-      if (!sd || sd.cardId !== r.cardId) {          // slot moved under us — re-find by id
-        sd = (slots[r.locId] || []).find(function (x) { return x && x.cardId === r.cardId; });
-      }
-      if (!sd) return;
-      addIPMod(sd, 1, loc, nextEventId());
-      n++;
-    });
-    return n;
+     Presentation, in one beat: the Napata nameplate glows light gold as the
+     card lands, the badge is held at the pre-stamp number, then the +1 floats
+     with the positive sfx as the badge steps up. The pipeline continues after
+     the beat. Located by identity, so a card that later RELOCATES onto Napata
+     is never stamped (it never reveals here). Both sides. Inert without the key. */
+  function applyNapataStampForCard(owner, sd, done) {
+    done = typeof done === 'function' ? done : function () {};
+    if (!sd || !G.locations) { done(); return; }
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var locId = null, idx = -1;
+    for (var li = 0; li < G.locations.length && locId === null; li++) {
+      var arr = slots[G.locations[li].id];
+      if (arr && arr.indexOf(sd) !== -1) { locId = G.locations[li].id; idx = arr.indexOf(sd); }
+    }
+    if (locId === null) { done(); return; }
+    var loc = G.locations.find(function (l) { return l.id === locId; });
+    if (!loc || loc.abilityKey !== 'POLITICAL_PLUS_1_STAMP') { done(); return; }
+    var card = CARDS.find(function (c) { return c.id === sd.cardId; });
+    if (!card || card.type !== 'Political') { done(); return; }
+
+    var before = effectiveIP(sd);
+    addIPMod(sd, 1, loc, nextEventId());                     // STATE: the stamp
+    _holdBadgeAt(sd, before); _repaint();                    // paint waits for the beat
+
+    var nameEl = document.querySelector('.battle-col[data-loc-id="' + locId + '"] .battle-loc-name');
+    if (nameEl) {
+      nameEl.classList.remove('napata-stamp-glow'); void nameEl.offsetWidth;
+      nameEl.classList.add('napata-stamp-glow');
+      setTimeout(function () { nameEl.classList.remove('napata-stamp-glow'); }, 1100);
+    }
+    setTimeout(function () {                                 // THE BEAT: +1 floats, badge steps up
+      _releaseBadge(sd); _repaint();
+      var el = getSlotEl(owner, locId, idx);
+      if (el && typeof Anim !== 'undefined' && typeof Anim.floatNumber === 'function') Anim.floatNumber(el, 1);
+      if (typeof SFX !== 'undefined' && typeof SFX.ipGained === 'function') SFX.ipGained();
+      setTimeout(done, 450);
+    }, 250);
   }
 
   /* ── NUBIAN GOLD MINES (GOLD_CHANCE_ON_PLAY, Kush battle) ───────────────────
@@ -5515,6 +5535,39 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
      handler, matching endOfTurn(owner, locId, slotIndex, sd, done) — which always
      had it and was always correct as a result. Handlers must self-locate from the
      passed actor, never by scanning for their own card id. */
+  /* RE-FIRE PRESENTATION. A repeated At Once (Meroe's repeat, Apedemak's volley)
+     replays the card's reveal-FX registry entry — the animation and sfx that
+     played when it flipped — and waits it out before the ability fires again, so
+     the repeat is seen as well as scored. Cards whose animation lives inside
+     their handler (Scribe's stamps, Piye's bubble) repeat it on their own; this
+     covers the ones whose animation lives in the registry (the Egypt Farmer's
+     coin, the Meso Farmer's pop). No registry entry → immediate. */
+  function replayRevealFx(owner, cardId, locId, slotIndex, sd, done) {
+    done = typeof done === 'function' ? done : function () {};
+    var rfx = window.SOG && SOG.RevealFx;
+    var el  = actorSlotEl(owner, locId, sd, slotIndex);
+    if (!rfx || typeof rfx.fire !== 'function' || typeof rfx.has !== 'function' || !rfx.has(cardId) || !el) { done(); return; }
+    var card   = CARDS.find(function (c) { return c.id === cardId; });
+    var fullMs = (typeof rfx.fullRevealMs === 'function') ? rfx.fullRevealMs(cardId) : 0;
+    /* LET THE PREVIOUS PLAYING FINISH FIRST. The reveal pipeline only holds for
+       the part of an animation that exceeds its own inter-reveal gap (holdFor),
+       so an At Once fires while the card's flip animation is still going. The
+       flip (game.js flipSlot) and this replay both stamp sd._revealFxAt; the
+       replay starts when the earlier one has run its full length, so the two
+       readings never overlap and never pile their sfx. */
+    var since = (sd && sd._revealFxAt) ? (Date.now() - sd._revealFxAt) : fullMs;
+    var wait  = Math.max(0, fullMs - since);
+    setTimeout(function () {
+      var hold = 0;
+      try {
+        hold = rfx.fire({ cardId: cardId, owner: owner, locId: locId, slotIndex: slotIndex,
+                          card: card, slotEl: el, getSlotEl: getSlotEl }) || 0;
+      } catch (e) { hold = 0; }
+      if (sd) sd._revealFxAt = Date.now();
+      setTimeout(done, Math.max(hold, fullMs));
+    }, wait);
+  }
+
   function fireAtOnce(owner, cardId, locId, slotIndex, sd, done) {
     // Cards with actual At Once abilities: play sound + pulse animation.
     // Cards 2, 3, 5, 13 have custom sfx — skip the generic 8-bit chime for those.
@@ -5573,11 +5626,18 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
         }
       }
       if (_repeat) {
+        /* THE REPEAT IS SEEN: the card's reveal animation replays (replayRevealFx)
+           before its At Once fires the second time, so an Egypt Farmer repeated
+           here cha-chings twice, as a Meso Farmer pops twice — every repeated
+           ability animates its repeat, not just the ones that animate inside
+           their own handler. */
         spec.onAtOnce(owner, locId, slotIndex, sd, function () {
           G._meroeRepeating = true;
-          spec.onAtOnce(owner, locId, slotIndex, sd, function () {
-            G._meroeRepeating = false;
-            _afterAtOnce();
+          replayRevealFx(owner, cardId, locId, slotIndex, sd, function () {
+            spec.onAtOnce(owner, locId, slotIndex, sd, function () {
+              G._meroeRepeating = false;
+              _afterAtOnce();
+            });
           });
         });
       } else {
@@ -5711,7 +5771,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     applyCapitalWhenFull:      applyCapitalWhenFull,
     applyRiverAtOnce:          applyRiverAtOnce,
     applyNubianGoldOnPlay:     applyNubianGoldOnPlay,
-    applyNapataStamp:          applyNapataStamp,          // Kush — Napata +1 Political stamp
+    applyNapataStampForCard:   applyNapataStampForCard,   // Kush — Napata +1 Political stamp (per card, at its reveal, before its ability)
     rollGoldChanceForCard:     rollGoldChanceForCard,     // Kush — Nubian Gold Mines roll (per card, at its own beat)
     applyClosedTemplesOnPlay:  applyClosedTemplesOnPlay,   // Akhenaten — Closed Temples cost
     applyRoyalTombSummon:      applyRoyalTombSummon,       // Akhenaten — Royal Tomb, pre-tally
