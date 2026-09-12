@@ -417,7 +417,7 @@ var Overworld = (function () {
     { who: 'explorer', text: 'I wouldn’t say that…' },
     { who: 'narmer', text: 'Without a home, you are a threat.' },
     { who: 'explorer', text: 'This took a turn.' },
-    { who: 'narmer', text: 'And without one, you are not one of Egypt' }
+    { who: 'narmer', text: 'And without one, you are not one of Egypt.' }
   ];
 
   // Hatshepsut (Upper Egypt) encounter — plays on the first Hatshepsut node

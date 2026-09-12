@@ -497,7 +497,7 @@ window.SOG_LEVEL_DATA = {
       { who: 'piye', text: 'Easier said than done.' }
     ],
         giantWinA: [
-      { who: 'explorer', text: 'I  did it!' },
+      { who: 'explorer', text: 'I did it!' },
       { who: 'piye', text: 'You did.' },
       { who: 'piye', text: 'Remember who let you through.' },
       { who: 'explorer', text: 'You didn\'t let me. I won.' },
@@ -508,7 +508,7 @@ window.SOG_LEVEL_DATA = {
         giantLoss: [
       { who: 'piye', text: 'Your road ahead stays closed.' },
       { who: 'explorer', text: 'I know.' },
-      { who: 'piye', text: 'Lets see if you\'ve learned your way.' }
+      { who: 'piye', text: 'Let\'s see if you\'ve learned your way.' }
     ],
         giantDraw: [
       { who: 'piye', text: 'Even again.' },
