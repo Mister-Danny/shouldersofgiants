@@ -37,8 +37,9 @@
  *
  * NO RULES POPUP — the ambush drops straight into the battle by design.
  *
- * REWARD — the Hyksos card itself, and NOTHING else. No gold: the card is the
- * entire prize. This is a MUST-WIN battle; Stage 2 wires the retry loop, so
+ * REWARD — the Hyksos card itself plus 20 gold, both on the FIRST win only. The
+ * gold is part of the Egypt economy: the arc pays exactly what the River Market
+ * costs. This is a MUST-WIN battle; Stage 2 wires the retry loop, so
  * for now loss and tie take the standard result scoreboard whose PLAY AGAIN
  * restarts the battle in place (see _showResultScoreboard / _restartBattle).
  *
@@ -96,6 +97,7 @@ SOG.HyksosBattle = (function () {
   var HYKSOS_CARD_ID = 67;
   var SOLDIER_ID     = 70;
   var CHARIOT_ID     = 69;
+  var HYKSOS_WIN_GOLD = 20;   // paid once, with the card (see _onWin)
 
   /* THE INVADER DECK — 5 + 5 + 5 = 15, an even third each. Duplicates are
      intentional and the engine handles them; see the header. Change the counts
@@ -479,18 +481,61 @@ SOG.HyksosBattle = (function () {
     };
   }
 
-  /* ── Reward: the CARD, and nothing else. No gold by design. ── */
+  /* ── Reward: the CARD. done(newly) reports whether this win was the one that
+     granted it — Cards.unlock returns true only on a new unlock — which is also the
+     once-only signal the gold rides (see _onWin). ── */
   function _grantHyksosCard(done) {
     var newly = false;
     if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') {
       newly = !!SOG.Cards.unlock([HYKSOS_CARD_ID]);
     }
-    if (!newly) { if (done) done(); return; }
+    if (!newly) { if (done) done(false); return; }
     var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === HYKSOS_CARD_ID; });
     var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
     if (card && preh && typeof preh.showCardAcquisition === 'function') {
-      preh.showCardAcquisition(card, null, function () { if (done) done(); }, { autoDismissMs: 1500 });
-    } else if (done) { done(); }
+      preh.showCardAcquisition(card, null, function () { if (done) done(true); }, { autoDismissMs: 1500 });
+    } else if (done) { done(true); }
+  }
+
+  /* ── Reward: GOLD. Mirrors the boss modules' shared coin-drop (Hatshepsut's
+     _grantGold / _runGoldRewardAnimation) except the overlay id. ── */
+  function _playSfx(src) { if (window.SOG && SOG.sfx) { SOG.sfx.play(src); return; } try { new Audio(src).play(); } catch (e) {} }
+  function _grantGold(amount, done) {
+    if (window.SOG && SOG.gold && typeof SOG.gold.add === 'function') SOG.gold.add(amount);
+    if (window.SOG && SOG.HUD && typeof SOG.HUD.refreshGold === 'function') SOG.HUD.refreshGold();
+    _runGoldRewardAnimation(amount, function () { if (done) done(); });
+  }
+  function _runGoldRewardAnimation(amount, onDone) {
+    var overlay = document.createElement('div');
+    overlay.id = 'hyksos-gold-reward';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;pointer-events:none;';
+    var dim = document.createElement('div');
+    dim.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.80);transition:opacity 0.4s ease;';
+    var box = document.createElement('div');
+    box.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;opacity:0;' +
+      'transform:translateY(-110px);transition:opacity 0.45s ease, transform 0.7s cubic-bezier(0.2,0.9,0.3,1);';
+    var coin = document.createElement('img');
+    coin.src = 'images/ui_images/coin.png'; coin.alt = ''; coin.draggable = false;
+    coin.style.cssText = 'width:130px;height:130px;object-fit:contain;filter:drop-shadow(0 6px 10px rgba(0,0,0,0.6));';
+    var label = document.createElement('div');
+    label.textContent = amount + ' Gold';
+    label.style.cssText = 'font-family:var(--font, sans-serif);font-size:46px;font-weight:bold;color:#f3d574;' +
+      '-webkit-text-stroke:2px #1a0a04;' +
+      'text-shadow:-2px -2px 0 #1a0a04, 2px -2px 0 #1a0a04, -2px 2px 0 #1a0a04, 2px 2px 0 #1a0a04, 0 4px 6px rgba(0,0,0,0.55);';
+    box.appendChild(coin); box.appendChild(label);
+    overlay.appendChild(dim); overlay.appendChild(box);
+    (document.getElementById('sog-stage') || document.body).appendChild(overlay);
+    void box.offsetHeight;
+    box.style.opacity = '1'; box.style.transform = 'translateY(0)';
+    setTimeout(function () { _playSfx('sfx/demedici-money.mp3'); }, 300);
+    setTimeout(function () {
+      box.style.transition = 'opacity 0.4s ease';
+      box.style.opacity = '0'; dim.style.opacity = '0';
+      setTimeout(function () {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (onDone) onDone();
+      }, 420);
+    }, 1900);
   }
 
   /* ── Dialogue runner (shared engine, one instance per battle module) ── */
@@ -680,7 +725,7 @@ SOG.HyksosBattle = (function () {
 
   /* ══════════════════════════════════════════════════════════════
      SCRIPT — no intro dialogue and no rules popup: straight into the
-     fight. onWin grants the card (no gold) then shows this module's
+     fight. onWin grants the card and 20 gold (first win only), then shows this module's
      own scoreboard; loss/tie play their line and offer the retry.
   ══════════════════════════════════════════════════════════════ */
   var _dialogueActive = false;
@@ -733,18 +778,22 @@ SOG.HyksosBattle = (function () {
     onTie:  function (ctx, result, proceed) { _onDefeatOrTie(true,  result.locResults); }
   };
 
-  /* The card is the ENTIRE prize — no gold call anywhere in this module.
-     SOG.rewards is not consulted: it gates on tier flags and this battle has
-     no tier. A repeat win re-runs the dialogue and shows the board;
-     Cards.unlock returns false the second time, so the acquisition reveal
-     plays once and only once. */
+  /* The prize is the card plus 20 gold, both once. SOG.rewards is not consulted:
+     it gates on tier flags and this battle has no tier. The gold rides the card's
+     own once-only signal — Cards.unlock is true only on the win that grants it — so
+     a PLAY AGAIN re-win pays nothing. Not the ambush flag: that is stamped later, on
+     the way back to the map, so a replay before leaving would still read it unset.
+     This also keeps the dev panel's ambush rewind faithful, since it hands the card
+     back and so re-arms both. */
   function _onWin(locResults) {
     _removeResultPopup();
     _dialogueActive = true;
     _runLinesIfAny(WIN_DIALOGUE, function () {
       _dialogueActive = false;
-      _grantHyksosCard(function () {
-        _showResultScoreboard(true, false, locResults, {});
+      _grantHyksosCard(function (newly) {
+        var toScoreboard = function () { _showResultScoreboard(true, false, locResults, {}); };
+        if (newly) _grantGold(HYKSOS_WIN_GOLD, toScoreboard);
+        else toScoreboard();
       });
     });
   }

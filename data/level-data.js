@@ -191,7 +191,7 @@ window.SOG_LEVEL_DATA = {
         ]
       },
 
-      reward: { cardIdOnGiantWin: 53 },
+      reward: { cardIdOnGiantWin: 53, gold: { serf: 20, giant: 30 } },
 
       dialogue: {
         nodeIntro: [
@@ -321,7 +321,7 @@ window.SOG_LEVEL_DATA = {
         ]
       },
 
-      reward: { cardIdOnGiantWin: 77 },
+      reward: { cardIdOnGiantWin: 77, gold: { serf: 20, giant: 30 } },
 
       dialogue: {
         nodeIntro: [
@@ -444,7 +444,7 @@ window.SOG_LEVEL_DATA = {
         ]
       },
 
-      reward: { cardIdOnGiantWin: 78 },
+      reward: { cardIdOnGiantWin: 78, gold: { serf: 20, giant: 30 } },
 
       dialogue: {
         nodeIntro: [

@@ -426,6 +426,15 @@ SOG.LevelRuntime = (function () {
       var r = (window.SOG && SOG.rewards)
         ? SOG.rewards.consume(levelId)
         : { firstTierWin: false, tier: null, gold: 0, grantCard: false };
+      /* PER-BATTLE GOLD. A level may set reward.gold = { serf, giant }; the amount
+         for the tier just won replaces SOG.rewards' generic GOLD_PER_TIER. Absent,
+         or not a number, and the generic amount stands, so every other data-driven
+         level is unchanged. Only a FIRST tier win pays: consume() already zeroes
+         r.gold on a replay, and this override is guarded the same way. */
+      var _perBattleGold = level.reward && level.reward.gold;
+      if (r.firstTierWin && _perBattleGold && typeof _perBattleGold[r.tier] === 'number') {
+        r.gold = _perBattleGold[r.tier];
+      }
       var toScoreboard = function () {
         _showResultScoreboard(levelId, level, true, false, locResults, function () { _exitToOverworld(levelId, level); });
       };

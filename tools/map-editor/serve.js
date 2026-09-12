@@ -715,6 +715,16 @@ function validateLevel(doc) {
       }
     }
 
+    // reward.gold is optional too, but a half-filled or non-numeric one would pay
+    // undefined gold on one tier — refuse the save rather than write it.
+    var rgold = lvl.reward && lvl.reward.gold;
+    if (rgold) {
+      if (!isNum(rgold.serf) || !isNum(rgold.giant) || rgold.serf < 0 || rgold.giant < 0) {
+        return 'level "' + id + '" has reward.gold ' + JSON.stringify(rgold) +
+               ' — needs non-negative numbers for both serf and giant';
+      }
+    }
+
     var locs = lvl.locations;
     if (!Array.isArray(locs) || locs.length !== 3) return 'level "' + id + '" needs exactly 3 locations, has ' + (locs ? locs.length : 0);
     for (var li = 0; li < locs.length; li++) {
@@ -845,7 +855,12 @@ function serialiseLevel(id, lvl) {
   }
 
   if (lvl.reward) {
-    s += '\n      reward: { cardIdOnGiantWin: ' + num(lvl.reward.cardIdOnGiantWin) + ' },\n';
+    // reward.gold is an optional per-battle payout ({ serf, giant }); js/level-runtime.js
+    // falls back to SOG.rewards' GOLD_PER_TIER when it is absent. Written out by hand,
+    // the same way capitalByTurn is, or an editor save would silently drop it.
+    var rg = lvl.reward.gold;
+    s += '\n      reward: { cardIdOnGiantWin: ' + num(lvl.reward.cardIdOnGiantWin) +
+         (rg ? ', gold: { serf: ' + num(rg.serf) + ', giant: ' + num(rg.giant) + ' }' : '') + ' },\n';
   }
 
   if (lvl.dialogue) {

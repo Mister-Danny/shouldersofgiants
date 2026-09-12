@@ -4219,7 +4219,7 @@ var Overworld = (function () {
         { id: 45, price: 15 },   // Ziggurat
         { id: 48, price: 15 },   // Chariot
         { id: 49, price: 15 },   // Phoenicians
-        { id: 44, price: 25 }    // Enkidu (last on shelf 2)
+        { id: 44, price: 25, gate: 'sargon' }    // Enkidu (last on shelf 2) — locked until Sargon (see _enterMarket)
     ] }
   ];
   /* ── EGYPT · River Market ────────────────────────────────────────────────
@@ -4229,13 +4229,18 @@ var Overworld = (function () {
 
      The backdrop (images/ui_images/egyptmarket.jpg) is a 3-row × 3-column shelf
      grid — 9 VISIBLE slots. Unlike Mesopotamia's fixed shelf, Egypt RESTOCKS:
-     each row is a TIER with a 6-card queue behind its 3 visible slots.
+     each row is a TIER with a 9-card queue behind its 3 visible slots.
 
      ── THE RESTOCK RULE (the mechanic) ──
      Buying empties that slot for the REST OF THE VISIT. The next card in that
      row's own tier queue backfills it only on the NEXT market ENTRY — never
-     mid-visit, and never across tiers. When a tier's 6 are all bought, that row
+     mid-visit, and never across tiers. When a tier's 9 are all bought, that row
      reads sold-out (empty). This makes leaving-and-returning meaningful.
+
+     ── THE GATE RULE ──
+     A card shows greyed and locked until the player has beaten the battle that
+     first put it in front of them (each entry's `gate`). It still takes its slot —
+     the locked shelf is the teaser — so restock never looks at gates.
      [source: overworld.js → EGYPT_TRADER_INTRO / EGYPT_TIERS] */
   var EGYPT_TRADER_INTRO = [
     { who: 'trader', text: 'Welcome to the River Market!' },
@@ -4269,50 +4274,109 @@ var Overworld = (function () {
     cardH:   null
   };
 
-  /* ── TIERS — one per shelf row, top → bottom. Each is a 6-card QUEUE: the
-     first 3 are what the player sees on a fresh market, the last 3 wait behind
-     them and backfill (in order) as the visible ones sell.
-     Ids verified against cards.js (Egypt block 54–71, all 18 distinct);
-     tier subtotals 30 / 65 / 105 = 200 gold. */
+  /* ── TIERS — one per shelf row, top → bottom. Each is a 9-card QUEUE at one flat
+     price per tier: the first 3 are what the player sees on a fresh market, the
+     rest wait behind them and backfill (in order) as the visible ones sell.
+     27 cards at 45 / 90 / 135 = 270 gold, matched exactly by what the Egypt arc
+     pays: Narmer, Hatshepsut, Ramses, Akhenaten and Kush at 20 Serf / 30 Giant,
+     plus 20 for winning the Hyksos ambush.
+
+     GATES. `gate` is the scriptHook of the battle that first puts the card in front
+     of the player, in an opponent's deck or through a location. The arc is linear
+     and no battle changes its deck between tiers, so a card in several decks gates
+     on the earliest. Nubian Gold (73) is in no deck; Kush's Nubian Gold Mines
+     generate it. Hyksos (67) is NOT stocked — the mandatory ambush grants it free.
+
+     ORDER IS LOAD-BEARING. A locked card holds its slot until its gate opens and it
+     is bought, so an early-gated card queued behind later ones waits for them. Each
+     tier is therefore sorted by gate, earliest battle first. (Left in its old place
+     at the end of Tier 1, the Economic Papyrus (74) gates on Hatshepsut but would
+     sit behind three Kush cards and not be buyable until after Kush.)
+
+     The previous header claimed six cards per tier and 200 gold; Tier 1 actually
+     held five and the total was 195, because card 68 had been removed. */
   var EGYPT_TIERS = [
-    { label: 'Tier 1', cards: [        // TOP row — 5g staples
-      { id: 55, price:  5 },   // Farmer
-      { id: 56, price:  5 },   // Scribe
-      { id: 70, price:  5 },   // Soldier
-      { id: 71, price:  5 },   // Priest
-      { id: 69, price:  5 }    // Chariots
+    { label: 'Tier 1', cards: [        // TOP row — 5 gold
+      { id: 55, price:  5, gate: 'narmer'     },   // Farmer
+      { id: 56, price:  5, gate: 'narmer'     },   // Scribe
+      { id: 70, price:  5, gate: 'narmer'     },   // Soldier
+      { id: 69, price:  5, gate: 'narmer'     },   // Chariots
+      { id: 74, price:  5, gate: 'hatshepsut' },   // Papyrus (Economic)
+      { id: 71, price:  5, gate: 'akhenaten'  },   // Priest
+      { id: 73, price:  5, gate: 'kush'       },   // Nubian Gold — met through the Nubian Gold Mines
+      { id: 84, price:  5, gate: 'kush'       },   // Griot
+      { id: 87, price:  5, gate: 'kush'       }    // The Iron Furnace
     ] },
-    { label: 'Tier 2', cards: [        // MIDDLE row
-      { id: 54, price: 10 },   // Papyrus
-      { id: 57, price: 10 },   // Pyramid
-      { id: 59, price: 10 },   // Obelisk
-      { id: 64, price: 10 },   // Sphinx
-      { id: 61, price: 10 },   // King Tutankhamen
-      { id: 66, price: 15 }    // Book of the Dead
+    { label: 'Tier 2', cards: [        // MIDDLE row — 10 gold
+      { id: 54, price: 10, gate: 'narmer'     },   // Papyrus
+      { id: 57, price: 10, gate: 'narmer'     },   // Pyramid
+      { id: 59, price: 10, gate: 'narmer'     },   // Obelisk
+      { id: 64, price: 10, gate: 'narmer'     },   // Sphinx
+      { id: 61, price: 10, gate: 'akhenaten'  },   // King Tutankhamen
+      { id: 80, price: 10, gate: 'kush'       },   // Amenirdis I
+      { id: 81, price: 10, gate: 'kush'       },   // Apedemak
+      { id: 86, price: 10, gate: 'kush'       },   // Trade Network
+      { id: 85, price: 10, gate: 'kush'       }    // Nubian Archers
     ] },
-    { label: 'Tier 3', cards: [        // BOTTOM row — premium
-      { id: 65, price: 15 },   // Imhotep
-      { id: 62, price: 15 },   // Hieroglyphics
-      { id: 63, price: 15 },   // Ra
-      { id: 60, price: 20 },   // Khufu
-      { id: 67, price: 20 },   // Hyksos
-      { id: 58, price: 20 }    // Rosetta Stone
+    { label: 'Tier 3', cards: [        // BOTTOM row — 15 gold
+      { id: 65, price: 15, gate: 'narmer'     },   // Imhotep
+      { id: 62, price: 15, gate: 'narmer'     },   // Hieroglyphics
+      { id: 60, price: 15, gate: 'narmer'     },   // Khufu
+      { id: 58, price: 15, gate: 'ramses'     },   // Rosetta Stone
+      { id: 63, price: 15, gate: 'akhenaten'  },   // Ra
+      { id: 66, price: 15, gate: 'akhenaten'  },   // Book of the Dead
+      { id: 82, price: 15, gate: 'kush'       },   // Queen Shanakhdakheto
+      { id: 83, price: 15, gate: 'kush'       },   // King Ezana
+      { id: 79, price: 15, gate: 'kush'       }    // Kashta
     ] }
-    /* ── SEAM: future Nubian / Piye expansion ────────────────────────────────
-       Two shapes are supported without touching the engine below:
-         (a) DEEPEN a tier — append Nubian entries to that tier's `cards` queue
-             behind its flag; they simply restock after the Egyptian stock runs
-             out, which matches the "market replenishes" motif.
-         (b) ADD a tier — push a 4th { label, cards } here AND a 4th entry to
-             EGYPT_GRID.rowTops (the renderer is driven by these two arrays, so
-             a bigger grid needs no code change — only the backdrop art).
-       Do it inside _egyptTiers() below so it stays flag-gated and the persisted
-       queue state migrates cleanly (see _egyptMarketState's length guard).
-       NOT wired now. */
+    /* ── ADDING STOCK ─────────────────────────────────────────────────────────
+       The Nubian / Kush cards went in by DEEPENING the existing tiers, gated per
+       card. Adding a 4th tier is still supported with no engine change: push a 4th
+       { label, cards } here and a 4th entry to EGYPT_GRID.rowTops, plus the extra
+       shelf row in the backdrop art. Any re-composition — new cards, a new order,
+       a new tier — migrates saved queues through _tieredMarketState's composition
+       signature. */
   ];
-  /* Flag-gated tier source — the ONE place a future expansion mutates stock. */
+  /* Tier source. Gating is per card (each entry's `gate`, read live at render and
+     purchase), so the stock itself never changes with progress. */
   function _egyptTiers() {
-    return EGYPT_TIERS;   // e.g. if (_nubianUnlocked()) return EGYPT_TIERS_WITH_NUBIAN;
+    return EGYPT_TIERS;
+  }
+
+  /* ── MARKET GATES ─────────────────────────────────────────────────────────
+     A stock entry may carry `gate`: the scriptHook of the battle that unlocks it.
+     Until that battle is beaten the card renders greyed and locked and cannot be
+     bought. Serf OR Giant counts — the check the Enkidu lock always used — so a
+     dev-panel jump that stamps only the Giant flag still opens it. Always read
+     live; no gate state is persisted anywhere. */
+  var MARKET_GATE_OPPONENT = {
+    sargon: 'Sargon', narmer: 'Narmer', hatshepsut: 'Hatshepsut',
+    ramses: 'Ramses', akhenaten: 'Akhenaten', kush: 'Piye'
+  };
+  function _marketGateOpen(gate) {
+    if (!gate) return true;
+    return _tierBeaten(gate, 'serf') || _tierBeaten(gate, 'giant');
+  }
+  function _marketGateHint(gate, card) {
+    return 'Defeat ' + (MARKET_GATE_OPPONENT[gate] || gate) + ' to unlock ' +
+           (card && card.name ? card.name : 'this card') + '.';
+  }
+  /* Every entry a market stocks, flattened across its rows — the whole definition,
+     not just what is on the shelf right now. Works for tiers and fixed shelves
+     alike (both are arrays of { cards: [...] }). */
+  function _flatStock(rows) {
+    var out = [];
+    (rows || []).forEach(function (r) { out = out.concat(r.cards || []); });
+    return out;
+  }
+  /* The gate for a card in the market that is open right now, read from that
+     market's own stock definition. The purchase guard uses this rather than
+     anything the caller passes, so no path can buy a locked card. */
+  function _marketGateFor(cardId) {
+    var mk = MARKETS[_activeMarket];
+    var stock = (mk && typeof mk.stock === 'function') ? mk.stock() : [];
+    for (var i = 0; i < stock.length; i++) if (stock[i].id === cardId) return stock[i].gate;
+    return undefined;
   }
 
   function _cardOwned(id) {
@@ -4337,8 +4401,23 @@ var Overworld = (function () {
   function _tieredMarketState(storageKey, tiers) {
     var st = null;
     try { st = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch (e) {}
-    if (!st || !Array.isArray(st.tiers)) st = { tiers: [] };
-    // Length guard — also the migration path when a tier is added later.
+    /* COMPOSITION SIGNATURE — the migration path when tiers are RE-COMPOSED.
+       The length guard below only notices a change in tier COUNT. But `next` is a
+       queue POSITION: re-order or swap a tier's cards and a saved cursor points past
+       new cards, which are then skipped forever, while `slots` can still hold ids
+       that left the tier, which render nothing and never refill. So the saved state
+       carries the exact composition, and any mismatch clears slots and cursor.
+       Restock then rebuilds from ownership: owned cards are never offered and
+       purchases live in the collection, so a player loses nothing — only which
+       cards sit in which slots re-rolls, once. It lives on the READ path, so an old
+       snapshot restored from a cloud save migrates too. Prices and gates are read
+       live and are deliberately NOT part of the signature. */
+    var sig = tiers.map(function (t) {
+      return (t.cards || []).map(function (c) { return c.id; }).join(',');
+    }).join('|');
+    if (!st || !Array.isArray(st.tiers) || st.sig !== sig) st = { tiers: [] };
+    st.sig = sig;
+    // Length guard — pads a fresh or newly-grown state with empty tiers.
     while (st.tiers.length < tiers.length) st.tiers.push({ slots: [null, null, null], next: 0 });
     st.tiers.length = tiers.length;
     st.tiers.forEach(function (t) {
@@ -4624,11 +4703,10 @@ var Overworld = (function () {
     cardW:   null,
     cardH:   null
   };
-  // Two 6-card queues (3 visible + 3 backfill each) — same shape as EGYPT_TIERS,
-  // deliberately different ids/prices. Avoids id 44 (Enkidu) on purpose: the
-  // unconditional Enkidu-lock check in _enterMarket applies to every market's
-  // shelves, so a level-data card list has to route around it (flagged in the
-  // investigation as the one un-generalized special case left in that path).
+  // Two 6-card queues (3 visible + 3 backfill each) on the same tiered engine as
+  // EGYPT_TIERS, with deliberately different ids/prices. No gates: locks are now a
+  // per-entry `gate` field (see MARKET GATES), so this list no longer has to route
+  // around the old hard-coded Enkidu check that used to apply to every market.
   var SPIKE_MARKET_TIERS = [
     { label: 'Tier 1', cards: [
       { id: 34, price:  3 }, { id: 35, price:  3 }, { id: 56, price:  3 },
@@ -4645,6 +4723,7 @@ var Overworld = (function () {
       bg:       'images/ui_images/mesomarket.jpg',
       hudTitle: 'Spike Market',
       shelves:  function () { return _tieredShelves(KEY_SPIKE_MARKET, SPIKE_MARKET_TIERS, SPIKE_MARKET_GRID); },
+      stock:    function () { return _flatStock(SPIKE_MARKET_TIERS); },
       intro:    function () { return SPIKE_MARKET_INTRO; },
       introKey: 'sog_spike_market_intro_seen',
       postExit: false
@@ -4653,6 +4732,7 @@ var Overworld = (function () {
       bg:       'images/ui_images/mesomarket.jpg',
       hudTitle: 'Marketplace',   // HUD region label while inside; restored on exit
       shelves:  function () { return MARKET_SHELVES; },
+      stock:    function () { return _flatStock(MARKET_SHELVES); },
       intro:    function () { return MARKET_TRADER_INTRO; },
       introKey: KEY_MARKET_INTRO_SEEN,
       postExit: true     // deck-builder unlock + first-market interstitial beats
@@ -4666,6 +4746,7 @@ var Overworld = (function () {
          bottom is fine: the HUD bar covers that strip. */
       bgShiftUpPct: 3,
       shelves:  _egyptShelves,
+      stock:    function () { return _flatStock(_egyptTiers()); },   // full definition, gates included
       intro:    function () { return EGYPT_TRADER_INTRO; },
       introKey: 'sog_egypt_market_intro_seen',   // its own one-time greeting gate
       postExit: false,   // those beats are Mesopotamia-specific
@@ -4681,7 +4762,8 @@ var Overworld = (function () {
   /* sizeW/sizeH are OPTIONAL per-market tile-size overrides (Egypt's 3-wide grid
      can afford larger tiles than Mesopotamia's 5-wide). Omitted → the shared
      MARKET_CARD_W/H defaults, so existing call sites are unchanged. */
-  function _buildMarketCard(cardId, leftPct, topPct, price, locked, sizeW, sizeH) {
+  function _buildMarketCard(cardId, leftPct, topPct, price, gate, sizeW, sizeH) {
+    var locked = !_marketGateOpen(gate);
     var CW = sizeW || MARKET_CARD_W;
     var CH = sizeH || MARKET_CARD_H;
     var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
@@ -4703,8 +4785,9 @@ var Overworld = (function () {
       wrap.appendChild(window.buildCardImg(card));
     }
 
-    // Locked (Enkidu pre-Sargon): grey the card and stamp a padlock over it. The
-    // badge is appended AFTER buildCardFace (which clears the wrap) so it survives.
+    // Locked (its gate battle not yet beaten): grey the card and stamp a padlock
+    // over it. The badge is appended AFTER buildCardFace (which clears the wrap) so
+    // it survives.
     if (locked) {
       wrap.style.filter = 'grayscale(0.9) brightness(0.55)';
       var lockBadge = document.createElement('div');
@@ -4723,7 +4806,7 @@ var Overworld = (function () {
     // intro (first visit) has finished.
     wrap.addEventListener('click', function () {
       if (!_marketReady) return;
-      _openMarketBuyPopup(card, price, locked);
+      _openMarketBuyPopup(card, price, gate);
     });
 
     // Price tag — built as a SIBLING of the card (positioned in screen space),
@@ -4744,6 +4827,8 @@ var Overworld = (function () {
       'color:#3a2400;text-shadow:0 1px 0 rgba(255,230,150,.6);transform:translate(' +
       (String(price).length > 1 ? -8 : -6) + 'px, 3px);';
     tag.appendChild(num);
+    // A locked card's price greys with it, so the whole tile reads "not yet".
+    if (locked) tag.style.filter = 'grayscale(0.9) brightness(0.55)';
 
     return { cardEl: wrap, tagEl: tag };
   }
@@ -4788,19 +4873,16 @@ var Overworld = (function () {
     // Lay out the cards on their two shelves (card + its price tag). Cards the
     // player already OWNS are skipped — only unowned cards are for sale, so a
     // bought card stays gone (the empty slot is the "you own it" feedback).
-    // Enkidu (44) is purchase-locked until Sargon is beaten at EITHER tier — a
-    // softlock safeguard. The economy is tight: a 25-gold Enkidu splurge before
-    // Sargon could leave the player unable to afford the cheap (10–15 gold) cards
-    // needed to reach Sargon's 15-card minimum. Locking it pre-Sargon keeps early
-    // gold flowing to affordable cards, guaranteeing the deck can reach 15.
-    var _enkiduUnlocked = _tierBeaten('sargon', 'serf') || _tierBeaten('sargon', 'giant');
+    // Locks come from each entry's `gate` (see MARKET GATES). Enkidu (44) is the
+    // original case, gated on Sargon as a softlock safeguard: the economy is tight,
+    // and a 25-gold Enkidu splurge before Sargon could leave the player unable to
+    // afford the cheap (10–15 gold) cards needed to reach Sargon's 15-card minimum.
     _mk.shelves().forEach(function (shelf) {
       shelf.cards.forEach(function (c, i) {
         if (window.SOG && SOG.collection && typeof SOG.collection.isUnlocked === 'function'
             && SOG.collection.isUnlocked(c.id)) return;   // owned → not for sale
         var leftPct = (shelf.xs[i] != null) ? shelf.xs[i] : (20 + i * 12);
-        var locked  = (c.id === 44) && !_enkiduUnlocked;   // Enkidu gated on a Sargon win
-        var built   = _buildMarketCard(c.id, leftPct, shelf.topPct, c.price, locked,
+        var built   = _buildMarketCard(c.id, leftPct, shelf.topPct, c.price, c.gate,
                                        _mk.cardW, _mk.cardH);   // per-market size (falsy → shared default)
         if (built) { screen.appendChild(built.cardEl); screen.appendChild(built.tagEl); }
       });
@@ -4944,7 +5026,8 @@ var Overworld = (function () {
     Prehistory: 'prehistory'
   };
 
-  function _openMarketBuyPopup(card, price, locked) {
+  function _openMarketBuyPopup(card, price, gate) {
+    var locked = !_marketGateOpen(gate);
     _closeMarketBuyPopup();
     var gold = (window.SOG && SOG.gold) ? SOG.gold.get() : 0;
     var affordable = gold >= price;
@@ -5002,15 +5085,15 @@ var Overworld = (function () {
     abTx.style.cssText = 'font-size:15px;line-height:1.45;' + (card.ability ? '' : 'font-style:italic;opacity:0.7;');
     content.appendChild(abTx);
 
-    // Locked (Enkidu pre-Sargon): the Buy button is replaced by a non-interactive
-    // unlock hint so the player learns WHY it's unavailable and what unlocks it.
+    // Locked: the Buy button is replaced by a non-interactive unlock hint so the
+    // player learns WHY it's unavailable and which battle to come back after.
     var action;
     if (locked) {
       action = document.createElement('div');
       action.style.cssText = 'margin:0 14px 14px;padding:11px;font-size:16px;font-weight:bold;text-align:center;' +
         'color:#7a3010;border:2px dashed #7a3010;border-radius:6px;background:rgba(122,48,16,0.08);line-height:1.35;';
       action.innerHTML = '🔒 Locked' +
-        '<div style="font-weight:normal;font-size:14px;margin-top:3px;">Defeat Sargon to unlock Enkidu.</div>';
+        '<div style="font-weight:normal;font-size:14px;margin-top:3px;">' + _marketGateHint(gate, card) + '</div>';
     } else {
       action = document.createElement('button');
       action.className = 'btn-primary';
@@ -5068,6 +5151,9 @@ var Overworld = (function () {
      (b) grant the card to the collection, (c) refresh the HUD gold number,
      (d) play the card-acquisition animation, (e) remove the card from the shelf. */
   function _doMarketPurchase(card, price) {
+    // (0) lock — the gate is re-read LIVE from the open market's own stock, never
+    //     taken from the caller, so a locked card cannot be bought by any path.
+    if (!card || !_marketGateOpen(_marketGateFor(card.id))) return;
     // (a) spend — guard (button was active, but never trust it)
     if (!(window.SOG && SOG.gold && SOG.gold.spend(price))) return;
     // (b) grant to the collection (owned + persisted — same as battle-win grants)
