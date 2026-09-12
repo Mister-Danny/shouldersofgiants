@@ -213,9 +213,9 @@ window.SOG_LEVEL_DATA = {
       { who: 'explorer', text: 'Faces. Four of them. Why?' },
       { who: 'ramses', text: 'A warning to unwanted visitors.' },
       { who: 'explorer', text: 'Oh…' },
-      { who: 'explorer', text: 'Is it too late to tell you I always make my bed?' },
+      { who: 'explorer', text: 'Is it too late to tell you how grateful I am?' },
       { who: 'ramses', text: 'Yes.' },
-      { who: 'explorer', text: 'Unless you want me to strip the sheets…' },
+      { who: 'explorer', text: 'But I--' },
       { who: 'ramses', text: 'Enough!' },
       { who: 'ramses', text: 'Build yourself a monument worth remembering…' },
       { who: 'ramses', text: 'Or be left to the sands of time.' }
@@ -239,9 +239,8 @@ window.SOG_LEVEL_DATA = {
         serfWinB: [],
         loss: [
       { who: 'ramses', text: 'As expected.' },
-      { who: 'ramses', text: 'I tower over all.' },
-      { who: 'explorer', text: 'I just want to get home.' },
-      { who: 'ramses', text: 'Then you must prove yourself.' }
+      { who: 'ramses', text: 'I outlast them all.' },
+      { who: 'explorer', text: 'But I just want to get home.' }
     ],
         tie: [
       { who: 'ramses', text: 'A draw. How forgettable.' },
@@ -249,18 +248,20 @@ window.SOG_LEVEL_DATA = {
       { who: 'ramses', text: 'It gets you nothing.' }
     ],
         giantIntro: [
-      { who: 'ramses', text: 'You\'ve come back to etch your name into my walls of history.' },
-      { who: 'explorer', text: 'If you say so…' },
-      { who: 'explorer', text: 'You\'re not exactly a household name.' },
-      { who: 'ramses', text: 'Then I will etch it in every house from here to eternity!' }
+      { who: 'ramses', text: 'You\'ve come back to etch your name alongside mine?' },
+      { who: 'explorer', text: 'I guess...' },
+      { who: 'explorer', text: 'Where I\'m from, you\'re not exactly a household name.' },
+      { who: 'ramses', text: 'When I\'m done, your household will be but nothing.' }
     ],
         giantWinA: [
-      { who: 'explorer', text: 'Well, I appreciate the effort.' },
+      { who: 'explorer', text: 'Wow! Good game.' },
       { who: 'ramses', text: 'This is my greatest failure.' },
       { who: 'ramses', text: 'Please don\'t tell the Kushites.' },
-      { who: 'explorer', text: 'I don\'t know what a cushonite is.' },
-      { who: 'ramses', text: 'You really need to learn your history.' },
-      { who: 'explorer', text: 'Perhaps that\'s why I\'m on this journey.' }
+      { who: 'explorer', text: 'Cushionmites?' },
+      { who: 'ramses', text: 'Our rivals upriver.' },
+      { who: 'explorer', text: 'Right.' },
+      { who: '', text: 'I can\'t believe I lost to you.' },
+      { who: '', text: 'Twice.' }
     ],
         giantWinB: [],
         giantLoss: [
