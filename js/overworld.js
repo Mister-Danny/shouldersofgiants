@@ -284,7 +284,7 @@ var Overworld = (function () {
     // → [GIANT FLAG raises]
   ];
   var D6_NARMER_WIN_INTERSTITIAL_B = [
-    { who: 'explorer', text: 'I better see what I can add to my collection before I go back.' }
+    { who: 'explorer', text: 'I better see what I can add to my deck before I go back.' }
   ];
 
   /* ── STAGE B — NARMER → HATSHEPSUT JOURNEY ────────────────────────────────
@@ -392,36 +392,32 @@ var Overworld = (function () {
   // first), then hands off to the battle-start STUB (the Narmer battle isn't
   // built yet). EDITABLE.
   var NARMER_ENCOUNTER_DIALOGUE = [
-    { who: 'narmer',   text: 'Hello, good traveler!' },
-    { who: 'narmer',   text: 'Welcome, welcome…' },
+    { who: 'narmer', text: 'Hello, good traveler!' },
     { who: 'explorer', text: 'Are you another mean ruler?' },
-    { who: 'narmer',   text: 'Some like to call me Menes, but in Egypt, I am Narmer, the first pharaoh.' },
+    { who: 'narmer', text: 'Some like to call me Menes, but in Egypt, I am Narmer, the first pharaoh.' },
     { who: 'explorer', text: 'Thank goodness.' },
     { who: 'explorer', text: 'By the way, I love your hat.' },
-    { who: 'narmer',   text: 'This is no hat, my friend.' },
-    { who: 'narmer',   text: 'This is the Double Crown.' },
+    { who: 'narmer', text: 'This is no hat.' },
+    { who: 'narmer', text: 'This is the Double Crown.' },
     { who: 'explorer', text: 'Double?' },
     { who: 'explorer', text: 'Why would you put a crown on a crown?' },
-    { who: 'narmer',   text: 'It evokes unity.' },
-    { who: 'narmer',   text: 'The White Crown of Upper Egypt to the south.' },
-    { who: 'narmer',   text: 'The Red Crown of Lower Egypt to the north.' },
-    { who: 'explorer', text: "Wouldn't Upper be north? And Lower be south?" },
-    { who: 'narmer',   text: 'My people do not follow the compass. We follow the river.' },
-    { who: 'narmer',   text: '"Upper" refers to upstream on the Nile River.' },
+    { who: 'narmer', text: 'It evokes unity.' },
+    { who: 'narmer', text: 'The White Crown of Upper Egypt to the south.' },
+    { who: 'narmer', text: 'The Red Crown of Lower Egypt to the north.' },
+    { who: 'explorer', text: 'Wouldn\'t Upper be north? And Lower be south?' },
+    { who: 'narmer', text: 'My people do not follow the compass. We follow the river.' },
+    { who: 'narmer', text: '"Upper" refers to upstream on the Nile River.' },
     { who: 'explorer', text: 'Ohhh.' },
     { who: 'explorer', text: 'I think I get it.' },
-    { who: 'narmer',   text: 'It doesn’t matter whether or not you "get it."' },
-    { who: 'narmer',   text: 'This crown is what holds this Kingdom together.' },
-    { who: 'explorer', text: 'I’m sensing a turn…' },
-    { who: 'narmer',   text: 'What does your crown represent?' },
+    { who: 'narmer', text: 'It doesn’t matter whether or not you "get it."' },
+    { who: 'narmer', text: 'This crown is what holds this Kingdom together.' },
+    { who: 'narmer', text: 'What does your crown represent?' },
     { who: 'explorer', text: 'This hat? It represents me not wanting to get sunburned.' },
-    { who: 'narmer',   text: 'You belong to nothing?' },
+    { who: 'narmer', text: 'You belong to nothing?' },
     { who: 'explorer', text: 'I wouldn’t say that…' },
-    { who: 'narmer',   text: 'An unknown. A crack in a perfect whole.' },
-    { who: 'explorer', text: 'Yup. This took a turn.' },
-    { who: 'narmer',   text: 'Unity does not exist unless we are all as one.' },
-    { who: 'explorer', text: 'Gulp.' },
-    { who: 'narmer',   text: 'And you are not one of us.' }
+    { who: 'narmer', text: 'Without a home, you are a threat.' },
+    { who: 'explorer', text: 'This took a turn.' },
+    { who: 'narmer', text: 'And without one, you are not one of Egypt' }
   ];
 
   // Hatshepsut (Upper Egypt) encounter — plays on the first Hatshepsut node

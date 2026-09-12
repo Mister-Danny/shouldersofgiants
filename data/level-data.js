@@ -288,7 +288,7 @@ window.SOG_LEVEL_DATA = {
         handStart: 5,
         maxHandSize: 7
       },
-      resource: { model: 'capital', capital: 5, resetEachTurn: true },
+      resource: { model: 'capital', capital: 2, resetEachTurn: true, capitalByTurn: [2, 3, 4, 5, 6] },
       draw:     { model: 'replenish' },
 
       decks: {
@@ -316,6 +316,7 @@ window.SOG_LEVEL_DATA = {
         body: [
           '5 Turns',
           'Each card costs Capital (CC) to play.',
+          'Capital increases each turn: 2, 3, 4, 5, 6.',
           '<u>Win Condition</u> — Gain the most IP at the most locations.'
         ]
       },
@@ -344,7 +345,7 @@ window.SOG_LEVEL_DATA = {
       { who: 'explorer', text: 'I don\'t think that\'s how things work.' },
       { who: 'akhenaten', text: 'Your heresy will not be looked upon kindly.' },
       { who: 'akhenaten', text: 'Like the old gods who came before, you will be dealt with.' },
-      { who: 'explorer', text: 'Wait. What happened to the old gods?' },
+      { who: 'explorer', text: 'What happened to the old gods?' },
       { who: 'akhenaten', text: 'They were discarded.' }
     ],
         turn1: [],
@@ -352,7 +353,7 @@ window.SOG_LEVEL_DATA = {
       { who: 'explorer', text: 'The sun shined upon me!' },
       { who: 'akhenaten', text: 'Aten offered grace today.' },
       { who: 'akhenaten', text: 'But tomorrow will be a new day.' },
-      { who: 'akhenaten', text: 'And I will be ready.' }
+      { who: 'akhenaten', text: 'My day again.' }
     ],
         serfWinB: [],
         loss: [
@@ -371,22 +372,20 @@ window.SOG_LEVEL_DATA = {
       { who: 'akhenaten', text: 'You returned to seek favor a second time?' },
       { who: 'explorer', text: 'I\'m really just trying to get home.' },
       { who: 'akhenaten', text: 'Home is wherever the light falls.' },
-      { who: 'explorer', text: 'But my home has a roof.' },
-      { who: 'akhenaten', text: 'In darkness you cannot see.' },
-      { who: 'akhenaten', text: 'And with the light, I will see victory.' }
+      { who: 'explorer', text: 'Well, my home has a roof.' },
+      { who: 'akhenaten', text: 'Let the darkness cast its shadow upon you.' },
+      { who: 'akhenaten', text: 'And light upon my victory.' }
     ],
         giantWinA: [
       { who: 'explorer', text: 'I win again!' },
-      { who: 'akhenaten', text: 'I have been undone.' },
+      { who: 'akhenaten', text: 'Aten has left me.' },
       { who: 'explorer', text: 'It was just a game.' },
       { who: 'explorer', text: 'The sun will come up again.' },
-      { who: 'akhenaten', text: 'I have fallen out of favor with Aten.' },
-      { who: 'akhenaten', text: 'So it will all fall.' },
+      { who: 'akhenaten', text: 'It falls...' },
       { who: 'explorer', text: 'What?' },
       { who: 'akhenaten', text: 'All of it.' },
-      { who: 'akhenaten', text: 'My city. My name. The one god.' },
-      { who: 'explorer', text: 'That got dark.' },
-      { who: 'akhenaten', text: 'Take me away.' }
+      { who: 'akhenaten', text: 'My city. My name. My one god.' },
+      { who: 'explorer', text: 'That is dark.' }
     ],
         giantWinB: [],
         giantLoss: [
@@ -461,58 +460,60 @@ window.SOG_LEVEL_DATA = {
     ],
         opening: [
       { who: 'piye', text: 'Now that you understand, we can begin.' },
-      { who: 'explorer', text: 'Begin what?' },
-      { who: 'piye', text: 'You want to pass through Egypt. Egypt is mine.' },
+      { who: 'explorer', text: 'Understand what?' },
+      { who: 'piye', text: 'That Egypt is mine.' },
       { who: 'explorer', text: 'Do I have to fight you for it?' },
-      { who: 'piye', text: 'You have to convince me.' },
-      { who: 'explorer', text: 'Of what?' },
-      { who: 'piye', text: 'That you belong on the road.' }
+      { who: 'piye', text: 'That sounds so undignified.' },
+      { who: '', text: 'Convince me.' },
+      { who: 'explorer', text: 'Are we playing this card game, or what?' },
+      { who: '', text: 'I do not play.' },
+      { who: '', text: 'I win.' }
     ],
         turn1: [],
         serfWinA: [
       { who: 'explorer', text: 'I won!' },
-      { who: 'piye', text: 'You did. That was well played.' },
-      { who: 'explorer', text: 'You\'re being nice about it.' },
-      { who: 'piye', text: 'Why would I not be?' },
-      { who: 'piye', text: 'Come back. I will still be here.' }
+      { who: 'piye', text: 'That was well played.' },
+      { who: 'explorer', text: 'I don\'t play.' },
+      { who: 'explorer', text: 'I just keep moving forward.' },
+      { who: 'piye', text: 'If you do come back...' },
+      { who: '', text: 'I will have more to offer.' }
     ],
         serfWinB: [],
         loss: [
       { who: 'piye', text: 'Not yet.' },
-      { who: 'explorer', text: 'I really tried.' },
-      { who: 'piye', text: 'I know. Trying is most of it.' }
+      { who: 'explorer', text: 'But I tried.' },
+      { who: 'piye', text: 'I don\'t give out trophies for trying.' }
     ],
         tie: [
       { who: 'piye', text: 'Even.' },
       { who: 'explorer', text: 'Is that okay?' },
-      { who: 'piye', text: 'It is honest. It is not enough.' }
+      { who: 'piye', text: 'It is not enough.' }
     ],
         giantIntro: [
       { who: 'piye', text: 'You came back.' },
-      { who: 'explorer', text: 'I said I would.' },
-      { who: 'piye', text: 'People say many things at my gate.' },
-      { who: 'explorer', text: 'I\'m not people. I\'m trying to get home.' },
-      { who: 'piye', text: 'Then you already understand the road.' },
-      { who: 'piye', text: 'Everyone on it is going somewhere else.' }
+      { who: 'explorer', text: 'You offered.' },
+      { who: 'piye', text: 'I offered you a real challenge.' },
+      { who: 'explorer', text: 'A challenge I\'m ready for.' },
+      { who: 'piye', text: 'Easier said than done.' }
     ],
         giantWinA: [
-      { who: 'explorer', text: 'I made it!' },
+      { who: 'explorer', text: 'I  did it!' },
       { who: 'piye', text: 'You did.' },
       { who: 'piye', text: 'Remember who let you through.' },
       { who: 'explorer', text: 'You didn\'t let me. I won.' },
-      { who: 'piye', text: 'I know. Remember it anyway.' },
-      { who: 'piye', text: 'The road is open. Go carefully.' }
+      { who: 'explorer', text: 'I won.' },
+      { who: 'piye', text: 'Your road is open. Go carefully.' }
     ],
         giantWinB: [],
         giantLoss: [
-      { who: 'piye', text: 'The road stays closed.' },
-      { who: 'explorer', text: 'For how long?' },
-      { who: 'piye', text: 'Until you are ready. Not a day sooner.' }
+      { who: 'piye', text: 'Your road ahead stays closed.' },
+      { who: 'explorer', text: 'I know.' },
+      { who: 'piye', text: 'Lets see if you\'ve learned your way.' }
     ],
         giantDraw: [
       { who: 'piye', text: 'Even again.' },
       { who: 'explorer', text: 'I\'m getting closer.' },
-      { who: 'piye', text: 'You are. That is not the same as arriving.' }
+      { who: 'piye', text: 'But it is not your destination.' }
     ]
       }
     }
