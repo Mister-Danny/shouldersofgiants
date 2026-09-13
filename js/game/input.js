@@ -1530,6 +1530,11 @@
     queueMove:               queueMove,
     snapBack:                snapBack,
     resetTurn:               resetTurn,
+    /* The per-turn play rule, exactly as isLegalPlay applies it. board.updateHeader
+       reads these for the CARDS TO PLAY ticker, so the number shown and the rule
+       enforced come from one place. */
+    cardsPerTurnCap:         _cardsPerTurnCap,
+    cardsPlayedThisTurn:     _cardsPlayedThisTurn,
     clearSelection:          clearSelection,
     /* Used by game.js's initGame to reset transient drag state at
        the start of a new game. Selection state resets automatically

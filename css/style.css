@@ -10368,13 +10368,8 @@ body.otzi-battle .battle-avatar-ally.adv-active {
   transform: scale(1);
 }
 
-/* Turn counter in the CC box; standard turn-info hidden */
-body.otzi-battle .battle-turn-info { display: none; }
-body.otzi-battle .battle-capital-info {
-  font-size: 18px;
-  letter-spacing: 0.06em;
-  padding: 6px 14px;
-}
+/* Top-left box: no override. The turn row and the CARDS TO PLAY ticker render
+   exactly as in capital battles (SOG.board.updateHeader). */
 
 /* Hide CC numerals (spec: no CC numbers shown in this battle) */
 body.otzi-battle .db-overlay-cc { display: none; }
@@ -11134,15 +11129,8 @@ body.prehistory-battle .battle-loc-ability { display: none; }
    are hidden on all cards in this battle. Only the IP number is shown.") */
 body.prehistory-battle .db-overlay-cc { display: none; }
 
-/* Turn counter takes the Capital box. JS writes "Turn X / 4" into
-   #battle-capital-info; the existing turn-info element is emptied.
-   Slight font tweak so the longer string fits the parchment box. */
-body.prehistory-battle .battle-turn-info { display: none; }
-body.prehistory-battle .battle-capital-info {
-  font-size: 18px;
-  letter-spacing: 0.06em;
-  padding: 6px 14px;
-}
+/* Top-left box: no override. The turn row and the CARDS TO PLAY ticker render
+   exactly as in capital battles (SOG.board.updateHeader). */
 
 /* Lucy avatar hidden until Phase E pops her in. .adv-active is added
    by Phase E's coaching kickoff.

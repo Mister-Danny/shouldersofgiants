@@ -70,12 +70,13 @@ SOG.GilgameshBattle = (function () {
   function playBleep(who)             { _runner.playBleep(who); }
   function getBleepCtx()              { return _runner.getBleepCtx(); }
 
-  /* ── Turn counter ────────────────────────────────────────────── */
+  /* ── Turn counter ────────────────────────────────────────────
+     The top-left box is engine-rendered (SOG.board.updateHeader): TURN N / total
+     on top, CARDS TO PLAY and the count below — the same element and style every
+     capital battle uses. This only asks for a refresh; the module never writes
+     into the box, so the counter can't be overwritten at turn start. */
   function setTurnCounter(current, total) {
-    var capEl  = document.getElementById('battle-capital-info');
-    if (capEl)  capEl.textContent  = 'Turn ' + current + ' / ' + total;
-    var turnEl = document.getElementById('battle-turn-info');
-    if (turnEl) turnEl.textContent = '';
+    if (window.SOG && SOG.board && typeof SOG.board.updateHeader === 'function') SOG.board.updateHeader();
   }
 
   /* ── Avatar presentation ─────────────────────────────────────────

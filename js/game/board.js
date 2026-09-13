@@ -874,8 +874,43 @@
     var totalTurns = (G.config && G.config.structure) ? G.config.structure.turns : TURNS;
     headerTurnEl.textContent  = 'TURN ' + G.turn + ' / ' + totalTurns;
     headerPhaseEl.textContent = G.phase === 'select' ? 'SELECT CARDS' : 'REVEAL';
-    var capitalNumEl = document.getElementById('battle-capital-num');
-    if (capitalNumEl) capitalNumEl.textContent = G.capital;
+
+    /* THE TICKER ROW (top-left box, under the turn). A battle with capital shows
+       CAPITAL and what is left to spend. A battle with NO capital and a per-turn play
+       cap instead — structure.cardsPerTurn, set only by Neanderthal (1), Ötzi (2) and
+       Gilgamesh (2) — shows CARDS TO PLAY and how many it may still place, in the
+       same element and style, so young players see that a second card is allowed.
+       The count reads the same two functions the play check uses
+       (SOG.input.cardsPerTurnCap / cardsPlayedThisTurn), so the number and the rule
+       cannot disagree: it drops on each placement, and undo, RESET TURN and the next
+       turn restore it because each of them changes the plays those functions count.
+       Every one of those paths already calls updateHeader. */
+    var inp  = window.SOG && SOG.input;
+    var cap  = (inp && typeof inp.cardsPerTurnCap === 'function') ? inp.cardsPerTurnCap() : null;
+    var free = !!(G.config && G.config.resource && G.config.resource.model === 'none');
+    if (cap != null && free && typeof inp.cardsPlayedThisTurn === 'function') {
+      _renderTicker('CARDS TO PLAY', Math.max(0, cap - inp.cardsPlayedThisTurn()));
+    } else {
+      _renderTicker('CAPITAL', G.capital);
+    }
+  }
+
+  /* Write the ticker row: a small label over the big number, the markup
+     js/ui.js resetHeader builds for CAPITAL. Rebuilt only if something replaced
+     it, so for capital battles this is exactly the old single textContent write. */
+  function _renderTicker(label, value) {
+    var box = document.getElementById('battle-capital-info');
+    if (!box) return;
+    var labelEl = box.querySelector('.battle-capital-label');
+    var numEl   = box.querySelector('#battle-capital-num');
+    if (!labelEl || !numEl) {
+      box.innerHTML = '<span class="battle-capital-label"></span>' +
+                      '<span class="battle-capital-num" id="battle-capital-num"></span>';
+      labelEl = box.querySelector('.battle-capital-label');
+      numEl   = box.querySelector('#battle-capital-num');
+    }
+    if (labelEl.textContent !== label) labelEl.textContent = label;
+    numEl.textContent = value;
   }
 
   /* ═══════════════════════════════════════════════════════════════
