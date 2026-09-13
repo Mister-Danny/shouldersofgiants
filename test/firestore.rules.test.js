@@ -13,6 +13,7 @@ const {
   assertSucceeds,
   assertFails,
 } = require('@firebase/rules-unit-testing');
+const { documentSize } = require('./support/firestore-doc-size');
 
 const PROJECT_ID = 'demo-shoulders-of-giants';
 
@@ -289,4 +290,49 @@ test('a session doc created without a uid cannot be updated by anyone', async ()
   await assertFails(
     asAnonymous.doc('sessions/session-no-uid').set({ completed: true }, { merge: true })
   );
+});
+
+test('session owner can write the play log (logVersion 1) with the existing rules; the doc stays small', async () => {
+  // Real doc captured from a Gilgamesh Serf battle on this branch (js/analytics.js).
+  const sample = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'fixtures/session-play-log.sample.json'), 'utf8'));
+  delete sample._comment;
+  const id = sample.sessionId;
+  const asStudentZ    = testEnv.authenticatedContext('studentZ').firestore();
+  const asSomeoneElse = testEnv.authenticatedContext('someoneElse').firestore();
+  const ref = (db) => db.doc(`sessions/${id}`);
+
+  // Same write sequence the game makes: create at turn 1, turns after each END TURN,
+  // then the completion write with locationScores + board.
+  await assertSucceeds(ref(asStudentZ).set({
+    sessionId: id, uid: 'studentZ', timestamp: new Date(), isTestSession: false,
+    difficulty: sample.difficulty, gameMode: 'standard', completed: false, outcome: null,
+    turnDurations: [], locationScores: [],
+    logVersion: 1, battleId: sample.battleId, tier: sample.tier, locations: sample.locations,
+    turns: [{ ...sample.turns[0], playerFirst: null, player: [], ai: [] }],
+  }));
+  for (let t = 1; t <= sample.turns.length; t++) {
+    await assertSucceeds(ref(asStudentZ).set({ turnDurations: sample.turnDurations.slice(0, t) }, { merge: true }));
+    await assertSucceeds(ref(asStudentZ).set({ turns: sample.turns.slice(0, t) }, { merge: true }));
+  }
+  await assertSucceeds(ref(asStudentZ).set({
+    completed: true, outcome: sample.outcome, locationScores: sample.locationScores,
+    playerTotal: sample.playerTotal, aiTotal: sample.aiTotal, usedTiebreaker: sample.usedTiebreaker,
+    turnDurations: sample.turnDurations, turns: sample.turns, board: sample.board, finishedAt: new Date(),
+  }, { merge: true }));
+
+  // Another signed-in user still can't touch it.
+  await assertFails(ref(asSomeoneElse).set({ turns: [] }, { merge: true }));
+
+  let stored;
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    stored = (await ref(context.firestore()).get()).data();
+  });
+  assert.deepEqual(stored.turns, sample.turns);
+  assert.deepEqual(stored.board, sample.board);
+  assert.equal(stored.battleId, 'gilgamesh');
+  assert.equal(stored.tier, 'serf');
+
+  const bytes = documentSize(`sessions/${id}`, stored);
+  console.log(`emulator-stored play-log session doc: ${bytes} bytes`);
+  assert.ok(bytes < 16 * 1024, `doc is ${bytes} bytes`);
 });

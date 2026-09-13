@@ -366,9 +366,41 @@
       // (Battle music already started at battle entry in _initGameBuild.)
       _startSelectionTimer();
       if (typeof Analytics !== 'undefined') {
-        Analytics.gameStarted(window.aiDifficulty);
+        if (typeof Analytics.setBoardProvider === 'function') Analytics.setBoardProvider(_analyticsBoard);
+        Analytics.gameStarted(window.aiDifficulty, _analyticsBattle());
       }
     });
+  }
+
+  /* ── Play-log snapshots for js/analytics.js (logVersion 1) ──────
+     battleId = scriptHook, tier = the flag tier endGame stamps (same value as
+     ai.tier). Board = each location's cards per side in slot order with
+     effective IP. Read-only views of G — nothing here mutates state. */
+  function _analyticsBattle() {
+    var cfg = G.config || {};
+    return {
+      battleId:  cfg.scriptHook || null,
+      tier:      cfg.flagTier || (cfg.ai && cfg.ai.tier) || null,
+      locations: (G.locations || []).map(function (loc) { return { id: loc.id, name: loc.name }; }),
+      hand:      (G.playerHand || []).slice()
+    };
+  }
+  function _analyticsBoard() {
+    function side(slots) {
+      var out = [];
+      (slots || []).forEach(function (sd, i) {
+        if (sd) out.push({ slot: i, cardId: sd.cardId, ip: effectiveIP(sd), revealed: !!sd.revealed });
+      });
+      return out;
+    }
+    return (G.locations || []).map(function (loc) {
+      return { locId: loc.id, name: loc.name, player: side(G.playerSlots[loc.id]), ai: side(G.aiSlots[loc.id]) };
+    });
+  }
+  function _analyticsTurnActions(opponentActions) {
+    if (typeof Analytics !== 'undefined' && typeof Analytics.turnActions === 'function') {
+      Analytics.turnActions(G.turn, G.playerActionLog.slice(), (opponentActions || []).slice(), G.playerFirst);
+    }
   }
 
   /* ── Utilities ───────────────────────────────────────────────── */
@@ -714,6 +746,7 @@
       Match.submitTurn(G.turn, G.playerActionLog.slice(), function (oppActions) {
         _showMatchWaitOverlay(false);
         applyOpponentActions(oppActions);
+        _analyticsTurnActions(oppActions);   // applyOpponentActions doesn't fill aiActionLog
         setTimeout(startReveal, 600);
       });
       return;
@@ -732,6 +765,7 @@
     }
     SOG.ai.runAiSelection();
     SOG.ui.updateOppHand();
+    _analyticsTurnActions(G.aiActionLog);
     setTimeout(startReveal, 600);
   }
 
@@ -1715,7 +1749,7 @@
     resetTurnBtn.style.display = '';
     _startSelectionTimer();
 
-    if (typeof Analytics !== 'undefined') Analytics.turnStarted();
+    if (typeof Analytics !== 'undefined') Analytics.turnStarted(G.turn, G.playerHand.slice());
 
     /* onTurnStart (script hook): start of a selection phase (turns 2+). Sync,
        fire-and-forget. No script → no-op. */
@@ -1728,7 +1762,7 @@
     G.phase = 'over';
     refreshMoveableCards();
     var result = tallyResult();
-    if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);
+    if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);   // reads the final board via setBoardProvider
 
     // Checkpoint save (AUTH_SPEC.md Phase 3) — one of exactly three call
     // sites in the whole app (the others: account creation, logout). Fires
