@@ -83,23 +83,26 @@
   function _idList(arr) {
     return Array.isArray(arr) ? arr.filter(function (x) { return typeof x === 'number' && isFinite(x); }).slice(0, MAX_LIST) : [];
   }
-  function _action(a, i) {
+  // `logged` = the entry is already in play-log shape (slot / fromSlot), e.g. read
+  // back from an abandoned-session record; otherwise it's a raw engine action-log
+  // entry (slotIndex / fromSlotIndex; player plays use toLocId, AI plays locId).
+  function _action(a, i, logged) {
     var out = { i: i, type: (a && typeof a.type === 'string') ? a.type : 'unknown', cardId: _scalar(a && a.cardId) };
     if (out.type === 'play') {
-      // Player log uses toLocId, AI log uses locId — normalized to locId.
-      out.locId = _scalar(a.toLocId !== undefined ? a.toLocId : a.locId);
-      out.slot  = _scalar(a.slotIndex);
+      out.locId = _scalar(logged || a.toLocId === undefined ? a.locId : a.toLocId);
+      out.slot  = _scalar(logged ? a.slot : a.slotIndex);
     } else if (out.type === 'move') {
       out.fromLocId = _scalar(a.fromLocId);
-      out.fromSlot  = _scalar(a.fromSlotIndex);
+      out.fromSlot  = _scalar(logged ? a.fromSlot : a.fromSlotIndex);
       out.toLocId   = _scalar(a.toLocId);
     } else if (out.type === 'barter') {
       out.partnerCardId = _scalar(a.partnerCardId);
     }
     return out;
   }
-  function _actions(arr) {
-    return Array.isArray(arr) ? arr.filter(function (a) { return a && typeof a === 'object'; }).slice(0, MAX_LIST).map(_action) : [];
+  function _actions(arr, logged) {
+    return Array.isArray(arr) ? arr.filter(function (a) { return a && typeof a === 'object'; }).slice(0, MAX_LIST)
+      .map(function (a, i) { return _action(a, i, logged); }) : [];
   }
   function _locations(arr) {
     return Array.isArray(arr) ? arr.slice(0, MAX_LIST).map(function (l) {
@@ -216,13 +219,21 @@
   /* ══════════════════════════════════════════════════════════════
      Abandoned-session recovery
      On page close mid-game we save minimal state to localStorage.
-     On the NEXT call to gameStarted() we flush that record first.
+     On the NEXT call to gameStarted() we flush that record first —
+     but only when the signed-in uid is the one that wrote it.
   ══════════════════════════════════════════════════════════════ */
+  function _currentUid() {
+    var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
+      ? window.SogAuth.getUser() : null;
+    return user ? user.uid : null;
+  }
+
   function saveAbandonedSession() {
     if (!gameActive || !sessionId) return;
     try {
       localStorage.setItem(ABANDONED_KEY, JSON.stringify({
         sessionId:     sessionId,
+        uid:           _currentUid(),
         turnDurations: turnDurations,
         abandonedAt:   new Date().toISOString(),
         logVersion:    LOG_VERSION,
@@ -239,20 +250,30 @@
     var raw = null;
     try { raw = localStorage.getItem(ABANDONED_KEY); } catch (e) {}
     if (!raw) return;
+    // Consume the record up front so a bad record can't be retried every battle.
+    try { localStorage.removeItem(ABANDONED_KEY); } catch (e) {}
 
-    try {
-      var data = JSON.parse(raw);
-      var ref  = getDocRef(data.sessionId);
-      if (ref) {
+    var data = null;
+    try { data = JSON.parse(raw); } catch (e) { return; }
+    var ref = (data && typeof data.sessionId === 'string') ? getDocRef(data.sessionId) : null;
+    if (!ref) return;
+
+    // Sessions rules only let the creating uid update a session. A record left by a
+    // different user on a shared device (or saved by a build that didn't stamp the
+    // uid) would be denied — and a denial disables analytics for this whole session
+    // (see _writeDocNow). So compare uids once auth has settled, and drop otherwise.
+    var flushIfOwner = function () {
+      if (!data.uid || data.uid !== _currentUid()) return;
+      try {
         var abandoned = {
+          uid:           data.uid,
           completed:     false,
           outcome:       'abandoned',
           turnDurations: data.turnDurations || [],
           abandonedAt:   data.abandonedAt
         };
         // Play-log fields (logVersion 1). Re-sanitized: localStorage content is
-        // not trusted to be well-formed. Records saved by an older build lack
-        // logVersion and get none of these fields.
+        // not trusted to be well-formed.
         if (data.logVersion) {
           abandoned.logVersion = data.logVersion;
           abandoned.battleId   = _scalar(data.battleId);
@@ -261,17 +282,20 @@
           abandoned.turns      = Array.isArray(data.turns) ? data.turns.slice(0, MAX_LIST).map(function (t) {
             return { turn: _scalar(t && t.turn), hand: _idList(t && t.hand),
                      playerFirst: typeof (t && t.playerFirst) === 'boolean' ? t.playerFirst : null,
-                     player: _actions(t && t.player), ai: _actions(t && t.ai) };
+                     player: _actions(t && t.player, true), ai: _actions(t && t.ai, true) };
           }) : [];
           abandoned.board      = _board(data.board);
         }
         writeDoc(ref, abandoned, true);
+      } catch (e) {
+        console.warn('[Analytics] Failed to flush abandoned session:', e);
       }
-    } catch (e) {
-      console.warn('[Analytics] Failed to flush abandoned session:', e);
+    };
+    if (window.SogAuth && typeof window.SogAuth.ready === 'function') {
+      window.SogAuth.ready(flushIfOwner);
+    } else {
+      flushIfOwner();
     }
-
-    try { localStorage.removeItem(ABANDONED_KEY); } catch (e) {}
   }
 
   window.addEventListener('beforeunload', saveAbandonedSession);
@@ -328,10 +352,10 @@
      * @param {object} [battle]    { battleId, tier, locations:[{id,name}], hand:[cardId] }
      */
     gameStarted: function (difficulty, battle) {
-      // Clear any stale beforeunload flag from a clean previous session end
-      try { localStorage.removeItem(ABANDONED_KEY); } catch (e) {}
-
-      // Flush a genuinely abandoned prior session (page was closed mid-game)
+      // Flush a genuinely abandoned prior session (page was closed mid-game).
+      // A clean game end already clears the record in gameCompleted(), so any
+      // record still present here is a real abandonment. (This used to clear the
+      // record first, which meant the flush never found anything.)
       flushAbandonedSession();
 
       if (!db) return;

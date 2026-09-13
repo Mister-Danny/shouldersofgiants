@@ -336,3 +336,23 @@ test('session owner can write the play log (logVersion 1) with the existing rule
   console.log(`emulator-stored play-log session doc: ${bytes} bytes`);
   assert.ok(bytes < 16 * 1024, `doc is ${bytes} bytes`);
 });
+
+test('abandoned-session flush (owner merge with outcome abandoned + play log) is allowed', async () => {
+  const sample = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'fixtures/session-play-log.sample.json'), 'utf8'));
+  await seed(async (db) => {
+    await db.doc('sessions/session-abandoned').set({
+      sessionId: 'session-abandoned', uid: 'studentZ', timestamp: new Date(), difficulty: 'heuristic',
+      gameMode: 'standard', completed: false, outcome: null, logVersion: 1, battleId: 'gilgamesh', tier: 'giant',
+    });
+  });
+  const asStudentZ = testEnv.authenticatedContext('studentZ').firestore();
+  const asSomeoneElse = testEnv.authenticatedContext('someoneElse').firestore();
+  const flush = {
+    uid: 'studentZ', completed: false, outcome: 'abandoned', turnDurations: [13], abandonedAt: '2026-09-13T15:07:08.761Z',
+    logVersion: 1, battleId: 'gilgamesh', tier: 'giant', locations: sample.locations,
+    turns: sample.turns.slice(0, 2), board: sample.board,
+  };
+  await assertSucceeds(asStudentZ.doc('sessions/session-abandoned').set(flush, { merge: true }));
+  // What the client-side uid check prevents: someone else's flush is denied.
+  await assertFails(asSomeoneElse.doc('sessions/session-abandoned').set({ ...flush, uid: 'someoneElse' }, { merge: true }));
+});

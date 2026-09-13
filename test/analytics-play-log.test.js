@@ -1,7 +1,8 @@
 'use strict';
 
 // Play log (logVersion 1) in js/analytics.js: battle id + tier at start, hand per
-// turn, both action logs before the reveal, and the final board at the end.
+// turn, both action logs before the reveal, the final board at the end, and the
+// same fields through the abandoned-session flush (owner uid only).
 //
 // Loads the real analytics.js into a vm context with a recording Firestore stub —
 // no emulator, no network. Every write is checked for undefined values (Firestore
@@ -177,6 +178,79 @@ test('older call signatures still work (no battle info, no turn args)', () => {
   assert.equal(doc.tier, null);
   assert.deepEqual(doc.turns, [{ turn: 1, hand: [], playerFirst: null, player: [], ai: [] }]);
   assert.equal(doc.board, null);
+});
+
+test('abandoned session: page close saves the play log, the next battle flushes the same fields', () => {
+  const storage = new Map();
+  const first = load({ storage });
+  first.Analytics.setBoardProvider(board);
+  first.Analytics.gameStarted('easy', { battleId: 'otzi', tier: null, locations: LOCATIONS, hand: [26, 27, 28, 29] });
+  first.Analytics.turnActions(1, [{ type: 'play', cardId: 27, toLocId: 8, slotIndex: 2 }, { type: 'move', cardId: 33, fromLocId: 7, fromSlotIndex: 1, toLocId: 8 }], [{ type: 'play', cardId: 35, locId: 7, slotIndex: 3 }], true);
+  first.Analytics.turnEnded(1);
+  first.Analytics.turnStarted(2, [26, 28, 29, 31]);
+  first.unload();
+  const abandonedId = first.writes[0].path;
+
+  // Page reload: a new module instance sharing localStorage starts the next battle.
+  const second = load({ storage });
+  second.Analytics.gameStarted('easy', { battleId: 'otzi', locations: LOCATIONS, hand: [] });
+  const flush = second.writes[0];
+  assert.equal(flush.path, abandonedId);
+  assert.equal(flush.merge, true);
+  assert.equal(flush.data.uid, 'studentZ');
+  assert.equal(flush.data.completed, false);
+  assert.equal(flush.data.outcome, 'abandoned');
+  assert.deepEqual(flush.data.turnDurations.length, 1);
+  assert.equal(flush.data.logVersion, 1);
+  assert.equal(flush.data.battleId, 'otzi');
+  assert.equal(flush.data.tier, null);
+  assert.deepEqual(flush.data.locations, [{ id: 8, name: 'Cedar Forest' }, { id: 7, name: 'Uruk' }, { id: 2, name: 'Mount Mashu' }]);
+  assert.deepEqual(flush.data.turns, [
+    { turn: 1, hand: [26, 27, 28, 29], playerFirst: true,
+      player: [{ i: 0, type: 'play', cardId: 27, locId: 8, slot: 2 }, { i: 1, type: 'move', cardId: 33, fromLocId: 7, fromSlot: 1, toLocId: 8 }],
+      ai: [{ i: 0, type: 'play', cardId: 35, locId: 7, slot: 3 }] },
+    { turn: 2, hand: [26, 28, 29, 31], playerFirst: null, player: [], ai: [] },
+  ]);
+  assert.deepEqual(flush.data.board, board());
+  assert.equal(second.writes[1].merge, false);   // then the new session's create
+  assert.equal(storage.has('sog_abandoned_session'), false);
+});
+
+test('abandoned record left by a different uid (shared device) is dropped, not written', () => {
+  const storage = new Map();
+  const first = load({ storage, uid: 'studentA' });
+  first.Analytics.gameStarted('easy', { battleId: 'otzi', locations: LOCATIONS, hand: [26] });
+  first.unload();
+
+  const second = load({ storage, uid: 'studentB' });
+  second.Analytics.gameStarted('easy', { battleId: 'gilgamesh', tier: 'serf', locations: LOCATIONS, hand: [26] });
+  assert.deepEqual(second.writes.map((w) => w.merge), [false]);   // only studentB's own create
+  assert.equal(second.writes[0].data.uid, 'studentB');
+  assert.equal(storage.has('sog_abandoned_session'), false);
+  // Analytics still works for studentB afterwards.
+  second.Analytics.turnActions(1, [], [], true);
+  assert.equal(second.writes.length, 2);
+});
+
+test('abandoned record from an older build (no uid) is dropped', () => {
+  const storage = new Map([['sog_abandoned_session', JSON.stringify({ sessionId: 'old-1', turnDurations: [9, 4], abandonedAt: '2026-09-01T00:00:00.000Z' })]]);
+  const { Analytics, writes } = load({ storage });
+  Analytics.gameStarted('easy', { battleId: 'otzi', locations: LOCATIONS, hand: [] });
+  assert.deepEqual(writes.map((w) => w.merge), [false]);
+  assert.equal(storage.has('sog_abandoned_session'), false);
+});
+
+test('a battle that finishes normally leaves no abandoned record', () => {
+  const storage = new Map();
+  const first = load({ storage });
+  first.Analytics.gameStarted('easy', { battleId: 'otzi', locations: LOCATIONS, hand: [26] });
+  first.Analytics.gameCompleted({ outcome: 'player', locResults: [] });
+  first.unload();   // page closed after the result screen
+  assert.equal(storage.has('sog_abandoned_session'), false);
+
+  const second = load({ storage });
+  second.Analytics.gameStarted('easy', { battleId: 'otzi', locations: LOCATIONS, hand: [] });
+  assert.deepEqual(second.writes.map((w) => w.merge), [false]);
 });
 
 test('document size stays small for a typical and a worst-case battle', () => {
