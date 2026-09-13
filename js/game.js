@@ -2102,13 +2102,6 @@
         if      (result.outcome === 'player') Anim.celebration();
         else if (result.outcome === 'ai')     Anim.sadResult();
       }
-      // Vs AI / Multiplayer match completion — feeds the feedback
-      // counter + home-button visibility. Tutorial uses its own
-      // showScreen('screen-result') in tutorial.js, so it doesn't
-      // reach this code path.
-      if (window.Feedback && typeof window.Feedback.recordMatchCompleted === 'function') {
-        window.Feedback.recordMatchCompleted();
-      }
     };
 
     /* Tournament champion: Final knockout win always triggers the legend screen */
@@ -2351,10 +2344,6 @@
   }
 
   document.getElementById('result-play-again').addEventListener('click', function () {
-    // First-time feedback popup intercept (3rd-match milestone).
-    // Returns true if popup is now visible — abort the navigation
-    // and let the popup's own "Play Again" button re-fire this click.
-    if (window.Feedback && window.Feedback.maybeShowPopup()) return;
     // A battle config may supply a replay() to re-run THE SAME battle (e.g. the
     // Narmer advance-board battle rebuilds a fresh config). Arcadium / 2P set
     // none → fall through to the default (re-resolve a new Arcadium game).
@@ -2367,7 +2356,6 @@
   });
 
   document.getElementById('result-home').addEventListener('click', function () {
-    if (window.Feedback && window.Feedback.maybeShowPopup()) return;
     SOG.ui.stopBgMusic();
     _playPendingCelebrations(function () {
       showScreen('screen-home');

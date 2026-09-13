@@ -431,8 +431,8 @@ img    { display: block; }
 }
 
 /* ── Home-screen Feedback button ─────────────────────────────────
-   Conditional 5th button. Hidden by inline style="display:none"
-   until js/feedback.js shows it (player has finished 3+ matches).
+   Conditional 5th button. Hidden by inline style="display:none" until
+   js/feedback.js shows it — everyone except a brand-new guest's first visit.
    Smaller and quieter than the four primary buttons so it doesn't
    compete with the main navigation. */
 .btn-home-feedback {
@@ -569,7 +569,7 @@ img    { display: block; }
 }
 .feedback-body p { margin: 0; }
 
-/* Three-button stack, equal width, consistent spacing */
+/* Button stack (Feedback Form / Continue), equal width, consistent spacing */
 .feedback-actions {
   display: flex;
   flex-direction: column;

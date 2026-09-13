@@ -347,17 +347,30 @@ var HomeFlow = (function () {
       btnReady.style.display = '';
       btnLearn.style.display = 'none';
       btnAbout.style.display = 'none';
-      if (btnFeedback) btnFeedback.style.display = 'none';
+      _refreshFeedbackButton();   // hidden for a brand-new guest; a signed-in account still sees it
       if (btnAccount)  btnAccount.style.display = '';
       if (btnTeacherDashboard) btnTeacherDashboard.style.display = teacherDisplay;
     } else {
-      // Returning visitor — normal home menu. (Feedback button is threshold-gated
-      // separately by feedback.js, so we don't force it here.)
+      // Returning visitor — normal home menu.
       btnReady.style.display = '';
       btnAbout.style.display = '';
       btnLearn.style.display = localStorage.getItem(KEY_FIRST_VISIT) ? '' : 'none';
       if (btnAccount) btnAccount.style.display = '';
       if (btnTeacherDashboard) btnTeacherDashboard.style.display = teacherDisplay;
+      _refreshFeedbackButton();
+    }
+  }
+
+  /* Feedback button: its rule (everyone on the home menu, except a guest on the
+     first-visit funnel) lives in js/feedback.js. It is applied here, inside
+     applyVisitState(), so it shares the account button's lifecycle — every sign-in
+     and sign-out reaches applyVisitState() through the teacher-status listener,
+     which fires for guests too. */
+  function _refreshFeedbackButton() {
+    if (window.Feedback && typeof window.Feedback.refreshHomeButton === 'function') {
+      window.Feedback.refreshHomeButton();
+    } else if (btnFeedback) {
+      btnFeedback.style.display = 'none';
     }
   }
 
@@ -482,7 +495,7 @@ var HomeFlow = (function () {
     btnAbout.style.display = '';
     applyVisitState();           // restores btn-learn + btn-account per first-visit rule
     _updateAccountButtonLabel();
-    // Re-evaluate Feedback button (visible only past the play-count threshold)
+    // Re-evaluate Feedback button (see _refreshFeedbackButton)
     if (window.Feedback && typeof window.Feedback.refreshHomeButton === 'function') {
       window.Feedback.refreshHomeButton();
     }
@@ -991,7 +1004,7 @@ var HomeFlow = (function () {
     if (btnTeacherDashboard) gsap.set(btnTeacherDashboard, { opacity: 1 });  // same fade-out, same fix
     applyVisitState();
     _updateAccountButtonLabel();   // auth state may have changed since this button was last shown
-    // Re-evaluate Feedback button (threshold-gated by feedback.js)
+    // Re-evaluate Feedback button (see _refreshFeedbackButton)
     if (window.Feedback && typeof window.Feedback.refreshHomeButton === 'function') {
       window.Feedback.refreshHomeButton();
     }
@@ -1053,7 +1066,9 @@ var HomeFlow = (function () {
     resumeMusic:    resumeHomeMusic,  // bug 14
     setMusicVolume: setHomeMusicVolume, // bug 14: global widget volume slider
     getSnapshot:    getSnapshot,
-    applySnapshot:  applySnapshot
+    applySnapshot:  applySnapshot,
+    // First-ever visit (the "I'm Ready" funnel)? Read by js/feedback.js's button rule.
+    isFirstVisit:   function () { return !introSeen(); }
   };
 })();
 

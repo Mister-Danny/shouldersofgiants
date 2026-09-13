@@ -655,7 +655,14 @@ SOG.GilgameshBattle = (function () {
   /* Post-win scoreboard shown AFTER the dialogue + acquisitions (dialogue-first flow):
      VICTORY headline, only CONTINUE + GAME BOARD; CONTINUE exits to the overworld. */
   function _showPostWinScoreboard() {
-    _showResultPopup(true, _gLastLocResults, { onContinue: _returnToMesopotamiaMarket });
+    /* FEEDBACK ASK. Leaving the result screen of the first Serf win offers the
+       feedback form — the first point every Adventure player reaches. Feedback
+       owns the once-ever flag; either popup button then carries on to the map
+       exactly as before. The Giant rematch win never asks. */
+    var onContinue = (_gWinFlagTier === 'serf' && window.Feedback && typeof window.Feedback.offerOnce === 'function')
+      ? function () { window.Feedback.offerOnce(_returnToMesopotamiaMarket); }
+      : _returnToMesopotamiaMarket;
+    _showResultPopup(true, _gLastLocResults, { onContinue: onContinue });
   }
 
   /* FIRST WIN — the "fluke". [source: BLOCK 1 → GILGAMESH_FLUKE_A / _B]
