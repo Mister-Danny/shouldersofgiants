@@ -407,7 +407,7 @@
      * Records both sides' action logs for the turn and writes the play log.
      * @param {number}  turnNum         1-based turn being revealed
      * @param {Array}   playerActions   G.playerActionLog entries, in play order
-     * @param {Array}   aiActions       G.aiActionLog entries (or 2P opponent actions)
+     * @param {Array}   aiActions       G.aiActionLog entries (AI, or the 2P opponent via applyOpponentActions)
      * @param {boolean} playerFirst     whether the player's cards reveal first
      */
     turnActions: function (turnNum, playerActions, aiActions, playerFirst) {

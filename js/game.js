@@ -962,7 +962,7 @@
       Match.submitTurn(G.turn, G.playerActionLog.slice(), function (oppActions) {
         _showMatchWaitOverlay(false);
         applyOpponentActions(oppActions);
-        _analyticsTurnActions(oppActions);   // applyOpponentActions doesn't fill aiActionLog
+        _analyticsTurnActions(G.aiActionLog);   // applyOpponentActions records the remote's plays/moves here
         setTimeout(startReveal, 600);
       });
       return;
