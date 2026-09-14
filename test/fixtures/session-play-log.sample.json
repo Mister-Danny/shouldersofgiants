@@ -1,0 +1,110 @@
+{
+  "_comment": "Session doc captured from a real Gilgamesh Serf battle on this branch (local run, Firebase SDK stubbed). timestamp/finishedAt were serverTimestamp sentinels; uid was the stub's. Used by test/firestore.rules.test.js.",
+  "sessionId": "10419412-e6b3-4b6b-ad7e-3f9f7c332850",
+  "isTestSession": false,
+  "difficulty": "heuristic",
+  "gameMode": "standard",
+  "completed": true,
+  "outcome": "player",
+  "turnDurations": [22, 2, 2, 2],
+  "locationScores": [
+    { "location": "Cedar Forest", "playerIP": 7, "aiIP": 3, "winner": "player" },
+    { "location": "Uruk", "playerIP": 10, "aiIP": 16, "winner": "ai" },
+    { "location": "Mount Mashu", "playerIP": 10, "aiIP": 9, "winner": "player" }
+  ],
+  "logVersion": 1,
+  "battleId": "gilgamesh",
+  "tier": "serf",
+  "locations": [
+    { "id": 8, "name": "Cedar Forest" },
+    { "id": 7, "name": "Uruk" },
+    { "id": 2, "name": "Mount Mashu" }
+  ],
+  "turns": [
+    {
+      "turn": 1, "hand": [26, 33, 34, 36], "playerFirst": true,
+      "player": [
+        { "i": 0, "type": "play", "cardId": 26, "locId": 7, "slot": 0 },
+        { "i": 1, "type": "play", "cardId": 33, "locId": 2, "slot": 0 }
+      ],
+      "ai": [
+        { "i": 0, "type": "play", "cardId": 45, "locId": 2, "slot": 0 },
+        { "i": 1, "type": "play", "cardId": 44, "locId": 7, "slot": 0 }
+      ]
+    },
+    {
+      "turn": 2, "hand": [34, 36, 27, 30, 35], "playerFirst": false,
+      "player": [
+        { "i": 0, "type": "play", "cardId": 34, "locId": 2, "slot": 1 },
+        { "i": 1, "type": "play", "cardId": 36, "locId": 8, "slot": 0 }
+      ],
+      "ai": [
+        { "i": 0, "type": "play", "cardId": 40, "locId": 2, "slot": 1 },
+        { "i": 1, "type": "play", "cardId": 38, "locId": 8, "slot": 0 }
+      ]
+    },
+    {
+      "turn": 3, "hand": [27, 30, 35, 46, 29], "playerFirst": true,
+      "player": [
+        { "i": 0, "type": "play", "cardId": 27, "locId": 8, "slot": 1 },
+        { "i": 1, "type": "play", "cardId": 30, "locId": 7, "slot": 1 }
+      ],
+      "ai": [
+        { "i": 0, "type": "play", "cardId": 48, "locId": 2, "slot": 2 },
+        { "i": 1, "type": "play", "cardId": 39, "locId": 8, "slot": 1 }
+      ]
+    },
+    {
+      "turn": 4, "hand": [35, 46, 29, 28, 31], "playerFirst": false,
+      "player": [
+        { "i": 0, "type": "play", "cardId": 35, "locId": 7, "slot": 2 },
+        { "i": 1, "type": "play", "cardId": 46, "locId": 2, "slot": 2 }
+      ],
+      "ai": [
+        { "i": 0, "type": "play", "cardId": 49, "locId": 7, "slot": 1 },
+        { "i": 1, "type": "play", "cardId": 43, "locId": 7, "slot": 2 }
+      ]
+    }
+  ],
+  "playerTotal": 0,
+  "aiTotal": 0,
+  "usedTiebreaker": false,
+  "board": [
+    {
+      "locId": 8, "name": "Cedar Forest",
+      "player": [
+        { "slot": 0, "cardId": 36, "ip": 4, "revealed": true },
+        { "slot": 1, "cardId": 27, "ip": 3, "revealed": true }
+      ],
+      "ai": [
+        { "slot": 0, "cardId": 38, "ip": 2, "revealed": true },
+        { "slot": 1, "cardId": 39, "ip": 1, "revealed": true }
+      ]
+    },
+    {
+      "locId": 7, "name": "Uruk",
+      "player": [
+        { "slot": 0, "cardId": 26, "ip": 3, "revealed": true },
+        { "slot": 1, "cardId": 30, "ip": 2, "revealed": true },
+        { "slot": 2, "cardId": 35, "ip": 5, "revealed": true }
+      ],
+      "ai": [
+        { "slot": 0, "cardId": 44, "ip": 6, "revealed": true },
+        { "slot": 1, "cardId": 43, "ip": 10, "revealed": true }
+      ]
+    },
+    {
+      "locId": 2, "name": "Mount Mashu",
+      "player": [
+        { "slot": 0, "cardId": 33, "ip": 5, "revealed": true },
+        { "slot": 1, "cardId": 34, "ip": 4, "revealed": true },
+        { "slot": 2, "cardId": 46, "ip": 1, "revealed": true }
+      ],
+      "ai": [
+        { "slot": 0, "cardId": 45, "ip": 4, "revealed": true },
+        { "slot": 1, "cardId": 40, "ip": 2, "revealed": true },
+        { "slot": 2, "cardId": 48, "ip": 3, "revealed": true }
+      ]
+    }
+  ]
+}

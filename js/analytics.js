@@ -5,6 +5,22 @@
  * per-turn durations, outcomes, location scores, and difficulty mode.
  * No personal information is collected — no names, accounts, or device IDs.
  *
+ * Play log (logVersion 1) — card-level data for the hint system:
+ *   battleId, tier   scriptHook ('otzi', 'gilgamesh', …) and flag tier ('serf' /
+ *                    'giant'); null for battles without them (e.g. Arcadium).
+ *   locations        [{ id, name }] in board order; every locId below refers here.
+ *   turns            [{ turn, hand, playerFirst, player, ai }] — hand = card ids at
+ *                    the start of the turn; player / ai = that turn's action logs in
+ *                    play order, captured after the AI picks its plays and before
+ *                    the reveal: { i, type:'play', cardId, locId, slot } or
+ *                    { i, type:'move', cardId, fromLocId, fromSlot, toLocId }.
+ *                    slot is the commit-time slot index. Adventure AI moves that
+ *                    happen after the reveal are not in `ai` (see board).
+ *   board            [{ locId, name, player, ai }] at battle end (or at page close
+ *                    for abandoned sessions); player / ai = [{ slot, cardId, ip,
+ *                    revealed }] in slot order, ip = effective points.
+ * Rules: sessions/{id} rules check auth + uid only, so no rules change is needed.
+ *
  * Test mode:  Triple-click "Shoulders of Giants" title on the home screen
  *             to toggle. Active sessions are tagged isTestSession:true in
  *             Firestore. State persists in localStorage until toggled off.
@@ -40,6 +56,8 @@
   var TEST_MODE_KEY      = 'sog_test_mode';
   var ABANDONED_KEY      = 'sog_abandoned_session';
   var COLLECTION         = 'sessions';
+  var LOG_VERSION        = 1;
+  var MAX_LIST           = 40;    // cap on any logged list (hand, actions, cards per side) — keeps docs small
 
   /* ── Module state ────────────────────────────────────────────── */
   var db            = null;   // Firestore instance
@@ -50,6 +68,68 @@
   var turnStartTime = 0;      // Date.now() at the start of the current turn
   var turnDurations = [];     // array of seconds (one entry per completed turn)
   var analyticsDisabled = false;  // bug 3: set true on first permission-denied; subsequent writes silently no-op
+  var battleInfo    = null;   // { battleId, tier, locations } for the current game
+  var turnLog       = [];     // play log: one entry per turn (see header)
+  var boardProvider = null;   // game.js-supplied fn → board snapshot, read at game end / page close
+
+  /* ══════════════════════════════════════════════════════════════
+     Play-log sanitizers
+     Firestore rejects undefined values, so every logged field is coerced to a
+     number / string / boolean / null here — never passed through raw.
+  ══════════════════════════════════════════════════════════════ */
+  function _scalar(v) {
+    return (typeof v === 'number' && isFinite(v)) || typeof v === 'string' ? v : null;
+  }
+  function _idList(arr) {
+    return Array.isArray(arr) ? arr.filter(function (x) { return typeof x === 'number' && isFinite(x); }).slice(0, MAX_LIST) : [];
+  }
+  // `logged` = the entry is already in play-log shape (slot / fromSlot), e.g. read
+  // back from an abandoned-session record; otherwise it's a raw engine action-log
+  // entry (slotIndex / fromSlotIndex; player plays use toLocId, AI plays locId).
+  function _action(a, i, logged) {
+    var out = { i: i, type: (a && typeof a.type === 'string') ? a.type : 'unknown', cardId: _scalar(a && a.cardId) };
+    if (out.type === 'play') {
+      out.locId = _scalar(logged || a.toLocId === undefined ? a.locId : a.toLocId);
+      out.slot  = _scalar(logged ? a.slot : a.slotIndex);
+    } else if (out.type === 'move') {
+      out.fromLocId = _scalar(a.fromLocId);
+      out.fromSlot  = _scalar(logged ? a.fromSlot : a.fromSlotIndex);
+      out.toLocId   = _scalar(a.toLocId);
+    } else if (out.type === 'barter') {
+      out.partnerCardId = _scalar(a.partnerCardId);
+    }
+    return out;
+  }
+  function _actions(arr, logged) {
+    return Array.isArray(arr) ? arr.filter(function (a) { return a && typeof a === 'object'; }).slice(0, MAX_LIST)
+      .map(function (a, i) { return _action(a, i, logged); }) : [];
+  }
+  function _locations(arr) {
+    return Array.isArray(arr) ? arr.slice(0, MAX_LIST).map(function (l) {
+      return { id: _scalar(l && l.id), name: _scalar(l && l.name) };
+    }) : [];
+  }
+  function _board(arr) {
+    if (!Array.isArray(arr)) return null;
+    var side = function (cards) {
+      return Array.isArray(cards) ? cards.slice(0, MAX_LIST).map(function (c) {
+        return { slot: _scalar(c && c.slot), cardId: _scalar(c && c.cardId), ip: _scalar(c && c.ip), revealed: !!(c && c.revealed) };
+      }) : [];
+    };
+    return arr.slice(0, MAX_LIST).map(function (loc) {
+      return { locId: _scalar(loc && loc.locId), name: _scalar(loc && loc.name), player: side(loc && loc.player), ai: side(loc && loc.ai) };
+    });
+  }
+  function _turnEntry(turn) {
+    for (var k = turnLog.length - 1; k >= 0; k--) if (turnLog[k].turn === turn) return turnLog[k];
+    var entry = { turn: turn, hand: [], playerFirst: null, player: [], ai: [] };
+    turnLog.push(entry);
+    return entry;
+  }
+  function _readBoard() {
+    if (typeof boardProvider !== 'function') return null;
+    try { return _board(boardProvider()); } catch (e) { return null; }
+  }
 
   /* ══════════════════════════════════════════════════════════════
      UUID / session ID
@@ -139,15 +219,29 @@
   /* ══════════════════════════════════════════════════════════════
      Abandoned-session recovery
      On page close mid-game we save minimal state to localStorage.
-     On the NEXT call to gameStarted() we flush that record first.
+     On the NEXT call to gameStarted() we flush that record first —
+     but only when the signed-in uid is the one that wrote it.
   ══════════════════════════════════════════════════════════════ */
+  function _currentUid() {
+    var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
+      ? window.SogAuth.getUser() : null;
+    return user ? user.uid : null;
+  }
+
   function saveAbandonedSession() {
     if (!gameActive || !sessionId) return;
     try {
       localStorage.setItem(ABANDONED_KEY, JSON.stringify({
         sessionId:     sessionId,
+        uid:           _currentUid(),
         turnDurations: turnDurations,
-        abandonedAt:   new Date().toISOString()
+        abandonedAt:   new Date().toISOString(),
+        logVersion:    LOG_VERSION,
+        battleId:      battleInfo ? battleInfo.battleId : null,
+        tier:          battleInfo ? battleInfo.tier : null,
+        locations:     battleInfo ? battleInfo.locations : [],
+        turns:         turnLog,
+        board:         _readBoard()
       }));
     } catch (e) { /* storage full — ignore */ }
   }
@@ -156,23 +250,52 @@
     var raw = null;
     try { raw = localStorage.getItem(ABANDONED_KEY); } catch (e) {}
     if (!raw) return;
+    // Consume the record up front so a bad record can't be retried every battle.
+    try { localStorage.removeItem(ABANDONED_KEY); } catch (e) {}
 
-    try {
-      var data = JSON.parse(raw);
-      var ref  = getDocRef(data.sessionId);
-      if (ref) {
-        writeDoc(ref, {
+    var data = null;
+    try { data = JSON.parse(raw); } catch (e) { return; }
+    var ref = (data && typeof data.sessionId === 'string') ? getDocRef(data.sessionId) : null;
+    if (!ref) return;
+
+    // Sessions rules only let the creating uid update a session. A record left by a
+    // different user on a shared device (or saved by a build that didn't stamp the
+    // uid) would be denied — and a denial disables analytics for this whole session
+    // (see _writeDocNow). So compare uids once auth has settled, and drop otherwise.
+    var flushIfOwner = function () {
+      if (!data.uid || data.uid !== _currentUid()) return;
+      try {
+        var abandoned = {
+          uid:           data.uid,
           completed:     false,
           outcome:       'abandoned',
           turnDurations: data.turnDurations || [],
           abandonedAt:   data.abandonedAt
-        }, true);
+        };
+        // Play-log fields (logVersion 1). Re-sanitized: localStorage content is
+        // not trusted to be well-formed.
+        if (data.logVersion) {
+          abandoned.logVersion = data.logVersion;
+          abandoned.battleId   = _scalar(data.battleId);
+          abandoned.tier       = _scalar(data.tier);
+          abandoned.locations  = _locations(data.locations);
+          abandoned.turns      = Array.isArray(data.turns) ? data.turns.slice(0, MAX_LIST).map(function (t) {
+            return { turn: _scalar(t && t.turn), hand: _idList(t && t.hand),
+                     playerFirst: typeof (t && t.playerFirst) === 'boolean' ? t.playerFirst : null,
+                     player: _actions(t && t.player, true), ai: _actions(t && t.ai, true) };
+          }) : [];
+          abandoned.board      = _board(data.board);
+        }
+        writeDoc(ref, abandoned, true);
+      } catch (e) {
+        console.warn('[Analytics] Failed to flush abandoned session:', e);
       }
-    } catch (e) {
-      console.warn('[Analytics] Failed to flush abandoned session:', e);
+    };
+    if (window.SogAuth && typeof window.SogAuth.ready === 'function') {
+      window.SogAuth.ready(flushIfOwner);
+    } else {
+      flushIfOwner();
     }
-
-    try { localStorage.removeItem(ABANDONED_KEY); } catch (e) {}
   }
 
   window.addEventListener('beforeunload', saveAbandonedSession);
@@ -223,15 +346,16 @@
   window.Analytics = {
 
     /**
-     * Called at the very start of initGame().
+     * Called when turn 1 activates (end of initGame's onBattleStart).
      * Flushes any abandoned prior session, then opens a new session doc.
      * @param {string} difficulty  'easy' | 'hard'
+     * @param {object} [battle]    { battleId, tier, locations:[{id,name}], hand:[cardId] }
      */
-    gameStarted: function (difficulty) {
-      // Clear any stale beforeunload flag from a clean previous session end
-      try { localStorage.removeItem(ABANDONED_KEY); } catch (e) {}
-
-      // Flush a genuinely abandoned prior session (page was closed mid-game)
+    gameStarted: function (difficulty, battle) {
+      // Flush a genuinely abandoned prior session (page was closed mid-game).
+      // A clean game end already clears the record in gameCompleted(), so any
+      // record still present here is a real abandonment. (This used to clear the
+      // record first, which meant the flush never found anything.)
       flushAbandonedSession();
 
       if (!db) return;
@@ -241,6 +365,13 @@
       turnDurations = [];
       turnStartTime = Date.now();
       gameActive    = true;
+      battleInfo    = {
+        battleId:  _scalar(battle && battle.battleId),
+        tier:      _scalar(battle && battle.tier),
+        locations: _locations(battle && battle.locations)
+      };
+      turnLog = [];
+      _turnEntry(1).hand = _idList(battle && battle.hand);
 
       writeDoc(sessionDocRef, {
         sessionId:      sessionId,
@@ -251,16 +382,50 @@
         completed:      false,
         outcome:        null,
         turnDurations:  [],
-        locationScores: []
+        locationScores: [],
+        logVersion:     LOG_VERSION,
+        battleId:       battleInfo.battleId,
+        tier:           battleInfo.tier,
+        locations:      battleInfo.locations,
+        turns:          turnLog
       }, false);
     },
 
     /**
      * Called at the start of each new turn (turns 2–5).
      * Turn 1 timer begins in gameStarted().
+     * @param {number}   [turnNum]  1-based turn number that is starting
+     * @param {number[]} [hand]     card ids in the player's hand after the draw
      */
-    turnStarted: function () {
+    turnStarted: function (turnNum, hand) {
       turnStartTime = Date.now();
+      if (gameActive && typeof turnNum === 'number') _turnEntry(turnNum).hand = _idList(hand);
+    },
+
+    /**
+     * Called after the opponent's plays are chosen and before the reveal.
+     * Records both sides' action logs for the turn and writes the play log.
+     * @param {number}  turnNum         1-based turn being revealed
+     * @param {Array}   playerActions   G.playerActionLog entries, in play order
+     * @param {Array}   aiActions       G.aiActionLog entries (AI, or the 2P opponent via applyOpponentActions)
+     * @param {boolean} playerFirst     whether the player's cards reveal first
+     */
+    turnActions: function (turnNum, playerActions, aiActions, playerFirst) {
+      if (!gameActive || !sessionDocRef || typeof turnNum !== 'number') return;
+      var entry = _turnEntry(turnNum);
+      entry.player      = _actions(playerActions);
+      entry.ai          = _actions(aiActions);
+      entry.playerFirst = typeof playerFirst === 'boolean' ? playerFirst : null;
+      writeDoc(sessionDocRef, { turns: turnLog }, true);
+    },
+
+    /**
+     * Registers a function returning the current board as
+     * [{ locId, name, player:[{slot,cardId,ip,revealed}], ai:[…] }].
+     * Read at game end and when the page closes mid-game.
+     */
+    setBoardProvider: function (fn) {
+      boardProvider = typeof fn === 'function' ? fn : null;
     },
 
     /**
@@ -303,6 +468,8 @@
         aiTotal:        result.aiTotal      || 0,
         usedTiebreaker: result.tiebreaker   || false,
         turnDurations:  turnDurations,
+        turns:          turnLog,
+        board:          _readBoard(),
         finishedAt:     firebase.firestore.FieldValue.serverTimestamp()
       }, true);
     }
