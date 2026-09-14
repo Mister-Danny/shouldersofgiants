@@ -9,6 +9,9 @@
  *     title    {string}            — centered header
  *     body     {string|string[]}   — HTML string, or array of bullet strings
  *     onDismiss{function}          — called once when the popup closes
+ *   SOG.BattleRulesPopup.show({ body, choices: [{ label, onClick }] })
+ *     choice mode — one button per choice, no X, no click-outside dismiss;
+ *     the title is omitted unless one is passed (the Ötzi hints prompt)
  *   SOG.BattleRulesPopup.hide()    — close programmatically
  *   SOG.BattleRulesPopup.isOpen()
  */
@@ -57,6 +60,8 @@ SOG.BattleRulesPopup = (function () {
     hide();                       // close any existing instance (no dismiss cb)
     _onDismiss = opts.onDismiss || null;
     var playMode = !!opts.playButton;
+    // Choice mode (Yes / No): like play mode, the buttons are the only way on.
+    var choiceMode = !playMode && Array.isArray(opts.choices) && opts.choices.length > 0;
 
     var backdrop = document.createElement('div');
     backdrop.id = BACKDROP_ID;
@@ -78,9 +83,27 @@ SOG.BattleRulesPopup = (function () {
     bodyEl.className = 'rules-popup-body';
     bodyEl.innerHTML = _buildBodyHTML(opts.body);
 
-    if (!playMode) panel.appendChild(closeBtn);
-    panel.appendChild(titleEl);
+    if (!playMode && !choiceMode) panel.appendChild(closeBtn);
+    if (!choiceMode || opts.title) panel.appendChild(titleEl);
     panel.appendChild(bodyEl);
+    if (choiceMode) {
+      var choiceRow = document.createElement('div');
+      choiceRow.className = 'popup-actions rules-popup-actions';
+      opts.choices.forEach(function (choice) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-snes rules-choice-btn';
+        btn.textContent = choice.label;
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          _onDismiss = null;        // a choice is not a dismiss
+          hide();
+          if (typeof choice.onClick === 'function') choice.onClick();
+        });
+        choiceRow.appendChild(btn);
+      });
+      panel.appendChild(choiceRow);
+    }
     if (playMode) {
       var actions = document.createElement('div');
       actions.className = 'popup-actions rules-popup-actions';
@@ -103,7 +126,7 @@ SOG.BattleRulesPopup = (function () {
 
     // Dismiss: X button, or click outside the panel (mirrors the card popup).
     // Play mode has neither — the Play button is the only way on.
-    if (!playMode) {
+    if (!playMode && !choiceMode) {
       closeBtn.addEventListener('click', function (e) { e.stopPropagation(); hide(); });
       backdrop.addEventListener('click', function (e) { if (e.target === backdrop) hide(); });
     }

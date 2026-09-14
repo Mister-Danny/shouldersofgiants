@@ -88,6 +88,32 @@ SOG.OtziBattle = (function () {
   var KEY_CARD_OTZI_UNLOCKED = 'sog_card_otzi_unlocked';
   var KEY_OTZI_OPENING_SEEN  = 'sog_otzi_opening_seen';   // intro lines watched once → every later entry skips them
 
+  /* ── Strategy hints (Ötzi only) ─────────────────────────────────
+     A player who has FINISHED an Ötzi game (any outcome) and not yet beaten him
+     is offered hints before the deal. sog_otzi_game_finished is the only
+     trigger: it is stamped at the outcome, so saves from before hints shipped
+     (openingSeen but no finished flag) are never retroactively prompted — their
+     next finished game arms it. offered/seen clear on the win; beating Ötzi
+     turns every part of this off. */
+  var KEY_OTZI_GAME_FINISHED = 'sog_otzi_game_finished';  // an Ötzi game reached an outcome
+  var KEY_OTZI_HINTS_OFFERED = 'sog_otzi_hints_offered';  // the Yes / No box has been shown
+  var KEY_OTZI_HINTS_SEEN    = 'sog_otzi_hints_seen';     // a round of hints was accepted → "MORE" + on-draw hints
+
+  // Explorer's voice, keyed by card id: Fire 29, Cave Art 30, Megalith 31,
+  // Domesticated Animal 32, Lucy 33, Tribe 36.
+  var HINT_LINES = {
+    29: 'Fire helps the cards I play after it. Play it early so more cards get the bonus.',
+    30: 'Cave Art helps the cards already down. Save it for later so it helps more of them.',
+    31: 'Megalith earns a point every turn. The sooner I play it, the more it earns.',
+    32: 'This helps the cards beside it. Give it a spot with room on both sides.',
+    33: 'Lucy can only move once. Wait to move her until you know where you need points the most.',
+    36: 'Tribe pays off next turn. Play two cards at its location next turn to cash in.'
+  };
+  var HINTS_PROMPT_FIRST = 'Would you like some helpful strategy hints?';
+  var HINTS_PROMPT_MORE  = 'Would you like MORE helpful hints this time?';
+  var LOSS_REMINDER      = 'Remember, you only need to win 2 of the 3 locations.';
+  var HINT_DRAW_SETTLE_MS = 400;   // on-draw hints wait for the turn-start hand rebuild to settle
+
   /* ── Timing ──────────────────────────────────────────────────── */
   var TYPE_SPEED_MS = 32;
   var TOTAL_TURNS   = 4;
@@ -293,7 +319,7 @@ SOG.OtziBattle = (function () {
   function hideBubbles() {
     ['otzi', 'explorer'].forEach(function (who) {
       var el = getBubbleEl(who);
-      if (el) el.classList.remove('is-visible', 'is-ready');
+      if (el) el.classList.remove('is-visible', 'is-ready', 'is-hint');
     });
   }
 
@@ -346,7 +372,7 @@ SOG.OtziBattle = (function () {
 
     textEl.textContent = '';
     el.classList.add('is-visible');
-    el.classList.remove('is-ready');
+    el.classList.remove('is-ready', 'is-hint');   // dialogue is never a green hint line
 
     _dlg.fullText = line.text;
     _dlg.textEl   = textEl;
@@ -519,6 +545,294 @@ SOG.OtziBattle = (function () {
     setTimeout(function () { if (onDone) onDone(); }, 1000);
   }
 
+  /* ── Strategy hints ──────────────────────────────────────────────
+     A hint BEAT holds the battle: the hint types into the Explorer bubble in
+     green, the matching hand card glows green, and that card's info panel (the
+     hover panel, pinned) sits over it — the line and the ability text on screen
+     together. Placement, End Turn and Reset are held while a beat is up; the
+     player advances by clicking the bubble or pressing Space (the first press
+     while the line types finishes it). Beats run one after the next in hand
+     order, and once every hint for the cards in hand has been read, play
+     resumes as normal. The opening hand is one batch; in 'more' mode the cards
+     drawn by a turn start are another. */
+  var _hints = {
+    mode:     null,    // null (declined / not offered) · 'opening' · 'more' (opening + on-draw)
+    queue:    [],      // card ids waiting for their hint, in hand order
+    current:  null,    // card id whose hint is showing
+    pending:  false,   // a batch is queued and waiting to show (turn-start settle) — already holds input
+    batch:    null,    // { endDisabled, resetDisabled } while a batch holds the buttons
+    known:    {},      // ids that have been in hand this battle ('more': a new id = a draw)
+    timer:    null,    // typewriter interval
+    typing:   false,
+    settle:   null,    // on-draw settle timeout
+    observer: null,    // re-applies the glow + pinned panel after each hand rebuild
+    onBubbleClick: null,
+    onKey:    null
+  };
+
+  function _hintFlag(key)       { try { return localStorage.getItem(key) === 'true'; } catch (e) { return false; } }
+  function _hintSetFlag(key, v) { try { if (v) localStorage.setItem(key, 'true'); else localStorage.removeItem(key); } catch (e) {} }
+
+  // Prompt/hint eligibility: a finished Ötzi game, Ötzi not beaten.
+  function _hintsEligible() {
+    return _hintFlag(KEY_OTZI_GAME_FINISHED) && !_hintFlag(KEY_BATTLE_OTZI_COMPLETE);
+  }
+
+  // The input gate (OTZI_SCRIPT.isInputBlocked): true while a hint batch is up
+  // or about to show.
+  function _hintsHoldInput() {
+    return _hints.current !== null || _hints.pending;
+  }
+
+  // Before the deal: the neutral Yes / No box, when eligible. next() runs the
+  // deal either way; the answer only sets _hints.mode.
+  function _offerHints(next) {
+    _hintsStop();
+    _hints.mode = null;
+    var popup = window.SOG && SOG.BattleRulesPopup;
+    if (!_hintsEligible() || !popup || typeof popup.show !== 'function') { next(); return; }
+    var seenBefore = _hintFlag(KEY_OTZI_HINTS_SEEN);
+    _hintSetFlag(KEY_OTZI_HINTS_OFFERED, true);
+    popup.show({
+      body:       seenBefore ? HINTS_PROMPT_MORE : HINTS_PROMPT_FIRST,
+      panelClass: 'otzi-hints-prompt',
+      choices: [
+        { label: 'Yes', onClick: function () {
+            _hints.mode = seenBefore ? 'more' : 'opening';
+            _hintSetFlag(KEY_OTZI_HINTS_SEEN, true);
+            next();
+          } },
+        { label: 'No', onClick: function () { next(); } }
+      ]
+    });
+  }
+
+  function _hintHandIds() {
+    var G = SOG.state && SOG.state.G;
+    return (G && G.playerHand) ? G.playerHand.slice() : [];
+  }
+
+  // After the deal animation has settled: every hinted card in the opening
+  // hand, left to right.
+  function _startOpeningHints() {
+    if (!_hints.mode) return;
+    var hand = _hintHandIds();
+    hand.forEach(function (id) { _hints.known[id] = true; });
+    _hintEnqueue(hand);
+    _hintNext();
+  }
+
+  // Turn start ('more' only): a card in hand that has never been there this
+  // battle was drawn — by the start-of-turn draw or by Tool's At Once draw
+  // during the previous reveal. Both land before onTurnStart, so one check
+  // here catches both. The batch holds input from this moment; it shows once
+  // the hand rebuild has settled.
+  // Intentionally no hint for a card Tool draws on the LAST turn's reveal: the
+  // battle ends straight after that reveal, so there is no next turn start to
+  // hint at and nothing left to play it on.
+  function _hintsOnTurnStart() {
+    if (_hints.mode !== 'more') return;
+    var drawn = _hintHandIds().filter(function (id) { return !_hints.known[id]; });
+    drawn.forEach(function (id) { _hints.known[id] = true; });
+    _hintEnqueue(drawn);
+    if (!_hints.queue.length) return;
+    _hints.pending = true;
+    if (_hints.settle) clearTimeout(_hints.settle);
+    _hints.settle = setTimeout(function () {
+      _hints.settle  = null;
+      _hints.pending = false;
+      var G = SOG.state && SOG.state.G;
+      if (!_hints.mode || !G || G.phase !== 'select') { _hints.queue = []; return; }
+      if (_hints.current === null) _hintNext();
+    }, HINT_DRAW_SETTLE_MS);
+  }
+
+  function _hintEnqueue(ids) {
+    ids.forEach(function (id) {
+      if (HINT_LINES[id] && _hints.queue.indexOf(id) === -1 && _hints.current !== id) _hints.queue.push(id);
+    });
+  }
+
+  // Next beat in the batch, or — queue drained — release the battle.
+  function _hintNext() {
+    _hintClose();
+    var hand = _hintHandIds();
+    while (_hints.queue.length) {
+      var id = _hints.queue.shift();
+      if (hand.indexOf(id) !== -1) { _hintShow(id); return; }   // no longer in hand → skip
+    }
+    _hintBatchEnd();
+  }
+
+  // First beat of a batch: hold End Turn / Reset and listen for Space.
+  function _hintBatchBegin() {
+    if (_hints.batch) return;
+    var e = document.getElementById('battle-end-turn');
+    var r = document.getElementById('battle-reset-turn');
+    _hints.batch = { endDisabled: !!(e && e.disabled), resetDisabled: !!(r && r.disabled) };
+    if (e) e.disabled = true;
+    if (r) r.disabled = true;
+    if (!_hints.onKey) {
+      // Capture phase, so Space advances the hint and never reaches a focused
+      // hand card (select-to-play) or the page.
+      _hints.onKey = function (ev) {
+        if (_hints.current === null) return;
+        if (ev.key !== ' ' && ev.key !== 'Spacebar') return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (ev.repeat) return;
+        _hintAdvance();
+      };
+      document.addEventListener('keydown', _hints.onKey, true);
+    }
+  }
+  // Batch over: give the buttons back as the batch found them, drop the key listener.
+  function _hintBatchEnd() {
+    if (_hints.onKey) { document.removeEventListener('keydown', _hints.onKey, true); _hints.onKey = null; }
+    if (!_hints.batch) return;
+    var e = document.getElementById('battle-end-turn');
+    var r = document.getElementById('battle-reset-turn');
+    if (e) e.disabled = _hints.batch.endDisabled;
+    if (r) r.disabled = _hints.batch.resetDisabled;
+    _hints.batch = null;
+  }
+
+  // Bubble click / Space: finish the typing line, else the next beat.
+  function _hintAdvance() {
+    if (_hints.current === null) return;
+    if (_hints.typing) { _hintFinishTyping(); return; }
+    _hintNext();
+  }
+
+  function _hintShow(id) {
+    var el = getBubbleEl('explorer');
+    var textEl = el && el.querySelector('.adv-bubble-text');
+    if (!textEl) { _hintBatchEnd(); return; }
+    _hintBatchBegin();
+    if (window.SOG && SOG.input && typeof SOG.input.clearSelection === 'function') SOG.input.clearSelection();
+    _hints.current = id;
+    _hintApplyGlow();
+    _hintWatchHand();
+
+    var otzi = getBubbleEl('otzi');
+    if (otzi) otzi.classList.remove('is-visible', 'is-ready');
+    var text = HINT_LINES[id];
+    textEl.textContent = '';
+    el.classList.add('is-visible', 'is-hint');
+    el.classList.remove('is-ready');
+
+    if (!_hints.onBubbleClick) {
+      _hints.onBubbleClick = function (e) {
+        e.stopPropagation();
+        _hintAdvance();
+      };
+      el.addEventListener('click', _hints.onBubbleClick);
+    }
+
+    var i = 0, bleeps = 0, p = BLEEP_PROFILES.explorer;
+    _hints.typing = true;
+    if (_hints.timer) clearInterval(_hints.timer);
+    _hints.timer = setInterval(function () {
+      i++;
+      textEl.textContent = text.slice(0, i);
+      var c = text.charAt(i - 1);
+      if (c && c !== ' ') { bleeps++; if (bleeps >= p.every) { bleeps = 0; playBleep('explorer'); } }
+      if (i >= text.length) _hintFinishTyping();
+    }, TYPE_SPEED_MS);
+  }
+
+  function _hintFinishTyping() {
+    if (_hints.timer) { clearInterval(_hints.timer); _hints.timer = null; }
+    _hints.typing = false;
+    var el = getBubbleEl('explorer');
+    var textEl = el && el.querySelector('.adv-bubble-text');
+    if (textEl && _hints.current !== null) textEl.textContent = HINT_LINES[_hints.current];
+    if (el) el.classList.add('is-ready');
+  }
+
+  // Close the showing beat (bubble, glow, pinned panel); the queue is kept.
+  function _hintClose() {
+    if (_hints.timer) { clearInterval(_hints.timer); _hints.timer = null; }
+    _hints.typing = false;
+    _hints.current = null;
+    _hintApplyGlow();
+    var el = getBubbleEl('explorer');
+    if (el && el.classList.contains('is-hint')) el.classList.remove('is-visible', 'is-ready', 'is-hint');
+  }
+
+  // The reveal can't start mid-batch (End Turn is held), but never let a beat
+  // or a queued batch outlive the turn it belongs to.
+  function _hintsEndTurnSafety() {
+    _hints.queue   = [];
+    _hints.pending = false;
+    if (_hints.settle) { clearTimeout(_hints.settle); _hints.settle = null; }
+    _hintClose();
+    _hintBatchEnd();
+  }
+
+  // Hints over for this battle (outcome, teardown, a fresh prompt).
+  function _hintsStop() {
+    _hintClose();
+    _hints.queue   = [];
+    _hints.known   = {};
+    _hints.mode    = null;
+    _hints.pending = false;
+    if (_hints.settle) { clearTimeout(_hints.settle); _hints.settle = null; }
+    _hintBatchEnd();
+    if (_hints.observer) { _hints.observer.disconnect(); _hints.observer = null; }
+    var el = getBubbleEl('explorer');
+    if (el && _hints.onBubbleClick) el.removeEventListener('click', _hints.onBubbleClick);
+    _hints.onBubbleClick = null;
+  }
+
+  // The glow and the pinned info panel follow the hinted id. setPlayerHand
+  // rebuilds every hand card (destroying the panel's anchor), so this re-runs
+  // after each rebuild; with no current hint it clears both.
+  function _hintApplyGlow() {
+    var handEl = document.getElementById('battle-player-hand');
+    var anchor = null;
+    if (handEl) {
+      var cards = handEl.querySelectorAll('.battle-hand-card');
+      for (var i = 0; i < cards.length; i++) {
+        var on = _hints.current !== null && String(cards[i].dataset.id) === String(_hints.current);
+        cards[i].classList.toggle('otzi-hint-card', on);
+        if (on) anchor = cards[i];
+      }
+    }
+    var hover = window.SOG && SOG.cardHover;
+    if (!hover || typeof hover.pin !== 'function') return;
+    var card = anchor && (typeof CARDS !== 'undefined') &&
+               CARDS.find(function (c) { return String(c.id) === String(_hints.current); });
+    if (card && SOG.input && typeof SOG.input.buildHandPopupSd === 'function') {
+      hover.pin(card, SOG.input.buildHandPopupSd(card), anchor);
+    } else {
+      hover.unpin();
+    }
+  }
+  function _hintWatchHand() {
+    if (_hints.observer || typeof MutationObserver === 'undefined') return;
+    var handEl = document.getElementById('battle-player-hand');
+    if (!handEl) return;
+    _hints.observer = new MutationObserver(_hintApplyGlow);
+    _hints.observer.observe(handEl, { childList: true });
+  }
+
+  // The green 2-of-3 reminder under the DEFEAT / TIE location rows — every
+  // non-win, until Ötzi is beaten (a returning winner never sees it).
+  function _setLossReminder(locsEl, show) {
+    if (!locsEl || !locsEl.parentNode) return;
+    var id = locsEl.id + '-hint-reminder';
+    var el = document.getElementById(id);
+    if (!show) { if (el) el.parentNode.removeChild(el); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = id;
+      el.className = 'otzi-hint-reminder';
+      locsEl.parentNode.insertBefore(el, locsEl.nextSibling);
+    }
+    el.textContent = LOSS_REMINDER;
+  }
+
   /* ── Post-battle dialogue → card reveal → scoreboard ──────────── */
 
   /* Route outcome to the correct dialogue then scoreboard. */
@@ -683,6 +997,8 @@ SOG.OtziBattle = (function () {
       });
     }
 
+    if (outcome !== 'win') _setLossReminder(locsEl, !_hintFlag(KEY_BATTLE_OTZI_COMPLETE));
+
     el.style.display = 'flex';
 
     if (boardBtn) boardBtn.onclick = function () { _showBoardFromResult(el); };
@@ -738,6 +1054,9 @@ SOG.OtziBattle = (function () {
 
   /* ── Teardown ─────────────────────────────────────────────────── */
   function teardown() {
+    _hintsStop();
+    // A teardown while the hints prompt is up closes it without dealing.
+    if (document.querySelector('#battle-rules-backdrop .otzi-hints-prompt') && SOG.BattleRulesPopup) SOG.BattleRulesPopup.hide();
     document.body.classList.remove('otzi-battle');
     document.body.classList.remove('otzi-pre-deal');
     if (SOG.HUD && SOG.HUD.restoreBattleAvatars) SOG.HUD.restoreBattleAvatars();
@@ -842,7 +1161,12 @@ SOG.OtziBattle = (function () {
   // Outcome routing: SFX + (win: completion flag) → bespoke dialogue/card/
   // scoreboard helper (kept). The engine's tallyResult already produced `result`.
   function _otziRouteOutcome(won, isTie, result) {
+    _hintsStop();
     if (won) { try { localStorage.setItem(KEY_BATTLE_OTZI_COMPLETE, 'true'); } catch (e) {} }
+    // Any outcome arms the hints prompt for the next game; the win turns it all
+    // off and clears the hint flags.
+    _hintSetFlag(KEY_OTZI_GAME_FINISHED, true);
+    if (won) { _hintSetFlag(KEY_OTZI_HINTS_OFFERED, false); _hintSetFlag(KEY_OTZI_HINTS_SEEN, false); }
     if (typeof SFX !== 'undefined') {
       if (won && SFX.gameWon)  SFX.gameWon();
       else if (SFX.gameLost)   SFX.gameLost();
@@ -890,7 +1214,10 @@ SOG.OtziBattle = (function () {
               _lines(POST_SHAKE_LINES, function () {
                 // Full intro watched → never replay it (matches the boss battles).
                 try { localStorage.setItem(KEY_OTZI_OPENING_SEEN, 'true'); } catch (e) {}
-                dealCards(function () { done(); });
+                // Hints prompt (when eligible) → deal → turn 1 → opening-hand hints.
+                _offerHints(function () {
+                  dealCards(function () { done(); _startOpeningHints(); });
+                });
               });
             });
           });
@@ -901,10 +1228,12 @@ SOG.OtziBattle = (function () {
     // Turns 2-4: re-apply per-turn presentation.
     onTurnStart: function (ctx, turn) {
       _otziApplyTurnPresentation(turn);
+      _hintsOnTurnStart();
     },
 
     // Player ended the turn — keep buttons disabled through the reveal.
     onBeforeReveal: function (ctx, turn) {
+      _hintsEndTurnSafety();
       _otziDisableButtons();
     },
 
@@ -916,6 +1245,9 @@ SOG.OtziBattle = (function () {
 
     // (Ötzi's flee is now card 35's onCardLandedHere ability, fired by the shared
     //  reveal pipeline — no per-battle onAfterReveal handler.)
+
+    // Held while a strategy-hint batch is up (or queued to show at turn start).
+    isInputBlocked: function () { return _hintsHoldInput(); },
 
     onWin:  function (ctx, result, proceed) { _otziRouteOutcome(true,  false, result); },
     onLoss: function (ctx, result, proceed) { _otziRouteOutcome(false, false, result); },
@@ -938,7 +1270,10 @@ SOG.OtziBattle = (function () {
     return {
       battleComplete: _flag(KEY_BATTLE_OTZI_COMPLETE),
       cardUnlocked: _flag(KEY_CARD_OTZI_UNLOCKED),
-      openingSeen: _flag(KEY_OTZI_OPENING_SEEN)
+      openingSeen: _flag(KEY_OTZI_OPENING_SEEN),
+      gameFinished: _flag(KEY_OTZI_GAME_FINISHED),
+      otziHintsOffered: _flag(KEY_OTZI_HINTS_OFFERED),
+      otziHintsSeen: _flag(KEY_OTZI_HINTS_SEEN)
     };
   }
   function applySnapshot(snap) {
@@ -946,6 +1281,9 @@ SOG.OtziBattle = (function () {
     _setFlag(KEY_BATTLE_OTZI_COMPLETE, snap.battleComplete);
     _setFlag(KEY_CARD_OTZI_UNLOCKED, snap.cardUnlocked);
     _setFlag(KEY_OTZI_OPENING_SEEN, snap.openingSeen);
+    _setFlag(KEY_OTZI_GAME_FINISHED, snap.gameFinished);
+    _setFlag(KEY_OTZI_HINTS_OFFERED, snap.otziHintsOffered);
+    _setFlag(KEY_OTZI_HINTS_SEEN, snap.otziHintsSeen);
   }
 
   return {

@@ -1536,6 +1536,9 @@
     cardsPerTurnCap:         _cardsPerTurnCap,
     cardsPlayedThisTurn:     _cardsPlayedThisTurn,
     clearSelection:          clearSelection,
+    /* The synthetic slot the hand-card info panels render from (hover + modal) —
+       the Ötzi hints pin the same panel onto the hinted card. */
+    buildHandPopupSd:        buildHandPopupSd,
     /* Used by game.js's initGame to reset transient drag state at
        the start of a new game. Selection state resets automatically
        (no game starts with a selection active). */

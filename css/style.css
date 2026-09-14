@@ -1488,6 +1488,27 @@ img    { display: block; }
 .rules-play-btn:active {
   box-shadow: 0 0 0 #1a0c04, 0 1px 0 #000;
 }
+/* Choice-mode buttons (SOG.BattleRulesPopup choices, e.g. the Ötzi hints
+   Yes / No prompt) — the same bronze re-tint as the PLAY button, side by side. */
+.rules-choice-btn {
+  min-width: 140px; padding: 12px 26px; font-size: 24px; letter-spacing: 0.08em;
+  margin: 0 8px;
+  background: #3a200c;
+  border-color: #d4aa50;
+  color: #f3e6c4;
+  box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000;
+}
+.rules-choice-btn:hover {
+  background: #4a2a10;
+  border-color: #f0cf6c;
+  color: #fff5d8;
+}
+.rules-choice-btn:active {
+  box-shadow: 0 0 0 #1a0c04, 0 1px 0 #000;
+}
+/* Ötzi hints prompt: a short question, so a narrow panel with centred text. */
+.otzi-hints-prompt { width: 520px; max-width: 92vw; }
+.otzi-hints-prompt .rules-popup-body { text-align: center; }
 .tier-pick-name { font-size: 18px; letter-spacing: 0.08em; }
 .tier-pick-sub  { font-size: 11px; text-transform: none; letter-spacing: 0.02em; opacity: 0.85; }
 
@@ -10466,7 +10487,10 @@ body.otzi-battle #adv-bubble-explorer {
   bottom: auto;
   flex-direction: column;
   align-items: flex-start;
-  width: 230px;
+  /* 200px: the right edge (168 + 200 + padding/border = 402px) clears the
+     leftmost card of the 4-card Ötzi hand (~414px). At 230px it covered a strip
+     of that card. Longer lines (the strategy hints) wrap taller instead. */
+  width: 200px;
   gap: 0;
   background: #fffef5;
   border: 3px solid #111;
@@ -10518,6 +10542,37 @@ body.otzi-battle .adv-bubble .adv-bubble-text {
 body.otzi-battle .adv-bubble .adv-bubble-hint {
   color: #666;
   margin-top: 6px;
+}
+
+/* ── Ötzi strategy hints ─────────────────────────────────────────
+   A hint is an Explorer line shown mid-battle (sog-adventure-otzi.js). The
+   bubble carries .is-hint only while a hint is up: the text turns green and the
+   bubble takes clicks (click = next hint) — normal dialogue never adds the
+   class. The hinted card in hand gets .otzi-hint-card, a matching green glow. */
+body.otzi-battle #adv-bubble-explorer.is-hint {
+  pointer-events: auto;
+  cursor: pointer;
+}
+body.otzi-battle #adv-bubble-explorer.is-hint .adv-bubble-text {
+  color: #1d7a33;
+}
+body.otzi-battle .battle-hand-card.otzi-hint-card {
+  box-shadow: 0 0 0 3px #2fbf4f, 0 0 18px 6px rgba(47, 191, 79, 0.75);
+  animation: otzi-hint-card-pulse 1.4s ease-in-out infinite;
+}
+@keyframes otzi-hint-card-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px #2fbf4f, 0 0 12px 3px rgba(47, 191, 79, 0.55); }
+  50%      { box-shadow: 0 0 0 3px #4fe06d, 0 0 22px 8px rgba(47, 191, 79, 0.90); }
+}
+/* The 2-of-3 reminder on the Ötzi DEFEAT / TIE scoreboard, under the rows. */
+.otzi-hint-reminder {
+  font-family: var(--font);
+  font-size: 1.05rem;
+  color: #5fe07a;
+  text-align: center;
+  letter-spacing: 0.04em;
+  text-shadow: 1px 1px 0 #000, 0 0 4px rgba(0, 0, 0, 0.9);   /* legible on the tan panel */
+  margin-top: 2px;
 }
 
 /* ── Sargon + Hyksos battle speech bubbles — the comic-book treatment, same as

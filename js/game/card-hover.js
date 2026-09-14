@@ -46,6 +46,7 @@ SOG.cardHover = (function () {
 
   var _panel = null, _els = null, _showTimer = null, _anchorEl = null;
   var _suppressed = false;   // set while a play gesture is in flight (drag / hold)
+  var _pinned     = false;   // a scripted beat holds the panel on one card (pin / unpin)
 
   /* ── Setting ─────────────────────────────────────────────────────────── */
   function isEnabled() {
@@ -149,6 +150,7 @@ SOG.cardHover = (function () {
    * @param {Element} anchorEl the .battle-hand-card element being hovered
    */
   function show(card, sd, anchorEl) {
+    if (_pinned) return;       // a pinned panel ignores hover until unpinned
     if (!isEnabled() || !_canHover() || _suppressed || !card || !anchorEl) return;
     // Never compete with the modal, the tutorial's scripted popups, or boss dialogue.
     if (window.tutorialActive) return;
@@ -173,10 +175,38 @@ SOG.cardHover = (function () {
   }
 
   function hide() {
+    if (_pinned) return;       // hover-out / hand rebuild never close a pinned panel
+    _hideNow();
+  }
+  function _hideNow() {
     if (_showTimer) { clearTimeout(_showTimer); _showTimer = null; }
     _anchorEl = null;
     if (_panel) _panel.classList.remove('visible');
   }
+
+  /* PIN — a scripted teaching beat (the Ötzi strategy hints) shows this card's
+     info at once and holds it there while the beat is up: hovering other cards
+     neither moves nor closes it. It deliberately skips the hover setting and the
+     can-hover check — the beat is not a hover, and the ability text is the point
+     of it. Re-pinning moves it (the caller re-pins after a hand rebuild, whose
+     old anchor element is gone). unpin() closes it and restores normal hover. */
+  function pin(card, sd, anchorEl) {
+    if (!card || !anchorEl || !SOG.ui || typeof SOG.ui.fillPopupContent !== 'function') return false;
+    if (_showTimer) { clearTimeout(_showTimer); _showTimer = null; }
+    _pinned   = true;
+    _anchorEl = anchorEl;
+    _build();
+    SOG.ui.fillPopupContent(_els, card, sd, 'player', false);
+    _panel.classList.add('visible');
+    _position(anchorEl);
+    return true;
+  }
+  function unpin() {
+    if (!_pinned) return;
+    _pinned = false;
+    _hideNow();
+  }
+  function isPinned() { return _pinned; }
 
   /* Called on drag start / select-to-play so the panel can't reappear mid-gesture
      (the browser fires mouseenter again as the drag ghost detaches). Released on
@@ -193,7 +223,8 @@ SOG.cardHover = (function () {
 
   /* Full teardown — battle exit / hand rebuild. */
   function destroy() {
-    hide();
+    _pinned = false;
+    _hideNow();
     _suppressed = false;
     if (_panel && _panel.parentNode) _panel.parentNode.removeChild(_panel);
     _panel = null; _els = null;
@@ -208,6 +239,9 @@ SOG.cardHover = (function () {
     setEnabled: setEnabled,
     show:       show,
     hide:       hide,
+    pin:        pin,
+    unpin:      unpin,
+    isPinned:   isPinned,
     suppress:   suppress,
     unsuppress: unsuppress,
     destroy:    destroy,
