@@ -111,15 +111,16 @@ SOG.HangingGardensBattle = (function () {
   }
 
   /* ── Battle rules popup + click-opponent trigger (standardized across bosses).
-     [CREATED rules copy — refine.] Core rules only (no per-location abilities);
-     the flood is kept as it's a battle-wide mechanic, not a location ability. ── */
+     Core rules only (no per-location abilities); the flood leads, because it is a
+     battle-wide mechanic rather than a location ability and it is the thing that
+     will surprise a player who knows the standard rules. ── */
   var RULES_TITLE = 'In The Garden';
   var RULES_BODY  = [
+    'Watch out for flooding rivers!',
     '5 Turns',
     'Each card costs Capital (CC) to play.',
     '5 Capital to spend each turn.',
-    "Watch out for flooding rivers!",
-    '<u>Win Condition</u> — Gain the most IP at the most locations to defeat Nebuchadnezzar.'
+    '<u>Win Condition</u> — Gain the most IP at the most locations.'
   ];
   function _openRulesPopup(onDismiss) {
     if (window.SOG && SOG.BattleRulesPopup && typeof SOG.BattleRulesPopup.show === 'function') {
