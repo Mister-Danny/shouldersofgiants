@@ -10,7 +10,8 @@
  *   • Two formats: 'mc' (3-4 options) and 'tf' (True/False).
  *   • CORRECT  → "Correct!", restore +RESTORE_AMOUNT focus (capped at 100 by
  *                SOG.focus.restore), then choose: Next Question or Done.
- *   • WRONG    → "Not quite!", NO penalty, then a fresh random question to retry.
+ *   • WRONG    → "Not quite!", the correct answer lit green, NO penalty, then a
+ *                fresh random question to retry.
  *                The player can never get stuck.
  *
  * Visuals reuse the shared parchment/SNES popup (.card-popup .rules-popup) so it
@@ -33,6 +34,7 @@ SOG.LearningCheck = (function () {
 
   /* ── Tunables ───────────────────────────────────────────────────────────── */
   var RESTORE_AMOUNT = 50;   // focus granted per correct answer (clamped to MAX)
+  var WRONG_REVEAL_MS = 2200; // after a miss: how long the correct answer stays lit before the next question
 
   /* ── Aggregate stats (correct / total answered) ───────────────────────────
      Deliberately just two counters — no question IDs, no timestamps, no
@@ -190,6 +192,7 @@ SOG.LearningCheck = (function () {
     answers.forEach(function (ans) {
       var btn = document.createElement('button');
       btn.className = 'lc-option';
+      if (ans.correct) btn.dataset.correct = 'true';   // lets a miss reveal the right answer
       btn.textContent = ans.text;
       btn.addEventListener('click', function () { _onAnswer(ans.correct, btn, opts); });
       opts.appendChild(btn);
@@ -236,13 +239,16 @@ SOG.LearningCheck = (function () {
       actions.appendChild(doneBtn);
       feedback.appendChild(actions);
     } else {
-      // WRONG — no penalty. Mark the miss, then auto-advance to a fresh question.
+      // WRONG — no penalty. Mark the miss, light the correct answer so the player
+      // sees it, then auto-advance to a fresh question.
       btn.classList.add('lc-option-wrong');
+      var rightBtn = optsWrap.querySelector('.lc-option[data-correct="true"]');
+      if (rightBtn) rightBtn.classList.add('lc-option-correct');
       if (typeof SFX !== 'undefined' && typeof SFX.learnWrong === 'function') SFX.learnWrong();
       feedback.innerHTML =
         '<div class="lc-result lc-result-wrong">' + STR.wrong + '</div>' +
         '<div class="lc-result-sub">' + STR.wrongSub + '</div>';
-      setTimeout(function () { if (isOpen()) _renderQuestion(); }, 1100);
+      setTimeout(function () { if (isOpen()) _renderQuestion(); }, WRONG_REVEAL_MS);
     }
   }
 
