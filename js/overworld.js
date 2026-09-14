@@ -5793,6 +5793,9 @@ var Overworld = (function () {
     // the visual itself has never been Cuneiform-specific, only its old name was.
     showInterventionCandle:    _runInterventionCandle,
     fadeOutInterventionCandle: _fadeOutCandleBackdrop,
+    // The overworld map the player is on (a data/map-data.js map id). Read by the
+    // learning check to pick its question pool.
+    getCurrentMapId: function () { return currentMapId; },
     // Devtools helpers
     goToMap: function (mapId) {
       if (!MAPS[mapId]) { console.warn('No such map:', mapId); return; }
