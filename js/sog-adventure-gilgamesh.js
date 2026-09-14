@@ -94,6 +94,7 @@ SOG.GilgameshBattle = (function () {
   var RULES_BODY  = [
     '4 Turns',
     'Play 2 cards each turn.',
+    'Draw 2 cards at the start of each turn.',
     '<u>Win Condition</u> — Gain the most IP at the most locations to defeat Gilgamesh.'
   ];
   function _opponentAvatarEl() { return document.querySelector('.battle-avatar-opponent'); }
@@ -1143,7 +1144,7 @@ SOG.GilgameshBattle = (function () {
     var activeIds = (window.Decks && typeof window.Decks.getActiveCards === 'function')
       ? window.Decks.getActiveCards() : [];
     var playerDeck;
-    // 4 turns x 2 plays with replenish draws needs >= 10 cards for the player to
+    // 4 turns x 2 plays with the flat +2 draw needs >= 10 cards for the player to
     // keep drawing through the final turn. A degraded state (cleared progress →
     // starters-only 8-card collection) would starve the turn-4 draw, so the
     // explicit-list safety net now catches ANY too-small deck, not just an empty one.
@@ -1164,7 +1165,10 @@ SOG.GilgameshBattle = (function () {
     return {
       structure: { turns: 4, locationsCount: 3, slotsPerLocation: 4, handStart: 4, maxHandSize: 4, cardsPerTurn: 2 },
       resource:  { model: 'none', capital: 0 },               // cost-free
-      draw:      { model: 'replenish' },                       // fill-to-4
+      // Flat +2 a turn, capped at maxHandSize 4 — capital-less at 2 plays a
+      // turn, so the hand refills to 4. Replenish under-drew whenever both
+      // cards went to the same location.
+      draw:      { model: 'flat', perTurn: 2 },
       decks:     { player: playerDeck, ai: aiDeck },
       locationAbilities: { select: { mode: 'explicit', locations: _gilgameshLocations() } },
       scoring:   { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },  // exact-IP tie → onTie (tie-as-loss)

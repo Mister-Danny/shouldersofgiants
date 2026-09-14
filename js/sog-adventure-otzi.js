@@ -249,7 +249,11 @@ SOG.OtziBattle = (function () {
     structure: { turns: 4, locationsCount: 3, slotsPerLocation: 4,
                  handStart: 4, maxHandSize: 4, cardsPerTurn: 2 },
     resource:  { model: 'none', capital: 0 },     // 2/turn enforced via cardsPerTurn, not capital
-    draw:      { model: 'replenish' },            // fill-to-4 == replenish-by-played (hand starts at cap)
+    // Flat +2 a turn, capped at maxHandSize 4: this battle is capital-less and
+    // plays exactly 2 cards a turn, so the hand refills to 4 every turn however
+    // those cards were spread. Replenish counted DISTINCT LOCATIONS, so two
+    // cards into one location drew only one back and the hand bled down.
+    draw:      { model: 'flat', perTurn: 2 },
     decks: {
       player: { source: 'explicit', ids: PLAYER_DECK_IDS.slice(), shuffle: true },
       ai:     { source: 'explicit', ids: OTZI_DECK_IDS.slice(),   shuffle: true }

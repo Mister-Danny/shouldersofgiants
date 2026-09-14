@@ -158,7 +158,8 @@
       // Draw policy. 'replenish' = at the start of your turn, draw one card per
       // DISTINCT LOCATION you played at last turn, minimum 1, capped so the hand
       // never passes maxHandSize (see replenishDrawCount). The 'flat' variant
-      // (+N/turn) exists for future battles.
+      // (+N/turn, same cap) is what the capital-less battles use — Neanderthal,
+      // Otzi and Gilgamesh draw a flat 2.
       draw: { model: 'replenish' },
       decks: {
         player: { source: 'active-deck' },                     // window.Decks.getActiveCards()
@@ -1918,16 +1919,31 @@
     G.deferredPlays          = {};
     G.deferredOppPlays       = {};
 
-    /* Draw policy via config.draw. 'flat' draws a fixed +N per side per turn
-       (future capital-less battles); 'replenish' draws one card per DISTINCT
+    /* Draw policy via config.draw. 'flat' draws a fixed +N per side per turn,
+       capped at maxHandSize (the capital-less battles); 'replenish' draws one card per DISTINCT
        LOCATION each side played at last turn, minimum 1, capped at maxHandSize
        and by the deck — see replenishDrawCount above for the rule and why the
        cap now applies at the draw itself. */
     var _draw    = G.config.draw || { model: 'replenish' };
     if (_draw.model === 'flat') {
-      var _n = _draw.perTurn || 1;
-      G.playerDeck.splice(0, Math.min(_n, G.playerDeck.length)).forEach(function (id) { G.playerHand.push(id); });
-      G.aiDeck.splice(0,     Math.min(_n, G.aiDeck.length)).forEach(function (id) { G.aiHand.push(id); });
+      /* Fixed +N per side per turn — the rule for the CAPITAL-LESS battles
+         (Neanderthal, Otzi, Gilgamesh). Replenish under-draws there: it counts
+         DISTINCT LOCATIONS played, so two cards into one location drew a single
+         card back and the hand bled down across the battle. N is each battle's
+         cardsPerTurn, so the hand refills to its cap every turn however the
+         cards were spread.
+         CAPPED at maxHandSize and by the deck, exactly as replenish is — a hand
+         already at the cap draws nothing. The cap is new here and is what makes
+         a +2 safe in a 4-card hand. Tool (26) is untouched: its At-Once draw is
+         owned by the ability and deliberately bypasses this cap (that is what
+         lets the prehistory hand sit at 5); this draw simply adds nothing while
+         the hand is over. */
+      var _n        = _draw.perTurn || 1;
+      var _maxHandF = (G.config.structure && G.config.structure.maxHandSize) || MAX_HAND_SIZE;
+      var _pFlat    = Math.max(0, Math.min(_n, _maxHandF - G.playerHand.length, G.playerDeck.length));
+      var _aFlat    = Math.max(0, Math.min(_n, _maxHandF - G.aiHand.length,     G.aiDeck.length));
+      G.playerDeck.splice(0, _pFlat).forEach(function (id) { G.playerHand.push(id); });
+      G.aiDeck.splice(0,     _aFlat).forEach(function (id) { G.aiHand.push(id); });
     } else {
       var _maxHand = (G.config.structure && G.config.structure.maxHandSize) || MAX_HAND_SIZE;
       var playerCanDraw = replenishDrawCount(playerLocs, G.playerHand.length, G.playerDeck.length, _maxHand);

@@ -366,9 +366,14 @@ window.SOG.Adventure.Prehistory = (function () {
     structure: { turns: 4, locationsCount: 1, slotsPerLocation: 4,
                  handStart: 4, maxHandSize: 4, cardsPerTurn: 1 },
     resource:  { model: 'none', capital: 0, resetEachTurn: false },
-    // Flat +1 draw per turn (NOT draw-to-cap). Tool(26)'s reveal-phase draw
-    // is the documented soft-cap exception that can push the hand to 5.
-    draw:      { model: 'flat', perTurn: 1, softCapExceptionCardId: 26 },
+    // Flat +2 draw per turn, capped at maxHandSize 4 — the same rule as the
+    // other two capital-less battles. Only ONE card leaves the hand a turn here
+    // (cardsPerTurn 1), so the cap means this refills to 4 exactly as the old
+    // +1 did; the 2 is what the rule says, the cap is what it delivers.
+    // Tool(26)'s reveal-phase draw is the documented soft-cap exception that
+    // can still push the hand to 5 — the start-of-turn draw then adds nothing
+    // until the hand is back under the cap.
+    draw:      { model: 'flat', perTurn: 2, softCapExceptionCardId: 26 },
     decks: {
       player: { source: 'explicit', ids: [26, 27, 28, 29, 30, 31, 32, 36], shuffle: true },
       ai:     { source: 'scripted' }   // cards come from ai.settings.playOrder
