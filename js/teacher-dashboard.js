@@ -469,6 +469,21 @@ window.TeacherDashboard = (function () {
   }
 
   function isTeacher() { return !!_teacherDoc; }
+
+  /* Who may open the developer / teacher tooling (the backtick dev panel, the
+     triple-click teacher menu, the battle-lobby chooser): a signed-in user with a
+     /teachers/{uid} doc, or a trusted LOCAL host (localhost / file://) so local
+     dev stays frictionless. Replaces the plaintext client-side passwords those
+     three gates used to compare against. Client-side only — it stops discovery
+     of the tools, it is not a security boundary (Firestore rules are). */
+  function _isTrustedHost() {
+    try {
+      if (location.protocol === 'file:') return true;
+      var h = location.hostname;
+      return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '';
+    } catch (e) { return false; }
+  }
+  function devToolsAllowed() { return _isTrustedHost() || isTeacher(); }
   function getTeacherDoc() { return _teacherDoc; }
 
   /**
@@ -532,6 +547,7 @@ window.TeacherDashboard = (function () {
     show:           show,
     hide:           hide,
     isTeacher:      isTeacher,
+    devToolsAllowed: devToolsAllowed,
     getTeacherDoc:  getTeacherDoc,
     onStatusChange: onStatusChange
   };

@@ -639,21 +639,20 @@
        BATTLE LOBBY OVERLAYS
   ════════════════════════════════════════════════════════════════ -->
 
-  <!-- ── Password Prompt ─────────────────────────────────────── -->
+  <!-- ── Access chooser (triple-click on the title) ───────────
+       Teacher account or trusted local host (js/battlelobby.js prompt):
+       a chooser for teachers, a "teacher account required" notice otherwise. -->
   <div id="bl-pw-backdrop" class="bl-backdrop">
     <div class="bl-dialog bl-pw-dialog">
-      <div class="bl-dialog-title">Battle Lobby Access</div>
-      <form id="bl-pw-form" autocomplete="off">
-        <div class="bl-field">
-          <label class="bl-label" for="bl-pw-input">Password</label>
-          <input type="password" id="bl-pw-input" class="bl-input" placeholder="Enter password">
-        </div>
-        <div class="bl-error" id="bl-pw-error"></div>
-        <div class="bl-actions">
-          <button type="submit" class="btn-snes">ENTER</button>
-          <button type="button" class="btn-snes btn-snes-close" id="bl-pw-cancel">CANCEL</button>
-        </div>
-      </form>
+      <div class="bl-dialog-title">Teacher Tools</div>
+      <div class="bl-tournament-options" id="bl-pw-choices">
+        <button type="button" class="btn-snes bl-tourn-btn" id="bl-pw-menu">TEACHER MENU</button>
+        <button type="button" class="btn-snes bl-tourn-btn" id="bl-pw-lobby">MULTIPLAYER LOBBY</button>
+      </div>
+      <div class="bl-error" id="bl-pw-error"></div>
+      <div class="bl-actions">
+        <button type="button" class="btn-snes btn-snes-close" id="bl-pw-cancel">CANCEL</button>
+      </div>
     </div>
   </div>
 
@@ -1280,25 +1279,14 @@
   </div><!-- /#teacher-lobby-backdrop -->
 
   <!-- ═══════════════════════════════════════════════════════════════
-       BYPASS PASSWORD PROMPT
-       Fixed overlay — appears on triple-click before the bypass menu.
+       BYPASS ACCESS NOTICE
+       Fixed overlay — shown on triple-click when the user is not a signed-in
+       teacher (js/bypass.js BypassAuth). Teachers go straight to the menu.
   ════════════════════════════════════════════════════════════════ -->
   <div id="bypass-pw-backdrop" style="display:none">
     <div id="bypass-pw-box">
       <div class="bypass-pw-title">RESTRICTED ZONE</div>
       <div class="bypass-pw-divider"></div>
-      <div class="bypass-pw-body">
-        <input
-          id="bypass-pw-input"
-          type="password"
-          autocomplete="off"
-          spellcheck="false"
-          maxlength="32"
-          placeholder="&#9632;&#9632;&#9632;&#9632;&#9632;&#9632;&#9632;&#9632;"
-          aria-label="Password"
-        >
-        <button id="bypass-pw-submit" class="btn-snes">ENTER</button>
-      </div>
       <div id="bypass-pw-msg" class="bypass-pw-msg"></div>
     </div>
   </div>
@@ -1429,38 +1417,6 @@
           <div class="bypass-loc-footer">
             <span id="bypass-loc-status" class="bypass-loc-status bypass-loc-random">Random each game</span>
             <button class="btn-snes btn-snes-close bypass-btn-sm" id="bypass-loc-clear">Clear (Randomize)</button>
-          </div>
-        </section>
-
-        <!-- ── DATA REVIEW ───────────────────────────────────── -->
-        <section class="bypass-section">
-          <h3 class="bypass-section-title">Data Review</h3>
-
-          <!-- Date filter -->
-          <div class="bypass-date-row">
-            <button class="btn-snes bypass-date-btn bypass-btn-sm active" data-filter="today">Today</button>
-            <button class="btn-snes bypass-date-btn bypass-btn-sm" data-filter="week">This Week</button>
-            <button class="btn-snes bypass-date-btn bypass-btn-sm" data-filter="all">All Time</button>
-          </div>
-
-          <!-- Live stats -->
-          <div id="bypass-stats" class="bypass-stats-box">
-            <span class="bypass-loading">Loading&#8230;</span>
-          </div>
-
-          <!-- Action row -->
-          <div class="bypass-data-actions">
-            <button class="btn-snes bypass-btn-sm" id="bypass-view-log">VIEW FULL LOG</button>
-            <button class="btn-snes bypass-btn-sm" id="bypass-export">EXPORT CSV</button>
-          </div>
-
-          <!-- Expandable log panel -->
-          <div id="bypass-log-panel" class="bypass-log-panel" style="display:none">
-            <div class="bypass-log-header">
-              <span>Last 20 Sessions</span>
-              <button class="btn-snes btn-snes-close bypass-btn-sm" id="bypass-log-close">&#10005;</button>
-            </div>
-            <div id="bypass-log-list" class="bypass-log-list"></div>
           </div>
         </section>
 

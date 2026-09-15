@@ -38,19 +38,18 @@ SOG.DevPanel = (function () {
   var PANEL_ID = 'sog-dev-panel';
   var VIS_KEY  = 'sog_dev_menu_visible';   // reuse the old key (same intent)
 
-  /* ── Password gate ─────────────────────────────────────────────────────
+  /* ── Access gate ───────────────────────────────────────────────────────
      This panel is far more destructive than the teacher bypass menu (it can
      rewrite the collection, gold and every progression flag, and wipe the save),
-     so on the LIVE site the backtick key no longer opens it directly — it asks
-     for a password first, EVERY time, exactly like BypassAuth (bypass.js): no
-     persisted "already authed" state, wrong entry shows Access Denied and
-     closes. Same password as the teacher menu by request.
+     so on the LIVE site the backtick key opens it only for a signed-in TEACHER
+     (a /teachers/{uid} doc, via TeacherDashboard.isTeacher) — checked on every
+     press, nothing persisted; anyone else gets a brief notice. This replaced a
+     plaintext password that was readable in View Source.
 
-     On localhost / file:// the prompt is skipped entirely so local testing stays
+     On localhost / file:// the gate is skipped entirely so local testing stays
      frictionless — a dev machine is already trusted (devtools can do all of this
      anyway). Note this gate stops casual discovery of the panel; it is NOT a
      security boundary against someone with the browser console open. */
-  var DEV_PASSWORD = 'Swift';
   var PW_ID = 'sog-dev-pw';
 
   function _isTrustedHost() {
@@ -1178,11 +1177,10 @@ SOG.DevPanel = (function () {
   function isOpen() { return !!(_panel && _panel.classList.contains('visible')); }
   function toggle() { isOpen() ? hide() : show(); }
 
-  /* Password prompt — self-contained (built here, not in index.html) so this whole
-     file stays deletable in one move. Mirrors BypassAuth's behaviour: Enter or
-     SUBMIT to try, Escape / click-outside to cancel, wrong entry shakes + shows
-     ACCESS DENIED then closes. Never persists an unlocked state. */
-  function _promptForPassword(onGranted) {
+  /* Access notice — self-contained (built here, not in index.html) so this whole
+     file stays deletable in one move. Shown when the backtick is pressed on a
+     live host by someone who is not a signed-in teacher; closes itself. */
+  function _showAccessNotice() {
     var old = document.getElementById(PW_ID);
     if (old && old.parentNode) old.parentNode.removeChild(old);
 
@@ -1195,41 +1193,29 @@ SOG.DevPanel = (function () {
       'padding:16px 18px;min-width:260px;text-align:center;color:#e8d8a0;box-shadow:0 6px 28px rgba(0,0,0,.7);';
     box.appendChild(_el('div', null, '🛠 DEV PANEL')).style.cssText =
       'color:#f8d000;font-weight:bold;letter-spacing:1px;margin-bottom:8px;';
-    var inp = document.createElement('input');
-    inp.type = 'password';
-    inp.placeholder = 'password';
-    inp.style.cssText = 'width:100%;background:rgba(0,0,0,.5);border:1px solid rgba(212,170,80,.5);' +
-      'color:#e8d8a0;font-family:inherit;font-size:13px;padding:6px 8px;border-radius:3px;text-align:center;';
-    box.appendChild(inp);
-    var msg = _el('div', null, '');
-    msg.style.cssText = 'min-height:14px;font-size:11px;margin-top:7px;color:#f0857a;';
+    var msg = _el('div', null, 'TEACHER ACCOUNT REQUIRED');
+    msg.style.cssText = 'font-size:11px;margin-top:7px;color:#f0857a;';
     box.appendChild(msg);
     back.appendChild(box);
     document.body.appendChild(back);
-    setTimeout(function () { inp.focus(); }, 40);
 
     function close() { if (back.parentNode) back.parentNode.removeChild(back); }
-    function submit() {
-      if (inp.value === DEV_PASSWORD) { close(); onGranted(); return; }
-      inp.value = '';
-      msg.textContent = 'ACCESS DENIED';
-      setTimeout(close, 1200);      // wrong/empty → nothing opens
-    }
-    inp.addEventListener('keydown', function (e) {
-      e.stopPropagation();          // keep the backtick handler out of this field
-      if (e.key === 'Enter')  { e.preventDefault(); submit(); }
-      if (e.key === 'Escape') { e.preventDefault(); close(); }
-    });
-    back.addEventListener('click', function (e) { if (e.target === back) close(); });
+    setTimeout(close, 1600);
+    back.addEventListener('click', close);
   }
 
-  /* The backtick entry point. Closing never needs a password; OPENING does —
-     unless we're on a trusted (local) host. */
+  function _isTeacher() {
+    return !!(window.TeacherDashboard && typeof window.TeacherDashboard.isTeacher === 'function'
+              && window.TeacherDashboard.isTeacher());
+  }
+
+  /* The backtick entry point. Closing never needs access; OPENING does —
+     a trusted (local) host, or a signed-in teacher. */
   function _requestToggle() {
     if (isOpen()) { hide(); return; }
-    if (_isTrustedHost()) { show(); return; }
-    if (document.getElementById(PW_ID)) return;   // prompt already up
-    _promptForPassword(show);
+    if (_isTrustedHost() || _isTeacher()) { show(); return; }
+    if (document.getElementById(PW_ID)) return;   // notice already up
+    _showAccessNotice();
   }
 
   function _boot() {

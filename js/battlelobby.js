@@ -2,11 +2,12 @@
  * battlelobby.js — Battle Lobby System
  * Exposes: window.BattleLobby
  *
- * Triple-click title → BattleLobby.prompt()
- *   "Spartacus" → Mode Select
+ * Triple-click title → BattleLobby.prompt() — teacher account (or a trusted
+ *   local host) required: TeacherDashboard.devToolsAllowed()
+ *   TEACHER MENU        → BypassMenu.open()
+ *   MULTIPLAYER LOBBY   → Mode Select (only while SOG_FEATURES.MULTIPLAYER_ENABLED)
  *     VERSUS MODE  → Teacher lobby (Firebase: versus/{code}/)
  *     TOURNAMENT   → Existing Multiplayer system
- *   "Swift"       → BypassMenu.open()
  *
  * Student flow: btn-versus → BattleLobby.showStudentJoin()
  *   Enter code + 3-letter ID → Deck Builder (Lock In Deck)
@@ -73,26 +74,23 @@
      PASSWORD PROMPT
   ══════════════════════════════════════════════════════════════ */
 
-  function prompt() {
-    _setText('bl-pw-error', '');
-    _showEl('bl-pw-backdrop');
-    var inp = document.getElementById('bl-pw-input');
-    if (inp) { inp.value = ''; setTimeout(function () { inp.focus(); }, 80); }
+  function _accessAllowed() {
+    return !!(window.TeacherDashboard && typeof window.TeacherDashboard.devToolsAllowed === 'function'
+              && window.TeacherDashboard.devToolsAllowed());
   }
 
-  function _onPwSubmit() {
-    var pw = _val('bl-pw-input');
-    if (pw === 'Spartacus') {
-      _hideEl('bl-pw-backdrop');
-      showModeSelect();
-    } else if (pw === 'Swift') {
-      _hideEl('bl-pw-backdrop');
-      if (window.BypassMenu) window.BypassMenu.open();
-    } else {
-      _setText('bl-pw-error', 'Incorrect password.');
-      var inp = document.getElementById('bl-pw-input');
-      if (inp) { inp.value = ''; inp.focus(); }
-    }
+  /* The dialog is a chooser for a signed-in teacher (Teacher Menu / Multiplayer
+     Lobby, the latter only while multiplayer is enabled) and a "teacher account
+     required" notice for anyone else. */
+  function prompt() {
+    var allowed  = _accessAllowed();
+    var mpOn     = !(window.SOG_FEATURES && window.SOG_FEATURES.MULTIPLAYER_ENABLED === false);
+    var choices  = document.getElementById('bl-pw-choices');
+    var lobbyBtn = document.getElementById('bl-pw-lobby');
+    if (choices)  choices.style.display  = allowed ? '' : 'none';
+    if (lobbyBtn) lobbyBtn.style.display = mpOn ? '' : 'none';
+    _setText('bl-pw-error', allowed ? '' : 'Teacher account required — sign in to open this menu.');
+    _showEl('bl-pw-backdrop');
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -623,9 +621,14 @@
   ══════════════════════════════════════════════════════════════ */
 
   function _wire() {
-    /* Password */
-    var pwForm = document.getElementById('bl-pw-form');
-    if (pwForm) pwForm.addEventListener('submit', function (e) { e.preventDefault(); _onPwSubmit(); });
+    /* Access chooser (triple-click on the title) */
+    var pwMenu = document.getElementById('bl-pw-menu');
+    if (pwMenu) pwMenu.addEventListener('click', function () {
+      _hideEl('bl-pw-backdrop');
+      if (window.BypassMenu) window.BypassMenu.open();
+    });
+    var pwLobby = document.getElementById('bl-pw-lobby');
+    if (pwLobby) pwLobby.addEventListener('click', function () { _hideEl('bl-pw-backdrop'); showModeSelect(); });
     var pwCancel = document.getElementById('bl-pw-cancel');
     if (pwCancel) pwCancel.addEventListener('click', function () { _hideEl('bl-pw-backdrop'); });
 
