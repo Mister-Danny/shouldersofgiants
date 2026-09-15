@@ -9,9 +9,10 @@
  * Storage model:
  *   • A single integer in [0, MAX] persisted under `sog_focus`.
  *   • Defaults to MAX (full) when unset.
- *   • STAGE 1 (this): just the economy — drain events deduct and the value
- *     persists/clamps. NO gate at 0 (that's Stage 3) and NO learning-check
- *     refill (Stage 2). spend() therefore NEVER refuses; it drains and clamps.
+ *   • This module is just the economy — drain events deduct and the value
+ *     persists/clamps. The 0-focus gate lives in overworld.js (_showFocusGate)
+ *     and the refill in sog-learning-check.js; spend() itself NEVER refuses,
+ *     it drains and clamps.
  *
  * Public API (SOG.focus):
  *   MAX          — number   (the cap, 100)

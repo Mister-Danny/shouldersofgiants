@@ -1,13 +1,12 @@
 /**
  * sog-adventure-otzi.js
- * Shoulders of Giants — Adventure Mode: Otzi Battle (Phase 2)
+ * Shoulders of Giants — Adventure Mode: Otzi Battle
  *
- * Replaces the Phase 1 placeholder stub. SOG.OtziBattle.start() is
- * called by overworld.js after the radial wipe from the Egypt signpost.
- *
- * Phase 2 scope: pre-battle dialogue → 1→3 location reveal → card deal.
- * Ends with the board fully assembled and turn 1 ready.
- * Turn play mechanics (Phase 3+) are NOT implemented here.
+ * SOG.OtziBattle.start() is called by overworld.js after the radial wipe from
+ * the Egypt signpost. The battle runs on the shared engine (initGame(OTZI_CONFIG)
+ * + the 'otzi' script hook below); this module owns the opening cinematic
+ * (dialogue → 1→3 location reveal → deal), the strategy hints, and the outcome
+ * screens.
  *
  * Deck composition:
  *   Player (10): Tool(26) Hunter(27) Gatherer(28) Fire(29) Cave Art(30)
@@ -20,8 +19,9 @@
  *   Only Savannah is visible at battle entry; Desert and GRV slide in
  *   from the edges after the screen shake.
  *
- * State:
- *   localStorage: sog_battle_otzi_complete — NOT set in Phase 2
+ * State (all mirrored into the save snapshot, see getSnapshot):
+ *   sog_battle_otzi_complete · sog_card_otzi_unlocked · sog_otzi_opening_seen ·
+ *   sog_otzi_game_finished · sog_otzi_hints_offered · sog_otzi_hints_seen
  */
 
 var SOG = window.SOG || {};
@@ -909,8 +909,9 @@ SOG.OtziBattle = (function () {
   function _replayOtziBattle(overlayEl) {
     overlayEl.style.display = 'none';
     teardown();
-    // Re-enter through the engine (start → initGame(OTZI_CONFIG)). Ötzi has no
-    // skip-intro, so the full cinematic plays again.
+    // Re-enter through the engine (start → initGame(OTZI_CONFIG)). The shake /
+    // slide-in / deal replay; the intro lines are skipped once sog_otzi_opening_seen
+    // is set (see onBattleStart).
     if (typeof SOG !== 'undefined' && SOG.OtziBattle) SOG.OtziBattle.start();
   }
 
@@ -1118,8 +1119,9 @@ SOG.OtziBattle = (function () {
      The narrative half via the engine's script-hook seam, registered as
      'otzi'. The battle runs through initGame(OTZI_CONFIG) + the engine turn
      loop; these hooks supply the cinematic, dialogue, flee, and outcome screens.
-     Ötzi plays its full opening cinematic on EVERY entry (no skip-intro), so no
-     decide-once flag is needed.
+     The board-building beats (shake, slide-in, deal) run on every entry; the
+     intro LINES are skipped once watched (sog_otzi_opening_seen) or once Ötzi is
+     beaten — see onBattleStart.
   ════════════════════════════════════════════════════════════ */
 
   function _otziDisableButtons() {

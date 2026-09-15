@@ -95,8 +95,6 @@
       out.fromLocId = _scalar(a.fromLocId);
       out.fromSlot  = _scalar(logged ? a.fromSlot : a.fromSlotIndex);
       out.toLocId   = _scalar(a.toLocId);
-    } else if (out.type === 'barter') {
-      out.partnerCardId = _scalar(a.partnerCardId);
     }
     return out;
   }

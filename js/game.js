@@ -1,5 +1,5 @@
 /**
- * game.js — Shoulders of Giants · Core Turn Engine + Card Ability Engine (Step 6)
+ * game.js — Shoulders of Giants · Core Turn Engine + Card Ability Engine
  *
  * Slot ordering:     Cards fill left-to-right; gaps compact left on removal.
  * Reveal ordering:   Sequential, alternating player/AI, ~800 ms apart.
@@ -138,10 +138,9 @@
      sources — SOG.state constants, the 2P Match config, window.aiDifficulty,
      and the forced-locations strategy. Matches the battle-config schema blocks
      (structure / resource / decks / locationAbilities / ai / scoring).
-     Battle-config arc Step 1: this is attached to G.config but NOT yet read —
-     the engine still runs off its constants. Every value here equals the
-     source it mirrors, so attaching it is behavior-neutral. (Steps 2+ route
-     initGame's reads through it; turns/scoring/AI reads come in a later step.) */
+     Attached as G.config and READ by the engine (structure, resource, draw,
+     decks, locations, scoring, AI) — Adventure battles pass their own config
+     object to initGame in this same shape. */
   function resolveBattleConfig(twoPlayerCfg) {
     var cfg2p             = twoPlayerCfg || null;
     var hasExplicitLocs   = !!(cfg2p && cfg2p.locations  && cfg2p.locations.length);
@@ -1447,16 +1446,14 @@
         seq.push({ type: fi.type, owner: fO, cardId: fi.cardId,
                    locId: (fi.locId != null ? fi.locId : (fi.type === 'play' ? fi.toLocId : undefined)),
                    slotIndex: fi.slotIndex, fromSlotIndex: fi.fromSlotIndex,
-                   fromLocId: fi.fromLocId, toLocId: fi.toLocId,
-                   partnerCardId: fi.partnerCardId, barterCoords: fi.barterCoords });
+                   fromLocId: fi.fromLocId, toLocId: fi.toLocId });
       }
       if (i < sQ.length) {
         var si2 = sQ[i];
         seq.push({ type: si2.type, owner: sO, cardId: si2.cardId,
                    locId: (si2.locId != null ? si2.locId : (si2.type === 'play' ? si2.toLocId : undefined)),
                    slotIndex: si2.slotIndex, fromSlotIndex: si2.fromSlotIndex,
-                   fromLocId: si2.fromLocId, toLocId: si2.toLocId,
-                   partnerCardId: si2.partnerCardId, barterCoords: si2.barterCoords });
+                   fromLocId: si2.fromLocId, toLocId: si2.toLocId });
       }
     }
     return seq;

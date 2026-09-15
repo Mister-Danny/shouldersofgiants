@@ -4824,7 +4824,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
 
     // Grab the last card's CURRENT effective IP — base + permanent (ipMod) AND
     // continuous (contMod) mods — i.e. the number showing on its badge right now.
-    // effectiveIP includes contMod, so a live type-aura (e.g. Hieroglyphics' +2 to
+    // effectiveIP includes contMod, so a live type-aura (e.g. Hieroglyphics' +1 to
     // a Political host like Khufu, or Narmer's averaging) is captured; using only
     // ip+ipMod dropped those and grabbed the base value instead of the shown one.
     var gain = Math.max(0, Math.min(99, effectiveIP(last)));

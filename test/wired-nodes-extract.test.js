@@ -20,12 +20,12 @@ const boss = require('../tools/map-editor/boss-extract.js');   // findFunctionBo
 const ROOT = path.resolve(__dirname, '..');
 const OVERWORLD_ABS = path.join(ROOT, 'js', 'overworld.js');
 
-test('scans the real onNodeClick and finds exactly the known 9 dispatch ids', () => {
+test('scans the real onNodeClick and finds exactly the known 10 dispatch ids', () => {
   const result = wn.scanWiredNodeIds();
   assert.equal(result.found, true);
   const expected = [
     'walls-of-uruk', 'market', 'egypt-market', 'sargon',
-    'hammurabi', 'hanging-gardens', 'narmer', 'prehistory', 'egypt-signpost'
+    'hammurabi', 'hanging-gardens', 'narmer', 'hatshepsut', 'prehistory', 'egypt-signpost'
   ];
   assert.deepEqual([...result.ids].sort(), [...expected].sort());
   assert.equal(new Set(result.ids).size, result.ids.length, 'no duplicates');

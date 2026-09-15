@@ -36,7 +36,10 @@ var OVERWORLD_FILE = path.join(__dirname, '..', '..', 'js', 'overworld.js');
    hand-edited directly during a dev session, same reasoning as
    boss-extract.js's own require-cache-busting in serve.js. */
 function scanWiredNodeIds() {
-  var src = fs.readFileSync(OVERWORLD_FILE, 'utf8');
+  // Comments are stripped first: findFunctionBodySpan tracks quotes but not
+  // comments, so an apostrophe in a comment ("the prompt's button") opened a
+  // phantom string and the body span closed early — with zero ids inside it.
+  var src = fs.readFileSync(OVERWORLD_FILE, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   var body = boss.findFunctionBodySpan(src, 'onNodeClick');
   if (!body) return { found: false, ids: [], error: 'onNodeClick not found in js/overworld.js' };
 

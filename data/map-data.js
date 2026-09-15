@@ -77,8 +77,7 @@ window.SOG_MAP_DATA = {
     { id: 'paul-beaten', label: 'Paul defeated', flag: 'sog_node_paul_serf_beaten' },
     { id: 'christianity-complete', label: 'Paul Giant beaten → opens what follows', flag: 'sog_node_paul_giant_beaten' },
     { id: 'constantine-beaten', label: 'Constantine defeated', flag: 'sog_node_constantine_serf_beaten' },
-    { id: 'empire-complete', label: 'Constantine Giant beaten → opens what follows', flag: 'sog_node_constantine_giant_beaten' },
-    { id: 'dev-fixture-never', label: 'DEV ONLY — never reached, gates test fixtures', flag: 'sog_dev_fixture_never_set', note: 'Flag is never set by any game code — nothing stamps sog_dev_fixture_never_set, so _milestoneReached() reads it as false forever. Exists solely to hide dev/test fixtures (see spike-sargon-shadow) from real playthroughs. Not a story milestone.' }
+    { id: 'empire-complete', label: 'Constantine Giant beaten → opens what follows', flag: 'sog_node_constantine_giant_beaten' }
   ],
 
   maps: {
@@ -367,16 +366,6 @@ window.SOG_MAP_DATA = {
         flagNudge: { dx: 0, dy: -2 },
         showFrom: 'hanging-gardens-revealed',
         note: 'Sparkle-revealed on the first overworld return after defeating Hammurabi. Positioned at the midpoint between Walls of Uruk and Akkad.'
-      },
-      {
-        id:    'spike-sargon-shadow',
-        name:  'Spike: Shadow of Sargon',
-        kind:  'battle',
-        image: 'images/metaworld/civilization nodes/sargon.png',
-        x: 15, y: 20,
-        scale: 1,
-        showFrom: 'dev-fixture-never',
-        note: 'THROWAWAY — level-editor spike (see task in progress). Gated behind the dev-fixture-never milestone (flag never set by any game code) so it cannot appear in a real playthrough. To test manually: localStorage.setItem(\'sog_dev_fixture_never_set\',\'true\') then reload, or just call SOG.LevelRuntime.launch(\'spike-sargon-shadow\') from console. Delete once the spike is verified; not part of the real map.'
       }
     ],
     exits: [

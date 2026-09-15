@@ -2,8 +2,9 @@
  * sog-learning-check.js — Learning Check popup (Stage 2 of the focus system)
  *
  * The REFILL side of focus: the player answers a history question to restore
- * focus. Opened anytime from the book icon under the HUD focus bar (NO gate
- * yet — that's Stage 3).
+ * focus. Opened from the book icon under the HUD focus bar; at 0 focus the
+ * overworld's gate (overworld.js _showFocusGate) blocks node/exit actions and
+ * points the player here via the same icon.
  *
  *   • One question at a time, picked RANDOMLY from the current map's pool
  *     (data/questions.js mapPools; repeats OK in v1).
@@ -78,12 +79,7 @@ SOG.LearningCheck = (function () {
     nextQuestion: 'Next Question',
     done:         'Done',
     tfTrue:       'True',
-    tfFalse:      'False',
-    // Stage 3 hard-gate prompt (shown when a blocked action is attempted at 0 focus)
-    gateTitle:    'Out of Focus',
-    gateMsg:      "You're out of focus! Answer a learning check to continue.",
-    gateAnswer:   'Answer a Question',
-    gateClose:    'Not Now'
+    tfFalse:      'False'
   };
 
   /* ── Question pool ──────────────────────────────────────────────────────────
@@ -305,77 +301,6 @@ SOG.LearningCheck = (function () {
     }, 200);
   }
 
-  /* ── Stage 3 hard-gate prompt ───────────────────────────────────────────────
-     Shown by the gate (overworld) when a blocked action is attempted at 0 focus.
-     Its "Answer a Question" button opens the learning check directly, so the
-     player can ALWAYS refill and escape the gate (anti-softlock). Separate
-     backdrop id so it never collides with the learning-check popup. */
-  var GATE_ID = 'focus-gate-backdrop';
-
-  function gateIsOpen() {
-    var el = document.getElementById(GATE_ID);
-    return !!(el && el.classList.contains('visible'));
-  }
-
-  function closeGate() {
-    var el = document.getElementById(GATE_ID);
-    if (!el) return;
-    el.classList.remove('visible');
-    setTimeout(function () {
-      if (el.parentNode && !el.classList.contains('visible')) el.parentNode.removeChild(el);
-    }, 200);
-  }
-
-  function promptGate() {
-    closeGate();
-
-    var backdrop = document.createElement('div');
-    backdrop.id = GATE_ID;
-    backdrop.className = 'popup-backdrop rules-popup-backdrop learning-check-backdrop';
-
-    var panel = document.createElement('div');
-    panel.className = 'card-popup rules-popup learning-check-popup focus-gate-popup';
-
-    var closeX = document.createElement('button');
-    closeX.className = 'popup-close-x';
-    closeX.setAttribute('aria-label', 'Close');
-    closeX.innerHTML = '&#x2715;';
-
-    var titleEl = document.createElement('div');
-    titleEl.className = 'rules-popup-title';
-    titleEl.textContent = STR.gateTitle;
-
-    var msg = document.createElement('div');
-    msg.className = 'lc-question';
-    msg.textContent = STR.gateMsg;
-
-    var actions = document.createElement('div');
-    actions.className = 'lc-actions';
-    var answerBtn = document.createElement('button');
-    answerBtn.className = 'lc-btn lc-btn-next';
-    answerBtn.textContent = STR.gateAnswer;
-    answerBtn.addEventListener('click', function () { closeGate(); open(); });   // → refill path
-    var laterBtn = document.createElement('button');
-    laterBtn.className = 'lc-btn';
-    laterBtn.textContent = STR.gateClose;
-    laterBtn.addEventListener('click', closeGate);
-    actions.appendChild(answerBtn);
-    actions.appendChild(laterBtn);
-
-    panel.appendChild(closeX);
-    panel.appendChild(titleEl);
-    panel.appendChild(msg);
-    panel.appendChild(actions);
-    backdrop.appendChild(panel);
-    document.body.appendChild(backdrop);
-
-    closeX.addEventListener('click', function (e) { e.stopPropagation(); closeGate(); });
-    backdrop.addEventListener('click', function (e) { if (e.target === backdrop) closeGate(); });
-
-    void backdrop.offsetHeight;
-    backdrop.classList.add('visible');
-  }
-
   /* ── Snapshot (save-state.js) ───────────────────────────────────────────── */
   function getSnapshot() {
     return { correct: _stats.correct, total: _stats.total };
@@ -390,7 +315,6 @@ SOG.LearningCheck = (function () {
 
   return {
     open: open, close: close, isOpen: isOpen,
-    promptGate: promptGate, gateIsOpen: gateIsOpen, closeGate: closeGate,
     getSnapshot: getSnapshot, applySnapshot: applySnapshot,
     poolFor: _poolFor   // the questions a check on a given map id may draw
   };

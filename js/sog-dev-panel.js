@@ -1,5 +1,5 @@
 /**
- * sog-dev-panel.js — Developer State Panel (REPLACES sog-dev-menu.js)
+ * sog-dev-panel.js — Developer State Panel (replaced the old sog-dev-menu.js, since deleted)
  *
  * A dev-only popup for building arbitrary, CONSISTENT game state and launching
  * anywhere from it. Toggle with the backtick key (`).

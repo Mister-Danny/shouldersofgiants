@@ -373,7 +373,7 @@ window.SOG.Adventure.Prehistory = (function () {
     // Tool(26)'s reveal-phase draw is the documented soft-cap exception that
     // can still push the hand to 5 — the start-of-turn draw then adds nothing
     // until the hand is back under the cap.
-    draw:      { model: 'flat', perTurn: 2, softCapExceptionCardId: 26 },
+    draw:      { model: 'flat', perTurn: 2 },
     decks: {
       player: { source: 'explicit', ids: [26, 27, 28, 29, 30, 31, 32, 36], shuffle: true },
       ai:     { source: 'scripted' }   // cards come from ai.settings.playOrder
@@ -1233,8 +1233,8 @@ window.SOG.Adventure.Prehistory = (function () {
     var boardBtn = document.getElementById('adv-result-victory-board');
     if (boardBtn) boardBtn.onclick = function () { showBoardFromResult(el); };
 
-    // Continue — mark win + return to overworld
-    // TODO: Lucy overworld pop-up triggers here
+    // Continue — mark win + return to overworld (Lucy's goodbye plays there —
+    // overworld.js's post-victory sequence).
     var contBtn = document.getElementById('adv-result-victory-continue');
     if (contBtn) {
       contBtn.onclick = function () {

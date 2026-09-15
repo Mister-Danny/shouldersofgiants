@@ -334,8 +334,8 @@ SOG.HUD = (function () {
       if (window.SOG && SOG.OptionsPanel) SOG.OptionsPanel.open();
     });
     // Book icon (under the focus bar) — opens the Learning Check popup, which
-    // restores focus by answering a history question. Accessible anytime (no
-    // gate yet — that's Stage 3).
+    // restores focus by answering a history question. Always clickable — the
+    // 0-focus gate (overworld.js _showFocusGate) blocks map actions, not this.
     var bookBtn = document.getElementById('adv-hud-textbook');
     if (bookBtn) {
       bookBtn.style.cursor = 'pointer';

@@ -160,7 +160,7 @@ test('malformed inputs never write undefined, NaN or non-scalar values', () => {
   assert.deepEqual(doc.turns[0].hand, [26, 33]);
   assert.deepEqual(doc.turns[1], {
     turn: 2, hand: [], playerFirst: null,
-    player: [{ i: 0, type: 'play', cardId: null, locId: null, slot: null }, { i: 1, type: 'barter', cardId: 68, partnerCardId: null }],
+    player: [{ i: 0, type: 'play', cardId: null, locId: null, slot: null }, { i: 1, type: 'barter', cardId: 68 }],
     ai: [],
   });
   assert.deepEqual(doc.board[0], { locId: null, name: null, player: [{ slot: '1', cardId: null, ip: null, revealed: false }], ai: [] });
