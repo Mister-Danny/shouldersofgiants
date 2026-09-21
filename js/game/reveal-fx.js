@@ -64,6 +64,32 @@ SOG.RevealFx = (function () {
   // adjacency rule) briefly glow, then fade. The adjacency + glow are identical for
   // both cards; only the COLOUR (via glowClass) and the sfx differ. Self-cleaning
   // (flashClass strips the class after the fade). Returns nothing; callers return 0.
+  function _hasLeftNeighbor(ctx) {
+    try {
+      var st = SOG.state && SOG.state.G;
+      var arr = st && (ctx.owner === 'player' ? st.playerSlots : st.aiSlots)[ctx.locId];
+      var l = arr && arr[ctx.slotIndex - 1];
+      return !!(l && l.revealed);
+    } catch (e) { return false; }
+  }
+
+  /* Directional howl (Domesticated Animal 32 / Enkidu 44): the card rears its
+     head toward `dir` ('left' pivots on the bottom-left corner, 'right' on the
+     bottom-right), plays the howl, and the neighbour that just arrived on that
+     side gets the shared border glow (green for 32, amber for 44). Fired by the
+     ability layer's edge detector, never by the reveal registry directly. */
+  function neighborHowl(slotEl, dir, opts) {
+    opts = opts || {};
+    if (!slotEl) return;
+    if (opts.sfx) playSfx(opts.sfx);
+    // The keyframes are named by the corner they PIVOT on, and a card pivoting on
+    // its bottom-left corner tilts its head to the RIGHT — so a howl aimed right
+    // uses the left-pivot class and vice versa.
+    flashClass(slotEl, dir === 'right' ? 'reveal-fx-howl' : 'reveal-fx-howl-right', 1850);
+    var n = opts.neighborEl;
+    if (n && n !== slotEl && n.classList.contains('occupied')) flashClass(n, opts.glowClass || 'reveal-fx-neighbor-glow', 850);
+  }
+
   function neighborGlow(ctx, glowClass, sfxSrc) {
     if (sfxSrc) playSfx(sfxSrc);
     [ctx.slotIndex - 1, ctx.slotIndex + 1].forEach(function (adjIdx) {
@@ -317,19 +343,15 @@ SOG.RevealFx = (function () {
 
     // Domesticated Animal (32): adjacent occupied neighbors' borders glow GREEN,
     // then fade (shared neighborGlow helper + its own sfx).
-    32: function (ctx) {
-      neighborGlow(ctx, 'reveal-fx-neighbor-glow', 'sfx/domesticatedanimal.m4a');
-      flashClass(ctx.slotEl, 'reveal-fx-howl', 1850);   // card rears its head up to howl
-      return holdFor(1800);
-    },
+    // Domesticated Animal (32) / Enkidu (44): the howl itself is EDGE-driven now
+    // (abilities.js pulseNeighborHowls → neighborHowl below) — it fires toward a
+    // side that just gained a neighbour, on reveal or later. The reveal handler
+    // only HOLDS the pipeline when a reveal-time howl is coming (a revealed
+    // same-owner card already sits in the slot to the left), so the howl plays
+    // before the next card flips; with no neighbour there is nothing to wait for.
+    32: function (ctx) { return _hasLeftNeighbor(ctx) ? holdFor(1800) : 0; },
 
-    // Enkidu (44): same neighbor-border glow as Domesticated Animal, but in AMBER
-    // (the -enkidu colour class) with enkidu.mp3 — the shared glow, different colour.
-    44: function (ctx) {
-      neighborGlow(ctx, 'reveal-fx-neighbor-glow-enkidu', 'sfx/enkidu.mp3');
-      flashClass(ctx.slotEl, 'reveal-fx-howl', 1850);   // card rears its head up to howl
-      return holdFor(1800);
-    },
+    44: function (ctx) { return _hasLeftNeighbor(ctx) ? holdFor(1800) : 0; },
 
     // Ziggurat (45): a single bell-strike — zigguratbell.mp3 + a "struck bell"
     // resonating wobble that DAMPS DOWN to rest (decaying oscillation in the CSS
@@ -380,53 +402,6 @@ SOG.RevealFx = (function () {
       return holdFor(1400);   // onion pop + rise/fade ~1.4s
     },
 
-    // Gilgamesh (43): the card grows and PULSES with a heartbeat throb for the
-    // duration of gilgamesh.mp3, then DISSOLVES back to its resting size as the sfx
-    // ends. Pure presentation overlay (no ability coupling): a CSS class drives the
-    // grow-in + infinite throb; when the audio 'ends' we freeze the current scale and
-    // transition it smoothly back to 1 (the dissolve-back), restoring the slot's
-    // inline transform so nothing sticks. A fallback timer covers blocked/silent
-    // audio. Returns 0 — overlays the flip without stalling the turn loop, and fires
-    // for either owner (RevealFx.fire is keyed on cardId, not who played the card).
-    43: function (ctx) {
-      var slot = ctx.slotEl;
-      if (!slot) { playSfx('sfx/gilgamesh.mp3'); return 0; }
-
-      var prevTransform  = slot.style.transform;
-      var prevTransition = slot.style.transition;
-      var prevZ          = slot.style.zIndex;
-      slot.classList.add('reveal-fx-gilgamesh');   // grow-in + heartbeat throb
-
-      var settled = false;
-      function settle() {
-        if (settled) return; settled = true;
-        // Freeze the current (animated) scale, then ease it back down to rest.
-        var cur = getComputedStyle(slot).transform;
-        slot.classList.remove('reveal-fx-gilgamesh');
-        slot.style.transition = 'none';
-        slot.style.transform  = (cur && cur !== 'none') ? cur : 'scale(1)';
-        slot.style.zIndex     = '9';
-        void slot.offsetWidth;                       // commit the frozen scale
-        slot.style.transition = 'transform 0.55s ease-out';
-        slot.style.transform  = 'scale(1)';          // dissolve back to resting size
-        setTimeout(function () {                      // then restore the slot's own styles
-          slot.style.transition = prevTransition;
-          slot.style.transform  = prevTransform;
-          slot.style.zIndex     = prevZ;
-        }, 600);
-      }
-
-      // Dissolve-back coincides with the sound ending; fallback covers silent/blocked audio.
-      try {
-        var audio = new Audio('sfx/gilgamesh.mp3');
-        audio.volume = (window.SOG && SOG.sfx) ? SOG.sfx.factor() : 1;
-        audio.addEventListener('ended', settle);
-        audio.play().catch(function () {});
-      } catch (e) {}
-      setTimeout(settle, 2700);   // fallback ≈ gilgamesh.mp3 length (~2.53s) + margin (knob)
-
-      return holdFor(2530);   // pulse runs for gilgamesh.mp3 ~2.53s (dissolve-back rings into the gap)
-    }
   };
 
   function fire(ctx) {
@@ -440,8 +415,8 @@ SOG.RevealFx = (function () {
 
   // FULL reveal-animation/sfx duration (ms) per card id — the whole sequence each
   // REGISTRY handler kicks off, NOT the paced `holdFor()` value it returns. Used to
-  // delay reactions (Tribe's bounce) until the triggering card's reveal has fully
-  // finished. Keep in sync with the matching handler above.
+  // delay reactions until the triggering card's reveal has fully finished (see
+  // reactBounce's landedCardId). Keep in sync with the matching handler above.
   var FULL_MS = {
     26: 1000,   // Tool swing+rebound
     64: 1020,   // Sphinx rise + sand cascade
@@ -453,17 +428,17 @@ SOG.RevealFx = (function () {
     34: 450,    // Neanderthal drop-in
     39: 1400,   // Farmer (Meso) onion pop — phase 1 of the pending-IP buff
     55: 1400,   // Farmer (Egypt) onion pop — capital-grant flourish
-    43: 2530,   // Gilgamesh pulse
     44: 1850,   // Enkidu howl
     45: 1150    // Ziggurat ring-out
   };
   function fullRevealMs(cardId) { return FULL_MS[cardId] || 0; }
 
-  // Reactive flourish (NOT a reveal): a small upward "happy hop" + optional SFX,
-  // used by Tribe (36) when it gains bonus IP from a card played at its location.
-  // Called by the ability layer (abilities.js onCardLandedHere) AFTER the
-  // triggering card has resolved; a short delay sequences it as a reaction beat.
+  // Reactive flourish (NOT a reveal): a small upward "happy hop" + optional SFX —
+  // Tribe's (36) gain beat, replayed by tribeGainPulse below each time its
+  // per-card count goes up. A short delay sequences it as a reaction beat.
   // Self-removing so it re-triggers cleanly on each subsequent bonus.
+  // onBounce (optional) fires the instant the hop starts — the ability layer
+  // releases a held IP badge there so the number lands on the hop.
   //
   // landedCardId (optional): the card that triggered this bonus. If it has a reveal
   // animation/sfx that's still playing, hold the bounce until that finishes so the
@@ -471,7 +446,7 @@ SOG.RevealFx = (function () {
   // already consumed holdFor(full) = full - INTER_REVEAL_GAP, so the time remaining
   // when we get here is exactly min(full, INTER_REVEAL_GAP); 0 for plain cards (no
   // reveal fx), which keeps them snappy. A 140ms reaction beat follows either way.
-  function reactBounce(slotEl, sfxSrc, landedCardId, onDone) {
+  function reactBounce(slotEl, sfxSrc, landedCardId, onDone, onBounce) {
     onDone = typeof onDone === 'function' ? onDone : function () {};
     if (!slotEl) { onDone(); return; }
     var pre = (landedCardId != null)
@@ -480,12 +455,30 @@ SOG.RevealFx = (function () {
     setTimeout(function () {
       if (sfxSrc) playSfx(sfxSrc);
       flashClass(slotEl, 'reveal-fx-bounce', 480);
+      if (typeof onBounce === 'function') onBounce();
       // Hold the reveal pipeline until the bounce finishes so it stays bound to
       // its OWN triggering card and never bleeds onto the next card's reveal
       // (which, when the player goes first, would be the opponent's card and
       // make the bounce look like the opponent triggered it).
       setTimeout(onDone, 480);
     }, pre + 140);
+  }
+
+  /* Tribe (36) gain pulse — the hop above, for every Tribe whose count just
+     rose (abilities.js pulseTribeGains). One tribe.m4a for the batch. onRelease
+     fires ONCE, as the first hop starts, so the ability layer can release its held
+     IP badges there — the number ticks up with the card — and each badge pops. */
+  function tribeGainPulse(els, onRelease) {
+    els = (els || []).filter(Boolean);
+    if (!els.length) { if (typeof onRelease === 'function') onRelease(); return; }
+    var released = false;
+    els.forEach(function (el, i) {
+      reactBounce(el, i === 0 ? 'sfx/tribe.m4a' : null, null, null, function () {
+        if (!released) { released = true; if (typeof onRelease === 'function') onRelease(); }
+        var ip = el.querySelector('.db-overlay-ip');
+        if (ip) flashClass(ip, 'reveal-fx-ip-gain', 520);
+      });
+    });
   }
 
   // Scribe (40) stamping sequence (PRESENTATION; the IP is applied by the ability
@@ -2864,7 +2857,159 @@ SOG.RevealFx = (function () {
     setTimeout(endFlourish, 4000);   // safety: muted/failed audio or no 'ended'
   }
 
-  /* ── End-of-turn gain shimmer (generic — Megalith 31 + future EOT cards) ──
+  /* ── Gilgamesh (43) rally — "Gain +1 IP for each of your Cultural cards" ──
+     gilgamesh.mp3 plays and, for its whole length, Gilgamesh rises SLOWLY out of
+     his slot (~25% of his height) while the owner's Cultural cards in play — any
+     location — pulse to its beat. A "+1" lifts off each of those cards in turn
+     and flies to Gilgamesh; when the last one lands his number changes through
+     ipBadgeSwap (opts.onAbsorb performs the real write, so the number shown is
+     the number recorded). When the sound ends everyone settles back and
+     onComplete releases the reveal pipeline.
+     The "+1"s are body-level fixed flyers (they cross location columns, which
+     would clip them); the cards that pulse and the card that rises are the REAL
+     slot elements, so nothing is cloned and the cqw-based badges stay put.
+     No GSAP → apply the gain and finish. */
+  function gilgameshRally(gilgEl, culturalEls, opts, onComplete) {
+    opts = opts || {};
+    culturalEls = (culturalEls || []).filter(Boolean);
+    var fired = false;
+    function finish() { if (fired) return; fired = true; if (typeof onComplete === 'function') onComplete(); }
+    var absorbed = false;
+    function absorb() { if (absorbed) return; absorbed = true; if (typeof opts.onAbsorb === 'function') opts.onAbsorb(); }
+    if (!gilgEl || !culturalEls.length || typeof gsap === 'undefined') { absorb(); finish(); return; }
+
+    var SFX_MS = 2530;                              // gilgamesh.mp3
+    var BEAT_S = 0.42;                              // pulse half-period — the clip's throb
+    var badge  = gilgEl.querySelector('.db-overlay-ip');
+    var tr     = (badge || gilgEl).getBoundingClientRect();
+    var gr     = gilgEl.getBoundingClientRect();
+    var prevZ = gilgEl.style.zIndex;
+    var throbs = [], flyers = [];
+
+    // Gilgamesh: a slow rise for the length of the sound, growing a little.
+    var lift  = Math.max(10, Math.round(gilgEl.offsetHeight * 0.25));   // stage px
+    var GROW  = 1.08;
+
+    // The +1s land on his IP badge WHERE IT WILL BE at the top of the rise, not
+    // where it sits now: the badge's rest position, pushed out from the card's
+    // centre by the grow, then lifted by the rise (converted to screen px, since
+    // the stage is scaled).
+    var toScreen = gr.height / (gilgEl.offsetHeight || gr.height);
+    var gcx = gr.left + gr.width / 2, gcy = gr.top + gr.height / 2;
+    var tx = gcx + (tr.left + tr.width / 2 - gcx) * GROW;
+    var ty = gcy + (tr.top + tr.height / 2 - gcy) * GROW - lift * toScreen;
+    gsap.set(gilgEl, { zIndex: 9 });
+    var rise = gsap.to(gilgEl, { y: -lift, scale: GROW, duration: SFX_MS / 1000 - 0.3, ease: 'sine.inOut' });
+
+    // The Cultural cards pulse to the beat until the sound ends.
+    culturalEls.forEach(function (el) {
+      gsap.set(el, { zIndex: 6 });
+      throbs.push(gsap.to(el, { scale: 1.08, duration: BEAT_S, ease: 'sine.inOut', yoyo: true, repeat: -1 }));
+    });
+
+    // A "+1" lifts off each card and glides to Gilgamesh's number, timed so the
+    // LAST one lands just as he reaches the top of his rise (the badge swaps
+    // there); earlier ones land a beat apart before it. The glide is long and
+    // eased at both ends so it reads as a drift, not a zip.
+    var RISE_S   = SFX_MS / 1000 - 0.3;               // when Gilgamesh tops out
+    var LIFT_S   = 0.45;                              // the lift-off before the glide
+    var n = culturalEls.length;
+    var landed = 0;
+    function onLand() {
+      landed++;
+      if (landed === n) ipBadgeSwap(gilgEl, absorb);
+    }
+    culturalEls.forEach(function (el, i) {
+      var r  = el.getBoundingClientRect();
+      var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      var f  = document.createElement('div');
+      f.className = 'gilgamesh-plus';
+      f.textContent = '+1';
+      f.setAttribute('aria-hidden', 'true');
+      f.style.cssText = 'position:fixed;left:0;top:0;margin:0;pointer-events:none;z-index:9998;font-size:' + Math.max(16, Math.round((tr.height || 18) * 1.6)) + 'px;';   // ~1.6x the badge — readable at Chromebook scale
+      document.body.appendChild(f);
+      flyers.push(f);
+      var delay   = 0.2 + i * 0.15;                                   // lift-offs stagger up
+      var arrive  = RISE_S - (n - 1 - i) * 0.12;                      // …and landings stagger in, last one at the top
+      var glide   = Math.max(0.8, arrive - delay - LIFT_S);
+      gsap.set(f, { xPercent: -50, yPercent: -50, x: cx, y: cy, opacity: 0, scale: 0.6 });
+      gsap.timeline({ delay: delay })
+        .to(f, { opacity: 1, scale: 1, y: cy - r.height * 0.35, duration: LIFT_S, ease: 'power2.out' })
+        .to(f, { x: tx, y: ty, scale: 0.9, duration: glide, ease: 'sine.inOut' })
+        .to(f, { opacity: 0, scale: 0.4, duration: 0.14, ease: 'power1.in',
+                 onComplete: function () { if (f.parentNode) f.parentNode.removeChild(f); onLand(); } });
+    });
+
+    // Settle when the sound ends (fallback timer ≈ the clip).
+    var settled = false;
+    function settle() {
+      if (settled) return; settled = true;
+      rise.kill();                                   // never let the rise outlive the settle
+      throbs.forEach(function (t) { t.kill(); });
+      var s = gsap.timeline({ onComplete: function () {
+        culturalEls.concat([gilgEl]).forEach(function (el) { gsap.killTweensOf(el); gsap.set(el, { clearProps: 'transform,zIndex' }); });
+        gilgEl.style.zIndex = prevZ;
+        flyers.forEach(function (f) { if (f.parentNode) f.parentNode.removeChild(f); });
+        absorb();                                                       // safety: the gain always lands
+        finish();
+      } });
+      s.to(gilgEl, { y: 0, scale: 1, duration: 0.55, ease: 'power2.out' }, 0);
+      culturalEls.forEach(function (el) { s.to(el, { scale: 1, duration: 0.35, ease: 'power2.out' }, 0); });
+    }
+    playSfxThen(opts.sfx || 'sfx/gilgamesh.mp3', SFX_MS, function () { setTimeout(settle, 80); });
+  }
+
+  /* ── Megalith (31) / Obelisk (59) end-of-turn earth rise ───────────────────
+     The monument heaves up out of the ground and settles back, the way the
+     overworld's node reveals do (_earthRiseRevealNode): earthspell.mp3, a burst
+     of dirt clods at its base as the ground breaks, a ~10%-of-height rise with
+     a back-out settle. At the TOP of the rise the IP badge swaps (ipBadgeSwap —
+     opts.onTick performs the real addIPMod there): the old number sheds away
+     downward while a pinch of dirt falls beside it and the new number emerges.
+
+     The dirt is dirtBurst — the battle layer's own GSAP clod particles (Pyramid's
+     eruption), body-level fixed elements, so the slot's overflow:hidden never
+     clips them. The overworld's CSS-particle .hammurabi-dirt-grain is not reused;
+     nothing there needed reimplementing. The SLOT element is what rises (its
+     parents don't clip), lifted above its neighbours for the duration. onDone
+     releases the end-of-turn queue. No GSAP → apply the tick and finish. */
+  function megalithEarthRise(slotEl, opts, onDone) {
+    opts   = opts || {};
+    onDone = typeof onDone === 'function' ? onDone : function () {};
+    var tick = (typeof opts.onTick === 'function') ? opts.onTick : function () {};
+    if (!slotEl || typeof gsap === 'undefined') { tick(); onDone(); return; }
+
+    playSfx('sfx/earthspell.mp3');
+    var r    = slotEl.getBoundingClientRect();              // screen px — for the body-level dirt
+    var lift = Math.max(6, Math.round(slotEl.offsetHeight * 0.10));   // stage px — the transform lives inside the scaled stage
+    dirtBurst(r.left + r.width / 2, r.bottom - 2, r.width * 0.85, 16);   // the ground breaks first
+
+    var swapped = false;
+    function swap() {
+      if (swapped) return; swapped = true;
+      var badge = slotEl.querySelector('.db-overlay-ip');
+      if (badge) {
+        var b = badge.getBoundingClientRect();
+        dirtBurst(b.left + b.width / 2, b.bottom, b.width * 1.4, 6);     // dirt falls aside as the number changes
+      }
+      ipBadgeSwap(slotEl, tick);                                          // old number sheds, new one emerges
+    }
+
+    gsap.set(slotEl, { zIndex: 6 });
+    gsap.timeline({
+      onComplete: function () {
+        gsap.set(slotEl, { clearProps: 'transform,zIndex' });
+        swap();                                                           // safety: the tick always lands
+        onDone();
+      }
+    })
+      .to(slotEl, { y: -lift, duration: 0.5, ease: 'power2.out' })
+      .call(swap)
+      .to(slotEl, { y: 0, duration: 0.55, ease: 'back.out(1.6)' });
+  }
+
+  /* ── End-of-turn gain shimmer (generic — no current consumer; Megalith and
+     Obelisk moved to megalithEarthRise above. Kept for future EOT cards.) ──
      A band of light sweeps ACROSS the card (adapted from the Neb shimmer's
      cause-and-effect pacing): overlay div clipped to the slot, gradient band
      translates left→right (~750ms). At the sweep's midpoint opts.onTick() fires
@@ -3075,6 +3220,10 @@ SOG.RevealFx = (function () {
            nubianArchersVolley: nubianArchersVolley,
            ironFurnaceIgnite: ironFurnaceIgnite,
            griotPulse: griotPulse,
+           tribeGainPulse: tribeGainPulse,
+           neighborHowl: neighborHowl,
+           gilgameshRally: gilgameshRally,
            imhotepSandSculpt: imhotepSandSculpt,
+           megalithEarthRise: megalithEarthRise,
            endOfTurnShimmer: endOfTurnShimmer };
 })();

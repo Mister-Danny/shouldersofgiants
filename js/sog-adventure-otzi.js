@@ -107,7 +107,7 @@ SOG.OtziBattle = (function () {
     31: 'Megalith earns a point every turn. The sooner I play it, the more it earns.',
     32: 'This helps the cards beside it. Give it a spot with room on both sides.',
     33: 'Lucy can only move once. Wait to move her until you know where you need points the most.',
-    36: 'Tribe pays off next turn. Play two cards at its location next turn to cash in.'
+    36: 'The Tribe gains points with more cards at its location. Try to fill its location up.'
   };
   var HINTS_PROMPT_FIRST = 'Would you like some helpful strategy hints?';
   var HINTS_PROMPT_MORE  = 'Would you like MORE helpful hints this time?';
@@ -160,16 +160,18 @@ SOG.OtziBattle = (function () {
          piling everything into one — each play is nudged toward the location
          where the AI is currently weaker.
 
-     Ignores the fiddlier abilities (Domesticated Animal adjacency, Tribe's
-     next-turn bonus, Ötzi-migrate) — it values those at face IP. Good enough to
-     put up a fight without playing a perfect game. */
+     Tribe (36) is 1 base IP plus +1 per OTHER own card here (continuous), so it
+     is scored as its base plus its count of company: cards already here now, plus
+     one for room to add more. Ignores the fiddlier abilities (Domesticated Animal adjacency,
+     Ötzi-migrate) — it values those at face IP. Good enough to put up a fight
+     without playing a perfect game. */
   function otziSelectPlays(ctx) {
     var G = ctx.G;
     var CARDS_ = (typeof CARDS !== 'undefined') ? CARDS : [];
     function cardById(id) { for (var i = 0; i < CARDS_.length; i++) if (CARDS_[i].id === id) return CARDS_[i]; return null; }
     var perTurn = (G.config && G.config.ai && G.config.ai.settings && G.config.ai.settings.cardsPerTurn) || 2;
 
-    var FIRE = 29, CAVE = 30;
+    var FIRE = 29, CAVE = 30, TRIBE = 36;
     var hand = G.aiHand.slice();
 
     // Per-location AI state = committed (revealed prior turns) + this turn's sims.
@@ -204,6 +206,8 @@ SOG.OtziBattle = (function () {
       } else if (card.id === CAVE) {          // captures +1 for every AI card already here (played before it)
         eff = card.ip + cnt;
         if (caveHere) eff -= 3;               // never double Cave Art
+      } else if (card.id === TRIBE) {         // +1 per other AI card here, live — company now, plus room for more
+        eff = card.ip + cnt + (open >= 2 ? 1 : 0);
       } else {
         eff = card.ip;
         if (fireHere) eff += 1;               // benefits from Fire's "after" buff

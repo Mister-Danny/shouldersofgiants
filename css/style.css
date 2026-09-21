@@ -3989,6 +3989,17 @@ body.hanging-gardens-battle .battle-col .hg-flood-tint {
   border-radius: 4px;
   box-shadow: 0 0 12px 3px rgba(255, 210, 90, 0.7);
 }
+/* Gilgamesh (43) rally: the "+1" that lifts off each of the owner's Cultural
+   cards and flies to Gilgamesh (reveal-fx.js gilgameshRally). Body-level flyer;
+   position/size are set inline by the FX. */
+.gilgamesh-plus {
+  font-family: var(--font);
+  font-weight: bold;
+  color: #7ef08a;                                   /* green, per the Gilgamesh spec */
+  text-shadow: 0 0 6px rgba(60, 200, 90, 0.95), 1px 1px 0 #000, -1px -1px 0 #000;
+  line-height: 1;
+  white-space: nowrap;
+}
 .sargon-loc-glow {
   border-radius: 8px;
   border: 2px solid rgba(255, 225, 130, 0.9);
@@ -12033,6 +12044,21 @@ body[data-screen="overworld"] #overworld-overlay {
   transform-origin: left bottom;   /* pivot on the BOTTOM-LEFT corner */
   z-index: 7;
 }
+/* …and the mirror: pivots on the bottom-RIGHT corner, so the head tilts toward
+   the LEFT — used for a howl aimed at the slot on the left. (The left-pivot
+   keyframe above tilts the head toward the RIGHT.) */
+@keyframes revealFxHowlRight {
+  0%   { transform: rotate(0deg); }
+  16%  { transform: rotate(18deg); }
+  26%  { transform: rotate(21deg); }
+  68%  { transform: rotate(18deg); }
+  100% { transform: rotate(0deg); }
+}
+.battle-card-slot.reveal-fx-howl-right {
+  animation: revealFxHowlRight 1.8s ease-in-out;
+  transform-origin: right bottom;  /* pivot on the BOTTOM-RIGHT corner */
+  z-index: 7;
+}
 
 /* Tool (26): "hammer swing" — rotate upright → full horizontal pivoting on the
    bottom-right corner (the strike), then rebound/overshoot back to upright.
@@ -12180,31 +12206,6 @@ body[data-screen="overworld"] #overworld-overlay {
 .battle-card-slot.reveal-fx-soldier-hit {
   animation: revealFxSoldierHit 0.34s ease-in-out;
   z-index: 6;
-}
-
-/* Gilgamesh (43) reveal — the card grows in, then PULSES with a heartbeat throb
-   for the duration of gilgamesh.mp3 (the JS removes the class + dissolves back to
-   rest when the sfx ends). Two animations on transform: a one-shot grow-in (0–0.32s)
-   then the looping throb (0.32s delay, infinite) which takes over once active.
-   Tuning knobs: grow scale (grow-in 100% + throb scales), throb depth/rate (the
-   keyframe scales + 0.9s duration). z-index lifts it above neighbours. */
-.battle-card-slot.reveal-fx-gilgamesh {
-  z-index: 9;
-  animation: revealFxGilgameshGrow 0.32s ease-out,
-             revealFxGilgameshThrob 0.9s ease-in-out 0.32s infinite;
-  transform-origin: center center;
-}
-@keyframes revealFxGilgameshGrow {
-  0%   { transform: scale(1); }
-  100% { transform: scale(1.22); }     /* grow scale (knob) */
-}
-@keyframes revealFxGilgameshThrob {    /* lub-dub heartbeat between enlarged sizes */
-  0%   { transform: scale(1.20); }
-  14%  { transform: scale(1.32); }     /* throb peak (knob) */
-  28%  { transform: scale(1.21); }
-  42%  { transform: scale(1.29); }
-  58%  { transform: scale(1.20); }
-  100% { transform: scale(1.20); }     /* rest between beats */
 }
 
 /* Canals (41) water border — PERSISTENT, STATE-DRIVEN (added/removed by

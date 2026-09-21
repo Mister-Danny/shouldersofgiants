@@ -369,6 +369,84 @@
     else release();
   }
 
+  /* ── TRIBE (36) gain pulse — EDGE-TRIGGERED on the COUNT, the Griot shape ───
+     Tribe's aura is level-driven (+1 per other own card here, recomputed live).
+     The bounce fires when that count RISES between passes — Tribe's own reveal
+     onto cards already there, and every later card that reveals or MOVES in —
+     and never on a departure or an unrelated recompute. _tribeNow is written by
+     the aura block for every revealed Tribe; _tribeWas remembers the last pass.
+     The number lands ON the hop: the badge is held at the pre-gain value until
+     the bounce starts (reactBounce's onBounce), then released and popped. */
+  function pulseTribeGains() {
+    var gained = [];
+    ['player', 'opp'].forEach(function (own) {
+      var slots = own === 'player' ? G.playerSlots : G.aiSlots;
+      G.locations.forEach(function (loc) {
+        (slots[loc.id] || []).forEach(function (s, si) {
+          if (!s || typeof s._tribeNow !== 'number') return;
+          var now = s._tribeNow, was = s._tribeWas || 0;
+          if (now > was && !s._ipDisplayHold) {
+            _holdBadgeAt(s, effectiveIP(s) - (now - was));
+            gained.push({ s: s, el: getSlotEl(own, loc.id, si) });
+          }
+          s._tribeWas = now;
+          delete s._tribeNow;
+        });
+      });
+    });
+    if (!gained.length) return;
+    var release = function () { gained.forEach(function (g) { _releaseBadge(g.s); }); _repaint(); };
+    var rfx = window.SOG && SOG.RevealFx;
+    if (rfx && typeof rfx.tribeGainPulse === 'function') rfx.tribeGainPulse(gained.map(function (g) { return g.el; }), release);
+    else release();
+  }
+
+  /* ── DOMESTICATED ANIMAL (32) / ENKIDU (44) directional howl — EDGE-TRIGGERED ──
+     The buff is level-driven (index ±1, recomputed live). The HOWL is an edge:
+     the aura block records, on the howler's own slot data, whether a revealed
+     same-owner card sits in the slot to its LEFT and to its RIGHT this pass
+     (_markNeighbors → _nbLNow/_nbRNow); this compares each against the previous
+     pass (_nbLWas/_nbRWas) and howls TOWARD a side that just gained a neighbour:
+       • the howler's own reveal with a card already on its left → howl LEFT
+         (and, if one is already on its right, RIGHT as well — an arrival is an
+          arrival whichever order the two revealed in)
+       • a card later revealed or MOVED into the slot on its right → howl RIGHT
+       • a neighbour leaving → now=false: no howl; a recompute → nothing changed
+       • a neighbour that leaves and is REPLACED by a new arrival → howls again
+     COMPACTION: when a card leaves and the column shifts left, the flags travel
+     with the howler's slot data and are re-read against its NEW index, so a
+     neighbour it already had (now a different card, same side) reads as
+     unchanged — no howl; only a side that goes from empty to occupied howls.
+     One howl per direction per event; the newly-adjacent card gets the glow. */
+  function _markNeighbors(sd, arr, idx) {
+    var l = arr[idx - 1], r = arr[idx + 1];
+    sd._nbLNow = !!(l && l.revealed);
+    sd._nbRNow = !!(r && r.revealed);
+  }
+  function pulseNeighborHowls() {
+    var rfx = window.SOG && SOG.RevealFx;
+    ['player', 'opp'].forEach(function (own) {
+      var slots = own === 'player' ? G.playerSlots : G.aiSlots;
+      G.locations.forEach(function (loc) {
+        (slots[loc.id] || []).forEach(function (s, si) {
+          if (!s || typeof s._nbLNow !== 'boolean') return;
+          var id = abilityIdOf(s);
+          var glowClass = (id === 44) ? 'reveal-fx-neighbor-glow-enkidu' : 'reveal-fx-neighbor-glow';
+          var sfx       = (id === 44) ? 'sfx/enkidu.mp3' : 'sfx/domesticatedanimal.m4a';
+          var el = getSlotEl(own, loc.id, si);
+          [['L', -1, 'left'], ['R', 1, 'right']].forEach(function (d) {
+            var now = s['_nb' + d[0] + 'Now'], was = !!s['_nb' + d[0] + 'Was'];
+            if (now && !was && el && rfx && typeof rfx.neighborHowl === 'function') {
+              rfx.neighborHowl(el, d[2], { sfx: sfx, neighborEl: getSlotEl(own, loc.id, si + d[1]), glowClass: glowClass });
+            }
+            s['_nb' + d[0] + 'Was'] = now;
+            delete s['_nb' + d[0] + 'Now'];
+          });
+        });
+      });
+    });
+  }
+
   /* ── NARMER (51) "The Unifier" — persistent red glow ─────────────────────────
      Lights Narmer's own card and, for HIS OWNER'S SIDE ONLY, the score number at
      his location and at each ADJACENT location, for as long as his Continuous
@@ -681,6 +759,7 @@
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (dom, domIdx) {
           if (!dom || !dom.revealed || dom.cardId !== 32) return;
+          _markNeighbors(dom, sl[loc.id], domIdx);   // this pass's L/R presence — see pulseNeighborHowls
           [domIdx - 1, domIdx + 1].forEach(function (adjIdx) {
             var s = sl[loc.id][adjIdx];
             if (s && s.revealed) {
@@ -692,37 +771,20 @@
         });
       });
 
-      // Tribe (id 36): "Next Turn — Gain +1 IP for every card you play here."
-      // Delayed/continuous effect (NOT an At Once — its description no longer says
-      // "At Once", so Pacal's text-based At-Once trigger skips it; the grant was
-      // always computed here, never via an onAtOnce handler). Tribe gains +1 for
-      // every OTHER same-owner card revealed at Tribe's location on the ONE turn
-      // immediately after Tribe itself (turnPlayed === tribe.turnPlayed + 1) —
-      // that turn only, per the card text. Cards played later grant nothing; the
-      // bonus already earned persists, because those turn-N+1 cards keep matching
-      // on every later recompute.
-      //   Do NOT loosen this to >=. It was >= between b84a853 and this comment, on
-      // the theory that the exact match "silently stopped counting" once Tribe
-      // moved — but that conflated two independent questions. WHICH LOCATION counts
-      // is settled entirely by the sl[loc.id] scoping, not by the turn gate: this
-      // block is scoped to the location being evaluated THIS pass, so if Tribe
-      // moves, the recompute (fresh every call — see the contMod/contModSources
-      // reset above) re-finds it at its new location and counts THAT location's
-      // qualifying reveals; cards left behind at Tribe's old location stop counting
-      // the moment Tribe leaves that slot array, no move-tracking needed. WHICH
-      // TURN counts is this gate, and the card says "Next Turn" — one turn.
-      // Loosening the turn gate to fix a movement concern made Tribe score off
-      // every card played there for the rest of the game.
+      // Tribe (id 36): "Continuous — Gain +1 IP for other cards here." Tribe
+      // gains +1 for each OTHER same-owner revealed card at its location, LIVE:
+      // an arrival raises it, a departure lowers it, nothing is deferred and
+      // nothing is stamped. (The old card paid out only for cards played on the
+      // ONE turn after Tribe, keyed on turnPlayed; that gate is gone — Tribe no
+      // longer reads turnPlayed at all.) _tribeNow carries this pass's count to
+      // pulseTribeGains, which bounces Tribe only when the count has RISEN.
       ['player', 'opp'].forEach(function (own) {
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (tribe, tribeIdx) {
           if (!tribe || !tribe.revealed || abilityIdOf(tribe) !== 36) return;
-          if (typeof tribe.turnPlayed !== 'number') return;
-          var nextTurn = tribe.turnPlayed + 1;
           var count = 0;
-          sl[loc.id].forEach(function (s, si) {
-            if (s && s.revealed && si !== tribeIdx && s.turnPlayed === nextTurn) count++;
-          });
+          sl[loc.id].forEach(function (s, si) { if (s && s.revealed && si !== tribeIdx) count++; });
+          tribe._tribeNow = count;
           if (count > 0) {
             tribe.contMod = (tribe.contMod || 0) + count;
             tribe.contModSources.push({ source: 'Tribe', delta: count });
@@ -739,6 +801,7 @@
         var sl = own === 'player' ? G.playerSlots : G.aiSlots;
         sl[loc.id].forEach(function (enkidu, enkiduIdx) {
           if (!enkidu || !enkidu.revealed || abilityIdOf(enkidu) !== 44) return;
+          _markNeighbors(enkidu, sl[loc.id], enkiduIdx);   // this pass's L/R presence — see pulseNeighborHowls
           [enkiduIdx - 1, enkiduIdx + 1].forEach(function (adjIdx) {
             var s = sl[loc.id][adjIdx];
             if (s && s.revealed) {
@@ -808,29 +871,6 @@
       // Scribe (id 40) is no longer Continuous — it is now an At Once ability
       // (abilityScribe) that applies a one-time +1 IP to the owner's other cards
       // here as each stamp lands. See CARD_ABILITIES[40] / reveal-fx stamping.
-
-      // Gilgamesh (id 43): +1 IP for all OTHER Cultural cards the owner has played
-      // this game — Gilgamesh does NOT boost himself. culturalCount is all-time
-      // (persists through destruction) and includes Gilgamesh's own play (he's
-      // Cultural), so subtract 1 to exclude him. Self-portrait attribution.
-      ['player', 'opp'].forEach(function (own) {
-        var sl = own === 'player' ? G.playerSlots : G.aiSlots;
-        sl[loc.id].forEach(function (s) {
-          if (!s || !s.revealed || abilityIdOf(s) !== 43) return;
-          // The -1 excludes the SOURCE card from its own count, but only when the
-          // source is itself a Cultural card tallied in culturalCount. Real Gilgamesh
-          // is Cultural → subtract himself (identical to before). A projector whose
-          // OWN type isn't Cultural (e.g. Rosetta, Scientific) was never counted, so
-          // it subtracts nothing.
-          var _src         = CARDS.find(function (x) { return x.id === s.cardId; });
-          var _selfCounted = (_src && _src.type === 'Cultural') ? 1 : 0;
-          var bonus = ((G.culturalCount && G.culturalCount[own]) || 0) - _selfCounted;
-          if (bonus <= 0) return;
-          s.contMod = (s.contMod || 0) + bonus;
-          s.contModSources.push({ source: 'Gilgamesh', delta: bonus });
-          addBonus(s, bonus, 'card', 43, nextEventId(), 'A', true);
-        });
-      });
 
       // Sargon (id 37): grants +3 IP to each adjacent location for Sargon's owner.
       // This is a LOCATION-LEVEL bonus (not a card modifier) — written to
@@ -1178,6 +1218,10 @@
       pulseHieroglyphicsGains();
       // Griot's boost, same edge rule: pulse the cards that JUST started receiving it
       pulseGriotGains();
+      // Tribe: bounce when its per-card count has just gone up
+      pulseTribeGains();
+      // Domesticated Animal / Enkidu: howl toward a side that just gained a neighbour
+      pulseNeighborHowls();
     }
   }
 
@@ -3071,7 +3115,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
      Economic card at this location triggers nothing at all: no IP, no move, and
      no different-civilization bonus. (This replaces an earlier reading where
      either side's play counted, which let a player's Economic card move the
-     AI's Merchant.) Same-owner gating matches Tribe below.
+     AI's Merchant.) Same-owner gating matches Tribe's (36) aura.
 
      The card is real now (cards.js id 76, promoted from the old id-900
      placeholder), as are the Punt/Thebes move-here bonuses it plays into. */
@@ -3433,40 +3477,45 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     }
   }
 
-  /* Tribe (id 36) — REACTIVE PRESENTATION ONLY (no IP/state/timing change).
-     Tribe's actual +IP is computed in evaluateContinuous (a lump-sum continuous
-     recompute), which isn't a clean per-card event. Instead this onCardLandedHere
-     fires once per card that LANDS at Tribe's location, AFTER that card's reveal +
-     At Once have resolved (the fireOnCardLandedHere dispatcher runs post-reveal).
-     We gate on the EXACT same condition evaluateContinuous uses for Tribe's bonus
-     — the landed card is same-owner as Tribe AND was played on the one turn
-     right after Tribe (turnPlayed === tribe.turnPlayed + 1) — so the bounce fires
-     exactly when Tribe gains bonus IP from that card. ctx.locId is Tribe's
-     CURRENT location (wherever this dispatch is firing for), so a card landing
-     at Tribe's location after Tribe has moved there still bounces correctly.
-     Visual/audio only via SOG.RevealFx. */
-  function tribeReactBounce(ctx, done) {
+  /* Gilgamesh (id 43) — "Epic Hero": At Once, gain +1 IP for each of the OWNER'S
+     Cultural cards IN PLAY — revealed on the board, at any location, excluding the
+     actor itself (a Rosetta carrying this text is not Cultural and would not count
+     herself anyway; real Gilgamesh is Cultural and skips himself by identity).
+     A permanent stamp (addIPMod): it neither grows with later Cultural plays nor
+     shrinks when those cards leave. (The old card was Continuous, +1 per Cultural
+     card the owner had EVER played, persisting through destruction — that counter,
+     G.culturalCount, is gone.)
+     Presentation (RevealFx.gilgameshRally): the counted cards rise and beam at
+     Gilgamesh; he rises, throbs to gilgamesh.mp3, and his number changes through
+     ipBadgeSwap — opts.onAbsorb performs the real addIPMod there, so the number
+     shown is the number recorded. Zero Cultural cards in play → no animation,
+     no sound, nothing to gain. AWAITS done. */
+  function abilityGilgamesh(owner, locId, slotIndex, sd, done) {
     done = typeof done === 'function' ? done : function () {};
-    if (!ctx || ctx.landedOwner !== ctx.owner) { done(); return; }   // Tribe counts same-owner cards only
-    var tribe = ctx.slot;
-    if (!tribe || typeof tribe.turnPlayed !== 'number') { done(); return; }
-    var slots = (ctx.owner === 'player' ? G.playerSlots : G.aiSlots)[ctx.locId];
-    if (!slots) { done(); return; }
-    var landed = null;
-    for (var i = 0; i < slots.length; i++) {
-      if (slots[i] && slots[i].cardId === ctx.landedCardId) { landed = slots[i]; break; }
-    }
-    if (!landed || landed.turnPlayed !== tribe.turnPlayed + 1) { done(); return; }  // this card grants Tribe no bonus
-    var el = getSlotEl(ctx.owner, ctx.locId, ctx.slotIndex);
-    if (el && window.SOG && SOG.RevealFx && typeof SOG.RevealFx.reactBounce === 'function') {
-      // AWAIT the bounce: hold the reveal pipeline until it finishes so the
-      // bounce is sequenced to its OWN triggering (same-owner) card and never
-      // overlaps the next card's reveal — otherwise, when the player goes
-      // first, the bounce bleeds onto the opponent's card reveal and reads as
-      // if the opponent's play triggered it.
-      SOG.RevealFx.reactBounce(el, 'sfx/tribe.m4a', ctx.landedCardId, done);
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var els = [], count = 0;
+    G.locations.forEach(function (loc) {
+      (slots[loc.id] || []).forEach(function (s, si) {
+        if (!s || !s.revealed || s === sd) return;
+        var c = CARDS.find(function (x) { return x.id === s.cardId; });
+        if (!c || c.type !== 'Cultural') return;
+        count++;
+        var el = getSlotEl(owner, loc.id, si);
+        if (el) els.push(el);
+      });
+    });
+    if (count <= 0) { done(); return; }
+    var apply = function () {
+      addIPMod(sd, count, srcOf(sd, 43));
+      refreshSlotIPDisplays();
+      updateScores();
+    };
+    var gEl = actorSlotEl(owner, locId, sd, slotIndex);
+    var rfx = window.SOG && SOG.RevealFx;
+    if (gEl && rfx && typeof rfx.gilgameshRally === 'function') {
+      rfx.gilgameshRally(gEl, els, { onAbsorb: apply, sfx: 'sfx/gilgamesh.mp3' }, done);
     } else {
-      done();
+      apply(); done();
     }
   }
 
@@ -3555,9 +3604,12 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
      recomputed continuous mod, so it survives evaluateContinuous re-runs and
      counts in scoring). Fired by the END-OF-TURN phase (fireEndOfTurn below):
      once per turn, after ALL reveals complete, including the turn it's played.
-     Presentation: a light-band shimmer sweeps the card; the +1 lands at the
-     sweep's midpoint (IP number pops in sync) with a positive 8-bit blip. The
-     phase queue AWAITS done — multiple end-of-turn cards fire sequentially. */
+     Presentation (RevealFx.megalithEarthRise): the monument heaves ~10% up out
+     of its slot in a burst of dirt clods (earthspell.mp3), the old IP number
+     sheds away as the new one emerges at the top of the rise (ipBadgeSwap), and
+     the stone settles back. The +1 is written by the badge swap, so the number
+     that appears is the recorded one. The phase queue AWAITS done — multiple
+     end-of-turn cards fire sequentially. Obelisk (59) shares it. */
   function megalithEndOfTurn(owner, locId, slotIndex, sd, done) {
     // Re-acquire the slot element by owner+cardId (the Hammurabi lesson: slot
     // indexes can shift if an earlier queue entry compacted the board).
@@ -3568,12 +3620,11 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var rfx = window.SOG && SOG.RevealFx;
     var tick = function () {
       addIPMod(sd, 1, srcOf(sd, 31));         // permanent +1, cumulative across turns
-      if (typeof SFX !== 'undefined' && SFX.eotGain) SFX.eotGain();
-      refreshSlotIPDisplays();                 // IP number updates in sync with the sweep
+      refreshSlotIPDisplays();                 // the badge now reads the new number
       updateScores();
     };
-    if (rfx && typeof rfx.endOfTurnShimmer === 'function') {
-      rfx.endOfTurnShimmer(el, { onTick: tick }, done);
+    if (rfx && typeof rfx.megalithEarthRise === 'function') {
+      rfx.megalithEarthRise(el, { onTick: tick }, done);
     } else {
       tick();
       done();
@@ -3583,18 +3634,17 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
   /* ── Egypt era abilities (wired via existing machinery) ────────────────────── */
 
   /* Obelisk (id 59) — "Monolith": End of turn, gain +1 IP permanently and
-     cumulatively. Identical to Megalith (31) — same end-of-turn phase + shimmer,
-     different attribution source. */
+     cumulatively. Identical to Megalith (31) — same end-of-turn phase + the same
+     earth-rise (deliberate twins), different attribution source. */
   function obeliskEndOfTurn(owner, locId, slotIndex, sd, done) {
     var el  = actorSlotEl(owner, locId, sd, slotIndex);   // the actor, by identity
     var rfx = window.SOG && SOG.RevealFx;
     var tick = function () {
       addIPMod(sd, 1, srcOf(sd, 59));
-      if (typeof SFX !== 'undefined' && SFX.eotGain) SFX.eotGain();
       refreshSlotIPDisplays();
       updateScores();
     };
-    if (rfx && typeof rfx.endOfTurnShimmer === 'function') rfx.endOfTurnShimmer(el, { onTick: tick }, done);
+    if (rfx && typeof rfx.megalithEarthRise === 'function') rfx.megalithEarthRise(el, { onTick: tick }, done);
     else { tick(); done(); }
   }
 
@@ -5463,20 +5513,19 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     26: { onAtOnce: abilityTool             },  // Prehistory tutorial
     31: { endOfTurn: megalithEndOfTurn      },  // Megalith — End of turn: gain +1 IP (permanent, cumulative)
     35: { onCardLandedHere: abilityOtziFlee },  // Ötzi — reactive flee (any card lands at his loc after he's revealed)
-    36: { onCardLandedHere: tribeReactBounce },  // Tribe — reactive bounce+sfx (presentation only; IP stays in evaluateContinuous)
     74: { onAtOnce: abilityPapyrusEconomic },         // Papyrus (Economic) — Natural Resource: +2 IP to Scientific cards here
     75: { onAtOnce: abilityPurpleDye },               // Purple Dye — Natural Resource: +2 IP to Political cards here
     76: { onCardLandedHere: abilityMerchantTrade },   // Merchant (Egypt) — Economic played here → +1 IP, then random move (fizzles if nowhere to go)
 
     /* ── Mesopotamia era ───────────────────────────────────────────
-       Phase C cards (37 Sargon, 43 Gilgamesh) remain stubbed.      */
+       ───────────────────────────────────────────────────────────── */
     37: { onAtOnce: abilitySargon },  // Sargon — Continuous +3 (evaluateContinuous); At-Once = beam+glow flourish
     38: { onAtOnce: abilityPriest       },
     39: { onAtOnce: abilityHarvestPendingIP },  // Farmer (MESO) — arms +1 IP for the NEXT card played (swapped from Egypt)
     40: { onAtOnce: abilityScribe },  // Record Keeper — At Once: stamps +1 IP onto owner's other cards here
     41: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Canals   — Continuous only
     42: { onAtOnce: abilitySoldier      },
-    43: {},  // Gilgamesh — Continuous only; handled in evaluateContinuous
+    43: { onAtOnce: abilityGilgamesh },  // Gilgamesh — At Once: +1 per own Cultural card in play (rally animation)
     44: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Enkidu   — Continuous only
     45: { onAtOnce: function (o, l, si, sd, done) { done(); } },  // Ziggurat — Continuous only
     46: { onAtOnce: abilityCuneiform    },
@@ -5682,7 +5731,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     // Barrier: each reactor receives its own done(); allDone (the reveal
     // pipeline's continuation) fires only once EVERY reactor has completed — so
     // an async reactor like Ötzi's flee slide fully finishes before the next
-    // card reveals. Synchronous reactors (e.g. Tribe's bounce) call done() at once.
+    // card reveals. A synchronous reactor calls done() at once.
     var pending = reactors.length;
     var one = function () { if (--pending === 0) finish(); };
     reactors.forEach(function (r) {

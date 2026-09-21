@@ -82,9 +82,9 @@
       // Adventure battles relocate a move-capable AI card (Chariot) post-reveal
       // via runAdventureMovements, whose "not on the card's OWN reveal turn" guard
       // reads turnPlayed (parity with the player's commitPlay; the removed bespoke
-      // _gAiPlaceCard set it). Scope to adventure-movement configs so other
-      // battles' AI slot data — and the Tribe (36) turnPlayed ability — are
-      // unchanged (Ötzi's AI Tribe stays inert exactly as today).
+      // _gAiPlaceCard set it). Scoped to adventure-movement configs so other
+      // battles' AI slot data are unchanged. (No card ability reads turnPlayed
+      // on AI slots any more — Tribe (36) used to, before its continuous rework.)
       if (G.config && G.config.ai && G.config.ai.movement === 'adventure') _sd.turnPlayed = G.turn;
       G.aiSlots[locId][slotIndex] = _sd;
       // Remove ONE instance from hand (filter would delete BOTH copies of a
@@ -343,7 +343,7 @@
      so a pure-IP scorer under-plays them. turnsLeft = totalTurns − turn + 1. */
   function cardTurnBias(cardId, turnsLeft) {
     turnsLeft = (typeof turnsLeft === 'number' && turnsLeft > 0) ? turnsLeft : 1;
-    if (cardId === 29 || cardId === 31) {         // Fire / Megalith — prefer EARLY
+    if (cardId === 29 || cardId === 31 || cardId === 36) {   // Fire / Megalith / Tribe — prefer EARLY
       var b = Math.max(0, turnsLeft - 1) * 1.5;   // scales with turns remaining; 0 on the last turn
       if (cardId === 31 && turnsLeft <= 1) b -= 1;// a last-turn Megalith is nearly worthless
       return b;
@@ -1235,6 +1235,10 @@
       playerCards[lid] = (G.playerSlots[lid] || []).filter(function (s) { return s && s.revealed; });
     });
 
+    // Gilgamesh (43) counts the AI's Cultural cards across the WHOLE board.
+    var culturalInPlay = 0;
+    locs.forEach(function (lid) { aiByLoc[lid].forEach(function (e) { if (e.type === 'Cultural') culturalInPlay++; }); });
+
     // ── AI boosts (additive onto each entry.ip) ──
     locs.forEach(function (lid) {
       var arr = aiByLoc[lid], loc = G.locations.find(function (l) { return l.id === lid; });
@@ -1244,6 +1248,7 @@
       if (has(62)) arr.forEach(function (e) { if ((e.type === 'Religious' || e.type === 'Political') && e.cardId !== 62) e.ip += 1; }); // Hieroglyphics (aura halved to +1)
       var scribes = arr.filter(function (e) { return e.cardId === 40; }).length;                                       // Scribe (Meso) +1 to others
       if (scribes) arr.forEach(function (e) { if (e.cardId !== 40) e.ip += scribes; });
+      arr.forEach(function (e) { if (e.cardId === 36) e.ip += arr.length - 1; });                                     // Tribe: +1 per OTHER own card here
       if (has(49) && arr.some(function (e) { return e.type === 'Cultural' && e.cardId !== 49; })) {                    // Phoenicians (+1 if Cultural host)
         var ph = arr.find(function (e) { return e.cardId === 49; }); if (ph) ph.ip += 1;
       }
@@ -1259,7 +1264,7 @@
         var bid = pair[0], amt = pair[1];
         if (has(bid)) { var o = arr.filter(function (e) { return e.cardId !== bid; }); for (var i = 0; i < Math.min(2, o.length); i++) o[i].ip += amt; }
       });
-      if (has(43)) { var g = arr.find(function (e) { return e.cardId === 43; }); if (g) g.ip += Math.max(0, (G.culturalCount && G.culturalCount.opp) || 0); } // Gilgamesh
+      if (has(43)) { var g = arr.find(function (e) { return e.cardId === 43; }); if (g) g.ip += Math.max(0, culturalInPlay - 1); }   // Gilgamesh: +1 per OTHER own Cultural card in play (any location)
       arr.forEach(function (e) { if (e.cardId === 31 || e.cardId === 59) e.ip += 1; });                                // Megalith / Obelisk (EoT +1)
       if (loc && loc.abilityKey === 'LABOR_PLUS_2_HERE')    arr.forEach(function (e) { if (e.type === 'Labor')    e.ip += 2; }); // Euphrates
       if (loc && loc.abilityKey === 'MILITARY_PLUS_1_HERE') arr.forEach(function (e) { if (e.type === 'Military') e.ip += 1; }); // Tigris
@@ -1714,6 +1719,7 @@
   function _giantRevealOrder(cardId) {
     if (cardId === 65) return 0;                                // Imhotep — earliest: his mint needs HAND ROOM, so go before other card-granters
     if (cardId === 62 || cardId === 41 || cardId === 45 || cardId === 40) return 1;  // type auras
+    if (cardId === 43) return 6;                                // Gilgamesh — after this turn's other plays, so same-turn Cultural cards are IN PLAY when he counts
     if (cardId === 47) return 7;                                // Hammurabi — AFTER the bait body, so his destruction sacrifices it
     if (cardId === 57) return 8;                                // Pyramid — grabs the built board → late
     if (cardId === 54) return 9;                                // Papyrus — AFTER Pyramid, so it copies the buffed Pyramid

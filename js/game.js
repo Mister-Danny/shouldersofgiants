@@ -317,7 +317,6 @@
 
     G.locationBoosts         = {};   // { locId: { player: [...], opp: [...] } } — rebuilt by evaluateContinuous
     G.playOrderCounter       = 0;   // increments on every play-from-hand; stored on each sd.playTime
-    G.culturalCount          = { player: 0, opp: 0 };  // cumulative Cultural plays per owner (Gilgamesh)
 
     G.bonusCapitalNextTurn   = 0;
     G.aiBonusCapitalNextTurn = 0;
@@ -1780,13 +1779,6 @@
           if (rSd && rLocId !== null) {
             rSd.playTime      = ++G.playOrderCounter;
             rSd.originalLocId = rLocId;
-          }
-          // (c) Cultural counter increment (Gilgamesh reads this)
-          if (rLocId !== null) {
-            var _pc = CARDS.find(function (c) { return c.id === item.cardId; });
-            if (_pc && _pc.type === 'Cultural') {
-              G.culturalCount[item.owner] = (G.culturalCount[item.owner] || 0) + 1;
-            }
           }
           // (c2) "Next Turn:" reveal effects (Ramses 53 — 2x IP to this turn's
           //      Cultural reveals). Applied per-card at reveal so within-turn order

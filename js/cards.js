@@ -282,10 +282,10 @@ const CARDS = [
     image: "images/cards/prehistorycards/otzicard.jpg", locked: true
   },
   {
-    id: 36, name: "Tribe", cc: 2, ip: 2,
+    id: 36, name: "Tribe", cc: 2, ip: 1,                      // REWORKED: continuous +1 per OTHER own card here (was 2 IP, Next Turn: +1 per card played here)
     type: "Prehistory", type2: null, era: "Prehistory",
     abilityName: "Strength In Numbers",
-    ability: "Next Turn:\nGain +1 IP for every card you play here.",
+    ability: "Continuous:\nGain +1 IP for other cards here.",
     image: "images/cards/prehistorycards/tribecard.jpg", locked: true
   },
 
@@ -337,10 +337,10 @@ const CARDS = [
     image: "images/cards/mesopotamiacards/soldier@0.5x.jpg", locked: true
   },
   {
-    id: 43, name: "Gilgamesh", cc: 5, ip: 5,
+    id: 43, name: "Gilgamesh", cc: 5, ip: 5,                    // REWORKED: At Once, +1 per own Cultural card IN PLAY (was Continuous, +1 per Cultural card ever played)
     type: "Cultural", type2: null, era: "Mesopotamia",
     abilityName: "Epic Hero",
-    ability: "Continuous:\nGains +1 IP for each Cultural card you've played.",
+    ability: "At Once:\nGain +1 IP for each of your Cultural cards in play.",
     image: "images/cards/mesopotamiacards/gilgamesh@0.5x.jpg", locked: true
   },
   {

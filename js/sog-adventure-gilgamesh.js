@@ -194,7 +194,7 @@ SOG.GilgameshBattle = (function () {
      rules. Goal: the AI plays cards where their abilities actually do
      something. Gilgamesh deck (9): 38 Priest(Rel), 39 Farmer(Labor),
      40 Scribe(Cul,boost-before), 41 Canals(Sci), 42 Soldier(Mil,strike),
-     43 Gilgamesh(Cul,+1/Cultural), 45 Ziggurat(Rel,+1 Religious),
+     43 Gilgamesh(Cul, At Once +1 per own Cultural IN PLAY), 45 Ziggurat(Rel,+1 Religious),
      48 Chariot(Mil,move+strike), 49 Phoenicians(Cul,attach-Cultural). */
 
   function _gAiTypeOf(cardId) {
@@ -240,7 +240,7 @@ SOG.GilgameshBattle = (function () {
   // "Hold" cards play poorly now and want a later turn / a prerequisite.
   function _gAiHeld(cardId, turn) {
     if (cardId === 49) return !_gAiHasCulturalAnywhere(); // Phoenicians: need a Cultural to attach to
-    if (cardId === 43) return turn < 3;                   // Gilgamesh card: play in the back half
+    if (cardId === 43) return turn < 3 || (turn < 4 && !_gAiHasCulturalAnywhere());   // Gilgamesh card: back half, and only once a Cultural card is IN PLAY to count (his At Once snapshots the board)
     return false;
   }
   // Preferred synergy location for a card (open locs only); null → no preference.
