@@ -559,6 +559,13 @@ window.SogAccount = (function () {
      invite code is not a credential). */
   var PENDING_INVITE_KEY = 'sog_pending_teacher_invite';
 
+  // Google sign-in succeeded but this account has no /teachers doc yet, so the
+  // invite code is still outstanding. The user STAYS signed in while the UI
+  // asks for it (js/account-ui.js _stepGoogleInvite) — signing them out here
+  // dead-ends the flow on an empty form with nothing to show for the popup
+  // they just completed, which is how it failed in testing.
+  var _pendingGoogleSignup = null;   // { user, isNew }
+
   function _googleProvider() {
     var provider = new firebase.auth.GoogleAuthProvider();
     provider.addScope('email');
@@ -595,57 +602,98 @@ window.SogAccount = (function () {
         return;
       }
 
-      // First time with this Google account: an invite code is required, the
-      // same as the email signup form. Without one, don't leave the device
-      // signed in as a Google user with no teacher doc — sign back out so the
-      // next screen is the normal signed-out state, and tell the UI to ask.
+      // First time with this Google account: the invite code is still needed,
+      // same as the email form. Stay signed in and hand the UI what it needs to
+      // ask for it — finishTeacherGoogleSignup() completes the account,
+      // cancelTeacherGoogleSignup() backs the whole thing out.
       if (!inviteCode) {
-        firebase.auth().signOut().catch(function () {});
+        _pendingGoogleSignup = { user: user, isNew: isNew };
         var needErr = new Error('An invite code is required the first time you sign in with Google.');
         needErr.code = 'invite-required';
-        cb(needErr, null);
+        cb(needErr, _teacherGoogleResult(user, false));
         return;
       }
 
-      var teacherData = {
-        email:       user.email || '',
-        inviteCode:  inviteCode,
-        displayName: user.displayName || user.email || 'Teacher',
-        createdAt:   firebase.firestore.FieldValue.serverTimestamp()
-      };
-      _withTimeout(_db().collection('teachers').doc(user.uid).set(teacherData), WRITE_TIMEOUT_MS).then(function () {
-        // Same ungrouped /players doc the email signup bootstraps, so a
-        // teacher's own adventure progress round-trips across devices.
-        var playerData = {
-          username:   teacherData.displayName,
-          classCode:  '',
-          teacherUid: '',
-          progress:   {},
-          createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
-          lastActive: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        _withTimeout(_db().collection('players').doc(user.uid).set(playerData, { merge: true }), WRITE_TIMEOUT_MS)
-          .then(function () { cb(null, _teacherGoogleResult(user, false)); })
-          .catch(function (playerWriteErr) {
-            console.warn('[Account] /players/{uid} bootstrap failed for Google teacher — will self-heal on next checkpoint', playerWriteErr);
-            cb(null, _teacherGoogleResult(user, false));
-          });
-      }).catch(function (writeErr) {
-        console.error('[Account] /teachers/{uid} write failed for Google sign-in', writeErr);
-        // Roll back the way the email path does — but only delete a user this
-        // sign-in actually created. An existing Google user (someone who has
-        // signed in before and is now retrying with a bad code) must never be
-        // deleted; signing out is the correct undo there.
-        var undo = isNew ? user.delete() : firebase.auth().signOut();
-        undo.catch(function (undoErr) {
-          console.error('[Account] Google teacher rollback failed', undoErr);
-        }).then(function () {
-          cb(_friendlyTeacherSignupError(writeErr), null);
-        });
-      });
+      _createTeacherDocFor(user, isNew, inviteCode, cb);
     }).catch(function (readErr) {
       console.error('[Account] /teachers/{uid} lookup failed after Google sign-in', readErr);
       cb(readErr, null);
+    });
+  }
+
+  // Writes /teachers/{uid} (invite-gated by the rules) + the ungrouped
+  // /players/{uid} doc, for a user already signed in via Google. Shared by the
+  // straight-through path and the deferred "enter your code now" path.
+  function _createTeacherDocFor(user, isNew, inviteCode, cb) {
+    var teacherData = {
+      email:       user.email || '',
+      inviteCode:  inviteCode,
+      displayName: user.displayName || user.email || 'Teacher',
+      createdAt:   firebase.firestore.FieldValue.serverTimestamp()
+    };
+    _withTimeout(_db().collection('teachers').doc(user.uid).set(teacherData), WRITE_TIMEOUT_MS).then(function () {
+      _pendingGoogleSignup = null;
+      // Same ungrouped /players doc the email signup bootstraps, so a
+      // teacher's own adventure progress round-trips across devices.
+      var playerData = {
+        username:   teacherData.displayName,
+        classCode:  '',
+        teacherUid: '',
+        progress:   {},
+        createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
+        lastActive: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      _withTimeout(_db().collection('players').doc(user.uid).set(playerData, { merge: true }), WRITE_TIMEOUT_MS)
+        .then(function () { cb(null, _teacherGoogleResult(user, false)); })
+        .catch(function (playerWriteErr) {
+          console.warn('[Account] /players/{uid} bootstrap failed for Google teacher — will self-heal on next checkpoint', playerWriteErr);
+          cb(null, _teacherGoogleResult(user, false));
+        });
+    }).catch(function (writeErr) {
+      console.error('[Account] /teachers/{uid} write failed for Google sign-in', writeErr);
+      // A bad invite code is the likely cause and it is worth retrying, so keep
+      // the session (and _pendingGoogleSignup) alive and let the UI ask again.
+      cb(_friendlyTeacherSignupError(writeErr), _teacherGoogleResult(user, false));
+    });
+  }
+
+  /**
+   * Completes a signup that stopped at 'invite-required': the user is still
+   * signed in via Google, this supplies the code.
+   */
+  function finishTeacherGoogleSignup(inviteCode, cb) {
+    var pending = _pendingGoogleSignup;
+    var user = (pending && pending.user) || firebase.auth().currentUser;
+    if (!user) { cb(new Error('Signed out — start the Google sign-in again.'), null); return; }
+    var code = (inviteCode || '').trim().toUpperCase();
+    if (!code) {
+      var err = new Error('An invite code is required.');
+      err.code = 'invite-required';
+      cb(err, _teacherGoogleResult(user, false));
+      return;
+    }
+    _createTeacherDocFor(user, !!(pending && pending.isNew), code, cb);
+  }
+
+  /**
+   * Abandons a signup stopped at 'invite-required'. Deletes the Auth user when
+   * this sign-in created it (no teacher doc was ever written, so it would just
+   * be litter); otherwise signs out, which is the correct undo for someone who
+   * already had an account here.
+   */
+  function cancelTeacherGoogleSignup(cb) {
+    var pending = _pendingGoogleSignup;
+    _pendingGoogleSignup = null;
+    var user = (pending && pending.user) || firebase.auth().currentUser;
+    var done = function () {
+      if (window.SogAuth && typeof window.SogAuth.refresh === 'function') window.SogAuth.refresh();
+      if (cb) cb();
+    };
+    if (!user) { done(); return; }
+    var undo = (pending && pending.isNew) ? user.delete() : firebase.auth().signOut();
+    undo.then(done, function (err) {
+      console.warn('[Account] Abandoning Google signup failed — signing out instead', err);
+      firebase.auth().signOut().then(done, done);
     });
   }
 
@@ -771,6 +819,8 @@ window.SogAccount = (function () {
     signUpTeacher:     signUpTeacher,
     loginTeacher:      loginTeacher,
     signInTeacherWithGoogle:      signInTeacherWithGoogle,
+    finishTeacherGoogleSignup:    finishTeacherGoogleSignup,
+    cancelTeacherGoogleSignup:    cancelTeacherGoogleSignup,
     completeTeacherGoogleRedirect: completeTeacherGoogleRedirect,
     sendPasswordReset: sendPasswordReset,
     checkpointSave:    checkpointSave,

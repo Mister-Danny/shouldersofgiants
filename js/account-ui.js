@@ -556,15 +556,53 @@ window.SogAccountUI = (function () {
     window.SogAccount.signInTeacherWithGoogle(inviteCode, function (err, result) {
       if (err) {
         if (err.code === 'popup-cancelled') { _stepTeacherSignup(null, prefill); return; }
-        if (err.code === 'invite-required') {
-          _stepTeacherSignup('New here? Enter your invite code, then tap Continue with Google.', prefill);
-          return;
-        }
+        // Signed in fine, but this Google account is new here and still owes an
+        // invite code. They stay signed in while we ask — bouncing back to the
+        // empty signup form throws away the sign-in they just completed.
+        if (err.code === 'invite-required') { _stepGoogleInvite(result); return; }
         console.error('[AccountUI] Teacher Google sign-in failed', err);
         _stepTeacherSignup(_teacherErrorMessage(err), prefill);
         return;
       }
       _stepTeacherSignupSuccess(result, result.existing);
+    });
+  }
+
+  /* ── Step: invite code, after a Google sign-in ──────────────────────────
+     The second half of first-time Google signup. CANCEL backs the whole thing
+     out (js/account.js cancelTeacherGoogleSignup deletes the just-created Auth
+     user rather than leaving it stranded with no teacher doc). */
+  function _stepGoogleInvite(info, errorMsg) {
+    var who = (info && (info.email || info.displayName)) || 'your Google account';
+    _render(
+      'ONE MORE STEP',
+      '<p>Signed in as <strong>' + _escapeHtml(who) + '</strong>.</p>' +
+      '<p>Enter your invite code to finish setting up your teacher account.</p>' +
+      '<input type="text" id="af-google-invite" class="account-flow-input" maxlength="8" ' +
+        'placeholder="INVITE CODE" autocomplete="off" spellcheck="false">' +
+      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : ''),
+      '<button class="btn-snes" id="af-google-invite-submit">FINISH SETUP</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-google-invite-cancel">CANCEL</button>'
+    );
+    var input = _byId('af-google-invite');
+    input.focus();
+    function submit() {
+      var code = input.value;
+      _render('ONE MOMENT', '<p>Setting up your teacher account…</p>', '');
+      window.SogAccount.finishTeacherGoogleSignup(code, function (err, result) {
+        if (err) {
+          console.error('[AccountUI] Google teacher signup failed', err);
+          _stepGoogleInvite(result || info, _teacherErrorMessage(err));
+          return;
+        }
+        _stepTeacherSignupSuccess(result, false);
+      });
+    }
+    _byId('af-google-invite-submit').addEventListener('click', submit);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    _byId('af-google-invite-cancel').addEventListener('click', function () {
+      _render('ONE MOMENT', '<p>Cancelling…</p>', '');
+      window.SogAccount.cancelTeacherGoogleSignup(function () { _stepChooser(); });
     });
   }
 
@@ -695,7 +733,7 @@ window.SogAccountUI = (function () {
 
     window.SogAccount.completeTeacherGoogleRedirect(function (err, result) {
       if (err) {
-        if (err.code === 'invite-required') { _stepTeacherSignup('Enter your invite code, then continue with Google.'); return; }
+        if (err.code === 'invite-required') { _stepGoogleInvite(result); return; }
         _stepTeacherSignup(_teacherErrorMessage(err));
         return;
       }

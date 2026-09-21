@@ -13082,3 +13082,18 @@ body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract 
   color: var(--text-dim);
   text-align: center;
 }
+
+/* Account-flow steps can carry three wide buttons (CREATE TEACHER ACCOUNT /
+   CONTINUE WITH GOOGLE / BACK), which run off the modal's right edge in the
+   base single-row layout — .popup-actions .btn-snes sets flex-shrink: 0, so
+   they overflow rather than shrink. Wrapping keeps every button whole and
+   inside the box at any width; steps with one or two buttons are unaffected.
+   The chooser's own :has(#af-teacher) grid above still wins for that step. */
+#account-flow-actions {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#account-flow-actions .btn-snes {
+  max-width: 100%;
+  box-sizing: border-box;
+}
