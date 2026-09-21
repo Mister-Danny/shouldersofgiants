@@ -222,6 +222,10 @@ window.TeacherDashboard = (function () {
         players.push({
           uid:              doc.id,
           username:         data.username,
+          // Written at signup by js/account.js signUpStudent so a lost card is
+          // recoverable. Readable only by this student and this teacher
+          // (firestore.rules). Blank for accounts created before that shipped.
+          passphrase:       data.passphrase || '',
           classCode:        data.classCode,
           furthestProgress: stats.furthestProgress,
           learningCorrect:  stats.learningCorrect,
@@ -246,6 +250,14 @@ window.TeacherDashboard = (function () {
     } catch (e) { return '—'; }
   }
 
+  /* Join link for a class: the student clicks it and lands straight in the
+     signup flow with this class pre-filled (js/account-ui.js init). Built off
+     location so it works on the live site, a localhost dev server or a
+     preview copy without anything to configure. */
+  function joinLinkFor(code) {
+    return location.origin + location.pathname + '?join=' + encodeURIComponent(code);
+  }
+
   function _renderClassRow(c, isInactive) {
     return '<div class="td-class-row' + (isInactive ? ' td-class-row-inactive' : '') + '">' +
       '<div class="td-class-code">' + _escapeHtml(c.code) + '</div>' +
@@ -254,8 +266,12 @@ window.TeacherDashboard = (function () {
         (isInactive ? ' disabled' : '') + '>' +
       (isInactive
         ? '<span class="td-class-badge">INACTIVE</span>'
-        : '<button class="btn-snes td-regenerate-btn" data-code="' + _escapeHtml(c.code) + '">REGENERATE</button>' +
+        : '<button class="btn-snes td-copy-link-btn" data-code="' + _escapeHtml(c.code) + '">COPY JOIN LINK</button>' +
+          '<button class="btn-snes td-regenerate-btn" data-code="' + _escapeHtml(c.code) + '">REGENERATE</button>' +
           '<button class="btn-snes btn-snes-remove td-deactivate-btn" data-code="' + _escapeHtml(c.code) + '">DEACTIVATE</button>') +
+      (isInactive ? '' :
+        '<div class="td-join-link"><span>Share with students:</span> ' +
+          '<code class="td-join-link-url">' + _escapeHtml(joinLinkFor(c.code)) + '</code></div>') +
       '</div>';
   }
 
@@ -303,12 +319,19 @@ window.TeacherDashboard = (function () {
       html += '<div class="td-roster-group">';
       html += '<div class="td-roster-group-title">' + _escapeHtml(label) + ' (' + byClass[code].length + ')</div>';
       html += '<table class="td-roster-table"><thead><tr>' +
-        '<th>Username</th><th>Furthest Progress</th><th>Learning Checks</th><th>Time Played</th><th>Last Active</th>' +
+        '<th>Username</th><th>Passphrase</th><th>Furthest Progress</th><th>Learning Checks</th><th>Time Played</th><th>Last Active</th>' +
         '</tr></thead><tbody>';
       byClass[code].forEach(function (p) {
         var learningText = p.learningTotal > 0 ? (p.learningCorrect + ' / ' + p.learningTotal) : '—';
+        // Hidden until clicked: this is a working login, and a roster is often
+        // on a projector. '—' means the account predates passphrase storage
+        // (or the student joined no class), and can't be recovered.
+        var passCell = p.passphrase
+          ? '<button class="td-reveal-btn" data-pass="' + _escapeHtml(p.passphrase) + '">Show</button>'
+          : '—';
         html += '<tr>' +
           '<td>' + _escapeHtml(p.username) + '</td>' +
+          '<td class="td-pass-cell">' + passCell + '</td>' +
           '<td>' + _escapeHtml(p.furthestProgress) + '</td>' +
           '<td>' + _escapeHtml(learningText) + '</td>' +
           '<td>' + _escapeHtml(_formatDuration(p.playtimeSeconds)) + '</td>' +
@@ -318,6 +341,22 @@ window.TeacherDashboard = (function () {
       html += '</tbody></table></div>';
     });
     return html;
+  }
+
+  function _copyFallback(text, done) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      done();
+    } catch (e) {
+      window.prompt('Copy this link for your students:', text);
+    }
   }
 
   function _wireEvents(classes) {
@@ -334,6 +373,37 @@ window.TeacherDashboard = (function () {
         _refreshTeacherDoc();
       });
     });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.td-copy-link-btn'), function (btn) {
+      btn.addEventListener('click', function () {
+        var link = joinLinkFor(btn.getAttribute('data-code'));
+        var done = function () {
+          var was = btn.textContent;
+          btn.textContent = 'COPIED';
+          setTimeout(function () { btn.textContent = was; }, 1500);
+        };
+        // navigator.clipboard needs a secure context (https / localhost); the
+        // textarea fallback keeps this working anywhere else.
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(link).then(done, function () { _copyFallback(link, done); });
+        } else {
+          _copyFallback(link, done);
+        }
+      });
+    });
+
+    // Delegated: _wireEvents runs while the roster is still "Loading…", so the
+    // reveal buttons don't exist yet — and the roster re-renders on its own
+    // afterwards. Binding to the container covers every render.
+    var rosterEl = _byId('td-roster');
+    if (rosterEl && !rosterEl._revealWired) {
+      rosterEl._revealWired = true;
+      rosterEl.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest('.td-reveal-btn') : null;
+        if (!btn || !rosterEl.contains(btn)) return;
+        btn.parentNode.textContent = btn.getAttribute('data-pass');
+      });
+    }
 
     Array.prototype.forEach.call(document.querySelectorAll('.td-regenerate-btn'), function (btn) {
       btn.addEventListener('click', function () {

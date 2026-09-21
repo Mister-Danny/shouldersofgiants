@@ -356,3 +356,41 @@ test('abandoned-session flush (owner merge with outcome abandoned + play log) is
   // What the client-side uid check prevents: someone else's flush is denied.
   await assertFails(asSomeoneElse.doc('sessions/session-abandoned').set({ ...flush, uid: 'someoneElse' }, { merge: true }));
 });
+
+test('student passphrase: written by the student, readable by their teacher only', async () => {
+  await seed(async (db) => {
+    await db.doc('classes/E233V7').set({ ownerUid: 'teacherA', label: 'Period 3', active: true, createdAt: new Date() });
+  });
+  const asStudent      = testEnv.authenticatedContext('studentJ').firestore();
+  const asTeacherA     = testEnv.authenticatedContext('teacherA').firestore();
+  const asTeacherB     = testEnv.authenticatedContext('teacherB').firestore();
+  const asAnonymous    = testEnv.unauthenticatedContext().firestore();
+  const playerDoc = {
+    username: 'lucythebrave4', passphrase: 'cometwaffle42', classCode: 'E233V7', teacherUid: 'teacherA',
+    progress: {}, createdAt: new Date(), lastActive: new Date(),
+  };
+
+  // The student writes their own doc, passphrase included (js/account.js signUpStudent).
+  await assertSucceeds(asStudent.doc('players/studentJ').set(playerDoc));
+
+  // Their teacher can read it back — this is what the dashboard roster shows.
+  const mine = await assertSucceeds(asTeacherA.doc('players/studentJ').get());
+  assert.equal(mine.data().passphrase, 'cometwaffle42');
+  const roster = await assertSucceeds(asTeacherA.collection('players').where('teacherUid', '==', 'teacherA').get());
+  assert.deepEqual(roster.docs.map((d) => d.data().passphrase), ['cometwaffle42']);
+
+  // Nobody else can, including another teacher and a signed-out visitor.
+  await assertFails(asTeacherB.doc('players/studentJ').get());
+  await assertFails(asAnonymous.doc('players/studentJ').get());
+  await assertFails(asTeacherB.collection('players').where('teacherUid', '==', 'teacherA').get());
+
+  // A checkpoint save leaves the stored passphrase alone (merge, pinned fields unchanged).
+  await assertSucceeds(asStudent.doc('players/studentJ').set(
+    { username: 'lucythebrave4', classCode: 'E233V7', teacherUid: 'teacherA', progress: { modules: {} }, lastActive: new Date() },
+    { merge: true }
+  ));
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const after = await context.firestore().doc('players/studentJ').get();
+    assert.equal(after.data().passphrase, 'cometwaffle42');
+  });
+});
