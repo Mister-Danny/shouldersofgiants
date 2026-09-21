@@ -13029,3 +13029,55 @@ body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract 
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.65);
   filter: brightness(1.06);
 }
+
+/* ── Join links + student logins (teacher dashboard) ───────────────────── */
+/* The link wraps onto its own full-width line under the class row's controls
+   so a long URL never squeezes the label input or the buttons. */
+.td-class-row {
+  flex-wrap: wrap;
+}
+.td-join-link {
+  flex-basis: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.td-join-link-url {
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 12px;
+  color: var(--text-white);
+  word-break: break-all;
+}
+
+/* Passphrases stay hidden behind this until clicked — a roster is often on a
+   projector, and every one of these is a working student login. */
+.td-reveal-btn {
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--bg-btn);
+  border: 2px solid var(--border-mid);
+  border-radius: 3px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.td-reveal-btn:hover {
+  color: var(--snes-yellow);
+  border-color: var(--snes-yellow);
+}
+.td-pass-cell {
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  white-space: nowrap;
+}
+
+/* Separator line above an alternative action (e.g. Continue with Google). */
+.account-flow-or {
+  margin-top: 12px;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}

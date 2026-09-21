@@ -103,17 +103,24 @@ window.SogAccountUI = (function () {
     });
   }
 
-  /* ── Step: confirm class (student signup step 2-3) ───────────────────── */
-  function _stepConfirmClass() {
+  /* ── Step: confirm class (student signup step 2-3) ─────────────────────
+     fromLink: arrived via a teacher's join link (?join=CODE) rather than by
+     typing a code, so there is no code step to go BACK to — that button
+     closes instead, leaving the student on the home screen as a guest. */
+  function _stepConfirmClass(fromLink) {
     _render(
       'CONFIRM',
       '<p>Joining: <strong>' + _escapeHtml(_pendingClassInfo.label) + '</strong></p>' +
-      '<p>Not your class? Go back and check the code with your teacher.</p>',
+      (fromLink
+        ? '<p>Not your class? Check the link with your teacher — you can keep playing as a guest for now.</p>'
+        : '<p>Not your class? Go back and check the code with your teacher.</p>'),
       '<button class="btn-snes" id="af-confirm">CONFIRM</button>' +
-      '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
+      '<button class="btn-snes btn-snes-close" id="af-back">' + (fromLink ? 'NOT NOW' : 'BACK') + '</button>'
     );
     _byId('af-confirm').addEventListener('click', _stepSummon);
-    _byId('af-back').addEventListener('click', function () { _stepClassCode(); });
+    _byId('af-back').addEventListener('click', function () {
+      if (fromLink) _close(); else _stepClassCode();
+    });
   }
 
   /* ── Step: summon (student signup steps 3-6) ───────────────────────────
@@ -366,10 +373,13 @@ window.SogAccountUI = (function () {
         'placeholder="PASSWORD" autocomplete="current-password">' +
       (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
       (infoMsg  ? '<div class="account-flow-info">'  + _escapeHtml(infoMsg)  + '</div>' : '') +
-      '<div class="account-flow-forgot"><a href="#" id="af-forgot">Forgot password?</a></div>',
+      '<div class="account-flow-forgot"><a href="#" id="af-forgot">Forgot password?</a></div>' +
+      '<p class="account-flow-or">Teachers can also sign in with Google.</p>',
       '<button class="btn-snes" id="af-login-submit">LOG IN</button>' +
+      '<button class="btn-snes" id="af-login-google">CONTINUE WITH GOOGLE</button>' +
       '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
     );
+    _byId('af-login-google').addEventListener('click', function () { _submitTeacherGoogle('', {}); });
     var userInput = _byId('af-login-username');
     var passInput = _byId('af-login-passphrase');
     userInput.focus();
@@ -493,10 +503,19 @@ window.SogAccountUI = (function () {
         'placeholder="PASSWORD" autocomplete="new-password">' +
       '<input type="text" id="af-teacher-invite" class="account-flow-input" maxlength="8" ' +
         'placeholder="INVITE CODE" autocomplete="off" spellcheck="false" value="' + _escapeHtml(prefill.inviteCode || '') + '">' +
-      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : ''),
+      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
+      '<p class="account-flow-or">or skip the password — your invite code still applies</p>',
       '<button class="btn-snes" id="af-teacher-submit">CREATE TEACHER ACCOUNT</button>' +
+      '<button class="btn-snes" id="af-teacher-google">CONTINUE WITH GOOGLE</button>' +
       '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
     );
+    _byId('af-teacher-google').addEventListener('click', function () {
+      _submitTeacherGoogle(_byId('af-teacher-invite').value, {
+        displayName: _byId('af-teacher-name').value,
+        email:       _byId('af-teacher-email').value,
+        inviteCode:  _byId('af-teacher-invite').value
+      });
+    });
     var nameInput = _byId('af-teacher-name');
     nameInput.focus();
     function submit() {
@@ -528,9 +547,34 @@ window.SogAccountUI = (function () {
     });
   }
 
+  /* Google sign-in, shared by the teacher signup form (invite code typed in)
+     and the login form (returning teacher, no code needed). The popup path
+     resolves here; the redirect fallback resolves in init() instead, so both
+     land on the same screens. */
+  function _submitTeacherGoogle(inviteCode, prefill) {
+    _render('ONE MOMENT', '<p>Opening Google sign-in…</p>', '');
+    window.SogAccount.signInTeacherWithGoogle(inviteCode, function (err, result) {
+      if (err) {
+        if (err.code === 'popup-cancelled') { _stepTeacherSignup(null, prefill); return; }
+        if (err.code === 'invite-required') {
+          _stepTeacherSignup('New here? Enter your invite code, then tap Continue with Google.', prefill);
+          return;
+        }
+        console.error('[AccountUI] Teacher Google sign-in failed', err);
+        _stepTeacherSignup(_teacherErrorMessage(err), prefill);
+        return;
+      }
+      _stepTeacherSignupSuccess(result, result.existing);
+    });
+  }
+
   function _teacherErrorMessage(err) {
     var code = err && err.code;
     if (code === 'invite-invalid')              return "That code isn't valid. Check it with whoever gave it to you.";
+    if (code === 'auth/account-exists-with-different-credential')
+      return 'That email already has a password account here. Log in with your email and password instead.';
+    if (code === 'auth/unauthorized-domain')    return 'Google sign-in isn’t enabled for this site yet.';
+    if (code === 'auth/popup-blocked')          return 'Your browser blocked the Google window. Allow popups, or try again.';
     if (code === 'auth/email-already-in-use')   return 'An account with that email already exists. Try logging in instead.';
     if (code === 'auth/invalid-email')          return 'Enter a valid email address.';
     if (code === 'auth/weak-password')          return 'Password must be at least 6 characters.';
@@ -539,12 +583,13 @@ window.SogAccountUI = (function () {
     return 'Something went wrong creating your account. Please try again.';
   }
 
-  function _stepTeacherSignupSuccess(result) {
+  function _stepTeacherSignupSuccess(result, existing) {
     _render(
-      'TEACHER ACCOUNT CREATED',
-      '<p>Welcome, ' + _escapeHtml(result.displayName) + '! Your teacher account is ready.</p>' +
-      '<p>Class management tools are coming soon. For now, use your email and password any time you need ' +
-        'to sign back in — Firebase’s standard password reset works if you forget it.</p>',
+      existing ? 'WELCOME BACK' : 'TEACHER ACCOUNT CREATED',
+      '<p>Welcome' + (existing ? ' back' : '') + ', ' + _escapeHtml(result.displayName) + '! ' +
+        (existing ? 'You’re signed in to your teacher account.' : 'Your teacher account is ready.') + '</p>' +
+      '<p>Open your dashboard to create a class and share its join link with students — they click the link ' +
+        'and the game sets them up, no codes to read out.</p>',
       '<button class="btn-snes" id="af-done">OK</button>'
     );
     _byId('af-done').addEventListener('click', function () {
@@ -595,6 +640,79 @@ window.SogAccountUI = (function () {
     });
   }
 
+  /* ── Join links (?join=CODE) ────────────────────────────────────────────
+     The teacher shares a link instead of dictating a code, so a student's
+     first screen is "Joining: Mr. S — Period 3" and the account exists before
+     they play rather than part-way through. Everything after the confirm step
+     is the existing signup flow, unchanged — including linkWithCredential
+     upgrading the anonymous session in place, so a student who had already
+     been playing as a guest on this device keeps that progress. */
+  function _stepJoinBroken() {
+    _render(
+      'CLASS LINK NOT WORKING',
+      '<p>That class link didn’t work. It may be out of date, or the class may have been closed. ' +
+        'Check with your teacher — you can keep playing as a guest in the meantime.</p>',
+      '<button class="btn-snes" id="af-ok">OK</button>'
+    );
+    _byId('af-ok').addEventListener('click', _close);
+  }
+
+  // Already signed in (a student with an account, or a teacher trying their
+  // own link). Joining would mean a second account, and firestore.rules pins
+  // class membership anyway, so offer the honest choice instead.
+  function _stepJoinAlreadySignedIn(label) {
+    _render(
+      'ALREADY SIGNED IN',
+      '<p>You’re already signed in on this device, so you don’t need to join ' +
+        '<strong>' + _escapeHtml(label) + '</strong> again.</p>' +
+      '<p>If this is someone else’s device, log out first and then open the link again.</p>',
+      '<button class="btn-snes" id="af-ok">KEEP PLAYING</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-logout">LOG OUT</button>'
+    );
+    _byId('af-ok').addEventListener('click', _close);
+    _byId('af-logout').addEventListener('click', _startLogout);   // reload keeps ?join= in the URL
+  }
+
+  function _startJoinFlow(code) {
+    _pendingClassInfo = null;
+    _render('ONE MOMENT', '<p>Checking your class link…</p>', '');
+    window.SogAccount.lookupClassCode(code, function (err, classInfo) {
+      if (err || !classInfo || classInfo.ungrouped) { _stepJoinBroken(); return; }
+      var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
+      if (user && !user.isAnonymous) { _stepJoinAlreadySignedIn(classInfo.label); return; }
+      _pendingClassInfo = classInfo;
+      _stepConfirmClass(true);
+    });
+  }
+
+  /**
+   * Boot hook: finishes a redirect-based teacher Google sign-in, then opens
+   * the join flow if this page was opened from a class link. Safe to call on
+   * every load — both branches no-op when there's nothing to do.
+   */
+  function init() {
+    if (!window.SogAccount) return;
+
+    window.SogAccount.completeTeacherGoogleRedirect(function (err, result) {
+      if (err) {
+        if (err.code === 'invite-required') { _stepTeacherSignup('Enter your invite code, then continue with Google.'); return; }
+        _stepTeacherSignup(_teacherErrorMessage(err));
+        return;
+      }
+      if (result) _stepTeacherSignupSuccess(result, result.existing);
+    });
+
+    var code = window.SogAccount.parseJoinCode(location.search, location.hash);
+    if (!code) return;
+    // Drop the parameter so a refresh (or a shared screenshot of the URL bar)
+    // doesn't re-run the flow; the code lives in _pendingClassInfo from here.
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+
+    var start = function () { _startJoinFlow(code); };
+    if (window.SogAuth && typeof window.SogAuth.ready === 'function') window.SogAuth.ready(start);
+    else start();
+  }
+
   /**
    * @param {string} [startStep] 'chooser' (default) or 'classcode' — the
    *   post-Otzi CREATE ACCOUNT modal's YES button jumps straight to
@@ -606,8 +724,12 @@ window.SogAccountUI = (function () {
     else _stepChooser();
   }
 
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+
   return {
     openFlow: openFlow,
+    init:     init,
     logout:   _startLogout
   };
 })();
