@@ -4625,10 +4625,12 @@ body[data-screen="overworld"] .guest-status-strip {
   flex: 1;
   min-height: 0;
   display: flex;
-  gap: 28px;
+  gap: 40px;
   overflow: hidden;
 }
 
+/* Classes take a third, the roster two thirds: the roster is a wide table,
+   the class cards wrap happily. */
 #td-classes-section, #td-roster-section {
   flex: 1;
   min-width: 0;
@@ -4756,13 +4758,15 @@ body[data-screen="overworld"] .guest-status-strip {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  table-layout: fixed;
 }
 .td-roster-table th, .td-roster-table td {
   text-align: left;
-  padding: 6px 8px;
+  vertical-align: top;
+  padding: 8px 16px 8px 0;
   border-bottom: 1px solid var(--border-mid);
-  overflow-wrap: break-word;
+}
+.td-roster-table td {
+  overflow-wrap: break-word;   /* whole words size the column; a username breaks only if the table truly can't fit */
 }
 .td-roster-table th {
   color: var(--text-dim);
@@ -13032,6 +13036,14 @@ body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract 
 }
 
 /* ── Join links + student logins (teacher dashboard) ───────────────────── */
+#td-roster-section {
+  flex: 2;
+}
+/* The label input keeps a usable width in the narrower classes column; the
+   buttons wrap onto the next line when there isn't room beside it. */
+.td-class-label-input {
+  flex: 1 1 120px;
+}
 /* The link wraps onto its own full-width line under the class row's controls
    so a long URL never squeezes the label input or the buttons. */
 .td-class-row {
@@ -13071,7 +13083,6 @@ body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract 
 }
 .td-pass-cell {
   font-family: var(--font-ui, 'Source Sans 3', sans-serif);
-  white-space: nowrap;
 }
 
 /* Separator line above an alternative action (e.g. Continue with Google). */
