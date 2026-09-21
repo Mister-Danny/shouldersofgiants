@@ -374,7 +374,8 @@ window.SogAccountUI = (function () {
       (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
       (infoMsg  ? '<div class="account-flow-info">'  + _escapeHtml(infoMsg)  + '</div>' : '') +
       '<div class="account-flow-forgot"><a href="#" id="af-forgot">Forgot password?</a></div>' +
-      '<p class="account-flow-or">Teachers can also sign in with Google.</p>',
+      '<p class="account-flow-or">Teachers can also sign in with Google. Already have a password account? ' +
+        'Log in with it here first, then use CONNECT GOOGLE in your dashboard.</p>',
       '<button class="btn-snes" id="af-login-submit">LOG IN</button>' +
       '<button class="btn-snes" id="af-login-google">CONTINUE WITH GOOGLE</button>' +
       '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
@@ -560,12 +561,22 @@ window.SogAccountUI = (function () {
         // invite code. They stay signed in while we ask — bouncing back to the
         // empty signup form throws away the sign-in they just completed.
         if (err.code === 'invite-required') { _stepGoogleInvite(result); return; }
+        if (err.code === 'google-needs-password') { _stepGoogleLinkPassword(result); return; }
         console.error('[AccountUI] Teacher Google sign-in failed', err);
         _stepTeacherSignup(_teacherErrorMessage(err), prefill);
         return;
       }
-      _stepTeacherSignupSuccess(result, result.existing);
+      _afterGoogleSignIn(result);
     });
+  }
+
+  // Where a successful Google sign-in lands: the normal welcome, the "Google
+  // connected" note for a finished link, or — for a gmail password account
+  // Google just took over — the offer to put a password back.
+  function _afterGoogleSignIn(result) {
+    if (result.passwordLost) { _stepRestorePassword(result); return; }
+    if (result.linked) { _stepGoogleLinked(result); return; }
+    _stepTeacherSignupSuccess(result, result.existing);
   }
 
   /* ── Step: invite code, after a Google sign-in ──────────────────────────
@@ -579,11 +590,27 @@ window.SogAccountUI = (function () {
       '<p>Signed in as <strong>' + _escapeHtml(who) + '</strong>.</p>' +
       '<p>Enter your invite code to finish setting up your teacher account.</p>' +
       '<input type="text" id="af-google-invite" class="account-flow-input" maxlength="8" ' +
-        'placeholder="INVITE CODE" autocomplete="off" spellcheck="false">' +
-      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : ''),
+        'placeholder="INVITE CODE" autocomplete="off" spellcheck="false" value="' +
+        _escapeHtml((info && info.inviteCode) || '') + '">' +
+      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
+      '<p class="account-flow-or">Already have a teacher account with a different email? ' +
+        'Connect this Google account to it instead, so your classes stay in one place.</p>',
       '<button class="btn-snes" id="af-google-invite-submit">FINISH SETUP</button>' +
+      '<button class="btn-snes" id="af-google-existing">I ALREADY HAVE AN ACCOUNT</button>' +
       '<button class="btn-snes btn-snes-close" id="af-google-invite-cancel">CANCEL</button>'
     );
+    _byId('af-google-existing').addEventListener('click', function () {
+      if (window.SogAccount.startLinkToExistingAccount()) {
+        _stepGoogleLinkPassword({ email: '', googleEmail: (info && info.email) || '', differentEmail: true });
+        return;
+      }
+      // No reusable Google credential from this sign-in (rare): back out
+      // cleanly and use the password-first route instead.
+      _render('ONE MOMENT', '<p>Cancelling…</p>', '');
+      window.SogAccount.cancelTeacherGoogleSignup(function () {
+        _stepLoginForm(null, 'Log in with your email and password, then use CONNECT GOOGLE in your dashboard.');
+      });
+    });
     var input = _byId('af-google-invite');
     input.focus();
     function submit() {
@@ -606,11 +633,158 @@ window.SogAccountUI = (function () {
     });
   }
 
+  /* ── Step: connect Google to an existing password account ───────────────
+     Password once, then the Google credential is linked to that same uid —
+     classes, roster and progress all stay put, and both sign-in methods keep
+     working. info = { email, googleEmail, differentEmail } */
+  function _stepGoogleLinkPassword(info, errorMsg) {
+    info = info || {};
+    var intro = info.differentEmail
+      ? '<p>Log in to your existing teacher account once. <strong>' + _escapeHtml(info.googleEmail || 'This Google account') +
+        '</strong> will be connected to it — same classes, and you can sign in either way.</p>'
+      : '<p><strong>' + _escapeHtml(info.email) + '</strong> already has a teacher account here. Enter its password once to connect ' +
+        (info.googleEmail && info.googleEmail !== info.email ? '<strong>' + _escapeHtml(info.googleEmail) + '</strong>' : 'Google') +
+        ' — same classes, and you can sign in either way.</p>';
+    _render(
+      'CONNECT GOOGLE',
+      intro +
+      '<input type="email" id="af-link-email" class="account-flow-input" placeholder="EMAIL" autocomplete="username" value="' +
+        _escapeHtml(info.email || '') + '">' +
+      '<input type="password" id="af-link-password" class="account-flow-input" placeholder="PASSWORD" autocomplete="current-password">' +
+      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
+      '<div class="account-flow-forgot"><a href="#" id="af-link-forgot">Forgot password?</a></div>',
+      '<button class="btn-snes" id="af-link-submit">CONNECT</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-link-cancel">CANCEL</button>'
+    );
+    var emailInput = _byId('af-link-email');
+    var passInput = _byId('af-link-password');
+    (info.email ? passInput : emailInput).focus();
+    function submit() {
+      var email = emailInput.value.trim();
+      if (!email || !passInput.value) { _stepGoogleLinkPassword(info, 'Enter your email and password.'); return; }
+      var next = Object.assign({}, info, { email: email });
+      _render('ONE MOMENT', '<p>Connecting Google…</p>', '');
+      window.SogAccount.linkGoogleWithPassword(email, passInput.value, function (err, result) {
+        if (!err) { _stepGoogleLinked(result); return; }
+        if (err.code === 'google-link-retry') { _stepGoogleLinkRetry(); return; }
+        if (err.code === 'google-link-expired') { _stepLoginForm(null, 'That Google sign-in expired. Log in with your password, then use CONNECT GOOGLE in your dashboard.', email); return; }
+        console.warn('[AccountUI] Connecting Google failed', err);
+        _stepGoogleLinkPassword(next, _linkErrorMessage(err));
+      });
+    }
+    _byId('af-link-submit').addEventListener('click', submit);
+    passInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    _byId('af-link-forgot').addEventListener('click', function (e) {
+      e.preventDefault();
+      var email = emailInput.value.trim();
+      if (!email) { _stepGoogleLinkPassword(info, 'Enter your email above first.'); return; }
+      window.SogAccount.sendPasswordReset(email, function (resetErr) {
+        _stepGoogleLinkPassword(Object.assign({}, info, { email: email }),
+          resetErr ? _resetErrorMessage(resetErr) : 'Reset email sent. Set a new password, then come back and connect.');
+      });
+    });
+    _byId('af-link-cancel').addEventListener('click', function () {
+      _render('ONE MOMENT', '<p>Cancelling…</p>', '');
+      window.SogAccount.cancelGoogleLink(function () { _stepLoginForm(); });
+    });
+  }
+
+  function _linkErrorMessage(err) {
+    var code = err && err.code;
+    if (code === 'not-a-teacher')               return 'No teacher account uses that email. Check the address you signed up with.';
+    if (code === 'google-is-other-teacher')     return 'That Google account already has its own teacher account here, so it can’t be connected to this one.';
+    if (code === 'auth/provider-already-linked') return 'This teacher account already has a different Google account connected.';
+    if (code === 'auth/credential-already-in-use' || code === 'auth/email-already-in-use')
+      return 'That Google account is already connected to another account here.';
+    return _teacherLoginErrorMessage(err);
+  }
+
+  // Password login worked but the parked Google credential didn't take
+  // (expired). They're signed in now, so one click re-opens Google as a link.
+  function _stepGoogleLinkRetry() {
+    _render(
+      'ALMOST DONE',
+      '<p>You’re logged in. Click below and pick your Google account once more to finish connecting it.</p>',
+      '<button class="btn-snes" id="af-link-again">CONNECT GOOGLE</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-link-skip">SKIP</button>'
+    );
+    _byId('af-link-again').addEventListener('click', _connectGoogle);
+    _byId('af-link-skip').addEventListener('click', function () { _stepWelcomeBack(true); });
+  }
+
+  // Dashboard entry: a teacher already logged in with their password. Runs
+  // straight from the click so the Google popup isn't blocked.
+  function _connectGoogle() {
+    _render('ONE MOMENT', '<p>Opening Google…</p>', '');
+    window.SogAccount.linkGoogleToCurrentUser(function (err, result) {
+      if (!err) {
+        if (result.alreadyLinked) {
+          _render('GOOGLE CONNECTED', '<p>Google is already connected to this account.</p>', '<button class="btn-snes" id="af-ok">OK</button>');
+          _byId('af-ok').addEventListener('click', _close);
+          return;
+        }
+        _stepGoogleLinked(result);
+        return;
+      }
+      if (err.code === 'google-needs-password') { _stepGoogleLinkPassword(result); return; }
+      if (err.code === 'popup-cancelled') { _close(); return; }
+      console.error('[AccountUI] Connect Google failed', err);
+      _render('CONNECT GOOGLE', '<div class="account-flow-error">' + _escapeHtml(_linkErrorMessage(err)) + '</div>',
+        '<button class="btn-snes btn-snes-close" id="af-ok">OK</button>');
+      _byId('af-ok').addEventListener('click', function () { _close(); location.reload(); });
+    });
+  }
+
+  function _stepGoogleLinked(result) {
+    var google = result && result.googleEmail;
+    _render(
+      'GOOGLE CONNECTED',
+      '<p>' + (google ? '<strong>' + _escapeHtml(google) + '</strong> is' : 'Google is') + ' now connected to your teacher account.</p>' +
+      '<p>Sign in with Google or with your email and password — both open the same account and classes.</p>',
+      '<button class="btn-snes" id="af-done">OK</button>'
+    );
+    _byId('af-done').addEventListener('click', function () { _close(); location.reload(); });
+  }
+
+  /* ── Step: Google took over a gmail password account ──────────────────
+     Firebase's rule, not ours: for an @gmail.com address Google is the
+     authority, so signing in with Google on an unverified gmail password
+     account keeps the account (same uid, same classes) but switches the
+     password off. Say so plainly and offer the password back right here. */
+  function _stepRestorePassword(result, errorMsg) {
+    _render(
+      'WELCOME BACK',
+      '<p>Welcome back, ' + _escapeHtml(result.displayName) + '. Your classes and students are all here.</p>' +
+      '<p>Heads up: because <strong>' + _escapeHtml(result.email) + '</strong> is a Gmail address, Google now handles ' +
+        'sign-in for it, and Google switched off this account’s old password. Set a password to keep both ways in ' +
+        '(reusing your old one is fine).</p>' +
+      '<input type="password" id="af-restore-password" class="account-flow-input" placeholder="PASSWORD" autocomplete="new-password">' +
+      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : ''),
+      '<button class="btn-snes" id="af-restore-submit">SET PASSWORD</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-restore-skip">GOOGLE ONLY</button>'
+    );
+    var input = _byId('af-restore-password');
+    input.focus();
+    function submit() {
+      if (input.value.length < 6) { _stepRestorePassword(result, 'Password must be at least 6 characters.'); return; }
+      _render('ONE MOMENT', '<p>Saving your password…</p>', '');
+      window.SogAccount.addPasswordToCurrentUser(input.value, function (err) {
+        if (err) { console.warn('[AccountUI] Restoring password failed', err); _stepRestorePassword(result, _teacherErrorMessage(err)); return; }
+        _stepGoogleLinked({ googleEmail: result.email });
+      });
+    }
+    _byId('af-restore-submit').addEventListener('click', submit);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    _byId('af-restore-skip').addEventListener('click', function () {
+      window.SogAccount.keepGoogleOnly(function () { _stepTeacherSignupSuccess(result, true); });
+    });
+  }
+
   function _teacherErrorMessage(err) {
     var code = err && err.code;
     if (code === 'invite-invalid')              return "That code isn't valid. Check it with whoever gave it to you.";
     if (code === 'auth/account-exists-with-different-credential')
-      return 'That email already has a password account here. Log in with your email and password instead.';
+      return 'That email already has a password account here. Log in with your email and password, then use CONNECT GOOGLE in your dashboard.';
     if (code === 'auth/unauthorized-domain')    return 'Google sign-in isn’t enabled for this site yet.';
     if (code === 'auth/popup-blocked')          return 'Your browser blocked the Google window. Allow popups, or try again.';
     if (code === 'auth/email-already-in-use')   return 'An account with that email already exists. Try logging in instead.';
@@ -734,10 +908,12 @@ window.SogAccountUI = (function () {
     window.SogAccount.completeTeacherGoogleRedirect(function (err, result) {
       if (err) {
         if (err.code === 'invite-required') { _stepGoogleInvite(result); return; }
+        if (err.code === 'google-needs-password') { _stepGoogleLinkPassword(result); return; }
+        if (err.code === 'google-is-other-teacher') { _stepLoginForm(_linkErrorMessage(err)); return; }
         _stepTeacherSignup(_teacherErrorMessage(err));
         return;
       }
-      if (result) _stepTeacherSignupSuccess(result, result.existing);
+      if (result) _afterGoogleSignIn(result);
     });
 
     var code = window.SogAccount.parseJoinCode(location.search, location.hash);
@@ -767,6 +943,7 @@ window.SogAccountUI = (function () {
 
   return {
     openFlow: openFlow,
+    connectGoogle: _connectGoogle,
     init:     init,
     logout:   _startLogout
   };

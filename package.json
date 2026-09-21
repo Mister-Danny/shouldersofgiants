@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "description": "Firestore security rules test harness (Phase 0 of AUTH_SPEC.md). Not part of the game bundle.",
   "scripts": {
-    "test:rules": "firebase emulators:exec --only firestore \"node --test\"",
+    "test:rules": "firebase emulators:exec --only auth,firestore \"node --test --test-concurrency=1\"",
     "test:boss-extract": "node --test test/boss-extract.test.js test/boss-extract-writeback.test.js",
     "test:overworld-extract": "node --test test/overworld-extract.test.js",
     "test:wired-nodes": "node --test test/wired-nodes-extract.test.js"

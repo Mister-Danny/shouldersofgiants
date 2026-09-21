@@ -463,6 +463,12 @@ window.TeacherDashboard = (function () {
     // signup (see js/account-ui.js _submitTeacherSignup), so this only
     // ever shows the generic fallback in the unlikely case it's missing.
     _byId('td-teacher-name').textContent = (_teacherDoc && _teacherDoc.displayName) || 'Teacher';
+    // Offered until this account has Google linked (password teachers).
+    var connectBtn = _byId('td-connect-google');
+    if (connectBtn) {
+      var providers = (firebase.auth().currentUser.providerData || []).map(function (p) { return p && p.providerId; });
+      connectBtn.style.display = providers.indexOf('google.com') === -1 ? '' : 'none';
+    }
     _byId('td-classes').innerHTML = _renderClasses(classes);
     _byId('td-roster').innerHTML = '<p class="td-empty">Loading roster…</p>';
     _wireEvents(classes);
@@ -577,6 +583,14 @@ window.TeacherDashboard = (function () {
 
     var closeBtn = _byId('td-close');
     if (closeBtn) closeBtn.addEventListener('click', hide);
+
+    // Links Google to this same uid (js/account-ui.js _connectGoogle): the
+    // popup opens straight from this click so it isn't blocked.
+    var connectBtn = _byId('td-connect-google');
+    if (connectBtn) connectBtn.addEventListener('click', function () {
+      hide();
+      if (window.SogAccountUI && typeof window.SogAccountUI.connectGoogle === 'function') window.SogAccountUI.connectGoogle();
+    });
 
     var lobbyBtn = _byId('td-open-lobby');
     // Multiplayer temporarily disabled (js/feature-flags.js) — hide the

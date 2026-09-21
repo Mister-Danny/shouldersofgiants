@@ -566,6 +566,13 @@ window.SogAccount = (function () {
   // they just completed, which is how it failed in testing.
   var _pendingGoogleSignup = null;   // { user, isNew }
 
+  // A Google credential waiting to be attached to an existing password
+  // account ("log in with your password once, then Google is linked"). Set
+  // when Firebase refuses a Google sign-in because the email already has a
+  // password account (Workspace/school addresses), or when a teacher says
+  // their Google address differs from the one they signed up with.
+  var _pendingGoogleLink = null;     // { email, credential }
+
   function _googleProvider() {
     var provider = new firebase.auth.GoogleAuthProvider();
     provider.addScope('email');
@@ -585,6 +592,21 @@ window.SogAccount = (function () {
     });
   }
 
+  function _hasProvider(user, providerId) {
+    return !!(user && (user.providerData || []).some(function (p) { return p && p.providerId === providerId; }));
+  }
+
+  // Firebase refused the Google sign-in because this email already has a
+  // password account (never a duplicate — the project is one-account-per-
+  // email). Park the Google credential and hand the UI the email to ask for
+  // that account's password.
+  function _needsPasswordToLink(err, cb) {
+    _pendingGoogleLink = { email: (err.email || '').toLowerCase(), credential: err.credential || null };
+    var needErr = new Error('This email already has a password account. Enter its password to connect Google.');
+    needErr.code = 'google-needs-password';
+    cb(needErr, { email: _pendingGoogleLink.email, googleEmail: _pendingGoogleLink.email });
+  }
+
   function _teacherGoogleResult(user, existing) {
     return { uid: user.uid, email: user.email || '', displayName: user.displayName || user.email || 'Teacher', existing: !!existing };
   }
@@ -598,23 +620,32 @@ window.SogAccount = (function () {
       if (window.SogAuth && typeof window.SogAuth.refresh === 'function') window.SogAuth.refresh();
 
       if (snap.exists) {
-        _restoreProgressAfterLogin(user.uid, function () { cb(null, _teacherGoogleResult(user, true)); });
+        var result = _teacherGoogleResult(user, true);
+        result.displayName = snap.data().displayName || result.displayName;
+        result.linked = userCred.operationType === 'link';
+        // Firebase treats Google as the authority for @gmail.com, so signing in
+        // with Google on a gmail address whose password account was never
+        // email-verified keeps the uid (classes intact) but switches the
+        // password off. Teacher docs written by a Google signup carry
+        // authProvider:'google'; anything else started life as a password
+        // account, so no password provider now means that just happened.
+        result.passwordLost = snap.data().authProvider !== 'google' && !_hasProvider(user, 'password');
+        _restoreProgressAfterLogin(user.uid, function () { cb(null, result); });
         return;
       }
 
-      // First time with this Google account: the invite code is still needed,
-      // same as the email form. Stay signed in and hand the UI what it needs to
-      // ask for it — finishTeacherGoogleSignup() completes the account,
-      // cancelTeacherGoogleSignup() backs the whole thing out.
-      if (!inviteCode) {
-        _pendingGoogleSignup = { user: user, isNew: isNew };
-        var needErr = new Error('An invite code is required the first time you sign in with Google.');
-        needErr.code = 'invite-required';
-        cb(needErr, _teacherGoogleResult(user, false));
-        return;
-      }
-
-      _createTeacherDocFor(user, isNew, inviteCode, cb);
+      // First time with this Google account. Always stop here, even when the
+      // signup form already supplied a code: this is the one moment to catch
+      // an existing teacher whose password account uses a different email
+      // (startLinkToExistingAccount) before a second, empty teacher account
+      // gets created. Stay signed in — finishTeacherGoogleSignup() completes
+      // the account, cancelTeacherGoogleSignup() backs the whole thing out.
+      _pendingGoogleSignup = { user: user, isNew: isNew, credential: userCred.credential || null };
+      var needErr = new Error('An invite code is required the first time you sign in with Google.');
+      needErr.code = 'invite-required';
+      var pendingResult = _teacherGoogleResult(user, false);
+      pendingResult.inviteCode = inviteCode || '';
+      cb(needErr, pendingResult);
     }).catch(function (readErr) {
       console.error('[Account] /teachers/{uid} lookup failed after Google sign-in', readErr);
       cb(readErr, null);
@@ -622,14 +653,15 @@ window.SogAccount = (function () {
   }
 
   // Writes /teachers/{uid} (invite-gated by the rules) + the ungrouped
-  // /players/{uid} doc, for a user already signed in via Google. Shared by the
-  // straight-through path and the deferred "enter your code now" path.
+  // /players/{uid} doc, for a user already signed in via Google, once the
+  // invite step (finishTeacherGoogleSignup) supplies the code.
   function _createTeacherDocFor(user, isNew, inviteCode, cb) {
     var teacherData = {
-      email:       user.email || '',
-      inviteCode:  inviteCode,
-      displayName: user.displayName || user.email || 'Teacher',
-      createdAt:   firebase.firestore.FieldValue.serverTimestamp()
+      email:        user.email || '',
+      inviteCode:   inviteCode,
+      displayName:  user.displayName || user.email || 'Teacher',
+      authProvider: 'google',   // see passwordLost in _finishTeacherGoogle
+      createdAt:    firebase.firestore.FieldValue.serverTimestamp()
     };
     _withTimeout(_db().collection('teachers').doc(user.uid).set(teacherData), WRITE_TIMEOUT_MS).then(function () {
       _pendingGoogleSignup = null;
@@ -718,6 +750,7 @@ window.SogAccount = (function () {
         });
         return;   // page navigates away; completeTeacherGoogleRedirect picks it up
       }
+      if (err && err.code === 'auth/account-exists-with-different-credential') { _needsPasswordToLink(err, cb); return; }
       if (err && err.code === 'auth/popup-closed-by-user') {
         var cancelled = new Error('Sign-in cancelled.');
         cancelled.code = 'popup-cancelled';
@@ -743,9 +776,222 @@ window.SogAccount = (function () {
       try { sessionStorage.removeItem(PENDING_INVITE_KEY); } catch (e) {}
       _finishTeacherGoogle(userCred, code, cb);
     }).catch(function (err) {
+      try { sessionStorage.removeItem(PENDING_INVITE_KEY); } catch (e) {}
+      if (err && err.code === 'auth/account-exists-with-different-credential') { _needsPasswordToLink(err, cb); return; }
+      if (err && err.code === 'auth/credential-already-in-use' && err.credential) {
+        _googleBelongsToAnotherUser(err.credential, (firebase.auth().currentUser || {}).email || '', cb);
+        return;
+      }
       console.error('[Account] Google redirect result failed', err);
       cb(err, null);
     });
+  }
+
+  /* ── Link Google to an existing password account ─────────────────────
+     One uid, all classes kept: the teacher logs in with their password once
+     and the Google credential is attached to THAT account, so from then on
+     either way in lands on the same uid. Linking from a password session is
+     also what protects gmail teachers: once Google is linked, Firebase finds
+     the account by its Google identity and never runs the "trusted provider
+     replaces an unverified password" rule on it (verified against the Auth
+     emulator — see test/auth-google-link.test.js).
+
+     Three ways in:
+       - Firebase refused a Google sign-in because the email has a password
+         account (school/Workspace addresses) → _pendingGoogleLink is set.
+       - A first-time Google sign-in (new uid, no teacher doc) where the
+         teacher says "I already have an account" under another email →
+         startLinkToExistingAccount().
+       - A teacher already logged in with their password → linkGoogleToCurrentUser()
+         from the dashboard. */
+
+  /**
+   * From the invite step: this Google sign-in is really an existing teacher
+   * whose password account uses a different email.
+   */
+  function cancelGoogleLink(cb) {
+    _pendingGoogleLink = null;
+    cancelTeacherGoogleSignup(cb);
+  }
+
+  function startLinkToExistingAccount() {
+    var pending = _pendingGoogleSignup;
+    if (!pending || !pending.credential) return false;
+    _pendingGoogleLink = { email: '', credential: pending.credential };
+    return true;
+  }
+
+  // The Google user signed in right now has no teacher doc (checked by the
+  // caller's flow), so it holds nothing: delete it, or its Google identity
+  // stays claimed and linking fails with auth/credential-already-in-use.
+  function _discardEmptyGoogleUser(cb) {
+    var pending = _pendingGoogleSignup;
+    var user = firebase.auth().currentUser;
+    if (!pending || !user || user.uid !== pending.user.uid || _hasProvider(user, 'password')) { _pendingGoogleSignup = null; cb(null); return; }
+    _db().collection('teachers').doc(user.uid).get().then(function (snap) {
+      if (snap.exists) {
+        var err = new Error('That Google account is already a separate teacher account.');
+        err.code = 'google-is-other-teacher';
+        cb(err);
+        return;
+      }
+      return user.delete().then(function () { _pendingGoogleSignup = null; cb(null); });
+    }).catch(function (err) {
+      console.warn('[Account] Could not remove the empty Google sign-in before linking', err);
+      cb(err);
+    });
+  }
+
+  /**
+   * Logs in to the password account and attaches the parked Google credential.
+   * @param {function(err, result)} cb  result = { uid, email, displayName, existing:true, linked:true }
+   *   err.code 'google-link-retry' → password login worked but the parked
+   *   credential didn't take; call linkGoogleToCurrentUser() from a click.
+   */
+  function linkGoogleWithPassword(email, password, cb) {
+    var pending = _pendingGoogleLink;
+    if (!pending || !pending.credential) {
+      var gone = new Error('The Google sign-in expired. Start again.');
+      gone.code = 'google-link-expired';
+      cb(gone, null);
+      return;
+    }
+    var normalizedEmail = (email || pending.email || '').trim().toLowerCase();
+    _discardEmptyGoogleUser(function (discardErr) {
+      if (discardErr) { cb(discardErr, null); return; }
+      firebase.auth().signInWithEmailAndPassword(normalizedEmail, password).then(function (userCred) {
+        var user = userCred.user;
+        return _db().collection('teachers').doc(user.uid).get().then(function (snap) {
+          if (!snap.exists) {
+            var notTeacher = new Error('No teacher account uses that email.');
+            notTeacher.code = 'not-a-teacher';
+            return firebase.auth().signOut().then(function () { cb(notTeacher, null); });
+          }
+          return user.linkWithCredential(pending.credential).then(function () {
+            _pendingGoogleLink = null;
+            if (window.SogAuth && typeof window.SogAuth.refresh === 'function') window.SogAuth.refresh();
+            _restoreProgressAfterLogin(user.uid, function () {
+              var result = _teacherGoogleResult(user, true);
+              result.displayName = snap.data().displayName || result.displayName;
+              result.linked = true;
+              cb(null, result);
+            });
+          }, function (linkErr) {
+            console.warn('[Account] Linking the parked Google credential failed', linkErr);
+            if (window.SogAuth && typeof window.SogAuth.refresh === 'function') window.SogAuth.refresh();
+            var code = linkErr && linkErr.code;
+            if (code === 'auth/provider-already-linked' || code === 'auth/credential-already-in-use' || code === 'auth/email-already-in-use') {
+              cb(linkErr, null);
+              return;
+            }
+            var retry = new Error('Logged in. Connect Google once more to finish.');
+            retry.code = 'google-link-retry';
+            cb(retry, _teacherGoogleResult(user, true));
+          });
+        });
+      }).catch(function (err) {
+        cb(err, null);   // wrong password etc. — the parked credential survives, so they can retry
+      });
+    });
+  }
+
+  // The Google account the teacher picked is already its own Firebase user
+  // (e.g. an earlier Google sign-in that never finished setup). If it holds a
+  // teacher account, stop — that's a second teacher, not litter. Otherwise
+  // switch to it and route through the password form, which deletes it and
+  // links its Google identity to the password account instead.
+  function _googleBelongsToAnotherUser(credential, passwordEmail, cb) {
+    firebase.auth().signInWithCredential(credential).then(function (userCred) {
+      var user = userCred.user;
+      return _db().collection('teachers').doc(user.uid).get().then(function (snap) {
+        if (snap.exists) {
+          var err = new Error('That Google account is already a separate teacher account.');
+          err.code = 'google-is-other-teacher';
+          return firebase.auth().signOut().then(function () { cb(err, null); });
+        }
+        _pendingGoogleSignup = { user: user, isNew: false, credential: credential };
+        _pendingGoogleLink = { email: passwordEmail, credential: credential };
+        var needErr = new Error('Enter your password once more to connect this Google account.');
+        needErr.code = 'google-needs-password';
+        cb(needErr, { email: passwordEmail, googleEmail: user.email || '' });
+      });
+    }).catch(function (err) {
+      console.error('[Account] Could not sign in with the already-used Google credential', err);
+      cb(err, null);
+    });
+  }
+
+  /**
+   * For a teacher already logged in with their password (dashboard button).
+   * Must run from a click so the popup isn't blocked.
+   * @param {function(err, result)} cb  result = { email, googleEmail, linked:true } |
+   *   { alreadyLinked:true }
+   */
+  function linkGoogleToCurrentUser(cb) {
+    var user = firebase.auth().currentUser;
+    if (!user || user.isAnonymous) {
+      var none = new Error('Log in to your teacher account first.');
+      none.code = 'not-signed-in';
+      cb(none, null);
+      return;
+    }
+    if (_hasProvider(user, 'google.com')) { cb(null, { alreadyLinked: true }); return; }
+    var passwordEmail = user.email || '';
+    user.linkWithPopup(_googleProvider()).then(function (userCred) {
+      _pendingGoogleLink = null;
+      var g = (userCred.user.providerData || []).filter(function (p) { return p.providerId === 'google.com'; })[0];
+      cb(null, { email: passwordEmail, googleEmail: (g && g.email) || '', linked: true });
+    }).catch(function (err) {
+      var code = err && err.code;
+      if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment' || code === 'auth/cancelled-popup-request') {
+        user.linkWithRedirect(_googleProvider()).catch(function (redirectErr) { cb(redirectErr, null); });
+        return;   // completeTeacherGoogleRedirect() finishes it after the round trip
+      }
+      if (code === 'auth/popup-closed-by-user') {
+        var cancelled = new Error('Cancelled.');
+        cancelled.code = 'popup-cancelled';
+        cb(cancelled, null);
+        return;
+      }
+      if (code === 'auth/provider-already-linked') { cb(null, { alreadyLinked: true }); return; }
+      if (code === 'auth/credential-already-in-use' && err.credential) {
+        _googleBelongsToAnotherUser(err.credential, passwordEmail, cb);
+        return;
+      }
+      console.error('[Account] Linking Google failed', err);
+      cb(err, null);
+    });
+  }
+
+  /**
+   * Puts a password back on the signed-in account (after Google switched it
+   * off on a gmail address — see passwordLost). Same uid; just adds the
+   * email/password way in again.
+   */
+  function addPasswordToCurrentUser(password, cb) {
+    var user = firebase.auth().currentUser;
+    if (!user || !user.email) { cb(new Error('Signed out.')); return; }
+    user.linkWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, password)).then(function () {
+      cb(null);
+    }, function (err) {
+      // Newer SDKs link email/password through a sign-up call that sees the
+      // account's own (Google-verified) email as taken; setting the password
+      // directly adds the same provider back.
+      if (err && err.code === 'auth/email-already-in-use') { user.updatePassword(password).then(function () { cb(null); }, cb); return; }
+      cb(err);
+    });
+  }
+
+  /**
+   * "Google only is fine": stop offering to restore the password on every
+   * Google login. Only authProvider changes; the rules require inviteCode to
+   * stay the same, which a merge preserves.
+   */
+  function keepGoogleOnly(cb) {
+    var user = firebase.auth().currentUser;
+    if (!user) { if (cb) cb(); return; }
+    _db().collection('teachers').doc(user.uid).set({ authProvider: 'google' }, { merge: true })
+      .then(function () { if (cb) cb(); }, function (err) { console.warn('[Account] keepGoogleOnly failed', err); if (cb) cb(); });
   }
 
   /* ── Checkpoint save — one of exactly 3 call sites in the whole app:
@@ -822,6 +1068,12 @@ window.SogAccount = (function () {
     finishTeacherGoogleSignup:    finishTeacherGoogleSignup,
     cancelTeacherGoogleSignup:    cancelTeacherGoogleSignup,
     completeTeacherGoogleRedirect: completeTeacherGoogleRedirect,
+    startLinkToExistingAccount:   startLinkToExistingAccount,
+    cancelGoogleLink:             cancelGoogleLink,
+    linkGoogleWithPassword:       linkGoogleWithPassword,
+    linkGoogleToCurrentUser:      linkGoogleToCurrentUser,
+    addPasswordToCurrentUser:     addPasswordToCurrentUser,
+    keepGoogleOnly:               keepGoogleOnly,
     sendPasswordReset: sendPasswordReset,
     checkpointSave:    checkpointSave,
     logout:            logout
