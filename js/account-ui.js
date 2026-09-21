@@ -26,6 +26,7 @@ window.SogAccountUI = (function () {
 
   var backdrop, titleEl, bodyEl, actionsEl;
   var _pendingClassInfo = null;   // set once class-code lookup succeeds, used by the confirm step
+  var _teacherInviteCode = '';    // checked on Teacher Sign Up's first screen, carried into both signup paths
 
   function _els() {
     if (!backdrop) {
@@ -63,7 +64,7 @@ window.SogAccountUI = (function () {
     );
     _byId('af-create').addEventListener('click', function () { _stepClassCode(); });
     _byId('af-login').addEventListener('click', function () { _stepLoginForm(); });
-    _byId('af-teacher').addEventListener('click', function () { _stepTeacherSignup(); });
+    _byId('af-teacher').addEventListener('click', function () { _stepTeacherInvite(); });
     _byId('af-cancel').addEventListener('click', _close);
   }
 
@@ -491,7 +492,48 @@ window.SogAccountUI = (function () {
      "saved locally"/"account creation failed" steps below, since a teacher
      account has no local-only fallback concept — it either exists or it
      doesn't. */
+  /* ── Step: invite code (Teacher Sign Up, first screen) ─────────────────
+     Checked here (js/account.js checkInviteCode reads /invites/{code} by
+     exact id), so a wrong code never gets as far as creating an account.
+     The code then rides along into both the email form and Google. */
+  function _stepTeacherInvite(errorMsg, prefillCode) {
+    _render(
+      'TEACHER SIGN UP',
+      '<p>Enter the invite code you were given.</p>' +
+      '<input type="text" id="af-invite-code" class="account-flow-input" maxlength="12" ' +
+        'placeholder="INVITE CODE" autocomplete="off" spellcheck="false" value="' +
+        _escapeHtml(prefillCode != null ? prefillCode : _teacherInviteCode) + '">' +
+      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : ''),
+      '<button class="btn-snes" id="af-invite-continue">CONTINUE</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
+    );
+    var input = _byId('af-invite-code');
+    input.focus();
+    function submit() {
+      var typed = input.value.trim();
+      if (!typed) { _stepTeacherInvite('Enter your invite code.', ''); return; }
+      _render('ONE MOMENT', '<p>Checking your code…</p>', '');
+      window.SogAccount.checkInviteCode(typed, function (err, res) {
+        if (err) {
+          console.error('[AccountUI] Invite check failed', err);
+          _stepTeacherInvite('Couldn’t check that code — network issue. Please try again.', typed);
+          return;
+        }
+        if (!res.valid) {
+          _stepTeacherInvite("That code isn't valid. Check it with whoever gave it to you.", typed);
+          return;
+        }
+        _teacherInviteCode = res.code;
+        _stepTeacherSignup();
+      });
+    }
+    _byId('af-invite-continue').addEventListener('click', submit);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    _byId('af-back').addEventListener('click', function () { _teacherInviteCode = ''; _stepChooser(); });
+  }
+
   function _stepTeacherSignup(errorMsg, prefill) {
+    if (!_teacherInviteCode) { _stepTeacherInvite(errorMsg); return; }
     prefill = prefill || {};
     _render(
       'TEACHER SIGN UP',
@@ -502,19 +544,16 @@ window.SogAccountUI = (function () {
         'placeholder="EMAIL" autocomplete="email" value="' + _escapeHtml(prefill.email || '') + '">' +
       '<input type="password" id="af-teacher-password" class="account-flow-input" ' +
         'placeholder="PASSWORD" autocomplete="new-password">' +
-      '<input type="text" id="af-teacher-invite" class="account-flow-input" maxlength="8" ' +
-        'placeholder="INVITE CODE" autocomplete="off" spellcheck="false" value="' + _escapeHtml(prefill.inviteCode || '') + '">' +
       (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
-      '<p class="account-flow-or">or skip the password — your invite code still applies</p>',
+      '<p class="account-flow-or">Invite code ' + _escapeHtml(_teacherInviteCode) + ' accepted. Or skip the password:</p>',
       '<button class="btn-snes" id="af-teacher-submit">CREATE TEACHER ACCOUNT</button>' +
       '<button class="btn-snes" id="af-teacher-google">CONTINUE WITH GOOGLE</button>' +
       '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
     );
     _byId('af-teacher-google').addEventListener('click', function () {
-      _submitTeacherGoogle(_byId('af-teacher-invite').value, {
+      _submitTeacherGoogle(_teacherInviteCode, {
         displayName: _byId('af-teacher-name').value,
-        email:       _byId('af-teacher-email').value,
-        inviteCode:  _byId('af-teacher-invite').value
+        email:       _byId('af-teacher-email').value
       });
     });
     var nameInput = _byId('af-teacher-name');
@@ -524,16 +563,17 @@ window.SogAccountUI = (function () {
         displayName: nameInput.value,
         email:       _byId('af-teacher-email').value,
         password:    _byId('af-teacher-password').value,
-        inviteCode:  _byId('af-teacher-invite').value
+        inviteCode:  _teacherInviteCode
       });
     }
     _byId('af-teacher-submit').addEventListener('click', submit);
-    _byId('af-teacher-invite').addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
-    _byId('af-back').addEventListener('click', _stepChooser);
+    _byId('af-teacher-password').addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    _byId('af-back').addEventListener('click', function () { _stepTeacherInvite(); });
   }
 
   function _submitTeacherSignup(fields) {
-    if (!fields.displayName || !fields.email || !fields.password || !fields.inviteCode) {
+    if (!fields.inviteCode) { _stepTeacherInvite(); return; }
+    if (!fields.displayName || !fields.email || !fields.password) {
       _stepTeacherSignup('Fill in every field.', fields);
       return;
     }
@@ -541,6 +581,9 @@ window.SogAccountUI = (function () {
     window.SogAccount.signUpTeacher(fields, function (err, result) {
       if (err) {
         console.error('[AccountUI] Teacher signup failed', err);
+        // Only reachable if the first-screen check couldn't read invites
+        // (older deployed rules): send them back to re-enter the code.
+        if (err.code === 'invite-invalid') { _stepTeacherInvite(_teacherErrorMessage(err), fields.inviteCode); return; }
         _stepTeacherSignup(_teacherErrorMessage(err), fields);
         return;
       }
@@ -556,18 +599,32 @@ window.SogAccountUI = (function () {
     _render('ONE MOMENT', '<p>Opening Google sign-in…</p>', '');
     window.SogAccount.signInTeacherWithGoogle(inviteCode, function (err, result) {
       if (err) {
-        if (err.code === 'popup-cancelled') { _stepTeacherSignup(null, prefill); return; }
+        if (err.code === 'popup-cancelled') { if (inviteCode) _stepTeacherSignup(null, prefill); else _stepLoginForm(); return; }
         // Signed in fine, but this Google account is new here and still owes an
         // invite code. They stay signed in while we ask — bouncing back to the
         // empty signup form throws away the sign-in they just completed.
         if (err.code === 'invite-required') { _stepGoogleInvite(result); return; }
         if (err.code === 'google-needs-password') { _stepGoogleLinkPassword(result); return; }
+        // Signed in, but the carried code was refused on the write (only if the
+        // first-screen check couldn't read invites): the session is kept, so
+        // ask for the code right here instead of starting over.
+        if (err.code === 'invite-invalid' && result) { _stepGoogleInvite(result, _teacherErrorMessage(err)); return; }
         console.error('[AccountUI] Teacher Google sign-in failed', err);
-        _stepTeacherSignup(_teacherErrorMessage(err), prefill);
+        if (inviteCode) _stepTeacherSignup(_teacherErrorMessage(err), prefill);
+        else _stepLoginForm(_teacherErrorMessage(err));
         return;
       }
+      // First-time Google signup through Teacher Sign Up: the code was already
+      // checked, so the account is made — go straight to the dashboard.
+      if (!result.existing && !result.linked) { _teacherInviteCode = ''; _openDashboard(); return; }
       _afterGoogleSignIn(result);
     });
+  }
+
+  function _openDashboard() {
+    _close();
+    if (window.TeacherDashboard && typeof window.TeacherDashboard.showAfterSignup === 'function') window.TeacherDashboard.showAfterSignup();
+    else location.reload();
   }
 
   // Where a successful Google sign-in lands: the normal welcome, the "Google
@@ -622,7 +679,7 @@ window.SogAccountUI = (function () {
           _stepGoogleInvite(result || info, _teacherErrorMessage(err));
           return;
         }
-        _stepTeacherSignupSuccess(result, false);
+        _openDashboard();
       });
     }
     _byId('af-google-invite-submit').addEventListener('click', submit);
@@ -910,10 +967,13 @@ window.SogAccountUI = (function () {
         if (err.code === 'invite-required') { _stepGoogleInvite(result); return; }
         if (err.code === 'google-needs-password') { _stepGoogleLinkPassword(result); return; }
         if (err.code === 'google-is-other-teacher') { _stepLoginForm(_linkErrorMessage(err)); return; }
-        _stepTeacherSignup(_teacherErrorMessage(err));
+        if (err.code === 'invite-invalid' && result) { _stepGoogleInvite(result, _teacherErrorMessage(err)); return; }
+        _stepLoginForm(_teacherErrorMessage(err));
         return;
       }
-      if (result) _afterGoogleSignIn(result);
+      if (!result) return;
+      if (!result.existing && !result.linked) { _openDashboard(); return; }   // new signup via Teacher Sign Up
+      _afterGoogleSignIn(result);
     });
 
     var code = window.SogAccount.parseJoinCode(location.search, location.hash);
@@ -934,6 +994,7 @@ window.SogAccountUI = (function () {
    */
   function openFlow(startStep) {
     _pendingClassInfo = null;
+    _teacherInviteCode = '';
     if (startStep === 'classcode') _stepClassCode();
     else _stepChooser();
   }

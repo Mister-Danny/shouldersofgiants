@@ -510,6 +510,21 @@ window.TeacherDashboard = (function () {
     _fullRender();
   }
 
+  // Right after a teacher account is created: the status check that fills
+  // _teacherDoc may not have seen the new /teachers doc yet, so read it now.
+  function showAfterSignup() {
+    var user = firebase.auth().currentUser;
+    if (!user) return;
+    _db().collection('teachers').doc(user.uid).get().then(function (snap) {
+      _teacherDoc = snap.exists ? snap.data() : null;
+      _notifyStatus();
+      show();
+    }).catch(function (err) {
+      console.error('[TeacherDashboard] Could not load the new teacher doc', err);
+      location.reload();
+    });
+  }
+
   function hide() {
     var backdrop = _byId('teacher-dashboard-backdrop');
     if (backdrop) backdrop.classList.remove('visible');
@@ -629,6 +644,7 @@ window.TeacherDashboard = (function () {
   return {
     init:           init,
     show:           show,
+    showAfterSignup: showAfterSignup,
     hide:           hide,
     isTeacher:      isTeacher,
     devToolsAllowed: devToolsAllowed,

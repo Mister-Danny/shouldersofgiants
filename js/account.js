@@ -26,8 +26,9 @@
  *   7. UI layer shows the credential card.
  *
  * Teacher signup (signUpTeacher, below) follows §4 "Teacher signup" exactly
- * instead — create-then-rollback, since invites are unreadable client-side
- * so there's no pre-validation step available. See that function's doc.
+ * instead — create-then-rollback. The Sign Up flow pre-checks the invite
+ * code (checkInviteCode), but the create rule is still the real gate, so a
+ * code rejected there is rolled back. See that function's doc.
  *
  * Checkpoint saves (checkpointSave()) fire from exactly three places in the
  * app: after a battle win (js/game.js endGame()), the account-creation write
@@ -443,11 +444,10 @@ window.SogAccount = (function () {
   }
 
   /* ── Teacher signup (AUTH_SPEC.md §4 "Teacher signup", Phase 4) ────────
-     Invites are `read: false` (see firestore.rules), so there is no
-     pre-validation step like the student class-code lookup — the invite
-     code is only ever checked server-side, inside the /teachers/{uid}
-     create rule's get(). That means a bad/deactivated code can't be
-     detected until AFTER the Auth user already exists, so this follows the
+     The Sign Up flow pre-checks the code (checkInviteCode above), but the
+     code is only enforced server-side, inside the /teachers/{uid} create
+     rule's get(). That means a bad/deactivated code is only enforced
+     AFTER the Auth user already exists, so this follows the
      spec's create-then-rollback order exactly:
        1. createUserWithEmailAndPassword — a clean account, NOT linked to
           the current anonymous session (teachers don't carry over guest
@@ -465,6 +465,28 @@ window.SogAccount = (function () {
       return err;
     }
     return writeErr;
+  }
+
+  /* ── Invite check (Teacher Sign Up, first screen) ──────────────────────
+     Reads /invites/{code} by exact id (rules: get only, no list). It's a
+     courtesy check so a wrong code is caught before any account exists; the
+     /teachers create rule still enforces the code on the actual write.
+     cb(err, { code, valid, unverified }) — unverified:true means the rules
+     in production don't allow the read yet (permission-denied), so the code
+     is let through and the create rule decides, exactly as before. */
+  function checkInviteCode(raw, cb) {
+    var code = (raw || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,12}$/.test(code)) { cb(null, { code: code, valid: false }); return; }
+    _withTimeout(_db().collection('invites').doc(code).get(), WRITE_TIMEOUT_MS).then(function (snap) {
+      cb(null, { code: code, valid: !!(snap.exists && snap.data().active === true) });
+    }).catch(function (err) {
+      if (err && err.code === 'permission-denied') {
+        console.warn('[Account] Invite read not allowed by the deployed rules — the teacher create rule will check it instead');
+        cb(null, { code: code, valid: true, unverified: true });
+        return;
+      }
+      cb(err, null);
+    });
   }
 
   /**
@@ -547,9 +569,8 @@ window.SogAccount = (function () {
      One button for both cases, exactly like Firebase itself treats Google:
      the provider signs in, then /teachers/{uid} decides whether this is a
      returning teacher (restore their progress and go) or a first-time one
-     (invite-gated create, same server-side rule as the email path — invites
-     stay unreadable client-side, so the code is still only ever checked
-     inside the rules' get()).
+     (invite-gated create, same server-side rule as the email path — the
+     create rule's get() is what actually enforces the code).
 
      Students never touch this: their credentials are @sog.invalid, which no
      Google account can be. Popups are blocked on plenty of locked-down
@@ -634,18 +655,24 @@ window.SogAccount = (function () {
         return;
       }
 
-      // First time with this Google account. Always stop here, even when the
-      // signup form already supplied a code: this is the one moment to catch
-      // an existing teacher whose password account uses a different email
-      // (startLinkToExistingAccount) before a second, empty teacher account
-      // gets created. Stay signed in — finishTeacherGoogleSignup() completes
-      // the account, cancelTeacherGoogleSignup() backs the whole thing out.
+      // First time with this Google account. Kept pending (signed in) either
+      // way, so a failure can fall back to the invite step below.
       _pendingGoogleSignup = { user: user, isNew: isNew, credential: userCred.credential || null };
+
+      // Came through Teacher Sign Up, which already checked the code on its
+      // first screen: create the teacher account straight away. A code the
+      // create rule still rejects comes back as invite-invalid with the
+      // session kept, and the UI drops to the invite step.
+      if (inviteCode) { _createTeacherDocFor(user, isNew, inviteCode, cb); return; }
+
+      // Came through Log In (no code yet): stop and ask for it. This step
+      // also offers "I already have an account" (startLinkToExistingAccount)
+      // for a teacher whose password account uses a different email.
+      // finishTeacherGoogleSignup() completes the account,
+      // cancelTeacherGoogleSignup() backs the whole thing out.
       var needErr = new Error('An invite code is required the first time you sign in with Google.');
       needErr.code = 'invite-required';
-      var pendingResult = _teacherGoogleResult(user, false);
-      pendingResult.inviteCode = inviteCode || '';
-      cb(needErr, pendingResult);
+      cb(needErr, _teacherGoogleResult(user, false));
     }).catch(function (readErr) {
       console.error('[Account] /teachers/{uid} lookup failed after Google sign-in', readErr);
       cb(readErr, null);
@@ -653,8 +680,9 @@ window.SogAccount = (function () {
   }
 
   // Writes /teachers/{uid} (invite-gated by the rules) + the ungrouped
-  // /players/{uid} doc, for a user already signed in via Google, once the
-  // invite step (finishTeacherGoogleSignup) supplies the code.
+  // /players/{uid} doc, for a user already signed in via Google: straight
+  // through from Teacher Sign Up, or from the invite step
+  // (finishTeacherGoogleSignup).
   function _createTeacherDocFor(user, isNew, inviteCode, cb) {
     var teacherData = {
       email:        user.email || '',
@@ -1060,6 +1088,7 @@ window.SogAccount = (function () {
     generatePassphrase: generatePassphrase,
     parseJoinCode:     parseJoinCode,
     lookupClassCode:   lookupClassCode,
+    checkInviteCode:   checkInviteCode,
     signUpStudent:     signUpStudent,
     loginStudent:      loginStudent,
     signUpTeacher:     signUpTeacher,

@@ -160,16 +160,15 @@ test('school (Workspace) address = password email: refused, then password once l
   assert.equal(await passwordWorks(email), 'ok');
 });
 
-test('different Google address: stops at the invite step (even with a code), "I already have an account" links instead of duplicating', { skip }, async () => {
+test('different Google address via Log In: stops at the invite step, "I already have an account" links instead of duplicating', { skip }, async () => {
   const pwEmail = 'e.teacher@gmail.com', gEmail = 'e.teacher@district.org';
   const uid = await passwordTeacher(pwEmail);
 
   pickGoogle('g-e', gEmail, { trusted: false });
-  const first = await call(api.signInTeacherWithGoogle, 'HISTROCK');   // from the signup form, code filled in
-  assert.equal(first.err.code, 'invite-required', 'a new Google uid never becomes a teacher without the confirm step');
+  const first = await call(api.signInTeacherWithGoogle, '');   // Log In path: no code
+  assert.equal(first.err.code, 'invite-required');
   const googleUid = first.result.uid;
   assert.notEqual(googleUid, uid);
-  assert.equal(first.result.inviteCode, 'HISTROCK', 'code carried into the step');
   assert.equal(await teacherDoc(googleUid), null, 'no teacher doc yet');
 
   assert.equal(api.startLinkToExistingAccount(), true);
@@ -302,4 +301,35 @@ test('brand-new Google teacher still signs up normally, and is never flagged as 
   const again = await call(api.signInTeacherWithGoogle, '');
   assert.equal(again.result.existing, true);
   assert.equal(again.result.passwordLost, false);
+});
+
+test('checkInviteCode: active code valid, wrong / inactive / malformed codes not', { skip }, async () => {
+  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc('invites/OLDCODE1').set({ active: false }));
+  await auth.signInAnonymously();   // guests are signed in, which the invites get rule requires
+  const check = async (code) => (await call(api.checkInviteCode, code)).result;
+  assert.deepEqual({ ...await check(' histrock ') }, { code: 'HISTROCK', valid: true });
+  assert.equal((await check('WRONG123')).valid, false);
+  assert.equal((await check('OLDCODE1')).valid, false, 'deactivated');
+  assert.equal((await check('../x')).valid, false, 'malformed never hits Firestore');
+});
+
+test('Teacher Sign Up with a checked code: first-time Google creates the teacher account with no second prompt', { skip }, async () => {
+  pickGoogle('g-s', 'signup@district.org', { trusted: false });
+  const r = await call(api.signInTeacherWithGoogle, 'HISTROCK');
+  assert.ifError(r.err);
+  assert.equal(r.result.existing, false);
+  const doc = await teacherDoc(r.result.uid);
+  assert.equal(doc.inviteCode, 'HISTROCK');
+  assert.equal(doc.authProvider, 'google');
+});
+
+test('Teacher Sign Up code refused by the create rule: still signed in, fallback invite step can finish', { skip }, async () => {
+  pickGoogle('g-x', 'x@district.org', { trusted: false });
+  const r = await call(api.signInTeacherWithGoogle, 'WRONG123');
+  assert.equal(r.err.code, 'invite-invalid');
+  assert.equal(auth.currentUser.uid, r.result.uid, 'session kept');
+  assert.equal(await teacherDoc(r.result.uid), null);
+  const done = await call(api.finishTeacherGoogleSignup, 'HISTROCK');
+  assert.ifError(done.err);
+  assert.equal((await teacherDoc(r.result.uid)).inviteCode, 'HISTROCK');
 });

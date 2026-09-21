@@ -103,3 +103,14 @@ test('ungrouped signup (no class) still stores the passphrase', async () => {
   assert.equal(write.data.teacherUid, '');
   assert.equal(write.data.passphrase, 'tigerrobot19');
 });
+
+test('checkInviteCode lets the code through (create rule decides) when the deployed rules still deny invite reads', async () => {
+  // Swap in a Firestore whose invite read is denied, as with the pre-change rules.
+  const denied = Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+  const window = {};
+  const fb = { firestore: () => ({ collection: () => ({ doc: () => ({ get: () => Promise.reject(denied) }) }) }), auth: () => ({}) };
+  const ctx = vm.createContext({ window, firebase: fb, localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} }, sessionStorage: {}, console: { ...console, warn() {} }, setTimeout, clearTimeout, Promise });
+  vm.runInContext(SRC, ctx, { filename: 'js/account.js' });
+  const res = await new Promise((resolve, reject) => window.SogAccount.checkInviteCode('histrock', (err, r) => (err ? reject(err) : resolve(r))));
+  assert.deepEqual(JSON.parse(JSON.stringify(res)), { code: 'HISTROCK', valid: true, unverified: true });
+});

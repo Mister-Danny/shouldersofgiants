@@ -10,11 +10,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/classes/$(code)).data;
     }
 
-    // Invite codes: never client-readable, in any form.
-    // Validation happens via get() inside rules, which is server-side
-    // and does not require client read permission.
+    // Invite codes: fetchable by exact ID only, so Teacher Sign Up can check
+    // a code on its first screen (same model as classes below). list is
+    // denied, so codes cannot be enumerated, and nothing is writable. The
+    // real gate is still the get() inside the /teachers create rule.
     match /invites/{code} {
-      allow read, write: if false;
+      allow get:   if signedIn();
+      allow list:  if false;
+      allow write: if false;
     }
 
     // Classes: fetchable by exact ID so the student can see

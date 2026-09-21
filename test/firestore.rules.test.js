@@ -394,3 +394,17 @@ test('student passphrase: written by the student, readable by their teacher only
     assert.equal(after.data().passphrase, 'cometwaffle42');
   });
 });
+
+test('invites: a signed-in user can get one code by exact id, but not list, write, or read signed out', async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc('invites/HISTROCK').set({ active: true, label: 'x' });
+  });
+  const asGuest = testEnv.authenticatedContext('anon-guest').firestore();
+  const signedOut = testEnv.unauthenticatedContext().firestore();
+  await assertSucceeds(asGuest.doc('invites/HISTROCK').get());
+  await assertSucceeds(asGuest.doc('invites/NOPE1234').get());   // a missing code reads as "doesn't exist"
+  await assertFails(asGuest.collection('invites').get());
+  await assertFails(asGuest.doc('invites/NEWCODE1').set({ active: true }));
+  await assertFails(asGuest.doc('invites/HISTROCK').update({ active: false }));
+  await assertFails(signedOut.doc('invites/HISTROCK').get());
+});
