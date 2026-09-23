@@ -32,6 +32,9 @@ SOG.GilgameshBattle = (function () {
   var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set on victory
   var KEY_PHASE1_COMPLETE           = 'sog_gilgamesh_phase1_complete';
   var KEY_CUNEIFORM_GRANTED         = 'sog_cuneiform_granted';
+  // Cuneiform scaffolding tips — losses since Cuneiform was owned, PER TIER, so the
+  // ladder plays out on the Serf and starts over on the Giant (see CUNEIFORM TIPS).
+  var KEY_CUN_LOSSES_PREFIX         = 'sog_gilgamesh_cun_losses_';   // + 'serf' | 'giant'
 
   /* ── Deck IDs (one-and-done: the same battle is retried until won) ─── */
   var PREHISTORY_IDS   = [26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36]; // 11 — player base
@@ -490,6 +493,7 @@ SOG.GilgameshBattle = (function () {
       if (r && r.tier) flagTier = r.tier;
       _gWinReward   = r;
       _gWinFlagTier = flagTier;
+      if (flagTier === 'giant') { _cunSetLosses('serf', 0); _cunSetLosses('giant', 0); }   // Giant beaten → the tips are done
       try { localStorage.setItem(KEY_PHASE1_COMPLETE, 'true'); } catch (e) {}
       try { localStorage.setItem(KEY_BATTLE_GILGAMESH_COMPLETE, 'true'); } catch (e) {}
       if (r.firstTierWin) {
@@ -515,13 +519,102 @@ SOG.GilgameshBattle = (function () {
       // 2-button DEFEAT scoreboard (PLAY AGAIN → Cuneiform intervention). NO Back To Map
       // — the player must retry, not wander off. Keyed on the SERF flag (not the legacy
       // completion flag) so a stale save can't leak a Back To Map button here.
-      runLines(GILGAMESH_LOSS_SMACK, function () {
+      runLines(_withCunTip(GILGAMESH_LOSS_SMACK), function () {
         _showResultPopup(false, locResults);
       });
     } else {
       // Post-arc loss/tie (fluke won; not the Giant rematch) → plain 3-button scoreboard.
       _showResultPopup(false, locResults, { repeat: true });
     }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     CUNEIFORM TIPS — a scaffolding ladder for players who keep losing with
+     Cuneiform (46) in the deck. Counted per TIER (Serf / Giant) in losses since
+     the card was owned at battle start, so it plays out on the Serf, starts over
+     when the player moves on to the Giant (first Giant battle: no in-battle tips),
+     and switches off once the Giant is beaten.
+       level 0 — Cuneiform not owned at battle start, or the Giant already beaten:
+                 nothing.
+       level 1 — first battle lost with Cuneiform owned: the Explorer closes the
+                 post-loss dialogue with ONE line —
+                   never reached the hand → "I really wish I could have played Cuneiform."
+                   in hand, played before turn 4 or never → "I wonder what's the best
+                   time to play Cuneiform?"
+                   played on turn 4 → nothing to say.
+       level 2 — every later battle while still losing: in-battle nudges —
+                   Cuneiform revealed on turn 1-3 → after that reveal, "I wonder if
+                   that was really the best time to play Cuneiform?"
+                   Cuneiform in hand at the start of turn 4 → before selection,
+                   "I wonder how many extra Influence Points I'd get if I play
+                   Cuneiform now?"
+     Each in-battle line fires at most once per battle; a loss at any level bumps
+     the tier's counter. All lines are the Explorer's and editable here. */
+  var CUN_TIP_NEVER_IN_HAND = 'I really wish I could have played Cuneiform.';
+  var CUN_TIP_BEST_TIME     = "I wonder what's the best time to play Cuneiform?";
+  var CUN_TIP_TOO_EARLY     = 'I wonder if that was really the best time to play Cuneiform?';
+  var CUN_TIP_TURN4_IN_HAND = "I wonder how many extra Influence Points I'd get if I play Cuneiform now?";
+  var CUNEIFORM_ID = 46;
+
+  var _cunTip = { level: 0, tier: 'serf', seenInHand: false, playedTurn: null, firedReveal: false, firedT4: false };
+
+  function _cunLosses(tier) { try { return parseInt(localStorage.getItem(KEY_CUN_LOSSES_PREFIX + tier), 10) || 0; } catch (e) { return 0; } }
+  function _cunSetLosses(tier, n) { try { if (n > 0) localStorage.setItem(KEY_CUN_LOSSES_PREFIX + tier, String(n)); else localStorage.removeItem(KEY_CUN_LOSSES_PREFIX + tier); } catch (e) {} }
+  function _cunTierOf(cfg) { return (cfg && (cfg.flagTier || (cfg.ai && cfg.ai.tier))) || 'serf'; }
+
+  // Battle start: decide this battle's level from the persisted counter.
+  function _cunTipArm(cfg) {
+    var tier = _cunTierOf(cfg);
+    var owned = _has(KEY_CUNEIFORM_GRANTED);
+    var level = (!owned || _tierBeatenLocal('gilgamesh', 'giant')) ? 0 : (_cunLosses(tier) === 0 ? 1 : 2);
+    _cunTip = { level: level, tier: tier, seenInHand: false, playedTurn: null, firedReveal: false, firedT4: false };
+  }
+  function _cunNoteHand() {
+    var G = SOG.state && SOG.state.G;
+    if (_cunTip.level && G && G.playerHand && G.playerHand.indexOf(CUNEIFORM_ID) !== -1) _cunTip.seenInHand = true;
+  }
+  // An Explorer aside that holds card placement until it is dismissed.
+  function _cunSay(text, onDone) {
+    _gScriptDialogueActive = true;
+    runLines([{ who: 'explorer', text: text }], function () {
+      _gScriptDialogueActive = false;
+      if (onDone) onDone();
+    });
+  }
+  // Level 2, after a reveal: Cuneiform revealed by the player on turn 1-3.
+  function _cunAfterReveal(turn, revealed) {
+    var mine = (revealed || []).some(function (r) { return r && r.owner === 'player' && r.cardId === CUNEIFORM_ID; });
+    if (!mine) return;
+    _cunTip.playedTurn = turn;
+    if (_cunTip.level === 2 && turn < TOTAL_TURNS && !_cunTip.firedReveal) {
+      _cunTip.firedReveal = true;
+      _cunSay(CUN_TIP_TOO_EARLY);
+    }
+  }
+  // Level 2, turn 4 start: Cuneiform still in hand.
+  function _cunTurnStart(turn) {
+    _cunNoteHand();
+    var G = SOG.state && SOG.state.G;
+    if (_cunTip.level === 2 && turn === TOTAL_TURNS && !_cunTip.firedT4
+        && G && G.playerHand && G.playerHand.indexOf(CUNEIFORM_ID) !== -1) {
+      _cunTip.firedT4 = true;
+      _cunSay(CUN_TIP_TURN4_IN_HAND);
+    }
+  }
+  // Loss: bump the tier's counter; at level 1 return the closing Explorer line.
+  function _cunOnLoss() {
+    if (!_cunTip.level) return null;
+    _cunNoteHand();
+    _cunSetLosses(_cunTip.tier, _cunLosses(_cunTip.tier) + 1);
+    if (_cunTip.level !== 1) return null;
+    if (!_cunTip.seenInHand) return CUN_TIP_NEVER_IN_HAND;
+    if (_cunTip.playedTurn === null || _cunTip.playedTurn < TOTAL_TURNS) return CUN_TIP_BEST_TIME;
+    return null;
+  }
+  // Append the level-1 closing line (if any) to a post-loss dialogue block.
+  function _withCunTip(lines) {
+    var tip = _cunOnLoss();
+    return tip ? lines.concat([{ who: 'explorer', text: tip }]) : lines;
   }
 
   /* Repeat-win flourish: the word VICTORY — same gold colour / font / glow as the
@@ -711,14 +804,14 @@ SOG.GilgameshBattle = (function () {
 
   /* REMATCH LOSS — dismissive, back to map to retry. [source: BLOCK 4 → GILGAMESH_REMATCH_LOSS] */
   function _runRematchLossSequence(locResults) {
-    runLines(GILGAMESH_REMATCH_LOSS, function () {
+    runLines(_withCunTip(GILGAMESH_REMATCH_LOSS), function () {
       _showResultPopup(false, locResults, { repeat: true });   // PLAY AGAIN / GAMEBOARD / BACK TO MAP
     });
   }
 
   /* REMATCH DRAW — "a draw is not a victory", must play again. [source: BLOCK 5 → GILGAMESH_REMATCH_DRAW] */
   function _runRematchDrawSequence(locResults) {
-    runLines(GILGAMESH_REMATCH_DRAW, function () {
+    runLines(_withCunTip(GILGAMESH_REMATCH_DRAW), function () {
       _showResultPopup(false, locResults, { repeat: true });
     });
   }
@@ -1236,6 +1329,7 @@ SOG.GilgameshBattle = (function () {
     // off to the engine's opening tail: rules popup + PLAY → the deal-in (this
     // battle's original fly-up, now shared by every Adventure battle) → turn 1.
     onBattleStart: function (ctx, done) {
+      _cunTipArm(ctx.config);   // Cuneiform tips: this battle's level, from the tier's loss count
       if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(ctx.config && ctx.config.presentation);
       setTurnCounter(1, TOTAL_TURNS);
       _gDisableButtons();
@@ -1262,17 +1356,24 @@ SOG.GilgameshBattle = (function () {
       });
     },
 
+    // The deal landed — note whether Cuneiform is in the opening hand.
+    onHandDealt: function (ctx) { _cunNoteHand(); },
+
     // Turns 2-4: re-apply per-turn presentation; buttons disabled until a play.
     onTurnStart: function (ctx, turn) {
       setTurnCounter(turn, TOTAL_TURNS);
       _gDisableButtons();
+      _cunTurnStart(turn);
     },
+
+    // Reveals done: a Cuneiform revealed early may draw the level-2 nudge.
+    onAfterReveal: function (ctx, info) { _cunAfterReveal(info && info.turn, info && info.revealed); },
 
     // A card was committed — enable End Turn + Reset (mirrors notifyPlayerPlayed).
     onPlayerPlayed: function (ctx, p) { _gEnableButtons(); },
 
     // Player ended the turn — keep buttons disabled through the reveal.
-    onBeforeReveal: function (ctx, turn) { _gDisableButtons(); },
+    onBeforeReveal: function (ctx, turn) { _gDisableButtons(); _cunNoteHand(); },
 
     // Block card input while the opening dialogue / interactive pause is active.
     isInputBlocked: function (ctx) { return !!_gScriptDialogueActive; },
@@ -1304,7 +1405,9 @@ SOG.GilgameshBattle = (function () {
       battleComplete: _has(KEY_BATTLE_GILGAMESH_COMPLETE),
       phase1Complete: _has(KEY_PHASE1_COMPLETE),
       cuneiformGranted: _has(KEY_CUNEIFORM_GRANTED),
-      openingSeen: _has('sog_gilgamesh_opening_seen')
+      openingSeen: _has('sog_gilgamesh_opening_seen'),
+      cunTipLossesSerf:  _cunLosses('serf'),
+      cunTipLossesGiant: _cunLosses('giant')
     };
   }
   function applySnapshot(snap) {
@@ -1313,6 +1416,8 @@ SOG.GilgameshBattle = (function () {
     _set(KEY_PHASE1_COMPLETE, snap.phase1Complete);
     _set(KEY_CUNEIFORM_GRANTED, snap.cuneiformGranted);
     _set('sog_gilgamesh_opening_seen', snap.openingSeen);
+    _cunSetLosses('serf',  snap.cunTipLossesSerf  || 0);
+    _cunSetLosses('giant', snap.cunTipLossesGiant || 0);
   }
 
   return {
