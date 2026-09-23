@@ -901,12 +901,15 @@ SOG.GilgameshBattle = (function () {
     }, 100);
   }
 
-  /* Post-win → Mesopotamia market navigation. Fade to black, tear down, switch
-     to the overworld screen UNDER the black, then hand off to the overworld:
-     it lands at Uruk, reveals the market node, and (first time) auto-walks into
-     the market. We pass _gFadeFromBlack as the "map shown" callback so the black
-     lifts once the overworld has positioned the Explorer + refreshed the nodes.
-     Falls back to the plain overworld return if the hook is unavailable. */
+  /* Post-win → Mesopotamia return. Fade to black, tear down, switch to the
+     overworld screen UNDER the black, then hand off to the overworld
+     (returnFromGilgameshWin): it lands at Uruk, plays the flag choreography,
+     reveals the market node and — on the first Serf win only — walks the Explorer
+     into the market for her scripted first visit (sog_market_auto_visit_done);
+     on the Giant win it reveals Sargon instead. We pass _gFadeFromBlack as the
+     "map shown" callback so the black lifts once the overworld has positioned the
+     Explorer + refreshed the nodes. Falls back to the plain overworld return if
+     the hook is unavailable. */
   function _returnToMesopotamiaMarket() {
     var ow = window.Overworld;
     if (!ow || typeof ow.returnFromGilgameshWin !== 'function') { _exitToOverworld(); return; }

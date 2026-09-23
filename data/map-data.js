@@ -326,7 +326,7 @@ window.SOG_MAP_DATA = {
         scale: 2,
         flipX: true,
         showFrom: 'gilgamesh-beaten',
-        note: 'Placed near the Uruk node. First win auto-walks here (returnFromGilgameshWin); afterwards it is a clickable node.'
+        note: 'Placed near the Uruk node. The first Serf win walks the Explorer in for a scripted first visit (returnFromGilgameshWin, sog_market_auto_visit_done); afterwards it is a clickable node.'
       },
       {
         id:    'sargon',
