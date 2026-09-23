@@ -928,9 +928,72 @@
   endTurnBtn.addEventListener('click', function () {
     if (window.tutorialActive) return;  // tutorial owns this button
     if (G.phase !== 'select')   return;
+    if (_endTurnNudgeNeeded()) { _showEndTurnNudge(); return; }
     if (typeof SFX !== 'undefined') SFX.endTurn();
     onEndTurn();
   });
+
+  /* ── End Turn nudge (cap-based battles only) ───────────────────────────
+     Leaving a play on the table is the single biggest loss cause in the session
+     data (Giant losses had a turn with fewer than 2 plays in 40 of 116 games, vs
+     3 of 17 wins). In a battle with a CARDS TO PLAY counter, clicking End Turn
+     while the counter is above 0 AND a legal play exists (a card in hand, an open
+     slot it may go to) asks first: PLAY MORE stays in the turn, END TURN ANYWAY
+     proceeds. The counter in the top-left box is ringed while the prompt is up so
+     the message and the number read as one thing. Capital battles have no cap →
+     never prompted; a counter at 0, an empty hand or a full board → no prompt. */
+  function _endTurnNudgeNeeded() {
+    var inp = SOG.input;
+    if (!inp || typeof inp.cardsPerTurnCap !== 'function') return false;
+    var cap = inp.cardsPerTurnCap();
+    if (cap == null) return false;                                  // capital battle
+    if (cap - inp.cardsPlayedThisTurn() <= 0) return false;          // counter at 0
+    if (typeof inp.hasLegalPlay !== 'function' || !inp.hasLegalPlay()) return false;
+    return !!(window.SOG && SOG.BattleRulesPopup && typeof SOG.BattleRulesPopup.show === 'function');
+  }
+  function _setEndTurnNudgeRing(on) {
+    var num = document.getElementById('battle-capital-num');
+    if (num) num.classList.toggle('end-turn-nudge-ring', !!on);
+  }
+  function _showEndTurnNudge() {
+    _setEndTurnNudgeRing(true);
+    // The popup's backdrop sits above the stage, so the ringed counter can only
+    // be seen through it — the nudge uses a lighter dim (CSS end-turn-nudge-backdrop).
+    SOG.BattleRulesPopup.show({
+      body:       'You still have cards to play.',
+      panelClass: 'end-turn-nudge',
+      onDismiss:  function () { _setEndTurnNudgeRing(false); },   // a teardown hide() mid-prompt
+      choices: [
+        { label: 'PLAY MORE',       onClick: function () { _setEndTurnNudgeRing(false); } },
+        { label: 'END TURN ANYWAY', onClick: function () {
+            _setEndTurnNudgeRing(false);
+            if (G.phase !== 'select') return;
+            if (typeof SFX !== 'undefined') SFX.endTurn();
+            onEndTurn();
+          } }
+      ]
+    });
+    var bd = document.getElementById('battle-rules-backdrop');
+    if (bd) {
+      bd.classList.add('end-turn-nudge-backdrop');
+      // Cut the dim away over the top-left box (a rectangular hole in the
+      // backdrop via a two-layer mask), so the ringed counter is undimmed.
+      var box = document.querySelector('.battle-hud-topleft');
+      if (box) {
+        var r = box.getBoundingClientRect(), pad = 6;
+        var x = Math.round(r.left - pad), y = Math.round(r.top - pad);
+        var w = Math.round(r.width + pad * 2), h = Math.round(r.height + pad * 2);
+        var img = 'linear-gradient(#000, #000), linear-gradient(#000, #000)';
+        var size = '100% 100%, ' + w + 'px ' + h + 'px';
+        var pos  = '0 0, ' + x + 'px ' + y + 'px';
+        bd.style.webkitMaskImage = img;    bd.style.maskImage = img;
+        bd.style.webkitMaskSize = size;    bd.style.maskSize = size;
+        bd.style.webkitMaskPosition = pos; bd.style.maskPosition = pos;
+        bd.style.webkitMaskRepeat = 'no-repeat'; bd.style.maskRepeat = 'no-repeat';
+        bd.style.webkitMaskComposite = 'xor'; bd.style.maskComposite = 'exclude';
+      }
+    }
+  }
 
   resetTurnBtn.addEventListener('click', function () {
     if (G.phase !== 'select') return;
