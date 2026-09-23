@@ -285,3 +285,25 @@ test('document size stays small for a typical and a worst-case battle', () => {
   assert.ok(typical < 4 * 1024, `typical ${typical}`);
   assert.ok(worst < 16 * 1024, `worst ${worst}`);
 });
+
+test('session carries the device clock as well as the server stamp, so queued offline writes keep their real times', () => {
+  const { Analytics, writes } = load();
+  const before = Date.now();
+  Analytics.gameStarted('easy', { battleId: 'otzi', tier: null, locations: LOCATIONS, hand: [26, 27, 46, 33] });
+  Analytics.gameCompleted({ outcome: 'player', tiebreaker: false, playerTotal: 12, aiTotal: 9, locResults: [] });
+  const after = Date.now();
+
+  const doc = merged(writes, `sessions/${writes[0].data.sessionId}`);
+  // Server stamps stay: they are still the authoritative write time.
+  assert.deepEqual(doc.timestamp, { __serverTimestamp: true });
+  assert.deepEqual(doc.finishedAt, { __serverTimestamp: true });
+
+  for (const field of ['startedAtClient', 'finishedAtClient']) {
+    const t = Date.parse(doc[field]);
+    assert.ok(!Number.isNaN(t), `${field} is an ISO timestamp`);
+    assert.ok(t >= before && t <= after, `${field} comes from the device clock`);
+  }
+  assert.ok(Date.parse(doc.finishedAtClient) >= Date.parse(doc.startedAtClient), 'finish is not before start');
+  assert.equal(typeof doc.clientTzOffsetMin, 'number', 'UTC offset kept so local time of day survives');
+  assert.ok(Math.abs(doc.clientTzOffsetMin) <= 14 * 60);
+});

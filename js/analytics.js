@@ -374,6 +374,16 @@
       writeDoc(sessionDocRef, {
         sessionId:      sessionId,
         timestamp:      firebase.firestore.FieldValue.serverTimestamp(),
+        // The server stamp is filled in when the write REACHES Firestore. On a
+        // flaky Chromebook the SDK queues writes offline and commits them later,
+        // so a whole lesson's games can land in the same second with ~0s
+        // durations — real play that then looks like scripted test data. These
+        // two carry the device's own clock (and its UTC offset, so the local
+        // time of day survives): wrong if the device clock is wrong, but never
+        // collapsed. See lib/sessions.js in the analytics toolkit, which prefers
+        // them and falls back to the server stamp for older rows.
+        startedAtClient: new Date().toISOString(),
+        clientTzOffsetMin: -new Date().getTimezoneOffset(),
         isTestSession:  isTestSession,
         difficulty:     difficulty || 'easy',
         gameMode:       'standard',
@@ -468,7 +478,8 @@
         turnDurations:  turnDurations,
         turns:          turnLog,
         board:          _readBoard(),
-        finishedAt:     firebase.firestore.FieldValue.serverTimestamp()
+        finishedAt:     firebase.firestore.FieldValue.serverTimestamp(),
+        finishedAtClient: new Date().toISOString()
       }, true);
     }
   };
