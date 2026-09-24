@@ -28,7 +28,8 @@ var Overworld = (function () {
   var KEY_EGYPT_ARRIVAL                = 'sog_egypt_arrival_seen';                // one-time Egypt arrival dialogue (manual flow)
   var KEY_MESOPOTAMIA_ARRIVAL       = 'sog_mesopotamia_arrival_complete';
   var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set on the Gilgamesh win
-  var KEY_MARKET_FIRST_VISIT        = 'sog_market_first_visit_done';   // one-time auto-walk into the market
+  var KEY_MARKET_FIRST_VISIT        = 'sog_market_first_visit_done';   // set when the market NODE is first revealed (post-Serf-win return); nothing gates on it
+  var KEY_MARKET_AUTO_VISIT         = 'sog_market_auto_visit_done';    // one-time scripted first trip INTO the market (set on entry — see returnFromGilgameshWin)
   var KEY_MARKET_INTRO_SEEN         = 'sog_market_intro_seen';         // one-time trader intro dialogue
   var KEY_DECKBUILDER_UNLOCKED      = 'sog_deckbuilder_unlocked';      // deck builder button un-greys after first marketplace return
   // Phase D2c
@@ -195,6 +196,13 @@ var Overworld = (function () {
      ('sargon' already exists with sargonportrait.jpg). The reveal plays once on
      the first marketplace return (after the deck-builder unlock); the node-click
      branches on the active deck size (see onNodeClick 'sargon').                */
+  // First look at the market — the Explorer's two lines after the market node fades in
+  // on the post-Serf-win return, just before the scripted walk into it.
+  // [source: overworld.js → D4_MARKET_FIRST_LOOK]
+  var D4_MARKET_FIRST_LOOK = [
+    { who: 'explorer', text: 'A market?' },
+    { who: 'explorer', text: "Wonder what's for sale..." }
+  ];
   // First-market interstitial — plays once on the FIRST market return (post-Serf-win
   // shopping). Sargon does NOT appear yet; the only forward path is back to Gilgamesh
   // for the Giant rematch. [source: overworld.js → D4_FIRST_MARKET_INTERSTITIAL]
@@ -1604,7 +1612,7 @@ var Overworld = (function () {
       return;
     }
 
-    // ── Mesopotamian Marketplace — revisit (the first visit auto-walks via
+    // ── Mesopotamian Marketplace — revisit (the first visit is the scripted walk in
     //    returnFromGilgameshWin). Walk to the node, then open the market. ──
     if (node.id === 'market' && currentMapId === 'mesopotamia') {
       isDialogueLocked = true;
@@ -3966,8 +3974,10 @@ var Overworld = (function () {
      dialogue + Gilgamesh-card grant. The battle module has faded to black and
      switched to the overworld screen; we land the Explorer at the Uruk node on
      the (still-loaded) Mesopotamia map, reveal the now-unlocked market node, fade
-     the black out via onMapShown, then hand control back. The market node sits
-     there clickable — the player walks into it on their own when ready. */
+     the black out via onMapShown, then hand control back. On the FIRST Serf win
+     the node fades in, the Explorer notices it, and she walks in for a scripted
+     first visit (KEY_MARKET_AUTO_VISIT); afterwards the node just sits there
+     clickable. */
   function returnFromGilgameshWin(onMapShown) {
     // A battle launched on a FRESH page load (dev-panel launch) never initialized
     // the overworld — DOM refs unbound, currentMapId at its boot default — so the
@@ -4005,9 +4015,8 @@ var Overworld = (function () {
     // Reveal the map + Uruk (battle module fades its black cover out).
     if (onMapShown) onMapShown();
 
-    // Fade the market node in, then hand control back. The node is revealed but the
-    // player walks into it on their own — clicking opens the market (trader intro
-    // still plays on their first actual entry, gated on KEY_MARKET_INTRO_SEEN).
+    // Fade the market node in, then: GIANT win → reveal Sargon; SERF win → the
+    // scripted first visit (once), else hand control back with the node clickable.
     var revealMarket = function () {
       if (marketEl) {
         if (typeof gsap !== 'undefined') gsap.to(marketEl, { opacity: 1, duration: 0.6, ease: 'power1.out' });
@@ -4015,14 +4024,27 @@ var Overworld = (function () {
       }
       try { localStorage.setItem(KEY_MARKET_FIRST_VISIT, 'true'); } catch (e) {}
       // GIANT rematch win → NOW dust-reveal the Sargon node (moved here from the first
-      // market return). The Serf/fluke win (Giant not beaten yet) just hands control
-      // back — Sargon stays hidden until the Giant is beaten.
+      // market return). No market visit on this path.
       if (_tierBeaten('gilgamesh', 'giant')) {
         _maybeRevealSargonNode(function () { isDialogueLocked = false; scheduleIdle(); });
-      } else {
-        isDialogueLocked = false;
-        scheduleIdle();
+        return;
       }
+      var visited = false;
+      try { visited = localStorage.getItem(KEY_MARKET_AUTO_VISIT) === 'true'; } catch (e) {}
+      if (visited) { isDialogueLocked = false; scheduleIdle(); return; }
+      // FIRST Serf win: once the node has faded in, the Explorer notices it and walks
+      // in — the same lock → walk → fire shape as the other auto-push sequences.
+      // isDialogueLocked stays true throughout; _exitMarket unlocks on the way out
+      // and then runs the deck-builder unlock + first-market interstitial beats.
+      // Deliberately NOT focus-gated: _enterMarket spends 5 but doesn't require it.
+      setTimeout(function () {
+        runDialogue(D4_MARKET_FIRST_LOOK, function () {
+          walkPath(_routeTo('market'), function () {
+            try { localStorage.setItem(KEY_MARKET_AUTO_VISIT, 'true'); } catch (e) {}   // set on ENTRY
+            _enterMarket();
+          });
+        });
+      }, 700);   // let the 0.6s node fade land first
     };
 
     // Flag choreography (AFTER the map is shown): 300ms → thunk the just-won stamp
@@ -6000,6 +6022,7 @@ var Overworld = (function () {
         mesopotamiaArrivalComplete: flag(KEY_MESOPOTAMIA_ARRIVAL),
         metGilgamesh: flag(KEY_MET_GILGAMESH),
         marketFirstVisitDone: flag(KEY_MARKET_FIRST_VISIT),
+        marketAutoVisitDone: flag(KEY_MARKET_AUTO_VISIT),
         marketIntroSeen: flag(KEY_MARKET_INTRO_SEEN),
         egyptMarketIntroSeen: flag('sog_egypt_market_intro_seen'),
         deckbuilderUnlocked: flag(KEY_DECKBUILDER_UNLOCKED),
@@ -6040,6 +6063,7 @@ var Overworld = (function () {
       setFlag(KEY_MESOPOTAMIA_ARRIVAL, snap.mesopotamiaArrivalComplete);
       setFlag(KEY_MET_GILGAMESH, snap.metGilgamesh);
       setFlag(KEY_MARKET_FIRST_VISIT, snap.marketFirstVisitDone);
+      setFlag(KEY_MARKET_AUTO_VISIT, snap.marketAutoVisitDone);
       setFlag(KEY_MARKET_INTRO_SEEN, snap.marketIntroSeen);
       setFlag('sog_egypt_market_intro_seen', snap.egyptMarketIntroSeen);
       setFlag(KEY_DECKBUILDER_UNLOCKED, snap.deckbuilderUnlocked);

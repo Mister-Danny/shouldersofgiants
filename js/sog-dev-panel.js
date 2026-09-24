@@ -754,7 +754,7 @@ SOG.DevPanel = (function () {
               'sog_battle_gilgamesh_complete',                 // gilgamesh-beaten milestone
               'sog_gilgamesh_phase1_complete',
               // First market return is the post-Serf-win shopping trip.
-              'sog_market_first_visit_done', 'sog_market_intro_seen',
+              'sog_market_first_visit_done', 'sog_market_auto_visit_done', 'sog_market_intro_seen',
               'sog_first_market_interstitial_seen', 'sog_deckbuilder_unlocked'],
         clear: [{ flag: 'sog_cuneiform_granted', card: 46 }]
       },

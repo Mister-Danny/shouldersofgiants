@@ -32,6 +32,9 @@ SOG.GilgameshBattle = (function () {
   var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set on victory
   var KEY_PHASE1_COMPLETE           = 'sog_gilgamesh_phase1_complete';
   var KEY_CUNEIFORM_GRANTED         = 'sog_cuneiform_granted';
+  // Cuneiform scaffolding tips — losses since Cuneiform was owned, PER TIER, so the
+  // ladder plays out on the Serf and starts over on the Giant (see CUNEIFORM TIPS).
+  var KEY_CUN_LOSSES_PREFIX         = 'sog_gilgamesh_cun_losses_';   // + 'serf' | 'giant'
 
   /* ── Deck IDs (one-and-done: the same battle is retried until won) ─── */
   var PREHISTORY_IDS   = [26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36]; // 11 — player base
@@ -187,190 +190,6 @@ SOG.GilgameshBattle = (function () {
       .to(el, { x:   0, y:  0, duration: 0.05, ease: 'none' });
   }
 
-  /* ── AI: card-aware play selection (D3a.2 ST2) ────────────────────
-     A modest priority cascade — NOT optimal play. For each of up to 2 plays:
-     pick the highest-value playable card (deferring "hold" cards), then send
-     it to its preferred synergy location, falling back to general location
-     rules. Goal: the AI plays cards where their abilities actually do
-     something. Gilgamesh deck (9): 38 Priest(Rel), 39 Farmer(Labor),
-     40 Scribe(Cul,boost-before), 41 Canals(Sci), 42 Soldier(Mil,strike),
-     43 Gilgamesh(Cul, At Once +1 per own Cultural IN PLAY), 45 Ziggurat(Rel,+1 Religious),
-     48 Chariot(Mil,move+strike), 49 Phoenicians(Cul,attach-Cultural). */
-
-  function _gAiTypeOf(cardId) {
-    var c = (typeof CARDS !== 'undefined') && CARDS.find(function (x) { return x.id === cardId; });
-    return c ? c.type : null;
-  }
-  function _gAiEffIP(s) {
-    var fn = (SOG.board && SOG.board.effectiveIP) || (SOG.game && SOG.game.effectiveIP);
-    return fn ? fn(s) : (s.ip + (s.ipMod || 0) + (s.contMod || 0));
-  }
-  function _gAiOpenLocs() {
-    var G = SOG.state.G;
-    return G.locations.filter(function (loc) { return (G.aiSlots[loc.id] || []).indexOf(null) !== -1; });
-  }
-  // AI cards present at a loc — includes face-down cards placed earlier THIS
-  // turn (the AI knows its own plays). Used for own-synergy targeting.
-  function _gAiCardsAt(locId) { return (SOG.state.G.aiSlots[locId] || []).filter(Boolean); }
-  function _gAiHasType(locId, type) {
-    return _gAiCardsAt(locId).some(function (s) { return _gAiTypeOf(s.cardId) === type; });
-  }
-  // Player cards the AI can actually see (revealed) — for strike targeting.
-  function _gPlayerRevealedAt(locId) {
-    return (SOG.state.G.playerSlots[locId] || []).filter(function (s) { return s && s.revealed; });
-  }
-  function _gLocIP(slots, locId) {
-    return (slots[locId] || []).reduce(function (sum, s) { return sum + (s && s.revealed ? _gAiEffIP(s) : 0); }, 0);
-  }
-  function _gLocGap(locId) {  // AI minus player (revealed) at a location
-    var G = SOG.state.G;
-    return _gLocIP(G.aiSlots, locId) - _gLocIP(G.playerSlots, locId);
-  }
-  function _gSoldierStrikeValue(locId) {
-    var pr = _gPlayerRevealedAt(locId);
-    if (!pr.length) return -Infinity;
-    var highIP = pr.reduce(function (m, s) { return Math.max(m, _gAiEffIP(s)); }, 0);
-    var gap = _gLocGap(locId);
-    var flips = gap < 0 && (gap + 1) >= 0;        // -1 to player flips/ties the loc
-    return highIP + (flips ? 5 : 0);
-  }
-  function _gAiHasCulturalAnywhere() {
-    return SOG.state.G.locations.some(function (loc) { return _gAiHasType(loc.id, 'Cultural'); });
-  }
-  // "Hold" cards play poorly now and want a later turn / a prerequisite.
-  function _gAiHeld(cardId, turn) {
-    if (cardId === 49) return !_gAiHasCulturalAnywhere(); // Phoenicians: need a Cultural to attach to
-    if (cardId === 43) return turn < 3 || (turn < 4 && !_gAiHasCulturalAnywhere());   // Gilgamesh card: back half, and only once a Cultural card is IN PLAY to count (his At Once snapshots the board)
-    return false;
-  }
-  // Preferred synergy location for a card (open locs only); null → no preference.
-  function _gPreferredLoc(cardId) {
-    var open = _gAiOpenLocs();
-    if (!open.length) return null;
-    function best(filterFn, scoreFn) {
-      var cands = open.filter(filterFn);
-      if (!cands.length) return null;
-      cands.sort(function (a, b) { return scoreFn(b.id) - scoreFn(a.id); });
-      return cands[0].id;
-    }
-    switch (cardId) {
-      case 49: // Phoenicians → a loc where the AI has a Cultural card to attach to
-        return best(function (l) { return _gAiHasType(l.id, 'Cultural'); },
-                    function (id) { return _gAiCardsAt(id).filter(function (s) { return _gAiTypeOf(s.cardId) === 'Cultural'; }).length; });
-      case 45: // Ziggurat → a loc where the AI has another Religious card (Priest)
-        return best(function (l) { return _gAiHasType(l.id, 'Religious'); },
-                    function (id) { return _gAiCardsAt(id).filter(function (s) { return _gAiTypeOf(s.cardId) === 'Religious'; }).length; });
-      case 38: // Priest → a loc where the AI already has a Ziggurat (gains its +1 to Religious)
-        return best(function (l) { return _gAiCardsAt(l.id).some(function (s) { return s.cardId === 45; }); },
-                    function (id) { return _gAiCardsAt(id).filter(function (s) { return s.cardId === 45; }).length; });
-      case 42: // Soldier → a loc with a player card; prefer the strongest strike / a flip
-        return best(function (l) { return _gPlayerRevealedAt(l.id).length > 0; }, _gSoldierStrikeValue);
-      case 40: // Scribe → a loc where the AI already has cards (boosts cards played before it)
-        return best(function (l) { return _gAiCardsAt(l.id).length > 0; },
-                    function (id) { return _gAiCardsAt(id).length; });
-      case 43: // Gilgamesh card → contest the location we're most behind at
-        return best(function () { return true; }, function (id) { return -_gLocGap(id); });
-      case 44: // Enkidu → the AI's biggest stack (his +2 hits adjacent slots)
-        return best(function (l) { return _gAiCardsAt(l.id).length > 0; },
-                    function (id) { return _gAiCardsAt(id).length; });
-      default:
-        return null; // Chariot/Priest/Farmer/Canals: no strong location context
-    }
-  }
-  // General fallback location rules: spread out, contest CLOSE losses, don't
-  // pile onto safe wins, abandon lost causes. On the FINAL turn the score is
-  // marginal-outcome placement instead: flipping a loss with THIS card is gold,
-  // shoring a narrow lead is silver, and both safe wins and unwinnable holes
-  // are wasted plays. (Gaps read REVEALED cards only — the player's face-down
-  // current-turn plays stay invisible, same information the player has.)
-  function _gLocPlayScore(locId, cardIp, lastTurn) {
-    var count = _gAiCardsAt(locId).length;
-    var gap   = _gLocGap(locId);
-    var score = 0;
-    if (lastTurn) {
-      if (gap < 0 && gap + cardIp >= 0)      score += 8;   // this card flips the location
-      else if (gap >= 0 && gap <= 2)         score += 4;   // secure a narrow lead
-      else if (gap < 0 && gap + cardIp < 0)  score -= 6;   // unwinnable even with this card
-      else if (gap > 4)                      score -= 4;   // already safely won
-      if (count >= 4) score -= 10;                          // no slot pressure valve
-      return score;
-    }
-    if (count >= 3) score -= 6;   // avoid stacking 3+ on one location
-    else if (count >= 2) score -= 2;
-    if (gap >= 4)  score -= 4;    // already comfortably won — don't reinforce
-    if (gap < 0 && gap >= -5) score += 3;   // contest a CLOSE loss (2-of-3 focus)
-    if (gap < -7)  score -= 5;    // deep hole — stop feeding a lost cause
-    if (count === 0) score += 1;  // prefer spreading to fresh locations
-    return score;
-  }
-  function _gFallbackLoc(cardId) {
-    var open = _gAiOpenLocs();
-    if (!open.length) return null;
-    var G    = SOG.state.G;
-    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
-    var ip   = card ? card.ip : 0;
-    var lastTurn = !!(G.config && G.config.structure && G.turn >= G.config.structure.turns);
-    open.sort(function (a, b) { return _gLocPlayScore(b.id, ip, lastTurn) - _gLocPlayScore(a.id, ip, lastTurn); });
-    return open[0].id;
-  }
-  // Synergy-pull sanity clamp. The preferred-loc rules chase +1-style combo value
-  // and would happily snowball every card onto one location (Scribe→most cards,
-  // Enkidu→biggest stack, Priest→the Ziggurat…) while losing the other two.
-  // A synergy nudge is never worth feeding a runaway win — 2-of-3 locations is
-  // the win condition — so the preference is DROPPED (→ strategic fallback) when
-  // that location is already comfortably won, already stacked while ahead, or
-  // holds 3+ cards. Contested targets (e.g. Soldier striking into a loss) pass
-  // through untouched.
-  function _gClampPreferred(pref) {
-    if (pref === null) return null;
-    var count = _gAiCardsAt(pref).length;
-    var gap   = _gLocGap(pref);
-    if (count >= 3) return null;                 // never a 4th card by synergy pull
-    if (gap >= 4)  return null;                  // runaway win — stop reinforcing
-    if (count >= 2 && gap >= 0) return null;     // stacked AND ahead — spread out
-    return pref;
-  }
-  // How eagerly to play a card this turn (higher = sooner; held / castoff → negative).
-  // Base = the card's IP, so the strongest material actually reaches the board
-  // (8 plays from a 10-card deck = 2 castoffs; make them the junk, not Enkidu).
-  // Situational bonuses/penalties layer on top. Negative scores are skipped while
-  // anything better exists (the selectPlays 'playable' filter).
-  function _gCardPlayScore(cardId, turn) {
-    // Held cards score FAR below any castoff, so even the all-negative fallback
-    // pool (junk-only hands) plays the junk first and keeps holds held.
-    if (_gAiHeld(cardId, turn)) return -100;
-    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
-    var base = card ? card.ip : 0;
-    var pref = _gPreferredLoc(cardId);
-    switch (cardId) {
-      case 49: return base + (pref !== null ? 5 : -1);    // Phoenicians with a Cultural target ready
-      case 42: return base + (pref !== null ? 4 : -2.5);  // Soldier: strike value, else dead weight
-      case 45: return base + (pref !== null ? 3 : 0);     // Ziggurat next to a Religious card
-      case 38: return base + (pref !== null ? 2 : -0.5);  // Priest eats a hand card — wants the Ziggurat payoff
-      case 40: {
-        // Scribe is a late-bloomer: strongest on the FINAL turn (max stamp targets).
-        // Earlier he's HELD — playable only when nothing better exists (the 2-plays
-        // quota must be filled), and even then only ranking above other holds when
-        // 2+ of his targets are already on board.
-        var _sG    = SOG.state.G;
-        var _sLast = !!(_sG.config && _sG.config.structure && turn >= _sG.config.structure.turns);
-        var _sTgts = pref !== null ? _gAiCardsAt(pref).length : 0;
-        if (_sLast) return base + 3 + Math.min(_sTgts, 3);
-        return _sTgts >= 2 ? -99 : -100;
-      }
-      case 44: return base + (pref !== null ? 1 : 0);     // Enkidu into a stack (adjacency payoff)
-      case 43: return base + 4;                            // Gilgamesh (held until turn 3) = top priority when live
-      /* Farmer (39): weight KEPT at -2.5, reason REWRITTEN for its new ability.
-         It used to grant capital, which was literally dead here (this battle is
-         model:'none', capital 0). Post-swap it arms +1 IP on the next card played
-         — not dead, but still the weakest card in hand when every play is free:
-         a 1/1 body whose whole payoff is a single +1 somewhere else. Castoff. */
-      case 39: return base - 2.5;
-      case 41: return base - 2;                            // Canals: only boosts Farmer here → castoff
-      default: return base;
-    }
-  }
-
   /* ── Post-battle: self-rendered result popup ──────────────────────
      Win  → set phase-1 complete (+ lucky-win Cuneiform auto-grant) →
             "Continue" returns to the Mesopotamia overworld (D3b adds the
@@ -490,6 +309,7 @@ SOG.GilgameshBattle = (function () {
       if (r && r.tier) flagTier = r.tier;
       _gWinReward   = r;
       _gWinFlagTier = flagTier;
+      if (flagTier === 'giant') { _cunSetLosses('serf', 0); _cunSetLosses('giant', 0); }   // Giant beaten → the tips are done
       try { localStorage.setItem(KEY_PHASE1_COMPLETE, 'true'); } catch (e) {}
       try { localStorage.setItem(KEY_BATTLE_GILGAMESH_COMPLETE, 'true'); } catch (e) {}
       if (r.firstTierWin) {
@@ -515,13 +335,102 @@ SOG.GilgameshBattle = (function () {
       // 2-button DEFEAT scoreboard (PLAY AGAIN → Cuneiform intervention). NO Back To Map
       // — the player must retry, not wander off. Keyed on the SERF flag (not the legacy
       // completion flag) so a stale save can't leak a Back To Map button here.
-      runLines(GILGAMESH_LOSS_SMACK, function () {
+      runLines(_withCunTip(GILGAMESH_LOSS_SMACK), function () {
         _showResultPopup(false, locResults);
       });
     } else {
       // Post-arc loss/tie (fluke won; not the Giant rematch) → plain 3-button scoreboard.
       _showResultPopup(false, locResults, { repeat: true });
     }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     CUNEIFORM TIPS — a scaffolding ladder for players who keep losing with
+     Cuneiform (46) in the deck. Counted per TIER (Serf / Giant) in losses since
+     the card was owned at battle start, so it plays out on the Serf, starts over
+     when the player moves on to the Giant (first Giant battle: no in-battle tips),
+     and switches off once the Giant is beaten.
+       level 0 — Cuneiform not owned at battle start, or the Giant already beaten:
+                 nothing.
+       level 1 — first battle lost with Cuneiform owned: the Explorer closes the
+                 post-loss dialogue with ONE line —
+                   never reached the hand → "I really wish I could have played Cuneiform."
+                   in hand, played before turn 4 or never → "I wonder what's the best
+                   time to play Cuneiform?"
+                   played on turn 4 → nothing to say.
+       level 2 — every later battle while still losing: in-battle nudges —
+                   Cuneiform revealed on turn 1-3 → after that reveal, "I wonder if
+                   that was really the best time to play Cuneiform?"
+                   Cuneiform in hand at the start of turn 4 → before selection,
+                   "I wonder how many extra Influence Points I'd get if I play
+                   Cuneiform now?"
+     Each in-battle line fires at most once per battle; a loss at any level bumps
+     the tier's counter. All lines are the Explorer's and editable here. */
+  var CUN_TIP_NEVER_IN_HAND = 'I really wish I could have played Cuneiform.';
+  var CUN_TIP_BEST_TIME     = "I wonder what's the best time to play Cuneiform?";
+  var CUN_TIP_TOO_EARLY     = 'I wonder if that was really the best time to play Cuneiform?';
+  var CUN_TIP_TURN4_IN_HAND = "I wonder how many extra Influence Points I'd get if I play Cuneiform now?";
+  var CUNEIFORM_ID = 46;
+
+  var _cunTip = { level: 0, tier: 'serf', seenInHand: false, playedTurn: null, firedReveal: false, firedT4: false };
+
+  function _cunLosses(tier) { try { return parseInt(localStorage.getItem(KEY_CUN_LOSSES_PREFIX + tier), 10) || 0; } catch (e) { return 0; } }
+  function _cunSetLosses(tier, n) { try { if (n > 0) localStorage.setItem(KEY_CUN_LOSSES_PREFIX + tier, String(n)); else localStorage.removeItem(KEY_CUN_LOSSES_PREFIX + tier); } catch (e) {} }
+  function _cunTierOf(cfg) { return (cfg && (cfg.flagTier || (cfg.ai && cfg.ai.tier))) || 'serf'; }
+
+  // Battle start: decide this battle's level from the persisted counter.
+  function _cunTipArm(cfg) {
+    var tier = _cunTierOf(cfg);
+    var owned = _has(KEY_CUNEIFORM_GRANTED);
+    var level = (!owned || _tierBeatenLocal('gilgamesh', 'giant')) ? 0 : (_cunLosses(tier) === 0 ? 1 : 2);
+    _cunTip = { level: level, tier: tier, seenInHand: false, playedTurn: null, firedReveal: false, firedT4: false };
+  }
+  function _cunNoteHand() {
+    var G = SOG.state && SOG.state.G;
+    if (_cunTip.level && G && G.playerHand && G.playerHand.indexOf(CUNEIFORM_ID) !== -1) _cunTip.seenInHand = true;
+  }
+  // An Explorer aside that holds card placement until it is dismissed.
+  function _cunSay(text, onDone) {
+    _gScriptDialogueActive = true;
+    runLines([{ who: 'explorer', text: text }], function () {
+      _gScriptDialogueActive = false;
+      if (onDone) onDone();
+    });
+  }
+  // Level 2, after a reveal: Cuneiform revealed by the player on turn 1-3.
+  function _cunAfterReveal(turn, revealed) {
+    var mine = (revealed || []).some(function (r) { return r && r.owner === 'player' && r.cardId === CUNEIFORM_ID; });
+    if (!mine) return;
+    _cunTip.playedTurn = turn;
+    if (_cunTip.level === 2 && turn < TOTAL_TURNS && !_cunTip.firedReveal) {
+      _cunTip.firedReveal = true;
+      _cunSay(CUN_TIP_TOO_EARLY);
+    }
+  }
+  // Level 2, turn 4 start: Cuneiform still in hand.
+  function _cunTurnStart(turn) {
+    _cunNoteHand();
+    var G = SOG.state && SOG.state.G;
+    if (_cunTip.level === 2 && turn === TOTAL_TURNS && !_cunTip.firedT4
+        && G && G.playerHand && G.playerHand.indexOf(CUNEIFORM_ID) !== -1) {
+      _cunTip.firedT4 = true;
+      _cunSay(CUN_TIP_TURN4_IN_HAND);
+    }
+  }
+  // Loss: bump the tier's counter; at level 1 return the closing Explorer line.
+  function _cunOnLoss() {
+    if (!_cunTip.level) return null;
+    _cunNoteHand();
+    _cunSetLosses(_cunTip.tier, _cunLosses(_cunTip.tier) + 1);
+    if (_cunTip.level !== 1) return null;
+    if (!_cunTip.seenInHand) return CUN_TIP_NEVER_IN_HAND;
+    if (_cunTip.playedTurn === null || _cunTip.playedTurn < TOTAL_TURNS) return CUN_TIP_BEST_TIME;
+    return null;
+  }
+  // Append the level-1 closing line (if any) to a post-loss dialogue block.
+  function _withCunTip(lines) {
+    var tip = _cunOnLoss();
+    return tip ? lines.concat([{ who: 'explorer', text: tip }]) : lines;
   }
 
   /* Repeat-win flourish: the word VICTORY — same gold colour / font / glow as the
@@ -711,14 +620,14 @@ SOG.GilgameshBattle = (function () {
 
   /* REMATCH LOSS — dismissive, back to map to retry. [source: BLOCK 4 → GILGAMESH_REMATCH_LOSS] */
   function _runRematchLossSequence(locResults) {
-    runLines(GILGAMESH_REMATCH_LOSS, function () {
+    runLines(_withCunTip(GILGAMESH_REMATCH_LOSS), function () {
       _showResultPopup(false, locResults, { repeat: true });   // PLAY AGAIN / GAMEBOARD / BACK TO MAP
     });
   }
 
   /* REMATCH DRAW — "a draw is not a victory", must play again. [source: BLOCK 5 → GILGAMESH_REMATCH_DRAW] */
   function _runRematchDrawSequence(locResults) {
-    runLines(GILGAMESH_REMATCH_DRAW, function () {
+    runLines(_withCunTip(GILGAMESH_REMATCH_DRAW), function () {
       _showResultPopup(false, locResults, { repeat: true });
     });
   }
@@ -992,12 +901,15 @@ SOG.GilgameshBattle = (function () {
     }, 100);
   }
 
-  /* Post-win → Mesopotamia market navigation. Fade to black, tear down, switch
-     to the overworld screen UNDER the black, then hand off to the overworld:
-     it lands at Uruk, reveals the market node, and (first time) auto-walks into
-     the market. We pass _gFadeFromBlack as the "map shown" callback so the black
-     lifts once the overworld has positioned the Explorer + refreshed the nodes.
-     Falls back to the plain overworld return if the hook is unavailable. */
+  /* Post-win → Mesopotamia return. Fade to black, tear down, switch to the
+     overworld screen UNDER the black, then hand off to the overworld
+     (returnFromGilgameshWin): it lands at Uruk, plays the flag choreography,
+     reveals the market node and — on the first Serf win only — walks the Explorer
+     into the market for her scripted first visit (sog_market_auto_visit_done);
+     on the Giant win it reveals Sargon instead. We pass _gFadeFromBlack as the
+     "map shown" callback so the black lifts once the overworld has positioned the
+     Explorer + refreshed the nodes. Falls back to the plain overworld return if
+     the hook is unavailable. */
   function _returnToMesopotamiaMarket() {
     var ow = window.Overworld;
     if (!ow || typeof ow.returnFromGilgameshWin !== 'function') { _exitToOverworld(); return; }
@@ -1055,8 +967,8 @@ SOG.GilgameshBattle = (function () {
     // overworld wipe), onBattleStart (avatars + fade cover + the Attempt-1
     // opening dialogue + wire the persistent rules click; the engine then runs
     // the shared rules-popup/PLAY gate and the deal), onTurnStart/onPlayerPlayed/
-    // onBeforeReveal/isInputBlocked, and onWin/onLoss/onTie. The AI is the
-    // heuristic seam (gilgameshSelectPlays) + adventure Chariot movement.
+    // onBeforeReveal/isInputBlocked, and onWin/onLoss/onTie. The AI is the shared
+    // Serf/Giant heuristic (ai.js, by tier) + adventure Chariot movement.
     if (typeof window.initGame === 'function') window.initGame(buildGilgameshConfig());
   }
 
@@ -1090,44 +1002,6 @@ SOG.GilgameshBattle = (function () {
       { id: 7, name: 'Uruk',         region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/uruk.jpg',       thumbnailCrop: null },
       { id: 2, name: 'Mount Mashu',  region: 'Mesopotamia', abilityText: '', abilityKey: null, image: 'images/locations/mountmashu.jpg', thumbnailCrop: null }
     ];
-  }
-
-  /* Card-aware AI selector behind the Stage-1 'heuristic' seam. A faithful
-     re-packaging of aiPlayCards (NOT a redesign): the same ranked/held/
-     preferred/fallback decisions, reusing the same _g* helpers (which read
-     SOG.state.G directly). Receives ctx = { G, turn, hand, locations } and
-     RETURNS [{cardId, locId}] in play order; the engine commits each via its
-     own commitPlay. To keep the sequential decisions IDENTICAL to the bespoke
-     (which placed each card via _gAiPlaceCard before deciding the next), it
-     reflects each pick on the board between iterations, then RESTORES the board
-     so the engine stays the authoritative committer (no reveal-queue / DOM side
-     effects here). */
-  function gilgameshSelectPlays(ctx) {
-    var G = ctx.G;                       // === SOG.state.G (the _g* helpers read it)
-    var numPlay = Math.min(2, G.aiHand.length);
-    var plays = [], simSlots = [], handSnapshot = G.aiHand.slice();
-    for (var p = 0; p < numPlay; p++) {
-      if (!G.aiHand.length || !_gAiOpenLocs().length) break;
-      var ranked = G.aiHand.map(function (cid) { return { cid: cid, score: _gCardPlayScore(cid, G.turn) }; });
-      var playable = ranked.filter(function (r) { return r.score >= 0; });
-      var pool = playable.length ? playable : ranked;
-      pool.sort(function (a, b) { return b.score - a.score; });
-      var cardId = pool[0].cid;
-      var locId  = _gClampPreferred(_gPreferredLoc(cardId));
-      if (locId === null) locId = _gFallbackLoc(cardId);
-      if (locId === null) break;
-      var slotIndex = G.aiSlots[locId].indexOf(null);
-      if (slotIndex === -1) break;
-      var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === cardId; });
-      if (!card) break;                  // mirrors _gAiPlaceCard's !card → false → break
-      plays.push({ cardId: cardId, locId: locId });
-      G.aiSlots[locId][slotIndex] = { cardId: cardId, ip: card.ip, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], turnPlayed: G.turn };
-      G.aiHand = G.aiHand.filter(function (id) { return id !== cardId; });
-      simSlots.push({ locId: locId, slotIndex: slotIndex });
-    }
-    simSlots.forEach(function (s) { G.aiSlots[s.locId][s.slotIndex] = null; });
-    G.aiHand = handSnapshot;
-    return plays;
   }
 
   // The config-builder (one-and-done: ONE battle, retried until won). Player =
@@ -1173,10 +1047,12 @@ SOG.GilgameshBattle = (function () {
       locationAbilities: { select: { mode: 'explicit', locations: _gilgameshLocations() } },
       scoring:   { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },  // exact-IP tie → onTie (tie-as-loss)
       // Two-tier AI, tier derived from state (_aiTier above): SERF for the first battle
-      // + Cuneiform comeback, GIANT for the rematch. Looked up by scriptHook in ai.js;
-      // gilgameshSelectPlays stays as the untiered fallback. A dev-menu launcher can
-      // still force a tier via window.__forceTier (which initGame applies over this).
-      ai:        { profile: 'heuristic', tier: _aiTier, movement: 'adventure', settings: { selectPlays: gilgameshSelectPlays } },
+      // + Cuneiform comeback, GIANT for the rematch — the shared Serf/Giant brains in
+      // ai.js, the Giant bound to this boss's signature by scriptHook. (The module's
+      // own selector was dead code: the tier is always set, so ai.js never fell back
+      // to settings.selectPlays.) A dev-menu launcher can still force a tier via
+      // window.__forceTier (which initGame applies over this).
+      ai:        { profile: 'heuristic', tier: _aiTier, movement: 'adventure' },
       presentation: {
         bodyClass:        'gilgamesh-battle',                  // Mesopotamia location art
         bodyClassExtra:   'otzi-battle',                       // shared adventure-battle styling
@@ -1236,6 +1112,7 @@ SOG.GilgameshBattle = (function () {
     // off to the engine's opening tail: rules popup + PLAY → the deal-in (this
     // battle's original fly-up, now shared by every Adventure battle) → turn 1.
     onBattleStart: function (ctx, done) {
+      _cunTipArm(ctx.config);   // Cuneiform tips: this battle's level, from the tier's loss count
       if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(ctx.config && ctx.config.presentation);
       setTurnCounter(1, TOTAL_TURNS);
       _gDisableButtons();
@@ -1262,17 +1139,24 @@ SOG.GilgameshBattle = (function () {
       });
     },
 
+    // The deal landed — note whether Cuneiform is in the opening hand.
+    onHandDealt: function (ctx) { _cunNoteHand(); },
+
     // Turns 2-4: re-apply per-turn presentation; buttons disabled until a play.
     onTurnStart: function (ctx, turn) {
       setTurnCounter(turn, TOTAL_TURNS);
       _gDisableButtons();
+      _cunTurnStart(turn);
     },
+
+    // Reveals done: a Cuneiform revealed early may draw the level-2 nudge.
+    onAfterReveal: function (ctx, info) { _cunAfterReveal(info && info.turn, info && info.revealed); },
 
     // A card was committed — enable End Turn + Reset (mirrors notifyPlayerPlayed).
     onPlayerPlayed: function (ctx, p) { _gEnableButtons(); },
 
     // Player ended the turn — keep buttons disabled through the reveal.
-    onBeforeReveal: function (ctx, turn) { _gDisableButtons(); },
+    onBeforeReveal: function (ctx, turn) { _gDisableButtons(); _cunNoteHand(); },
 
     // Block card input while the opening dialogue / interactive pause is active.
     isInputBlocked: function (ctx) { return !!_gScriptDialogueActive; },
@@ -1304,7 +1188,9 @@ SOG.GilgameshBattle = (function () {
       battleComplete: _has(KEY_BATTLE_GILGAMESH_COMPLETE),
       phase1Complete: _has(KEY_PHASE1_COMPLETE),
       cuneiformGranted: _has(KEY_CUNEIFORM_GRANTED),
-      openingSeen: _has('sog_gilgamesh_opening_seen')
+      openingSeen: _has('sog_gilgamesh_opening_seen'),
+      cunTipLossesSerf:  _cunLosses('serf'),
+      cunTipLossesGiant: _cunLosses('giant')
     };
   }
   function applySnapshot(snap) {
@@ -1313,6 +1199,8 @@ SOG.GilgameshBattle = (function () {
     _set(KEY_PHASE1_COMPLETE, snap.phase1Complete);
     _set(KEY_CUNEIFORM_GRANTED, snap.cuneiformGranted);
     _set('sog_gilgamesh_opening_seen', snap.openingSeen);
+    _cunSetLosses('serf',  snap.cunTipLossesSerf  || 0);
+    _cunSetLosses('giant', snap.cunTipLossesGiant || 0);
   }
 
   return {

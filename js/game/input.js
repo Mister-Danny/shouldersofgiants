@@ -1535,6 +1535,18 @@
        enforced come from one place. */
     cardsPerTurnCap:         _cardsPerTurnCap,
     cardsPlayedThisTurn:     _cardsPlayedThisTurn,
+    /* Does the player have ANY legal play right now — a card in hand that
+       isLegalPlayTarget accepts somewhere (cap, cost, open slot, flood, the
+       turn-1 Rift rule all included)? game.js's End Turn nudge asks this. */
+    hasLegalPlay:            function () {
+      if (G.phase !== 'select' || !G.playerHand || !G.playerHand.length) return false;
+      for (var h = 0; h < G.playerHand.length; h++) {
+        for (var l = 0; l < G.locations.length; l++) {
+          if (isLegalPlayTarget(G.playerHand[h], G.locations[l].id)) return true;
+        }
+      }
+      return false;
+    },
     clearSelection:          clearSelection,
     /* The synthetic slot the hand-card info panels render from (hover + modal) —
        the Ötzi hints pin the same panel onto the hinted card. */

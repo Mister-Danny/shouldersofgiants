@@ -1509,6 +1509,48 @@ img    { display: block; }
 /* Ötzi hints prompt: a short question, so a narrow panel with centred text. */
 .otzi-hints-prompt { width: 520px; max-width: 92vw; }
 .otzi-hints-prompt .rules-popup-body { text-align: center; }
+/* End Turn nudge (js/game.js _showEndTurnNudge): same short-question panel, over
+   a LIGHTER dim than the other rules popups so the ringed CARDS TO PLAY number in
+   the top-left box stays readable behind it. */
+.end-turn-nudge { width: 520px; max-width: 92vw; }
+#battle-rules-backdrop.end-turn-nudge-backdrop { background: rgba(20, 10, 2, 0.42); }
+.end-turn-nudge .rules-popup-body { text-align: center; }
+/* …and the CARDS TO PLAY number while the nudge is up: a pulsing gold aura on
+   the glyph itself (text-shadow, so nothing is drawn over the label above it),
+   gold to read as part of the box's own frame. The dim is also cut away over
+   the whole top-left box (js/game.js masks the backdrop), so the number sits
+   at full brightness behind the prompt. */
+.battle-capital-num.end-turn-nudge-ring {
+  position: relative;
+  animation: endTurnNudgeGlow 1.1s ease-in-out infinite;
+}
+/* …with a gold arrow just to the LEFT of the number, pointing at it, bobbing
+   toward it in time with the glow. A border triangle (no glyph/font dependency),
+   vertically centred on the digit. */
+.battle-capital-num.end-turn-nudge-ring::before {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  margin-right: 12px;
+  width: 0;
+  height: 0;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 14px solid #ffd54a;
+  filter: drop-shadow(0 0 4px #ffd54a) drop-shadow(0 0 8px rgba(255, 196, 40, 0.8)) drop-shadow(1px 1px 0 #000);
+  transform: translateY(-50%);
+  animation: endTurnNudgeArrow 1.1s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes endTurnNudgeArrow {
+  0%, 100% { transform: translate(0, -50%); }
+  50%      { transform: translate(4px, -50%); }
+}
+@keyframes endTurnNudgeGlow {
+  0%, 100% { text-shadow: 0 0 4px #ffe89a, 0 0 10px #ffd54a, 0 0 18px rgba(255, 196, 40, 0.75), 1px 1px 0 #000; }
+  50%      { text-shadow: 0 0 6px #fff3c4, 0 0 16px #ffd54a, 0 0 32px rgba(255, 196, 40, 1), 0 0 48px rgba(255, 170, 0, 0.6), 1px 1px 0 #000; }
+}
 .tier-pick-name { font-size: 18px; letter-spacing: 0.08em; }
 .tier-pick-sub  { font-size: 11px; text-transform: none; letter-spacing: 0.02em; opacity: 0.85; }
 
