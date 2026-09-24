@@ -30,7 +30,7 @@ function findUndefined(v, at = '$') {
 }
 
 // Fresh module instance. `storage` can be shared to simulate a page reload.
-function load({ storage = new Map(), uid = 'studentZ' } = {}) {
+function load({ storage = new Map(), uid = 'studentZ', intl = Intl } = {}) {
   const writes = [];
   const listeners = {};
   const SERVER_TS = { __serverTimestamp: true };
@@ -60,7 +60,7 @@ function load({ storage = new Map(), uid = 'studentZ' } = {}) {
     SogAuth: { ready: (cb) => cb(), getUser: () => ({ uid }) },
   };
   const document = { readyState: 'complete', getElementById: () => null, addEventListener() {} };
-  const ctx = vm.createContext({ window, localStorage, document, firebase, console });
+  const ctx = vm.createContext({ window, localStorage, document, firebase, console, Intl: intl });
   vm.runInContext(SRC, ctx, { filename: 'js/analytics.js' });
   return { Analytics: window.Analytics, writes, storage, unload: () => listeners.beforeunload() };
 }
@@ -306,4 +306,12 @@ test('session carries the device clock as well as the server stamp, so queued of
   assert.ok(Date.parse(doc.finishedAtClient) >= Date.parse(doc.startedAtClient), 'finish is not before start');
   assert.equal(typeof doc.clientTzOffsetMin, 'number', 'UTC offset kept so local time of day survives');
   assert.ok(Math.abs(doc.clientTzOffsetMin) <= 14 * 60);
+  assert.equal(doc.clientTimeZone, Intl.DateTimeFormat().resolvedOptions().timeZone, 'IANA zone, so reports can use the player\'s own clock');
+});
+
+test('a browser with no resolvable time zone writes an empty string, never undefined', () => {
+  const { Analytics, writes } = load({ intl: { DateTimeFormat: function () { throw new Error('no Intl here'); } } });
+  Analytics.gameStarted('easy', { battleId: 'otzi', tier: null, locations: LOCATIONS, hand: [26] });
+  assert.equal(writes[0].data.clientTimeZone, '');
+  assert.equal(typeof writes[0].data.clientTzOffsetMin, 'number');
 });

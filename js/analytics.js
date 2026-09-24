@@ -220,6 +220,15 @@
      On the NEXT call to gameStarted() we flush that record first —
      but only when the signed-in uid is the one that wrote it.
   ══════════════════════════════════════════════════════════════ */
+  // Guarded: resolvedOptions().timeZone is absent on a few old browsers, and
+  // a garbage value must never be written. Capped like every other string here.
+  function _timeZone() {
+    try {
+      var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      return (typeof tz === 'string' && tz.length <= 64) ? tz : '';
+    } catch (e) { return ''; }
+  }
+
   function _currentUid() {
     var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
       ? window.SogAuth.getUser() : null;
@@ -384,6 +393,11 @@
         // them and falls back to the server stamp for older rows.
         startedAtClient: new Date().toISOString(),
         clientTzOffsetMin: -new Date().getTimezoneOffset(),
+        // The browser's IANA zone ('America/Chicago'), so a report can show the
+        // player's own clock rather than the server's. Coarse by design — a
+        // region, not a location — and never recorded for a named person:
+        // guests are anonymous, and a student is only ever a username to us.
+        clientTimeZone: _timeZone(),
         isTestSession:  isTestSession,
         difficulty:     difficulty || 'easy',
         gameMode:       'standard',
