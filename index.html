@@ -1540,6 +1540,23 @@
     </div>
   </div>
 
+  <!-- ── End-of-content popup (js/feedback.js showEndOfContent). Shown once by
+       js/overworld.js on the post-battle return after the LAST built boss's
+       Giant is beaten. Title and body are filled from END_OF_CONTENT_TEXT in
+       js/feedback.js at show time — edit the words there, not here. Same panel
+       styling as the feedback popup above. -->
+  <div id="endgame-backdrop" class="popup-backdrop">
+    <div class="card-popup feedback-popup endgame-popup">
+      <div class="popup-card-name" id="endgame-title"></div>
+      <div class="popup-divider"></div>
+      <div class="feedback-body" id="endgame-body"></div>
+      <div class="feedback-actions">
+        <button class="btn-feedback btn-feedback-primary" id="endgame-form-btn">Feedback Form</button>
+        <button class="btn-feedback" id="endgame-continue-btn">Continue</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Guest first-launch notice modal (AUTH_SPEC.md Phase 2) — see
        js/guest-status.js. Sequenced to show after the welcome popup (below)
        is dismissed, so the two never stack. -->

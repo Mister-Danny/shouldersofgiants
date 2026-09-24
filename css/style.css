@@ -634,6 +634,24 @@ img    { display: block; }
     0 0 22px rgba(240, 207, 108, 0.55);
 }
 
+/* ── End-of-content popup — reuses the feedback panel; adds paragraph
+   spacing and the visible, clickable form link. */
+#endgame-backdrop {
+  background: rgba(20, 10, 2, 0.82);
+}
+.endgame-popup .feedback-body p + p { margin-top: 10px; }
+.endgame-link {
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #f0cf6c;
+  text-decoration: underline;
+  word-break: break-all;
+  text-shadow: 1px 1px 0 #000;
+}
+.endgame-link:hover { color: #fff5d8; }
+
 
 /* ── Video intro screen ────────────────────────────────────────── */
 

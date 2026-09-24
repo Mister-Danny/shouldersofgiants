@@ -48,6 +48,8 @@ var Overworld = (function () {
   var KEY_EGYPT_NODE_LIVE           = 'sog_egypt_node_live';            // post-Neb: Egypt Double Crown node is active + post-Neb beat has played (set once, at end of the beat)
   var KEY_EGYPT_NODE_ARRIVAL        = 'sog_egypt_node_arrival_seen';    // one-time Egypt "funny hat" arrival beat (fires when reaching Egypt with the node live)
   var KEY_MET_NARMER                = 'sog_met_narmer';                 // set after the first Double Crown encounter → later clicks skip straight to the battle
+  // End of built content
+  var KEY_END_OF_CONTENT_SEEN       = 'sog_end_of_content_seen';        // one-time congratulations + feedback ask, shown once the LAST built boss's Giant is beaten (set when shown)
   var KEY_MET_HATSHEPSUT            = 'sog_met_hatshepsut';             // set after the first Hatshepsut encounter → later clicks skip straight to the battle
   // Stage B
   var KEY_HATSHEPSUT_TRANSITION     = 'sog_hatshepsut_transition_seen'; // Narmer→Hatshepsut journey played (once, after the Narmer GIANT win)
@@ -4154,6 +4156,13 @@ var Overworld = (function () {
        onProceed; a GIANT win has no pending erect → onProceed right after the stamp.
      onProceed continues whatever is next (market fade / Hammurabi reveal / interstitial). */
   var STAMP_DELAY_MS = 1200;  // pause after arrival before the stamp thunk (editable)
+
+  /* THE LAST BUILT BOSS. Beating this tier means the player has finished every
+     battle that exists so far → the end-of-content popup (see resumeAfterBattle).
+     Update this as new bosses ship. END_OF_CONTENT_DELAY_MS is the pause between
+     the Giant stamp landing and the popup appearing (editable). */
+  var END_OF_CONTENT          = { hook: 'kush', tier: 'giant' };
+  var END_OF_CONTENT_DELAY_MS = 900;
   var ERECT_GAP_MS   = 500;   // pause between the stamp and the Giant erect beats (editable)
   function _playReturnFlagAnim(giantFlagEl, onProceed) {
     // A GIANT-FIRST win (difficulty-picker bosses) both REVEALS and STAMPS the same
@@ -5849,7 +5858,14 @@ var Overworld = (function () {
       // FIRST-ever tier win) so bosses returning through this generic path
       // (Hammurabi / Narmer / Hanging Gardens) get the same erect choreography
       // as the dedicated Gilgamesh/Sargon returns. Null when nothing is pending.
-      _playReturnFlagAnim(_consumePendingFlagReveal(), null);
+      var _flagAnimDone = false, _flagAnimWaiter = null;
+      _playReturnFlagAnim(_consumePendingFlagReveal(), function () {
+        _flagAnimDone = true;
+        if (_flagAnimWaiter) { var w = _flagAnimWaiter; _flagAnimWaiter = null; w(); }
+      });
+      // Run cb once the stamp/erect choreography above has landed (at once if it
+      // already has). Only the end-of-content beat below waits on it today.
+      var _afterReturnFlagAnim = function (cb) { if (_flagAnimDone) cb(); else _flagAnimWaiter = cb; };
 
       // Catch-up Hammurabi node reveal. The node normally rises via
       // returnFromSargonWin (the FIRST Sargon win). But a save that beat Sargon
@@ -5930,6 +5946,34 @@ var Overworld = (function () {
         }, 350);
         log('resumeAfterBattle() — Egypt chain reveals: ' +
             _egyptReveals.map(function (r) { return r.opener + '(Giant)→' + r.node; }).join(', '));
+        return;
+      }
+
+      /* ── END OF BUILT CONTENT ──────────────────────────────────────────────
+         Once the LAST boss that exists so far has had its Giant beaten, play the
+         one-time congratulations + feedback-form popup (js/feedback.js,
+         END_OF_CONTENT_TEXT). Fires on the post-battle return — normally the Kush
+         Giant win's own return — AFTER the Giant stamp has thunked onto the flag,
+         so the payoff lands before the ask. Same catch-up shape as the reveals
+         above: gated on the beaten flag, not on which battle just ended, and on
+         NO map, so a save that finished everything before this existed sees it on
+         its next battle return wherever that is. The flag is set as the popup
+         SHOWS, so it is shown at most once even if the tab closes on it. Move
+         END_OF_CONTENT forward as new bosses ship. */
+      var _endSeen = false;
+      try { _endSeen = localStorage.getItem(KEY_END_OF_CONTENT_SEEN) === 'true'; } catch (e) {}
+      if (!_endSeen && _tierBeaten(END_OF_CONTENT.hook, END_OF_CONTENT.tier)) {
+        isDialogueLocked = true;
+        cancelIdle();
+        _afterReturnFlagAnim(function () {
+          setTimeout(function () {
+            try { localStorage.setItem(KEY_END_OF_CONTENT_SEEN, 'true'); } catch (e) {}
+            var done = function () { isDialogueLocked = false; scheduleIdle(); };
+            var fb = window.Feedback;
+            if (fb && typeof fb.showEndOfContent === 'function') fb.showEndOfContent(done); else done();
+          }, END_OF_CONTENT_DELAY_MS);
+        });
+        log('resumeAfterBattle() — end of built content (' + END_OF_CONTENT.hook + ' ' + END_OF_CONTENT.tier + ' beaten)');
         return;
       }
 
@@ -6036,6 +6080,7 @@ var Overworld = (function () {
         egyptNodeLive: flag(KEY_EGYPT_NODE_LIVE),
         egyptNodeArrivalSeen: flag(KEY_EGYPT_NODE_ARRIVAL),
         metNarmer: flag(KEY_MET_NARMER),
+        endOfContentSeen: flag(KEY_END_OF_CONTENT_SEEN),
         cuneiformGranted: flag(KEY_CUNEIFORM_GRANTED)
       };
     },
@@ -6077,6 +6122,7 @@ var Overworld = (function () {
       setFlag(KEY_EGYPT_NODE_LIVE, snap.egyptNodeLive);
       setFlag(KEY_EGYPT_NODE_ARRIVAL, snap.egyptNodeArrivalSeen);
       setFlag(KEY_MET_NARMER, snap.metNarmer);
+      setFlag(KEY_END_OF_CONTENT_SEEN, snap.endOfContentSeen);
       setFlag(KEY_CUNEIFORM_GRANTED, snap.cuneiformGranted);
       // Resync in-memory state (currentMapId/currentPos/visitedMaps) from what
       // was just written, reusing loadState()'s existing parsing/defaulting.

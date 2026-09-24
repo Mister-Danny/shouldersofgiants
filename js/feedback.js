@@ -17,6 +17,14 @@
  * once. The module itself knows nothing about battles, so a future trigger is
  * just another offerOnce call.
  *
+ * THE END-OF-CONTENT POPUP — a second, separately-worded popup for the player who
+ * has beaten the LAST boss that exists so far (js/overworld.js decides the moment
+ * and owns its once-only flag, sog_end_of_content_seen, which rides in the save
+ * snapshot). It congratulates them, says more is being built, and asks for the
+ * form as the biggest help they can give — with the link itself shown and
+ * clickable. Text lives in END_OF_CONTENT_TEXT below; edit it there.
+ *   Feedback.showEndOfContent(onContinue)
+ *
  * THE HOME BUTTON — shown on the home menu to everyone, guests included, at any
  * progress. The one-time popup only reaches players who have not yet beaten
  * Gilgamesh, so a guest past that point would otherwise have no way to the form.
@@ -36,6 +44,21 @@
 
   var OFFERED_KEY = 'sog_feedback_form_offered';
   var FORM_URL    = 'https://docs.google.com/forms/d/e/1FAIpQLSfSBd4cMeFjQZce1NX86leaLkAofRECZJBjh3gbDbhOcAuxRg/viewform?usp=dialog';
+
+  /* END-OF-CONTENT POPUP TEXT — edit freely. `title` is the big gold heading,
+     `subhead` the italic line under it, `paragraphs` the body (each entry is one
+     paragraph, in order). The form link is rendered after the last paragraph as
+     the URL itself, clickable, opening in a new tab. Plain text only — it is set
+     via textContent, so no HTML. */
+  var END_OF_CONTENT_TEXT = {
+    title:   'Congratulations!',
+    subhead: "You've reached the end... for now",
+    paragraphs: [
+      "You've beaten every challenge in Shoulders of Giants that exists so far. That is a serious achievement.",
+      'More civilizations are being built right now, and they will appear on your map as they are finished.',
+      'The biggest help you can give us is to fill out the feedback form. It only takes a few minutes, and what you tell us shapes what gets built next:'
+    ]
+  };
 
   var _pendingContinue = null;   // what offerOnce's caller wants to happen next
 
@@ -76,6 +99,69 @@
     if (go) go();
   }
 
+  // ── End-of-content popup ─────────────────────────────────────
+  function getEndBackdrop() { return document.getElementById('endgame-backdrop'); }
+
+  /* Fill the popup from END_OF_CONTENT_TEXT every time it shows, so an edit to
+     the constant is the only edit needed. Built with textContent, never
+     innerHTML. */
+  function _renderEndOfContent() {
+    var t = END_OF_CONTENT_TEXT;
+    var titleEl = document.getElementById('endgame-title');
+    var bodyEl  = document.getElementById('endgame-body');
+    if (titleEl) {
+      titleEl.textContent = '';
+      titleEl.appendChild(document.createTextNode(t.title || ''));
+      if (t.subhead) {
+        titleEl.appendChild(document.createElement('br'));
+        var sub = document.createElement('span');
+        sub.className = 'feedback-subhead';
+        sub.textContent = t.subhead;
+        titleEl.appendChild(sub);
+      }
+    }
+    if (bodyEl) {
+      bodyEl.textContent = '';
+      (t.paragraphs || []).forEach(function (txt) {
+        var p = document.createElement('p');
+        p.textContent = txt;
+        bodyEl.appendChild(p);
+      });
+      var a = document.createElement('a');
+      a.className = 'endgame-link';
+      a.href = FORM_URL;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = FORM_URL;
+      bodyEl.appendChild(a);
+    }
+  }
+
+  /**
+   * Show the end-of-content popup, then run onContinue when the player answers.
+   * NOT once-only here: the caller (js/overworld.js) owns the flag and the
+   * moment. Returns true if the popup is showing, false if onContinue ran at
+   * once (markup missing).
+   */
+  function showEndOfContent(onContinue) {
+    var go = (typeof onContinue === 'function') ? onContinue : function () {};
+    var bd = getEndBackdrop();
+    if (!bd) { go(); return false; }
+    _renderEndOfContent();
+    _pendingContinue = go;
+    bd.classList.add('visible');
+    return true;
+  }
+
+  function _answerEnd(openForm) {
+    if (openForm) window.open(FORM_URL, '_blank', 'noopener,noreferrer');
+    var bd = getEndBackdrop();
+    if (bd) bd.classList.remove('visible');
+    var go = _pendingContinue;
+    _pendingContinue = null;
+    if (go) go();
+  }
+
   // ── Home-screen Feedback button ──────────────────────────────
   function isAccountSignedIn() {
     var user = (window.SogAuth && typeof window.SogAuth.getUser === 'function')
@@ -106,6 +192,11 @@
     if (btnContinue) btnContinue.addEventListener('click', function () { _answer(false); });
     if (btnHomeNav)  btnHomeNav.addEventListener('click', openForm);
 
+    var btnEndForm     = document.getElementById('endgame-form-btn');
+    var btnEndContinue = document.getElementById('endgame-continue-btn');
+    if (btnEndForm)     btnEndForm.addEventListener('click', function () { _answerEnd(true); });
+    if (btnEndContinue) btnEndContinue.addEventListener('click', function () { _answerEnd(false); });
+
     // Clicking the backdrop outside the panel does NOT dismiss — the player
     // answers with one of the two buttons, and either one carries on.
 
@@ -120,6 +211,7 @@
 
   window.Feedback = {
     offerOnce:         offerOnce,
+    showEndOfContent:  showEndOfContent,
     refreshHomeButton: refreshHomeButton,
     isOffered:         isOffered,
     resetOffer:        resetOffer,
