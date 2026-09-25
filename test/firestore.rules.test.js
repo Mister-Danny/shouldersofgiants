@@ -408,3 +408,20 @@ test('invites: a signed-in user can get one code by exact id, but not list, writ
   await assertFails(asGuest.doc('invites/HISTROCK').update({ active: false }));
   await assertFails(signedOut.doc('invites/HISTROCK').get());
 });
+
+test('notices: a player can read only their own, cannot list, and nobody can write', async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc('notices/studentA').set({ id: 'kush-2026-09', active: true, body: 'Congratulations!' });
+  });
+  const asStudentA = testEnv.authenticatedContext('studentA').firestore();
+  const asStudentB = testEnv.authenticatedContext('studentB').firestore();
+  const signedOut = testEnv.unauthenticatedContext().firestore();
+
+  await assertSucceeds(asStudentA.doc('notices/studentA').get());
+  await assertFails(asStudentB.doc('notices/studentA').get(), 'another player cannot read it');
+  await assertFails(signedOut.doc('notices/studentA').get());
+  await assertFails(asStudentA.collection('notices').get(), 'the collection cannot be walked');
+  await assertFails(asStudentA.doc('notices/studentA').set({ id: 'x', active: true, body: 'hi' }), 'the game never writes notices');
+  await assertFails(asStudentA.doc('notices/studentA').update({ active: false }));
+  await assertFails(asStudentB.doc('notices/studentB').set({ id: 'x', active: true, body: 'hi' }));
+});

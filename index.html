@@ -1560,6 +1560,21 @@
   <!-- ── Guest first-launch notice modal (AUTH_SPEC.md Phase 2) — see
        js/guest-status.js. Sequenced to show after the welcome popup (below)
        is dismissed, so the two never stack. -->
+  <!-- ── Player notice (js/notice.js). Filled from /notices/{uid} when one
+       exists for this player; shown once per message id. -->
+  <div id="notice-backdrop" class="guest-modal-backdrop">
+    <div class="card-popup guest-modal">
+      <div class="popup-card-name" id="notice-title"></div>
+      <div class="popup-divider"></div>
+      <div class="welcome-body" id="notice-body"></div>
+      <div class="popup-actions">
+        <span class="popup-hint"></span>
+        <button class="btn-snes" id="notice-action"></button>
+        <button class="btn-snes btn-snes-close" id="notice-dismiss">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
   <div id="guest-notice-backdrop" class="guest-modal-backdrop">
     <div class="card-popup guest-modal">
       <div class="popup-card-name">WELCOME GUEST</div>
@@ -1745,6 +1760,7 @@
        welcome.js so it can sequence behind the "Before You Begin" popup. -->
   <script src="js/guest-status.js?v=15"></script>
   <script src="js/feedback.js?v=15"></script>
+  <script src="js/notice.js?v=15"></script>
   <!-- Developer state panel (toggle with `): reads/writes the real game state
        (collection, gold, progression flags) and launches anywhere from it.
        Always-loaded for now; gate behind a build flag pre-launch. -->

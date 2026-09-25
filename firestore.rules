@@ -10,6 +10,16 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/classes/$(code)).data;
     }
 
+    // Notices: a one-off message for a single player, read by that player only.
+    // The doc id IS the uid, so nobody can read anyone else's, list is denied so
+    // the collection can't be walked, and writes are console/admin only — the
+    // game never writes here.
+    match /notices/{uid} {
+      allow get:   if signedIn() && request.auth.uid == uid;
+      allow list:  if false;
+      allow write: if false;
+    }
+
     // Invite codes: fetchable by exact ID only, so Teacher Sign Up can check
     // a code on its first screen (same model as classes below). list is
     // denied, so codes cannot be enumerated, and nothing is writable. The
