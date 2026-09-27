@@ -205,6 +205,57 @@
   function renderAllGroups() {
     mainEl.innerHTML = '';
     renderCardGroups();
+    renderHistoryTeaser();
+  }
+
+  /* ── 7TH-GRADE HISTORY TEASER (Arcadium only) ──────────────────────────────
+     The 25 history cards (SOG.collection.HISTORY_CARD_IDS) unlock as a set once
+     every Giant in Adventure Mode is beaten (SOG.collection.historyCardsUnlocked).
+     Until then, Arcadium's deck builder shows them in one greyed-out, unselectable
+     section under the owned cards, with the unlock hint. Once unlocked they are
+     simply owned and flow into their normal type groups above, so this section
+     disappears on its own. Not shown from the overworld / versus / multiplayer
+     entries, and not under the dev unlock-all override (those cards are already
+     selectable then). Text is editable here. */
+  var HISTORY_TEASER = {
+    title: '7th Grade History',
+    note:  'Beat all of the Giants currently in Adventure Mode to unlock.'
+  };
+  function _isArcadiumEntry() {
+    return !window.deckBuilderFromOverworld && !window.multiplayerMode && !window.versusStudentMode;
+  }
+  function renderHistoryTeaser() {
+    var col = window.SOG && SOG.collection;
+    if (!col || !col.HISTORY_CARD_IDS || typeof col.historyCardsUnlocked !== 'function') return;
+    if (!_isArcadiumEntry() || col.historyCardsUnlocked() || devUnlockAll()) return;
+    var cards = col.HISTORY_CARD_IDS.map(function (id) {
+      return CARDS.find(function (c) { return c.id === id; });
+    }).filter(Boolean);
+    if (!cards.length) return;
+
+    var section = document.createElement('section');
+    section.className = 'db-type-group db-teaser-group';
+
+    var header = document.createElement('div');
+    header.className = 'db-type-header';
+    header.innerHTML =
+      '<div class="db-type-pip"></div>' +
+      '<span class="db-type-label"></span>' +
+      '<span class="db-type-count">(' + cards.length + ')</span>';
+    header.querySelector('.db-type-label').textContent = HISTORY_TEASER.title;
+
+    var note = document.createElement('div');
+    note.className = 'db-teaser-note';
+    note.textContent = '\uD83D\uDD12 ' + HISTORY_TEASER.note;
+
+    var row = document.createElement('div');
+    row.className = 'db-card-row';
+    cards.forEach(function (card) { row.appendChild(buildCardEl(card, true)); });
+
+    section.appendChild(header);
+    section.appendChild(note);
+    section.appendChild(row);
+    mainEl.appendChild(section);
   }
 
   /* Single unified layout for every context: the collection grouped by type,

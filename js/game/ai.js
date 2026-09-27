@@ -210,15 +210,22 @@
       // Randomly skip ~1 in 3 affordable cards to simulate carelessness
       if (Math.random() < 0.33) return;
 
+      // Open slots at locations that will TAKE a play. This branch writes to the
+      // board directly (not through commitPlay), so it must apply the same gate:
+      // a flooded location (Arcadium river floods / Nebuchadnezzar) or an
+      // advance-gate lock takes no new plays. Inert elsewhere (always playable).
+      var _playable = function (locId) {
+        return !(SOG.board && SOG.board.isLocationPlayable) || SOG.board.isLocationPlayable(locId, 'ai');
+      };
       var empties = [];
       G.locations.forEach(function (loc) {
         var fi = G.aiSlots[loc.id].indexOf(null);
-        if (fi !== -1) empties.push({ locId: loc.id, slotIndex: fi });
+        if (fi !== -1 && _playable(loc.id)) empties.push({ locId: loc.id, slotIndex: fi });
       });
       if (!empties.length) return;
 
       var t;
-      if (riftLoc && G.turn === 1 && !aiFirstPlayed) {
+      if (riftLoc && G.turn === 1 && !aiFirstPlayed && _playable(riftLoc.id)) {
         var riftFi = G.aiSlots[riftLoc.id].indexOf(null);
         if (riftFi === -1) return;
         t = { locId: riftLoc.id, slotIndex: riftFi };

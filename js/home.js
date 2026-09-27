@@ -35,6 +35,14 @@ var HomeFlow = (function () {
   var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback, btnAccount, btnTeacherDashboard;
   var advDevWarningEl, advDevProceedBtn, advDevGoBackBtn;
   var arcadiumLockedEl, arcadiumLockedClose;
+
+  /* ARCADIUM LOCKED POPUP — the words the player sees when they click Arcadium
+     before it is open (the gate itself is onArcadiumClick: 15 owned cards). Edit
+     here; the markup in index.html is filled from this at init. */
+  var ARCADIUM_LOCKED_POPUP = {
+    title: 'Arcadium Locked',
+    body:  'To unlock the Arcadium, you must win one battle against Sargon.'
+  };
   var subtitleIntroEl, subtitlePathEl, subtitleAdventurerEl;
   var charFemaleEl, charMaleEl;
   var backBtn, doorEl, irisEl;
@@ -250,6 +258,10 @@ var HomeFlow = (function () {
 
     arcadiumLockedEl    = document.getElementById('arcadium-locked-backdrop');
     arcadiumLockedClose = document.getElementById('arcadium-locked-close');
+    var lockedTitleEl = document.getElementById('arcadium-locked-title');
+    var lockedTextEl  = document.getElementById('arcadium-locked-text');
+    if (lockedTitleEl) lockedTitleEl.textContent = ARCADIUM_LOCKED_POPUP.title;
+    if (lockedTextEl)  lockedTextEl.textContent  = ARCADIUM_LOCKED_POPUP.body;
     if (arcadiumLockedClose) arcadiumLockedClose.addEventListener('click', hideArcadiumLockedPopup);
 
     if (btnReady)        btnReady.addEventListener('click', onReadyClick);

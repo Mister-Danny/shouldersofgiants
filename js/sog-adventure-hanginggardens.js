@@ -101,13 +101,9 @@ SOG.HangingGardensBattle = (function () {
      must be cleared explicitly. Safe/idempotent — inert if no flood ever happened. */
   function _clearFloodState() {
     _floodedRiver = null;
-    var G = (window.SOG && SOG.state && SOG.state.G);
-    if (G && G.locations) G.locations.forEach(function (l) { l.flooded = false; });
-    // Stage 4c flood presentation — strip the crossfade class + any overlay elements.
-    Array.prototype.forEach.call(document.querySelectorAll('.battle-col.hg-flooded'),
-      function (col) { col.classList.remove('hg-flooded'); });
-    Array.prototype.forEach.call(document.querySelectorAll('.hg-flood-overlay, .hg-flood-rush, .hg-flood-tint'),
-      function (el) { if (el.parentNode) el.parentNode.removeChild(el); });
+    // Flags + Stage 4c presentation (crossfade class, overlay elements) live in the
+    // shared flood module now (js/game/flood.js).
+    if (window.SOG && SOG.flood && typeof SOG.flood.clear === 'function') SOG.flood.clear();
   }
 
   /* ── Battle rules popup + click-opponent trigger (standardized across bosses).
@@ -616,8 +612,10 @@ SOG.HangingGardensBattle = (function () {
      None on turns 1/2. The schedule sets/clears the `flooded` flag on the river
      LOCATION objects in G.locations; the engine's SOG.board.isLocationPlayable reads
      it (play-block wired in Stage 4b; presentation in Stage 4c). _floodedRiver is
-     reset per battle (onBattleStart) so each battle rolls fresh. This logic lives ONLY
-     in this script, so the flood is inert in every other battle.
+     reset per battle (onBattleStart) so each battle rolls fresh. The SCHEDULE (which
+     turn, which river) and the first-flood dialogue live only in this script; the
+     flag + presentation are the shared SOG.flood (js/game/flood.js), which Arcadium
+     reuses with its own 25%-per-turn roll (js/game.js _rollArcadiumFloods).
   ══════════════════════════════════════════════════════════════ */
   var RIVER_EUPHRATES = 101;   // left river loc id
   var RIVER_TIGRIS    = 103;   // right river loc id
@@ -635,10 +633,11 @@ SOG.HangingGardensBattle = (function () {
     if (!G || !G.locations) return;
     var prev   = _floodedRiver;                 // previously-flooded river (or null)
     var target = _floodTargetForTurn(turn);     // reads _floodedRiver (= prev) for alternation
-    G.locations.forEach(function (l) { l.flooded = (l.id === target); });   // exactly one, others cleared
-    // Presentation (Stage 4c): revert the river that just un-flooded, flood the new one.
-    if (prev   != null && prev   !== target) _unfloodPresentation(prev);
-    if (target != null && target !== prev)   _floodPresentation(target);
+    // Exactly one river flooded (or none on 1/2): SOG.flood sets the flag the engine's
+    // play gates read AND plays the flood / un-flood presentation on each change.
+    G.locations.forEach(function (l) {
+      if (l.id === RIVER_EUPHRATES || l.id === RIVER_TIGRIS) SOG.flood.setFlooded(l.id, l.id === target);
+    });
     _floodedRiver = target;
     // First-flood interjection (first-time only): block input, run the exchange,
     // then release. Fires only when a river actually floods (target != null), and
@@ -656,65 +655,9 @@ SOG.HangingGardensBattle = (function () {
     log('[FLOOD] turn ' + turn + ' → flooded: ' + nm + (_floodedRiver != null ? '  (playable check: 101=' + SOG.board.isLocationPlayable(101) + ', 103=' + SOG.board.isLocationPlayable(103) + ')' : ''));
   }
 
-  /* ── Flood PRESENTATION (Stage 4c) ──────────────────────────────────────────
-     A river floods → crossfade its art to the flood image (CSS .hg-flooded toggles
-     the ::after layer), nameplate → "[River] River - Flooded", ability → "No cards
-     can be played here", play waterflow.m4a. Un-flood → reverse, restoring the
-     location's original name + abilityText (read from the live loc object, never
-     mutated). The board rebuilds fresh each battle, so nothing leaks. */
-  function _floodColEl(locId) { return document.querySelector('.battle-col[data-loc-id="' + locId + '"]'); }
-
-  /* A transient blue water surge that sweeps down over the column the instant it
-     floods (CSS .hg-flood-rush + @keyframes hgFloodRushIn), then self-removes,
-     leaving the persistent .hg-flooded art behind. */
-  function _spawnFloodRush(col) {
-    if (!col) return;
-    var rush = document.createElement('div');
-    rush.className = 'hg-flood-rush';
-    rush.setAttribute('aria-hidden', 'true');
-    col.appendChild(rush);
-    setTimeout(function () { if (rush.parentNode) rush.parentNode.removeChild(rush); }, 2250);  // outlast the 1.875s wipe
-  }
-
-  /* A persistent 20% blue tint over the flooded location (CSS .hg-flood-tint), kept
-     for the whole time the river stays flooded and removed on un-flood / teardown. */
-  function _spawnFloodTint(col) {
-    if (!col || col.querySelector('.hg-flood-tint')) return;   // idempotent
-    var tint = document.createElement('div');
-    tint.className = 'hg-flood-tint';
-    tint.setAttribute('aria-hidden', 'true');
-    col.appendChild(tint);
-  }
-  function _removeFloodTint(col) {
-    if (!col) return;
-    var tint = col.querySelector('.hg-flood-tint');
-    if (tint && tint.parentNode) tint.parentNode.removeChild(tint);
-  }
-
-  function _floodPresentation(locId) {
-    var G = (window.SOG && SOG.state && SOG.state.G);
-    var loc = G && G.locations && G.locations.find(function (l) { return l.id === locId; });
-    var col = _floodColEl(locId);
-    if (col) {
-      col.classList.add('hg-flooded');                                        // art crossfade
-      var nm = col.querySelector('.battle-loc-name');    if (nm && loc) nm.textContent = loc.name + ' - Flooded';
-      var ab = col.querySelector('.battle-loc-ability'); if (ab)        ab.textContent = 'No cards can be played here';
-      _spawnFloodRush(col);                                                   // blue water surge sweeps over it
-      _spawnFloodTint(col);                                                   // persistent 20% blue tint
-    }
-    _playSfx('sfx/waterflow.m4a');
-  }
-  function _unfloodPresentation(locId) {
-    var G = (window.SOG && SOG.state && SOG.state.G);
-    var loc = G && G.locations && G.locations.find(function (l) { return l.id === locId; });
-    var col = _floodColEl(locId);
-    if (col) {
-      col.classList.remove('hg-flooded');                                     // crossfade back
-      var nm = col.querySelector('.battle-loc-name');    if (nm && loc) nm.textContent = loc.name;
-      var ab = col.querySelector('.battle-loc-ability'); if (ab && loc) ab.textContent = loc.abilityText;
-      _removeFloodTint(col);                                                  // drop the blue tint
-    }
-  }
+  /* (Flood PRESENTATION — art crossfade, nameplate/ability swap, water rush, blue
+     tint, waterflow sfx — moved to the shared js/game/flood.js so Arcadium's rivers
+     flood the same way. The CSS it drives is un-scoped for the same reason.) */
 
   /* First-flood interjection (FIRST-TIME ONLY) — a short exchange the first time a
      river floods, naming the actual flooded river. Play resumes when it's dismissed.

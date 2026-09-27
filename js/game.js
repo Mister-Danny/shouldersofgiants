@@ -134,6 +134,14 @@
      INIT
   ═══════════════════════════════════════════════════════════════ */
 
+  /* ARCADIUM FLOODS. Every catalog location flagged `floods: true` (js/locations.js:
+     the Euphrates and the Tigris) rolls independently at the start of EVERY turn,
+     turn 1 included, and is closed to new plays for that turn on a hit (shared
+     SOG.flood — the same flag, art crossfade, water rush and sfx as the
+     Nebuchadnezzar battle, which keeps its own turn-3/4/5 schedule). Solo Arcadium
+     only: 2P matches get no flood config, so both clients see one board. */
+  var ARCADIUM_FLOOD_CHANCE = 0.25;   // editable — per river, per turn
+
   /* Build the battle-config object for a standard/Arcadium match from TODAY's
      sources — SOG.state constants, the 2P Match config, window.aiDifficulty,
      and the forced-locations strategy. Matches the battle-config schema blocks
@@ -175,6 +183,8 @@
       },
       ai:      { profile: window.aiDifficulty },
       scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'draw' },
+      // Solo Arcadium floods (see ARCADIUM_FLOOD_CHANCE). null for 2P — never desync.
+      flood:   cfg2p ? null : { chance: ARCADIUM_FLOOD_CHANCE },
       scriptHook: null
     };
   }
@@ -302,6 +312,9 @@
     G.locations.forEach(function (loc) {
       G.playerSlots[loc.id] = Array(cfg.structure.slotsPerLocation).fill(null);
       G.aiSlots[loc.id]     = Array(cfg.structure.slotsPerLocation).fill(null);
+      // Arcadium draws the shared LOCATIONS catalog OBJECTS, so a flood flag left
+      // by the previous game would follow the location into this one. Start dry.
+      loc.flooded = false;
     });
 
     G.turn              = 1;
@@ -417,6 +430,7 @@
 
   function _activateTurn1() {
     // (Battle music already started at battle entry in _initGameBuild.)
+    _rollArcadiumFloods();      // turn 1 rolls too (inert without cfg.flood)
     _startSelectionTimer();
     if (typeof Analytics !== 'undefined') {
       if (typeof Analytics.setBoardProvider === 'function') Analytics.setBoardProvider(_analyticsBoard);
@@ -725,13 +739,38 @@
         if (result.length === 3) return result;
       }
     } catch (e) {}
-    // Standard Arcadium pool = the six locations with an ability. Savannah (7)
-    // and Desert (8) carry abilityKey null and exist only for the Ötzi adventure
-    // battle (which resolves them by id from LOCATIONS), so exclude them from the
-    // random pick.
+    // Standard Arcadium pool = every catalog location with an ability: the original
+    // six plus the boss-battle locations copied into js/locations.js (Nebuchadnezzar,
+    // Hatshepsut, Ramses, Akhenaten, Kush, Hyksos). Savannah (7) and Desert (8) carry
+    // abilityKey null and exist only for the Ötzi adventure battle (which resolves
+    // them by id from LOCATIONS), so exclude them from the random pick. Two
+    // locations that share a NAME (Hatshepsut's and Hyksos's Thebes) never draw
+    // together — the second one seen is skipped.
     var pool = LOCATIONS.filter(function (l) { return l.abilityKey != null; });
     pool.sort(function () { return Math.random() - 0.5; });
-    return pool.slice(0, 3);
+    var picked = [], names = {};
+    for (var i = 0; i < pool.length && picked.length < 3; i++) {
+      if (names[pool[i].name]) continue;
+      names[pool[i].name] = true;
+      picked.push(pool[i]);
+    }
+    return picked;
+  }
+
+  /* ARCADIUM FLOOD ROLL — start of every turn (turn 1 via _activateTurn1, later
+     turns via nextTurn). Each location flagged `floods: true` in the catalog rolls
+     on its own against cfg.flood.chance; a hit closes it to new plays this turn, a
+     miss re-opens it. SOG.flood plays the presentation only on a change, so a river
+     that stays flooded two turns running does not re-surge. Inert unless the config
+     carries a flood block (solo Arcadium only — see resolveBattleConfig). */
+  function _rollArcadiumFloods() {
+    var f = G.config && G.config.flood;
+    if (!f || !(f.chance > 0) || !(SOG.flood && typeof SOG.flood.setFlooded === 'function')) return;
+    if (!G.locations) return;
+    G.locations.forEach(function (loc) {
+      if (!loc.floods) return;
+      SOG.flood.setFlooded(loc.id, Math.random() < f.chance);
+    });
   }
 
   function buildAiDeck() {
@@ -2055,6 +2094,10 @@
     _startSelectionTimer();
 
     if (typeof Analytics !== 'undefined') Analytics.turnStarted(G.turn, G.playerHand.slice());
+
+    /* Arcadium river floods: re-rolled at the start of every turn, BEFORE the
+       script hook and before the AI plans its plays. Inert without cfg.flood. */
+    _rollArcadiumFloods();
 
     /* onTurnStart (script hook): start of a selection phase (turns 2+). Sync,
        fire-and-forget. No script → no-op. */

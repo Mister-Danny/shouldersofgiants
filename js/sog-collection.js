@@ -42,6 +42,29 @@ SOG.collection = (function () {
 
   function _isStarter(id) { return STARTER_CARD_IDS.indexOf(id) !== -1; }
 
+  /* ── 7TH-GRADE HISTORY SET (cards 1-25 — Citizens … Christopher Columbus, the
+        game's original Arcadium pool). Owned as a SET, not earned one by one:
+        they unlock the moment every Giant currently in Adventure Mode is beaten.
+        Nothing new is stored — the check is derived from the per-boss Giant flags
+        (sog_node_<hook>_giant_beaten), which game.js stamps and carries in the
+        save snapshot, so this survives a cloud restore like everything else.
+        Until then the deck builder shows them greyed out as a teaser (Arcadium).
+        ADVENTURE_GIANT_HOOKS is the list to extend as new bosses ship. Kush's
+        Giant alone is NOT enough: the Egypt chain opens on Giants, but Hatshepsut
+        opens on Narmer's SERF and the Mesopotamia chain opens on Serfs, so a
+        player can reach Kush with Narmer/Gilgamesh/Sargon/Hammurabi Giants unbeaten. */
+  var HISTORY_CARD_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
+  var ADVENTURE_GIANT_HOOKS = ['gilgamesh', 'sargon', 'hammurabi', 'hanging-gardens',
+                               'narmer', 'hatshepsut', 'ramses', 'akhenaten', 'kush'];
+  function _isHistory(id) { return HISTORY_CARD_IDS.indexOf(id) !== -1; }
+  function historyCardsUnlocked() {
+    try {
+      return ADVENTURE_GIANT_HOOKS.every(function (h) {
+        return localStorage.getItem('sog_node_' + h + '_giant_beaten') === 'true';
+      });
+    } catch (e) { return false; }
+  }
+
   /* ── Storage (the ONLY ownership localStorage access in the codebase) ── */
   function _readEarned() {
     try {
@@ -66,11 +89,12 @@ SOG.collection = (function () {
   function getUnlockedCards() {
     var out = STARTER_CARD_IDS.slice();
     _readEarned().forEach(function (id) { if (out.indexOf(id) === -1) out.push(id); });
+    if (historyCardsUnlocked()) HISTORY_CARD_IDS.forEach(function (id) { if (out.indexOf(id) === -1) out.push(id); });
     return out;
   }
 
   function isUnlocked(id) {
-    return _isStarter(id) || _readEarned().indexOf(id) !== -1;
+    return _isStarter(id) || _readEarned().indexOf(id) !== -1 || (_isHistory(id) && historyCardsUnlocked());
   }
 
   function unlockCard(idOrIds) {
@@ -142,6 +166,9 @@ SOG.collection = (function () {
 
   return {
     STARTER_CARD_IDS: STARTER_CARD_IDS.slice(),
+    HISTORY_CARD_IDS: HISTORY_CARD_IDS.slice(),
+    ADVENTURE_GIANT_HOOKS: ADVENTURE_GIANT_HOOKS.slice(),
+    historyCardsUnlocked: historyCardsUnlocked,
     getUnlockedCards: getUnlockedCards,
     isUnlocked:       isUnlocked,
     unlockCard:       unlockCard,

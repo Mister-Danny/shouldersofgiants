@@ -101,13 +101,14 @@
       </div>
     </div>
 
-    <!-- Arcadium: not enough cards to build a deck yet -->
+    <!-- Arcadium: not enough cards to build a deck yet. Title + body are filled
+         from ARCADIUM_LOCKED_POPUP in js/home.js at init — edit the words there. -->
     <div id="arcadium-locked-backdrop" class="popup-backdrop">
       <div class="card-popup">
-        <div class="popup-card-name">Build Your Deck</div>
+        <div class="popup-card-name" id="arcadium-locked-title">Arcadium Locked</div>
         <div class="popup-divider"></div>
-        <div class="popup-ability-text">
-          You need at least 15 cards to build an Arcadium deck. Unlock more cards by playing Adventure mode, then come back to build your deck!
+        <div class="popup-ability-text" id="arcadium-locked-text">
+          To unlock the Arcadium, you must win one battle against Sargon.
         </div>
         <div class="popup-actions">
           <button class="btn-snes btn-snes-close" id="arcadium-locked-close">Got It</button>
@@ -1714,6 +1715,7 @@
   <script src="js/game/hand.js?v=15"></script>  <!-- SOG.hand: hand-of-objects migration seam (Stage 0: wraps the current bare-id hands) -->
   <script src="js/game/battle-hooks.js?v=15"></script>  <!-- script-hook mechanism; engine + input.js call it at runtime -->
   <script src="js/game/board.js?v=15"></script>
+  <script src="js/game/flood.js?v=15"></script>
   <script src="js/game/input.js?v=15"></script>
   <script src="js/game/abilities.js?v=15"></script>
   <script src="js/game/reveal-fx.js?v=15"></script>  <!-- per-card reveal presentation (SFX + flavor anim); separate from abilities -->
