@@ -51,8 +51,8 @@ window.SOG_MAP_DATA = {
     { id: 'egypt-complete', label: 'Kush Giant beaten → opens what follows', flag: 'sog_node_kush_giant_beaten' },
     { id: 'greatbath-beaten', label: 'The Great Bath defeated', flag: 'sog_node_greatbath_serf_beaten' },
     { id: 'siddhartha-beaten', label: 'Siddhartha defeated', flag: 'sog_node_siddhartha_serf_beaten' },
-    { id: 'ashoka-beaten', label: 'Ashoka defeated', flag: 'sog_node_ashoka_serf_beaten' },
-    { id: 'india-complete', label: 'Ashoka Giant beaten → opens what follows', flag: 'sog_node_ashoka_giant_beaten' },
+    { id: 'gupta-beaten', label: 'The Gupta defeated', flag: 'sog_node_gupta_serf_beaten' },
+    { id: 'india-complete', label: 'Gupta Giant beaten → opens what follows', flag: 'sog_node_gupta_giant_beaten' },
     { id: 'confucius-beaten', label: 'Confucius defeated', flag: 'sog_node_confucius_serf_beaten' },
     { id: 'shihuangdi-beaten', label: 'Shi Huangdi defeated', flag: 'sog_node_shihuangdi_serf_beaten' },
     { id: 'zhangqian-beaten', label: 'Zhang Qian defeated', flag: 'sog_node_zhangqian_serf_beaten' },
@@ -487,7 +487,7 @@ window.SOG_MAP_DATA = {
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
         showFrom: 'egypt-complete',
-        note: 'Scaffolded position — drag into place. Battle not wired.'
+        note: 'Scaffolded position — drag into place.'
       },
       {
         id:    'india-market',
@@ -511,21 +511,21 @@ window.SOG_MAP_DATA = {
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
         showFrom: 'greatbath-beaten',
-        note: 'Scaffolded position — drag into place. Battle not wired.'
+        note: 'Scaffolded position — drag into place.'
       },
       {
-        id:    'ashoka',
-        name:  'Ashoka',
+        id:    'gupta',
+        name:  'The Gupta',
         kind:  'battle',
-        image: 'images/metaworld/civilization nodes/ashoka.png',
+        image: 'images/metaworld/civilization nodes/gupta.png',
         x: 61.27, y: 25.23,
         scale: 1,
-        hook:  'ashoka',
+        hook:  'gupta',
         tiers: 2,
         flagNudge: { dx: 0, dy: 0 },
         serfFlagOn: 'encounter',
         showFrom: 'siddhartha-beaten',
-        note: 'Scaffolded position — drag into place. Battle not wired.'
+        note: 'Scaffolded position — drag into place.'
       }
     ],
     exits: [

@@ -63,6 +63,11 @@
     var _base  = (G.baseCapitalThisTurn != null) ? G.baseCapitalThisTurn : CAPITAL;
     var budget = _base + G.aiBonusCapitalNextTurn;
     G.aiBonusCapitalNextTurn = 0;
+    // Granary (India 90) reads the AI's UNSPENT capital at end of turn: the
+    // budget the brains planned against minus what commitPlay / the Easy branch
+    // actually charged. The player's equivalent is simply G.capital.
+    G.aiCapitalBudgetThisTurn = budget;
+    G.aiCapitalSpentThisTurn  = 0;
 
     // Shared helper: write a decided play to the board and reveal queue.
     function commitPlay(cardId, locId) {
@@ -72,9 +77,11 @@
       // battle) blocks NEW plays — the AI has its own play path, so it must check
       // too, as the AI side ('ai': the advance gate is per-side; flood is
       // symmetric). Inert elsewhere (no flood flag, no advanceGate config).
-      if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(locId, 'ai')) return;
+      if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(locId, 'ai', cardId)) return;
       var slotIndex = G.aiSlots[locId].indexOf(null);
       if (slotIndex === -1) return;
+      G.aiCapitalSpentThisTurn = (G.aiCapitalSpentThisTurn || 0) +
+        ((SOG.board && SOG.board.effectiveCost) ? SOG.board.effectiveCost(card, locId, 'ai') : card.cc);
       // In-hand bonuses (resurrection chain, stamps, Papyrus copy) folded in with
       // attribution and consumed — parity with the player's commitPlay.
       var _sd = { cardId: cardId, ip: card.ip, revealed: false, ipMod: 0, contMod: 0, ipModSources: [], bonuses: [] };
@@ -215,7 +222,7 @@
       // a flooded location (Arcadium river floods / Nebuchadnezzar) or an
       // advance-gate lock takes no new plays. Inert elsewhere (always playable).
       var _playable = function (locId) {
-        return !(SOG.board && SOG.board.isLocationPlayable) || SOG.board.isLocationPlayable(locId, 'ai');
+        return !(SOG.board && SOG.board.isLocationPlayable) || SOG.board.isLocationPlayable(locId, 'ai', cardId);
       };
       var empties = [];
       G.locations.forEach(function (loc) {
@@ -252,6 +259,7 @@
       // Coordinates recorded for duplicate-safe reveal resolution (bug 16 log).
       G.aiActionLog.push({ type: 'play', cardId: cardId, locId: t.locId, slotIndex: t.slotIndex });
       budget -= cost;
+      G.aiCapitalSpentThisTurn = (G.aiCapitalSpentThisTurn || 0) + cost;
 
       var slotEl = helpers.getSlotEl('opp', t.locId, t.slotIndex);
       if (slotEl) { slotEl.dataset.cardId = cardId; helpers.setSlotFaceDown(slotEl); }
@@ -1325,7 +1333,7 @@
         var lid = G.locations[li].id;
         var arr = G.aiSlots[lid] || [];
         if (arr.indexOf(null) === -1) continue;                                  // no open slot
-        if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(lid, 'ai')) continue; // gate/flood
+        if (SOG.board && SOG.board.isLocationPlayable && !SOG.board.isLocationPlayable(lid, 'ai', hand[h])) continue; // gate/flood/type-block
         var locCost = costFree ? 0
           : (SOG.board && SOG.board.effectiveCost ? SOG.board.effectiveCost(card, lid, 'ai') : card.cc);
         if (locCost > capital) continue;

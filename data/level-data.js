@@ -400,6 +400,168 @@ window.SOG_LEVEL_DATA = {
       { who: 'piye', text: 'But it is not your destination.' }
     ]
       }
+    },
+    'greatbath': {
+      kind:  'battle',
+      tiers: 2,
+
+      structure: {
+        turns: 5,
+        locationsCount: 3,
+        slotsPerLocation: 4,
+        handStart: 5,
+        maxHandSize: 7
+      },
+      resource: { model: 'capital', capital: 5, resetEachTurn: true },
+      draw:     { model: 'replenish' },
+
+      decks: {
+        player: { source: 'active-deck', shuffle: true },
+        ai:     { source: 'explicit', ids: [88, 89, 90, 91, 92, 94, 95, 96, 97, 98, 98, 99, 99, 100, 100], shuffle: true }
+      },
+
+      locations: [
+        { id: 171, name: 'The Citadel', region: 'Mohenjo-daro', abilityText: 'Your cards here can\'t be damaged.', abilityKey: 'NO_DAMAGE_HERE', image: 'images/locations/citadel.jpeg', thumbnailCrop: null },
+        { id: 172, name: 'The Lower Town', region: 'Mohenjo-daro', abilityText: '+1 IP to each card here.', abilityKey: 'ALL_PLUS_ONE_HERE', image: 'images/locations/lower_town.jpeg', thumbnailCrop: null },
+        { id: 173, name: 'The Indus River', region: 'The Indus Valley', abilityText: 'Dry season: cards lose 1 IP when played here. The season changes every turn.', abilityKey: 'SEASON_WET_DRY', image: 'images/locations/indus_river_dry.jpeg', thumbnailCrop: null }
+      ],
+      scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
+
+      presentation: {
+        bodyClass: 'greatbath-battle',
+        allyAvatar: 'player',
+        opponentAvatar: 'images/portraits/priestking.jpeg',
+        opponentBubblePortrait: 'images/portraits/priestking.jpeg',
+        popAlly: true
+      },
+
+      reward: { cardIdOnGiantWin: 88, gold: { serf: 20, giant: 30 } },
+
+      // Dialogue is drafted separately — every array is intentionally empty for
+      // now (the level runtime skips empty blocks). 
+      note: 'India: Priest-King (The Great Bath node). Dialogue drafted separately (all arrays empty). Portrait priestking.jpeg is a PLACEHOLDER until real art exists.',
+      dialogue: {
+        nodeIntro: [],
+        opening: [],
+        turn1: [],
+        serfWinA: [],
+        serfWinB: [],
+        loss: [],
+        tie: [],
+        giantIntro: [],
+        giantWinA: [],
+        giantWinB: [],
+        giantLoss: [],
+        giantDraw: []
+      }
+    },
+    'siddhartha': {
+      kind:  'battle',
+      tiers: 2,
+
+      structure: {
+        turns: 5,
+        locationsCount: 3,
+        slotsPerLocation: 4,
+        handStart: 5,
+        maxHandSize: 7
+      },
+      resource: { model: 'capital', capital: 5, resetEachTurn: true },
+      draw:     { model: 'replenish' },
+
+      decks: {
+        player: { source: 'active-deck', shuffle: true },
+        ai:     { source: 'explicit', ids: [94, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114], shuffle: true }
+      },
+
+      locations: [
+        { id: 174, name: 'Kapilavastu', region: 'The Shakya Kingdom', abilityText: 'End of Turn: -1 IP to the highest card here and move it.', abilityKey: 'EOT_HIGHEST_MINUS_ONE_MOVE', image: 'images/locations/kapilavastu.jpeg', thumbnailCrop: null },
+        { id: 175, name: 'Bodh Gaya', region: 'Under the Bodhi Tree', abilityText: 'End of Turn: +1 IP to each card here.', abilityKey: 'EOT_ALL_PLUS_ONE', image: 'images/locations/bodh_gaya.jpeg', thumbnailCrop: null },
+        { id: 176, name: 'The Ganges', region: 'The Sacred River', abilityText: 'End of Turn: +1 IP to the card with the lowest IP.', abilityKey: 'EOT_LOWEST_PLUS_ONE', image: 'images/locations/ganges.jpeg', thumbnailCrop: null }
+      ],
+      scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
+
+      presentation: {
+        bodyClass: 'siddhartha-battle',
+        allyAvatar: 'player',
+        opponentAvatar: 'images/portraits/buddha.jpeg',
+        opponentBubblePortrait: 'images/portraits/buddha.jpeg',
+        popAlly: true
+      },
+
+      reward: { cardIdOnGiantWin: 101, gold: { serf: 20, giant: 30 } },
+
+      // Dialogue is drafted separately — every array is intentionally empty for
+      // now (the level runtime skips empty blocks). 
+      note: 'India: Siddhartha (The Buddha). Dialogue drafted separately (all arrays empty). Portrait buddha.jpeg is a PLACEHOLDER until real art exists.',
+      dialogue: {
+        nodeIntro: [],
+        opening: [],
+        turn1: [],
+        serfWinA: [],
+        serfWinB: [],
+        loss: [],
+        tie: [],
+        giantIntro: [],
+        giantWinA: [],
+        giantWinB: [],
+        giantLoss: [],
+        giantDraw: []
+      }
+    },
+    'gupta': {
+      kind:  'battle',
+      tiers: 2,
+
+      structure: {
+        turns: 5,
+        locationsCount: 3,
+        slotsPerLocation: 4,
+        handStart: 5,
+        maxHandSize: 7
+      },
+      resource: { model: 'capital', capital: 5, resetEachTurn: true },
+      draw:     { model: 'replenish' },
+
+      decks: {
+        player: { source: 'active-deck', shuffle: true },
+        ai:     { source: 'explicit', ids: [94, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120], shuffle: true }
+      },
+
+      locations: [
+        { id: 177, name: 'Nalanda', region: 'The University', abilityText: 'When you play a card here, draw a Scientific card from your deck.', abilityKey: 'DRAW_SCIENTIFIC_ON_PLAY', image: 'images/locations/nalanda.jpeg', thumbnailCrop: null },
+        { id: 178, name: 'Pataliputra', region: 'The Capital', abilityText: 'When a card gains IP here, give it an additional +1.', abilityKey: 'ECHO_GAINS_PLUS_ONE', image: 'images/locations/pataliputra.jpeg', thumbnailCrop: null },
+        { id: 179, name: 'The Ganges Plain', region: 'The Monsoon Lands', abilityText: '50% chance of monsoon each turn. Monsoon: cards gain +2 IP when played here.', abilityKey: 'MONSOON_CHANCE', image: 'images/locations/ganges_plain_dry.jpeg', thumbnailCrop: null }
+      ],
+      scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },
+
+      presentation: {
+        bodyClass: 'gupta-battle',
+        allyAvatar: 'player',
+        opponentAvatar: 'images/portraits/gupta.jpeg',
+        opponentBubblePortrait: 'images/portraits/gupta.jpeg',
+        popAlly: true
+      },
+
+      reward: { cardIdOnGiantWin: 115, gold: { serf: 20, giant: 30 } },
+
+      // Dialogue is drafted separately — every array is intentionally empty for
+      // now (the level runtime skips empty blocks). 
+      note: 'India: The Gupta. Dialogue drafted separately (all arrays empty). Portrait gupta.jpeg is a PLACEHOLDER until real art exists.',
+      dialogue: {
+        nodeIntro: [],
+        opening: [],
+        turn1: [],
+        serfWinA: [],
+        serfWinB: [],
+        loss: [],
+        tie: [],
+        giantIntro: [],
+        giantWinA: [],
+        giantWinB: [],
+        giantLoss: [],
+        giantDraw: []
+      }
     }
   }
 };

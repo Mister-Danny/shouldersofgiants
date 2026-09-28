@@ -625,7 +625,17 @@
     var transcribed = (sd && sd.transcribedFrom != null)
       ? CARDS.find(function (c) { return c.id === sd.transcribedFrom; })
       : null;
-    if (transcribed) {
+    if (sd && sd.borrowed) {
+      // A BORROWED ability (India: Priest-King, "Unknown Authority") keeps the
+      // card's OWN ability name in every case; only the text (and behaviour)
+      // is the bottom-of-deck card's. A borrow that found nothing shows none.
+      if (els.abilName) { els.abilName.textContent = card.abilityName || ''; els.abilName.style.display = card.abilityName ? '' : 'none'; }
+      if (els.abilText) {
+        var bText = transcribed && transcribed.ability;
+        els.abilText.textContent = bText || 'No special ability.';
+        els.abilText.className = bText ? 'popup-ability-text' : 'popup-ability-text vanilla';
+      }
+    } else if (transcribed) {
       if (els.abilName) { els.abilName.textContent = 'Deciphered: ' + transcribed.name; els.abilName.style.display = ''; }
       if (els.abilText) { els.abilText.textContent = transcribed.ability || 'No special ability.'; els.abilText.className = 'popup-ability-text'; }
     } else if (card.ability) {

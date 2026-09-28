@@ -82,7 +82,8 @@ SOG.DevPanel = (function () {
   var MAPS = [
     { id: 'eastafrica',  label: 'East Africa' },
     { id: 'mesopotamia', label: 'Mesopotamia' },
-    { id: 'egypt',       label: 'Egypt' }
+    { id: 'egypt',       label: 'Egypt' },
+    { id: 'india',       label: 'India' }
   ];
 
   /* Card grouping for the collapsible checklist. Cards 1–25 are the original
@@ -602,7 +603,7 @@ SOG.DevPanel = (function () {
     ['upper-egypt', 'kush'],
     ['india',       'greatbath'],
     ['india',       'siddhartha'],
-    ['india',       'ashoka'],
+    ['india',       'gupta'],
     ['china',       'confucius'],
     ['china',       'shihuangdi'],
     ['china',       'zhangqian'],

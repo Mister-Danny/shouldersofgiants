@@ -797,6 +797,266 @@ const CARDS = [
     abilityName: "Forges of Meroe",
     ability: "End of Turn:\nOther Labor cards here gain +1 IP.",
     image:   "images/cards/kushcards/kush_the_iron_furnace.jpg", locked: true
+  },
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     INDIA (88-120) — the Harappan / Early India set, from india_cards.csv
+     (33 unique cards; the CSV is the source of truth for text and stats).
+
+     ART: image = images/cards/india/<card_id>.jpg, where card_id is the CSV
+     id and the portrait filename EXACTLY (never derived from the display name);
+     the @sm.jpg small variant derives automatically (js/ui.js buildCardImg).
+     Display names that differ from the id: Lord of the Beasts = india_pashupati,
+     Asoka = india_ashoka, Dalit = india_dalits. Two cards share the display name
+     "Vaishya": india_vaishya (Economic, The Trader's Duty) and
+     india_vaishya_farmer (Labor, The Farmer's Duty) — distinct records, both
+     deckable. india_beast is a TOKEN (token:true, like the Mummy 72): in no
+     deck, never drafted or drawn, only summoned by Lord of the Beasts.
+     india_missionary is defined once here and is reused by the China set.
+
+     DECKS: data/india-decks.js (priest_king / siddhartha / gupta, 15 slots each,
+     copies as repeated ids). ERA: "Harappan" / "Early India" are not in
+     ADVENTURE_ERAS, so these sit in the 'arcadium' lane like Egypt and Kush.
+     CIVILIZATION: "India" on every record — the set spans two eras, and civOf
+     (js/game/abilities.js) reads civilization before era, so the Merchant /
+     Vaishya "different civilization" bonus treats Harappan and Early India
+     cards as ONE civilization rather than two.
+
+     ENGINE: none of these abilities are wired yet — every card is NOT WIRED
+     until it gets a CARD_ABILITIES entry (js/game/abilities.js); the text is
+     display-only until then. locked:true throughout (rewards / market stock).
+  ═══════════════════════════════════════════════════════════════════════════ */
+  {
+    id: 88, name: "Priest-King", cc: 5, ip: 6,                  // NOT WIRED — At Once: Take on the text from the card at the bottom of your deck.
+    type: "Political", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Unknown Authority",
+    ability: "At Once:\nTake on the text from the card at the bottom of your deck.",
+    image:   "images/cards/india/india_priest_king.jpg", locked: true
+  },
+  {
+    id: 89, name: "Great Bath", cc: 4, ip: 5,                   // NOT WIRED — When a card is played or moves here, restore it to its base IP.
+    type: "Religious", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Sacred Water",
+    ability: "When a card is played or moves here, restore it to its base IP.",
+    image:   "images/cards/india/india_great_bath.jpg", locked: true
+  },
+  {
+    id: 90, name: "Granary", cc: 3, ip: 2,                      // NOT WIRED — End of Turn: Gain +1 IP for every Capital you did not spend this turn.
+    type: "Economic", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Surplus",
+    ability: "End of Turn:\nGain +1 IP for every Capital you did not spend this turn.",
+    image:   "images/cards/india/india_granary.jpg", locked: true
+  },
+  {
+    id: 91, name: "Drainage System", cc: 4, ip: 3,              // NOT WIRED — At Once: Heal all damage to your cards here. Gain that much IP.
+    type: "Scientific", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Carried Away",
+    ability: "At Once:\nHeal all damage to your cards here. Gain that much IP.",
+    image:   "images/cards/india/india_drainage_system.jpg", locked: true
+  },
+  {
+    id: 92, name: "Lord of the Beasts", cc: 4, ip: 3,           // NOT WIRED — At Once: Send a beast to another location.
+    type: "Religious", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Unleash the Beast",
+    ability: "At Once:\nSend a beast to another location.",
+    image:   "images/cards/india/india_pashupati.jpg", locked: true
+  },
+  {
+    id: 93, name: "Beast", cc: 3, ip: 4,                        // TOKEN — summoned by Lord of the Beasts (92) as a 3 CC / 4 IP card no matter what spawned it; in no deck, never drafted or drawn
+    type: "Labor", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Rawr!",
+    ability: null,
+    image:   "images/cards/india/india_beast.jpg", locked: true, token: true
+  },
+  {
+    id: 94, name: "Cotton", cc: 1, ip: 1,                       // NOT WIRED — At Once: Your Labor cards here gain +2 IP.
+    type: "Economic", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Natural Resource",
+    ability: "At Once:\nYour Labor cards here gain +2 IP.",
+    image:   "images/cards/india/india_cotton.jpg", locked: true
+  },
+  {
+    id: 95, name: "Indus Seals", cc: 2, ip: 3,                  // NOT WIRED — At Once: Merge into a card here. Additional +1 if it's Economic.
+    type: "Economic", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Stamped and Sealed",
+    ability: "At Once:\nMerge into a card here. Additional +1 if it's Economic.",
+    image:   "images/cards/india/india_indus_seals.jpg", locked: true
+  },
+  {
+    id: 96, name: "Fired Brick", cc: 2, ip: 2,                  // NOT WIRED — At Once: Draw a card and set each card in your hand's IP equal to its CC.
+    type: "Labor", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "One Size",
+    ability: "At Once:\nDraw a card and set each card in your hand's IP equal to its CC.",
+    image:   "images/cards/india/india_fired_brick.jpg", locked: true
+  },
+  {
+    id: 97, name: "Standardized Weights", cc: 3, ip: 3,         // NOT WIRED — At Once: Set all cards here to 3 IP.
+    type: "Economic", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Honest Measure",
+    ability: "At Once:\nSet all cards here to 3 IP.",
+    image:   "images/cards/india/india_standardized_weights.jpg", locked: true
+  },
+  {
+    id: 98, name: "Farmer", cc: 1, ip: 0,                       // NOT WIRED — At Once: The top card of your deck gains +3 IP.
+    type: "Labor", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Sowing Season",
+    ability: "At Once:\nThe top card of your deck gains +3 IP.",
+    image:   "images/cards/india/india_farmer.jpg", locked: true
+  },
+  {
+    id: 99, name: "Merchant", cc: 1, ip: 2,                     // NOT WIRED — When you play an Economic card here, gain +1 IP and move. +1 more if it's from a different civilization.
+    type: "Economic", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Trade Route",
+    ability: "When you play an Economic card here, gain +1 IP and move. +1 more if it's from a different civilization.",
+    image:   "images/cards/india/india_merchant.jpg", locked: true
+  },
+  {
+    id: 100, name: "Priest", cc: 2, ip: 0,                      // NOT WIRED — At Once: Each card in your hand gives 1 IP to your Priest.
+    type: "Religious", type2: null, era: "Harappan", civilization: "India",
+    abilityName: "Sacrificial Rites",
+    ability: "At Once:\nEach card in your hand gives 1 IP to your Priest.",
+    image:   "images/cards/india/india_priest.jpg", locked: true
+  },
+  {
+    id: 101, name: "The Buddha", cc: 4, ip: 0,                  // NOT WIRED — Continuous: +2 IP for each of your cards in play with damage.
+    type: "Religious", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Four Noble Truths",
+    ability: "Continuous:\n+2 IP for each of your cards in play with damage.",
+    image:   "images/cards/india/india_the_buddha.jpg", locked: true
+  },
+  {
+    id: 102, name: "Asoka", cc: 5, ip: 5,                       // NOT WIRED — At Once: Destroy all your cards here. For each card destroyed, give +2 IP to your Religious cards in-hand.
+    type: "Political", type2: null, era: "Early India", civilization: "India",
+    abilityName: "The Sword & The Scroll",
+    ability: "At Once:\nDestroy all your cards here. For each card destroyed, give +2 IP to your Religious cards in-hand.",
+    image:   "images/cards/india/india_ashoka.jpg", locked: true
+  },
+  {
+    id: 103, name: "Stupa", cc: 3, ip: 2,                       // NOT WIRED — End of Turn: +1 IP to your other Religious cards here.
+    type: "Religious", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Circling the Shrine",
+    ability: "End of Turn:\n+1 IP to your other Religious cards here.",
+    image:   "images/cards/india/india_stupa.jpg", locked: true
+  },
+  {
+    id: 104, name: "Jain", cc: 2, ip: 2,                        // NOT WIRED — Continuous: Military cards cannot be played here.
+    type: "Religious", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Nonviolence",
+    ability: "Continuous:\nMilitary cards cannot be played here.",
+    image:   "images/cards/india/india_jain.jpg", locked: true
+  },
+  {
+    id: 105, name: "Missionary", cc: 2, ip: 3,                  // NOT WIRED — Can move once. +1 IP to non-Religious cards when arriving at a new location.
+    type: "Religious", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Turn The Wheel",
+    // TWO LINES on the card — the \n is load-bearing, do not collapse it.
+    ability: "Can move once.\n+1 IP to your non-Religious cards when arriving at a new location.",
+    image:   "images/cards/india/india_missionary.jpg", locked: true
+  },
+  {
+    id: 106, name: "Upanishads", cc: 3, ip: 3,                  // NOT WIRED — At Once: A discarded or destroyed card returns here.
+    type: "Religious", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Reincarnation",
+    ability: "At Once:\nA discarded or destroyed card returns here.",
+    image:   "images/cards/india/india_upanishads.jpg", locked: true
+  },
+  {
+    id: 107, name: "Brahmin", cc: 4, ip: 4,                     // NOT WIRED — Continuous: Gain +1 IP for each other Religious or Political card here.
+    type: "Religious", type2: null, era: "Early India", civilization: "India",
+    abilityName: "The Priestly Privilege",
+    ability: "Continuous:\nGain +1 IP for each other Religious or Political card you control here.",
+    image:   "images/cards/india/india_brahmin.jpg", locked: true
+  },
+  {
+    id: 108, name: "Kshatriya", cc: 3, ip: 3,                   // NOT WIRED — At Once: Destroy an opponent card here with less IP.
+    type: "Military", type2: null, era: "Early India", civilization: "India",
+    abilityName: "The Soldier's Duty",
+    ability: "At Once:\nDestroy an opponent card here with less IP.",
+    image:   "images/cards/india/india_kshatriya.jpg", locked: true
+  },
+  {
+    id: 109, name: "Shudra", cc: 1, ip: 0,                      // WIRED (reactive: a card the owner plays here gets a permanent +1 — not an aura, it keeps the +1 if it moves)
+    type: "Labor", type2: null, era: "Early India", civilization: "India",
+    abilityName: "The Worker's Burden",
+    ability: "Your cards played here gain +1 IP.",
+    image:   "images/cards/india/india_shudra.jpg", locked: true
+  },
+  {
+    id: 110, name: "Dalit", cc: 0, ip: 0,                       // NOT WIRED — Continuous: Decrease all other cards here by -1 IP.
+    type: "Labor", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Outcaste",
+    ability: "Continuous:\nDecrease all other cards here by -1 IP.",
+    image:   "images/cards/india/india_dalits.jpg", locked: true
+  },
+  {
+    id: 111, name: "Vaishya", cc: 2, ip: 2,                     // NOT WIRED — When you play an Economic card here, gain +2 IP and move. +1 more if it's from a different civilization.
+    type: "Economic", type2: null, era: "Early India", civilization: "India",
+    abilityName: "The Trader's Duty",
+    ability: "When you play an Economic card here, gain +2 IP and move. +1 more if it's from a different civilization.",
+    image:   "images/cards/india/india_vaishya.jpg", locked: true
+  },
+  {
+    id: 112, name: "Vaishya", cc: 2, ip: 2,                     // NOT WIRED — At Once: The top card of your deck gains +2 IP.
+    type: "Labor", type2: null, era: "Early India", civilization: "India",
+    abilityName: "The Farmer's Duty",
+    ability: "At Once:\nThe top card of your deck gains +2 IP.",
+    image:   "images/cards/india/india_vaishya_farmer.jpg", locked: true
+  },
+  {
+    id: 113, name: "Caste System", cc: 4, ip: 4,                // NOT WIRED — Continuous: Reduce the IP of all cards here that cost 0, 1, or 2 CC by -1 IP.
+    type: "Political", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Social Hierarchy",
+    ability: "Continuous:\nReduce the IP of all cards here that cost 0, 1, or 2 CC by -1 IP.",
+    image:   "images/cards/india/india_caste_system.jpg", locked: true
+  },
+  {
+    id: 114, name: "Sanskrit", cc: 1, ip: 1,                    // NOT WIRED — At Once: Merge into a card here. Additional +2 IP if it's Religious.
+    type: "Cultural", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Sacred Script",
+    ability: "At Once:\nMerge into a card here. Additional +2 IP if it's Religious.",
+    image:   "images/cards/india/india_sanskrit.jpg", locked: true
+  },
+  {
+    id: 115, name: "The Gupta", cc: 5, ip: 4,                   // NOT WIRED — End of Turn: +1 IP to each of your Scientific and Cultural cards here.
+    type: "Political", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Golden Age",
+    ability: "End of Turn:\n+1 IP to each of your Scientific and Cultural cards here.",
+    image:   "images/cards/india/india_the_gupta.jpg", locked: true
+  },
+  {
+    id: 116, name: "Bhagavad Gita", cc: 4, ip: 3,               // WIRED (continuous: +2 to the location total while the owner's cards here — two or more — are all different types)
+    type: "Religious", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Dharma",
+    ability: "Continuous:\n+2 IP to locations where your cards are all different types.",
+    image:   "images/cards/india/india_bhagavad_gita.jpg", locked: true
+  },
+  {
+    id: 117, name: "Number Zero", cc: 1, ip: 0,                 // NOT WIRED — End of Turn: +1 IP to your other Scientific cards here.
+    type: "Scientific", type2: null, era: "Early India", civilization: "India",
+    abilityName: "From Nothing",
+    ability: "End of Turn:\n+1 IP to your other Scientific cards here.",
+    image:   "images/cards/india/india_number_zero.jpg", locked: true
+  },
+  {
+    id: 118, name: "Inoculation", cc: 2, ip: 2,                 // NOT WIRED — At Once: -1 IP to a card here and then 2x its IP.
+    type: "Scientific", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Immunity",
+    ability: "At Once:\n-1 IP to a card here and then 2x its IP.",
+    image:   "images/cards/india/india_inoculation.jpg", locked: true
+  },
+  {
+    id: 119, name: "Alloy", cc: 3, ip: 1,                       // NOT WIRED — At Once: Merge with the last card you played here, and 2x the IP.
+    type: "Scientific", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Stronger Together",
+    ability: "At Once:\nMerge with the last card you played here, and 2x the IP.",
+    image:   "images/cards/india/india_alloy.jpg", locked: true
+  },
+  {
+    id: 120, name: "Vedas", cc: 4, ip: 4,                       // NOT WIRED — At Once: -1 CC to Religious cards in-hand.
+    type: "Religious", type2: null, era: "Early India", civilization: "India",
+    abilityName: "Holy Hymnals",
+    ability: "At Once:\n-1 CC to Religious cards in-hand.",
+    image:   "images/cards/india/india_vedas.jpg", locked: true
   }
 
 ];

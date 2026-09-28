@@ -649,12 +649,89 @@
 
      `owner` ('player' | 'ai', default 'player') matters only for the advance gate,
      which is per-side; the flood check is symmetric and ignores it. */
-  function isLocationPlayable(locId, owner) {
+  function isLocationPlayable(locId, owner, cardId) {
     if (!G.locations) return true;
     var loc = G.locations.find(function (l) { return l.id === locId; });
     if (loc && loc.flooded) return false;
     if (!isAdvanceUnlocked(locId, owner)) return false;
+    /* PLAY GATE BY TYPE (India set, e.g. Jain): a card IN PLAY here can block
+       plays of a given type at its location, for BOTH sides. Only consulted
+       when the caller names the card being played — the two-argument form
+       ("is this location open at all?") is unchanged. Movement into the
+       location is deliberately NOT gated (isLegalMoveTarget never calls this).
+       The rule itself lives with the abilities (registry `blocksPlayOfType`). */
+    if (cardId != null && SOG.abilities && typeof SOG.abilities.isPlayTypeBlockedAt === 'function') {
+      var card = CARDS.find(function (c) { return c.id === cardId; });
+      if (card && SOG.abilities.isPlayTypeBlockedAt(locId, card.type)) return false;
+    }
     return true;
+  }
+
+  /* ── DAMAGE ────────────────────────────────────────────────────────────────
+     Damage is any reduction of a card's current IP, from ANY source — an
+     opponent's card, a location, the controller's own cards (self-inflicted
+     counts). It is not a separate stat: it is read off the mod ledgers the
+     engine already keeps, so every existing minus (Juvenal, Nubian Archers,
+     the Sahara, a Dalit) is damage without any writer changing.
+       damageOn(sd)        total damage on a card: the sum of every negative
+                           permanent delta (sd.ipModSources) and every negative
+                           continuous delta (sd.contModSources), as a positive
+                           number. 0 when undamaged.
+       hasDamage(sd)       the card's IP is below what it would otherwise be.
+       cardsWithDamage(owner)  every revealed card `owner` controls, anywhere on
+                           the board, that has damage.
+     IP may go below zero — nothing clamps effectiveIP, and reaching 0 or less
+     has no consequence (no destroy). The badge renders the minus sign.
+     EXEMPTION: an ADJUST-TO-VALUE delta (addIPMod kind 'adjust', below) is NOT
+     damage even when negative. It moves a card toward a target value; counting
+     it would make the Great Bath damage the card it is healing. */
+  function damageOn(sd) {
+    if (!sd) return 0;
+    var d = 0;
+    (sd.ipModSources || []).forEach(function (e) {
+      if (e && e.delta < 0 && e.kind !== 'adjust') d -= e.delta;
+    });
+    (sd.contModSources || []).forEach(function (e) {
+      if (e && e.delta < 0) d -= e.delta;
+    });
+    return d;
+  }
+  function hasDamage(sd) { return damageOn(sd) > 0; }
+  function cardsWithDamage(owner) {
+    var out = [];
+    if (!G.locations) return out;
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    G.locations.forEach(function (loc) {
+      (slots[loc.id] || []).forEach(function (s, i) {
+        if (!s || !s.revealed) return;
+        var d = damageOn(s);
+        if (d > 0) out.push({ locId: loc.id, slotIndex: i, sd: s, damage: d });
+      });
+    });
+    return out;
+  }
+
+  /* ── ADJUST-TO-VALUE ───────────────────────────────────────────────────────
+     Move a card's CURRENT IP toward `target` by applying the difference as one
+     permanent delta through addIPMod, tagged kind 'adjust'. Existing buffs and
+     damage stay on the ledger untouched (nothing is reset), the popup shows the
+     adjustment under `source` like any other bonus, and a later call adjusts
+     again from wherever the card then stands. Returns the delta applied (0 when
+     the card is already at target). Two intended users: the Great Bath
+     (restoreToBaseIP — target is the printed sd.ip) and Standardized Weights
+     (adjustIPToward(sd, 3, …) on both sides' cards at its location).
+     Note the target is measured against effectiveIP, which includes the
+     continuous layer; a continuous change afterwards moves the card off target
+     until something adjusts it again — that is the "delta, not reset" contract. */
+  function adjustIPToward(sd, target, source, eventId) {
+    if (!sd) return 0;
+    var delta = target - effectiveIP(sd);
+    if (!delta) return 0;
+    addIPMod(sd, delta, source, eventId, { kind: 'adjust' });
+    return delta;
+  }
+  function restoreToBaseIP(sd, source, eventId) {
+    return sd ? adjustIPToward(sd, sd.ip, source, eventId) : 0;
   }
 
   /* ── ADVANCE GATE (Narmer battle) ──────────────────────────────────
@@ -701,9 +778,32 @@
    * @param {object} [opts]     { kind } — 'stamp' (in-hand bonus consumed at
    *                            play, re-credited on undo), 'copy' (Papyrus
    *                            inheritance, likewise), 'chain' (Jesus / Samurai
-   *                            resurrection accumulator — never consumed).
+   *                            resurrection accumulator — never consumed),
+   *                            'adjust' (adjust-to-value delta — excluded from
+   *                            damageOn even when negative).
    */
+  /* The location a slot record currently sits at (by identity, either side), or
+     null when the record is not on the board (a hand-popup dry run, a pile). */
+  function _locOfSlot(sd) {
+    if (!sd || !G.locations) return null;
+    for (var li = 0; li < G.locations.length; li++) {
+      var loc = G.locations[li];
+      var p = G.playerSlots[loc.id], a = G.aiSlots[loc.id];
+      if ((p && p.indexOf(sd) !== -1) || (a && a.indexOf(sd) !== -1)) return loc;
+    }
+    return null;
+  }
+
   function addIPMod(sd, delta, source, eventId, opts) {
+    var kind = opts && opts.kind;
+    /* THE CITADEL (NO_DAMAGE_HERE, India): cards here can't be damaged — a
+       permanent negative delta (anything but an adjust-to-value) is simply not
+       applied to a card standing there. The continuous layer's negatives are
+       stripped by evaluateContinuous (abilities.js, the immunity pass). */
+    if (delta < 0 && kind !== 'adjust') {
+      var _shield = _locOfSlot(sd);
+      if (_shield && _shield.abilityKey === 'NO_DAMAGE_HERE') return;
+    }
     var desc = resolveSource(source);
     sd.ipMod = (sd.ipMod || 0) + delta;
     if (!sd.ipModSources) sd.ipModSources = [];
@@ -712,6 +812,52 @@
     sd.ipModSources.push(entry);
     var eid = eventId || nextEventId();
     addBonus(sd, delta, desc.type, desc.id, eid, 'A', false);
+    // The popup record carries the ledger kind too, so clearDamage can drop the
+    // grid entries that belong to the ledger entries it removes (and only those).
+    if (opts && opts.kind) sd.bonuses[sd.bonuses.length - 1].kind = opts.kind;
+    /* PATALIPUTRA (ECHO_GAINS_PLUS_ONE, India): when a card gains IP here, it
+       gains +1 more, attributed to the location. Every permanent gain through
+       this funnel qualifies — an At Once, a stamp folded in at play, an end-of-
+       turn buff — except an adjust-to-value (that would overshoot its target).
+       LOOP GUARD: the echo is written with kind 'echo' and under a re-entrancy
+       flag, so the +1 never echoes itself. Continuous mods never pass through
+       here, so an aura's per-pass rebuild cannot compound. */
+    if (delta > 0 && kind !== 'adjust' && kind !== 'echo' && !G._echoingGain) {
+      var _echoLoc = _locOfSlot(sd);
+      if (_echoLoc && _echoLoc.abilityKey === 'ECHO_GAINS_PLUS_ONE') {
+        G._echoingGain = true;
+        try { addIPMod(sd, 1, _echoLoc, eid, { kind: 'echo' }); }
+        finally { G._echoingGain = false; }
+      }
+    }
+  }
+
+  /* ── CLEAR DAMAGE (heal) ───────────────────────────────────────────────────
+     The ONE thing that reduces the damage ledger. Removes every PERMANENT
+     negative entry from sd.ipModSources (kind 'adjust' excluded — those are
+     adjustments, not damage), adds the removed total back onto sd.ipMod, and
+     drops the matching popup records. Returns the total removed (>= 0).
+     It never touches contModSources: continuous minuses are rebuilt on every
+     evaluateContinuous pass from a standing aura (Dalit, Juvenal, the Sahara),
+     so "clearing" one would only reappear next pass — and a repeatable heal
+     paid per point cleared could farm IP off it forever. Damage from auras
+     therefore stays, and hasDamage/damageOn keep reporting it. */
+  function clearDamage(sd) {
+    if (!sd || !sd.ipModSources || !sd.ipModSources.length) return 0;
+    var removed = 0, keep = [];
+    sd.ipModSources.forEach(function (e) {
+      if (e && e.delta < 0 && e.kind !== 'adjust') removed -= e.delta;
+      else keep.push(e);
+    });
+    if (!removed) return 0;
+    sd.ipModSources = keep;
+    sd.ipMod = (sd.ipMod || 0) + removed;
+    if (sd.bonuses) {
+      sd.bonuses = sd.bonuses.filter(function (b) {
+        return !(b && !b.continuous && b.amount < 0 && b.kind !== 'adjust');
+      });
+    }
+    return removed;
   }
 
   /* ── Pre-play bonuses (the id-keyed accumulators a card carries IN HAND) ──
@@ -739,13 +885,17 @@
     return G.cardIPBonusSource[side];
   }
   /** Record an in-hand stamp: +delta on cardId for owner, attributed to `source`. */
-  function stampHandBonus(owner, cardId, delta, source) {
+  function stampHandBonus(owner, cardId, delta, source, opts) {
     var dict = _bonusDictOf(owner);
     dict[cardId] = (dict[cardId] || 0) + delta;
     var desc = resolveSource(source);
     var bag  = _stampBagOf(owner);
     if (!bag[cardId]) bag[cardId] = [];
-    bag[cardId].push({ type: desc.type, id: desc.id, delta: delta });
+    var entry = { type: desc.type, id: desc.id, delta: delta };
+    // opts.kind: 'adjust' for a set-toward-a-value stamp (Fired Brick) so the
+    // ledger entry it becomes at play is not counted as damage.
+    if (opts && opts.kind) entry.kind = opts.kind;
+    bag[cardId].push(entry);
   }
   /**
    * @param {object} opts  { copy: true }   also fold the Papyrus copy bonus
@@ -765,7 +915,7 @@
       addIPMod(sd, chain, chainSrc, undefined, { kind: 'chain' });
     }
     stamps.forEach(function (e) {
-      addIPMod(sd, e.delta, { type: e.type, id: e.id }, undefined, { kind: 'stamp' });
+      addIPMod(sd, e.delta, { type: e.type, id: e.id }, undefined, { kind: e.kind || 'stamp' });
     });
     if (!opts.dryRun && stamps.length) {
       dict[cardId] = chain;
@@ -778,16 +928,39 @@
         if (!opts.dryRun) delete G.copyIPBonus[side][cardId];
       }
     }
+    /* BORROWED ABILITY (India: Priest-King). An ability borrowed while the card
+       was IN HAND (G.borrowedAbility, written by
+       SOG.abilities.borrowAbilityFromDeckBottom) rides onto the slot the same way
+       Rosetta's transcription does — sd.transcribedFrom — so evaluateContinuous
+       and fireEndOfTurn pick it up through abilityIdOf with no new dispatch path;
+       the At-Once case is the card's own registry handler firing the borrowed
+       onAtOnce, exactly as abilityRosetta does. sd.borrowed keeps the record so
+       the popup can keep the card's OWN ability name and undo can re-credit it.
+       A borrow that resolved to nothing (empty deck, vanilla bottom card) leaves
+       transcribedFrom unset — the card plays as a plain body — but still marks
+       sd.borrowed so the popup shows "No special ability". Consumed at play
+       like a stamp; the dry-run (hand popup) only reads it. */
+    var bor = G.borrowedAbility && G.borrowedAbility[side] && G.borrowedAbility[side][cardId];
+    if (bor) {
+      if (bor.srcId != null) sd.transcribedFrom = bor.srcId;
+      sd.borrowed = { srcId: (bor.srcId != null) ? bor.srcId : null };
+      if (!opts.dryRun) delete G.borrowedAbility[side][cardId];
+    }
     return sd;
   }
-  /** Undo of a play: return consumed stamps / copy bonus to the in-hand tables. */
+  /** Undo of a play: return consumed stamps / copy bonus / borrowed ability to the in-hand tables. */
   function recreditPrePlayBonuses(sd, owner) {
     if (!sd) return;
     var side = _sideOf(owner);
+    if (sd.borrowed) {
+      if (!G.borrowedAbility) G.borrowedAbility = { player: {}, opp: {} };
+      if (!G.borrowedAbility[side]) G.borrowedAbility[side] = {};
+      G.borrowedAbility[side][sd.cardId] = { srcId: sd.borrowed.srcId };
+    }
     (sd.ipModSources || []).forEach(function (e) {
       if (!e || !e.delta) return;
-      if (e.kind === 'stamp') {
-        stampHandBonus(owner, sd.cardId, e.delta, { type: e.type, id: e.id });
+      if (e.kind === 'stamp' || e.kind === 'adjust') {
+        stampHandBonus(owner, sd.cardId, e.delta, { type: e.type, id: e.id }, e.kind === 'adjust' ? { kind: 'adjust' } : undefined);
       } else if (e.kind === 'copy') {
         if (!G.copyIPBonus) G.copyIPBonus = { player: {}, opp: {} };
         if (!G.copyIPBonus[side]) G.copyIPBonus[side] = {};
@@ -858,7 +1031,13 @@
              same beat. Same "state first, visibility deferred" contract the hand
              flourishes use. */
           var ipEl = slotEl.querySelector('.db-overlay-ip');
-          if (ipEl) ipEl.textContent = displayedIP(s);
+          if (ipEl) {
+            var shown = displayedIP(s);
+            ipEl.textContent = shown;
+            // Negative IP is legal (damage has no floor); tint the badge so the
+            // minus sign reads at a glance rather than looking like a smudge.
+            ipEl.classList.toggle('ip-negative', shown < 0);
+          }
         });
       });
     });
@@ -940,6 +1119,12 @@
     displayedIP:           displayedIP,
     isLocationPlayable:    isLocationPlayable,
     isMoveBlockedInto:     isMoveBlockedInto,
+    damageOn:              damageOn,
+    hasDamage:             hasDamage,
+    clearDamage:           clearDamage,
+    cardsWithDamage:       cardsWithDamage,
+    adjustIPToward:        adjustIPToward,
+    restoreToBaseIP:       restoreToBaseIP,
     nextEventId:           nextEventId,
     addBonus:              addBonus,
     addIPMod:              addIPMod,

@@ -4161,7 +4161,7 @@ var Overworld = (function () {
      battle that exists so far → the end-of-content popup (see resumeAfterBattle).
      Update this as new bosses ship. END_OF_CONTENT_DELAY_MS is the pause between
      the Giant stamp landing and the popup appearing (editable). */
-  var END_OF_CONTENT          = { hook: 'kush', tier: 'giant' };
+  var END_OF_CONTENT          = { hook: 'gupta', tier: 'giant' };   // India shipped: the Gupta is the last built boss
   var END_OF_CONTENT_DELAY_MS = 900;
   var ERECT_GAP_MS   = 500;   // pause between the stamp and the Giant erect beats (editable)
   function _playReturnFlagAnim(giantFlagEl, onProceed) {

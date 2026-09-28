@@ -176,6 +176,125 @@
     return (sd.transcribedFrom != null) ? sd.transcribedFrom : sd.cardId;
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     INDIA PRIMITIVES (phase 1 — engine only; no card wires these yet)
+     ───────────────────────────────────────────────────────────────
+     The damage query and adjust-to-value live in board.js beside effectiveIP
+     (SOG.board.damageOn / hasDamage / cardsWithDamage / adjustIPToward /
+     restoreToBaseIP). The three below need the registry or the live board.
+  ═══════════════════════════════════════════════════════════════ */
+
+  /* PLAY GATE BY TYPE. A card in play whose registry entry carries
+     `blocksPlayOfType: 'Military'` (or an array of types) closes its location
+     to plays of that type from EITHER side while it stands there. Read by
+     SOG.board.isLocationPlayable(locId, owner, cardId), which every play gate
+     (player legal-target + commit, both AI brains) goes through; movement into
+     the location is untouched. Resolved through abilityIdOf, so a Rosetta or a
+     Priest-King carrying the rule blocks too. Face-down cards do not count —
+     the rule is a property of a card that is IN PLAY. */
+  function isPlayTypeBlockedAt(locId, type) {
+    if (!type || !G.locations) return false;
+    var sides = [G.playerSlots, G.aiSlots];
+    for (var s = 0; s < sides.length; s++) {
+      var arr = sides[s] && sides[s][locId];
+      if (!arr) continue;
+      for (var i = 0; i < arr.length; i++) {
+        var sd = arr[i];
+        if (!sd || !sd.revealed) continue;
+        var spec = CARD_ABILITIES[abilityIdOf(sd)];
+        var block = spec && spec.blocksPlayOfType;
+        if (!block) continue;
+        if (Array.isArray(block) ? block.indexOf(type) !== -1 : block === type) return true;
+      }
+    }
+    return false;
+  }
+
+  /* LOCATION TYPE-MIX PREDICATE. True when the location holds at least two
+     revealed cards and no two of them share a primary type. Both sides' cards
+     count by default; opts.owner ('player' | 'ai') restricts to one side. A
+     continuous check — call it from evaluateContinuous, never cache it. Bhagavad
+     Gita pays the LOCATION (+2 to the owner's total there, not to a card): that
+     is addLocationBoost below. */
+  function locationTypeMixDistinct(locId, opts) {
+    var sides = (opts && opts.owner)
+      ? [opts.owner === 'player' ? G.playerSlots : G.aiSlots]
+      : [G.playerSlots, G.aiSlots];
+    var seen = {}, n = 0;
+    for (var s = 0; s < sides.length; s++) {
+      var arr = sides[s] && sides[s][locId];
+      if (!arr) continue;
+      for (var i = 0; i < arr.length; i++) {
+        var sd = arr[i];
+        if (!sd || !sd.revealed) continue;
+        var card = CARDS.find(function (c) { return c.id === sd.cardId; });
+        var t = card && card.type;
+        if (!t) continue;
+        if (seen[t]) return false;
+        seen[t] = true; n++;
+      }
+    }
+    return n >= 2;
+  }
+
+  /* A location-level IP boost for one side: the same G.locationBoosts table
+     Sargon's adjacency, Abu Simbel and Hyksos's Thebes write, which updateScores,
+     tallyResult and the location popup already read. The table is rebuilt from
+     scratch on every evaluateContinuous pass, so a boost is only ever written
+     from inside that pass and re-derives live. sourceCardId may be null when the
+     source is a location. Returns false if the table is not built yet. */
+  function addLocationBoost(locId, side, amount, sourceCardId, sourceLocId) {
+    if (!G.locationBoosts || !G.locationBoosts[locId]) return false;
+    var key = (side === 'player') ? 'player' : 'opp';
+    G.locationBoosts[locId][key].push({
+      sourceCardId: (sourceCardId != null) ? sourceCardId : null,
+      sourceOwner:  key,
+      sourceLocId:  (sourceLocId != null) ? sourceLocId : locId,
+      amount:       amount
+    });
+    return true;
+  }
+
+  /* ABILITY BORROWING ON ENTERING HAND (Priest-King, "Unknown Authority").
+     When a card with a registry `onEnterHand` hook enters its controller's hand
+     (deal, draw, fetch, copy, return), noteCardEnteredHand runs the hook.
+     borrowAbilityFromDeckBottom is that hook's body: it reads the card at the
+     BOTTOM of the owner's deck at that moment and stores the borrow on
+     G.borrowedAbility[side][cardId] = { srcId } — the bottom card is not moved,
+     not revealed, and stays drawable. An empty deck, or a bottom card with no
+     ability text, stores { srcId: null }: the card then has no ability at all.
+     From there it is Rosetta's machinery, not a parallel one: applyPrePlayBonuses
+     (board.js) moves the record onto the played slot as sd.transcribedFrom, so
+     abilityIdOf resolves the borrowed id for evaluateContinuous and fireEndOfTurn
+     with their own timing (a Continuous bottom card makes the borrower
+     Continuous, not At Once); the borrower's own onAtOnce handler (phase 2)
+     fires the borrowed onAtOnce the way abilityRosetta does. The popup keeps the
+     card's OWN ability name and shows the borrowed text (js/game/ui.js). Keyed by
+     side + card id like every in-hand table (a second copy of the same id in
+     hand would share the record — the Kush stamps have the same limit). */
+  function borrowAbilityFromDeckBottom(owner, cardId) {
+    var side = (owner === 'player') ? 'player' : 'opp';
+    var deck = (owner === 'player') ? G.playerDeck : G.aiDeck;
+    if (!G.borrowedAbility) G.borrowedAbility = { player: {}, opp: {} };
+    if (!G.borrowedAbility[side]) G.borrowedAbility[side] = {};
+    var bottomId = (deck && deck.length) ? deck[deck.length - 1] : null;
+    var src = (bottomId != null) ? CARDS.find(function (c) { return c.id === bottomId; }) : null;
+    var rec = { srcId: (src && src.ability) ? src.id : null };
+    G.borrowedAbility[side][cardId] = rec;
+    return rec;
+  }
+  function borrowedAbilityOf(owner, cardId) {
+    var side = (owner === 'player') ? 'player' : 'opp';
+    var t = G.borrowedAbility && G.borrowedAbility[side];
+    return (t && t[cardId]) || null;
+  }
+  /* The hand-entry hook. Every path that pushes a card id into a hand calls this
+     right after the push. A no-op for any card without an onEnterHand entry. */
+  function noteCardEnteredHand(owner, cardId) {
+    var spec = CARD_ABILITIES[cardId];
+    if (spec && typeof spec.onEnterHand === 'function') spec.onEnterHand(owner, cardId);
+  }
+
   /* THE ACTOR'S OWN SLOT ELEMENT — for a flourish that must play on the card that
      is ACTING, not on whichever card happens to share its id.
 
@@ -693,6 +812,24 @@
         });
       });
 
+      // INDIA CONTINUOUS auras (Brahmin / Dalit / Caste System / Bhagavad Gita) — see _indiaAuraAt.
+      _indiaAuraAt(loc);
+
+      // THE LOWER TOWN (ALL_PLUS_ONE_HERE, India): +1 IP to every revealed card here, both sides.
+      if (loc.abilityKey === 'ALL_PLUS_ONE_HERE') {
+        var lowerTownName = loc.name || 'The Lower Town';
+        ['player', 'opp'].forEach(function (own) {
+          var sl = own === 'player' ? G.playerSlots : G.aiSlots;
+          sl[loc.id].forEach(function (s) {
+            if (s && s.revealed) {
+              s.contMod = (s.contMod || 0) + 1;
+              s.contModSources.push({ source: lowerTownName, delta: 1 });
+              addBonus(s, 1, 'location', loc.id, nextEventId(), 'A', true);
+            }
+          });
+        });
+      }
+
       // The Sahara (ALL_MINUS_ONE_IP): -1 IP to ALL revealed cards here (both sides)
       if (loc.abilityKey === 'ALL_MINUS_ONE_IP') {
         var saharaName = loc.name || 'The Sahara';
@@ -1052,6 +1189,30 @@
         });
       }
     });
+
+    /* THE CITADEL (NO_DAMAGE_HERE, India): cards here can't be damaged. Permanent
+       negatives are refused at addIPMod; the continuous layer is rebuilt every
+       pass, so its negatives are stripped here — after every aura has written,
+       before the Buddha counts damage (a shielded card has none). */
+    G.locations.forEach(function (loc) {
+      if (loc.abilityKey !== 'NO_DAMAGE_HERE') return;
+      [G.playerSlots, G.aiSlots].forEach(function (sl) {
+        (sl[loc.id] || []).forEach(function (s) {
+          if (!s || !s.revealed || !s.contModSources) return;
+          var kept = [], restored = 0;
+          s.contModSources.forEach(function (e) { if (e && e.delta < 0) restored -= e.delta; else kept.push(e); });
+          if (!restored) return;
+          s.contModSources = kept;
+          s.contMod = (s.contMod || 0) + restored;
+          if (s.bonuses) s.bonuses = s.bonuses.filter(function (b) { return !(b && b.continuous && b.amount < 0); });
+        });
+      });
+    });
+
+    /* THE BUDDHA (India 101) — counts damage across the WHOLE board, so it runs
+       here, after the per-location loop, when every card's continuous damage is
+       final (see _applyBuddhaAuras). */
+    _applyBuddhaAuras();
 
     /* THEBES (LEAD_HERE_BOOSTS_OTHERS, Hyksos battle): whichever side is STRICTLY
        AHEAD at Thebes gets +2 IP at EACH of the other locations. A tie gives nobody
@@ -1492,11 +1653,19 @@
       var loc = G.locations.find(function (l) { return l.id === r.locId; });
       if (!loc) return;
       var key = loc.abilityKey;
-      if (key !== 'LABOR_PLUS_2_HERE' && key !== 'MILITARY_PLUS_1_HERE') return;
       var slots = (r.owner === 'player') ? G.playerSlots : G.aiSlots;
       var arr   = slots[r.locId];
       var sd    = arr && arr[r.slotIndex];
-      if (!sd || !sd.revealed || sd._riverStamped) return;   // guard: stamp exactly once
+      if (!sd || !sd.revealed) return;
+      /* NALANDA (DRAW_SCIENTIFIC_ON_PLAY, India): the owner of a card played here
+         draws a Scientific card from their deck (Khufu's drawTypeFromDeck: fizzles
+         when none remain or the hand is full). Once per play. */
+      if (loc.abilityKey === 'DRAW_SCIENTIFIC_ON_PLAY' && !sd._nalandaDrawn) {
+        sd._nalandaDrawn = true;
+        drawTypeFromDeck(r.owner === 'player' ? 'player' : 'ai', 'Scientific');
+        return;
+      }
+      if (sd._riverStamped) return;   // guard: stamp exactly once
       var c = CARDS.find(function (x) { return x.id === sd.cardId; });
       if (!c) return;
       if (key === 'LABOR_PLUS_2_HERE' && c.type === 'Labor') {
@@ -1505,9 +1674,139 @@
       } else if (key === 'MILITARY_PLUS_1_HERE' && c.type === 'Military') {
         addIPMod(sd, 1, loc);
         sd._riverStamped = true; stamps++;
+      } else if (key === 'SEASON_WET_DRY') {
+        /* THE INDUS RIVER (India): wet season +2 to any card played here, dry
+           season -1 (real damage — the Citadel would refuse it). The season is
+           loc.seasonWet, set by applySeasonalLocations at turn start. */
+        addIPMod(sd, loc.seasonWet ? 2 : -1, loc);
+        sd._riverStamped = true; stamps++;
+      } else if (key === 'MONSOON_CHANCE' && loc.monsoonActive) {
+        /* THE GANGES PLAIN (India): +2 to any card played here during a monsoon;
+           nothing at all in a dry turn. monsoonActive is set at the reveal by
+           resolveHiddenSeasons from the roll made at turn start. */
+        addIPMod(sd, 2, loc);
+        sd._riverStamped = true; stamps++;
       }
     });
     return stamps;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     INDIA LOCATIONS — seasons and end-of-turn location rules
+     ───────────────────────────────────────────────────────────────
+     Keys (each also read where it acts — the map editor's validator discovers
+     keys from these literals): NO_DAMAGE_HERE (board.js + the immunity pass),
+     ALL_PLUS_ONE_HERE (evaluateContinuous), SEASON_WET_DRY and MONSOON_CHANCE
+     (applyRiverAtOnce + the schedulers below), EOT_HIGHEST_MINUS_ONE_MOVE,
+     EOT_ALL_PLUS_ONE, EOT_LOWEST_PLUS_ONE (applyLocationEndOfTurn),
+     DRAW_SCIENTIFIC_ON_PLAY (applyRiverAtOnce), ECHO_GAINS_PLUS_ONE (board.js).
+  ═══════════════════════════════════════════════════════════════ */
+  var INDUS_WET = { suffix: ' - Wet Season', abilityText: 'Wet season: cards gain +2 IP when played here. The season changes every turn.', sfx: 'sfx/waterflow.m4a' };
+  var MONSOON   = { suffix: ' - Monsoon',    abilityText: 'Monsoon! Cards gain +2 IP when played here.', sfx: 'sfx/waterflow.m4a', tint: true };
+
+  /* Turn-start schedule (game.js calls this for turn 1 and every later turn):
+       SEASON_WET_DRY — turn 1 is a 50/50 roll, every later turn flips. Shown at once.
+       MONSOON_CHANCE — every turn a 50% roll, kept HIDDEN (loc.monsoonPending) until
+                        resolveHiddenSeasons at the reveal; the previous turn's
+                        monsoon ends here. */
+  function applySeasonalLocations(turn) {
+    if (!G.locations || !(window.SOG && SOG.flood)) return;
+    G.locations.forEach(function (loc) {
+      if (loc.abilityKey === 'SEASON_WET_DRY') {
+        loc.seasonWet = (turn <= 1) ? (Math.random() < 0.5) : !loc.seasonWet;
+        SOG.flood.setSeason(loc.id, loc.seasonWet, INDUS_WET);
+      } else if (loc.abilityKey === 'MONSOON_CHANCE') {
+        loc.monsoonActive = false;
+        SOG.flood.setSeason(loc.id, false);
+        loc.monsoonPending = Math.random() < 0.5;
+      }
+    });
+  }
+  /* Reveal-phase entry (game.js startReveal): a pending monsoon becomes real. */
+  function resolveHiddenSeasons() {
+    if (!G.locations || !(window.SOG && SOG.flood)) return;
+    G.locations.forEach(function (loc) {
+      if (loc.abilityKey !== 'MONSOON_CHANCE') return;
+      if (loc.monsoonPending) {
+        loc.monsoonPending = false;
+        loc.monsoonActive = true;
+        SOG.flood.setSeason(loc.id, true, MONSOON);
+      }
+    });
+  }
+
+  /* End-of-turn LOCATION rules, run by fireEndOfTurn after every card's End of
+     Turn (cards first, then the ground they stand on). All revealed cards at the
+     location, both sides.
+       EOT_ALL_PLUS_ONE (Bodh Gaya)       — +1 permanent to each card here; it is a
+                                            real modifier, so it travels with the card.
+       EOT_LOWEST_PLUS_ONE (The Ganges)   — +1 to the card with the lowest IP; ties
+                                            go to the EARLIEST played (lowest
+                                            playTime), then the player's side.
+       EOT_HIGHEST_MINUS_ONE_MOVE (Kapilavastu) — -1 to the highest card here (ties:
+                                            the most RECENTLY played, then the
+                                            player's side) and move it to a random
+                                            other location with an open slot on its
+                                            owner's side; no open slot → the -1
+                                            still applies and it stays. */
+  function _revealedHere(locId) {
+    var out = [];
+    [['player', G.playerSlots], ['ai', G.aiSlots]].forEach(function (pair) {
+      (pair[1][locId] || []).forEach(function (s, i) { if (s && s.revealed) out.push({ owner: pair[0], sd: s, si: i }); });
+    });
+    return out;
+  }
+  function applyLocationEndOfTurn(done) {
+    done = typeof done === 'function' ? done : function () {};
+    if (!G.locations) { done(); return; }
+    var moves = [];
+    var _dbg = function (msg) { if (window.SOG_DEBUG && typeof console !== 'undefined') console.log('[LocationEOT] ' + msg); };
+    G.locations.forEach(function (loc) {
+      var here = _revealedHere(loc.id);
+      _dbg(loc.name + ' (' + loc.abilityKey + ') turn ' + G.turn + ': ' + here.map(function (h) { return h.owner + ':' + h.sd.cardId + '=' + effectiveIP(h.sd); }).join(' '));
+      if (!here.length) return;
+      if (loc.abilityKey === 'EOT_ALL_PLUS_ONE') {
+        var eid = nextEventId();
+        here.forEach(function (h) { addIPMod(h.sd, 1, loc, eid); });
+      } else if (loc.abilityKey === 'EOT_LOWEST_PLUS_ONE') {
+        var low = here.reduce(function (a, b) {
+          var ia = effectiveIP(a.sd), ib = effectiveIP(b.sd);
+          if (ib !== ia) return ib < ia ? b : a;
+          var pa = (typeof a.sd.playTime === 'number') ? a.sd.playTime : Infinity;
+          var pb = (typeof b.sd.playTime === 'number') ? b.sd.playTime : Infinity;
+          return pb < pa ? b : a;                    // earlier played wins the tie; player side first on a full tie
+        });
+        addIPMod(low.sd, 1, loc);
+      } else if (loc.abilityKey === 'EOT_HIGHEST_MINUS_ONE_MOVE') {
+        var high = here.reduce(function (a, b) {
+          var ia = effectiveIP(a.sd), ib = effectiveIP(b.sd);
+          if (ib !== ia) return ib > ia ? b : a;
+          var pa = (typeof a.sd.playTime === 'number') ? a.sd.playTime : -Infinity;
+          var pb = (typeof b.sd.playTime === 'number') ? b.sd.playTime : -Infinity;
+          return pb > pa ? b : a;                    // most recently played wins the tie; player side first on a full tie
+        });
+        addIPMod(high.sd, -1, loc);
+        var dest = randomOtherOpenLoc(high.owner, loc.id);
+        _dbg('Kapilavastu picked ' + high.owner + ':' + high.sd.cardId + ' -> ' + (dest ? dest.name : 'no open location, stays'));
+        if (dest) moves.push({ owner: high.owner, sd: high.sd, from: loc.id, to: dest.id });
+      }
+    });
+    _indiaRepaint();
+    // Kapilavastu's moves resolve one after another through the shared move
+    // pipeline when it is present (it animates and fires the arrival hooks);
+    // state-only otherwise (tests).
+    (function next(i) {
+      if (i >= moves.length) { done(); return; }
+      var m = moves[i];
+      if (SOG.game && typeof SOG.game.executeMoveAnimated === 'function') {
+        SOG.game.executeMoveAnimated(m.owner, m.sd.cardId, m.from, m.to, { sd: m.sd }, function () { next(i + 1); });
+      } else {
+        var slots = m.owner === 'player' ? G.playerSlots : G.aiSlots;
+        var fi = (slots[m.from] || []).indexOf(m.sd), ti = (slots[m.to] || []).indexOf(null);
+        if (fi !== -1 && ti !== -1) { slots[m.from][fi] = null; slots[m.to][ti] = m.sd; }
+        next(i + 1);
+      }
+    })(0);
   }
 
   /* "Harvest" — the CAPITAL half. At Once: grant the OWNER +1 capital next turn
@@ -2683,6 +2982,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     if (owner !== 'player') {
       // AI path — no animation needed
       G.aiHand.push(10);
+      noteCardEnteredHand(owner, 10);
       if (callback) callback();
       return;
     }
@@ -2690,6 +2990,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     // Player path — ascend animation, then return to hand with glow + sound
     function doReturn() {
       G.playerHand.push(10);
+      noteCardEnteredHand('player', 10);
       rebuildPlayerHand();
       var newJesusEl = playerHandEl.querySelector('.battle-hand-card[data-id="10"]');
       if (newJesusEl && typeof Anim !== 'undefined') Anim.jesusReturn(newJesusEl);
@@ -3039,6 +3340,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     var hand = owner === 'player' ? G.playerHand : G.aiHand;
     if (deck.length > 0) {
       hand.push(deck.shift());
+      noteCardEnteredHand(owner, hand[hand.length - 1]);
       if (owner === 'player') rebuildPlayerHand();
       else                    SOG.ui.updateOppHand();
     }
@@ -3802,6 +4104,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     if (idx === -1) return null;                             // not in deck
     var drawn = deck.splice(idx, 1)[0];
     hand.push(drawn);
+    noteCardEnteredHand(owner, drawn);
     if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
     return drawn;
   }
@@ -4376,6 +4679,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     if (idx === -1) return null;                                   // none in deck → fizzle
     var drawnId = deck.splice(idx, 1)[0];
     hand.push(drawnId);
+    noteCardEnteredHand(owner, drawnId);
     if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
     // Returns the DRAWN CARD ID (null when nothing matched) rather than a bare
     // boolean, so a caller can name exactly what it drew. Truthiness is unchanged
@@ -4799,6 +5103,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     if (hand.length >= maxHand) { done(); return; }        // hand full → fizzle (no copy)
 
     hand.push(lastId);                                     // the copy (same card id)
+    noteCardEnteredHand(owner, lastId);
 
     // Carry the source's PERMANENT accumulated IP into the pending copy.
     var inherited = Math.max(-99, Math.min(99, (lastSd && lastSd.ipMod) || 0));
@@ -5501,6 +5806,646 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     discardFromHand(owner, pick, function () { afterDiscard(pick); });
   }
 
+
+  /* ═══════════════════════════════════════════════════════════════
+     INDIA SET — BUCKET 1 (existing primitive + a small handler each)
+     ───────────────────────────────────────────────────────────────
+     Ids are the js/cards.js INDIA section (88-120). Every handler is
+     state-first with no bespoke flourish yet (the generic At-Once pulse and
+     the existing float/badge repaint carry them); art beats can be layered on
+     later the way the Kush set's were.
+  ═══════════════════════════════════════════════════════════════ */
+  var INDIA = { DRAINAGE: 91, PASHUPATI: 92, BEAST: 93, COTTON: 94, FARMER: 98, PRIEST: 100,
+                STUPA: 103, MISSIONARY: 105, UPANISHADS: 106, BRAHMIN: 107, KSHATRIYA: 108,
+                SHUDRA: 109, DALIT: 110, VAISHYA_FARMER: 112, CASTE: 113, GUPTA: 115,
+                NUMBER_ZERO: 117, VEDAS: 120 };   // ids = js/cards.js INDIA section, CSV order
+
+  function _indiaRepaint() { evaluateContinuous(); refreshSlotIPDisplays(); updateScores(); }
+
+  /* Cotton (94) — "Natural Resource": At Once, +2 IP to the owner's Labor cards here. */
+  function abilityCotton(owner, locId, slotIndex, sd, done) {
+    _atOnceTypeBuffHere(owner, locId, 'Labor', 2, srcOf(sd, INDIA.COTTON), done);
+  }
+
+  /* Farmer (98) "Sowing Season" +3 / Vaishya (112) "The Farmer's Duty" +2: At Once,
+     the TOP card of the owner's deck gains IP. The stamp is the in-hand/in-deck
+     bonus table (stampHandBonus — the same one Amenirdis puts on Piye): keyed by
+     card id, attributed to the stamper, consumed when that card enters the board.
+     Keyed by ID, so a twin of the top card already in hand shares it (the Kush
+     stamps have the same limit). Empty deck → fizzle. */
+  function _stampDeckTop(owner, delta, source, done) {
+    var deck = owner === 'player' ? G.playerDeck : G.aiDeck;
+    if (deck && deck.length) stampHandBonus(owner, deck[0], delta, source);
+    done();
+  }
+  function abilityIndiaFarmer(owner, locId, slotIndex, sd, done)   { _stampDeckTop(owner, 3, srcOf(sd, INDIA.FARMER), done); }
+  function abilityVaishyaFarmer(owner, locId, slotIndex, sd, done) { _stampDeckTop(owner, 2, srcOf(sd, INDIA.VAISHYA_FARMER), done); }
+
+  /* Priest (100) — "Sacrificial Rites": At Once, a TRANSFER: every card in the
+     owner's hand (as it stands after the Priest left it) gives 1 IP to the Priest.
+     Each hand card is stamped -1 through the in-hand bonus table (attributed to
+     the Priest; it lands on the card when played and shows in its breakdown),
+     and the Priest gains the total. Stamps are keyed by card id, so two copies
+     of one id in hand put both -1s on that id — the first copy played carries -2,
+     the second none (the Kush stamps' limit; the total transferred is exact). */
+  function abilityIndiaPriest(owner, locId, slotIndex, sd, done) {
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    var n = hand ? hand.length : 0;
+    if (n > 0) {
+      hand.forEach(function (id) { stampHandBonus(owner, id, -1, srcOf(sd, INDIA.PRIEST)); });
+      addIPMod(sd, n, srcOf(sd, INDIA.PRIEST));
+      if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+      _indiaRepaint();
+    }
+    done();
+  }
+
+  /* Kshatriya (108) — "The Soldier's Duty": At Once, destroy an opponent card here
+     with less IP than Kshatriya. Several qualify → the strongest of them (highest
+     effective IP; first on a tie). destroyCard runs the normal destroy path
+     (protection gate, destroyed pile, death triggers, shake + fade). */
+  function abilityKshatriya(owner, locId, slotIndex, sd, done) {
+    var oppOwner = owner === 'player' ? 'ai' : 'player';
+    var oppSlots = oppOwner === 'player' ? G.playerSlots : G.aiSlots;
+    var mine = effectiveIP(sd), best = -1, bestIP = -Infinity;
+    (oppSlots[locId] || []).forEach(function (s, i) {
+      if (!s || !s.revealed) return;
+      var ip = effectiveIP(s);
+      if (ip < mine && ip > bestIP) { bestIP = ip; best = i; }
+    });
+    if (best === -1) { done(); return; }
+    destroyCard(oppOwner, locId, best, {});
+    _indiaRepaint();
+    done();
+  }
+
+  /* Vedas (120) — "Holy Hymnals": At Once, -1 CC to the Religious cards in the
+     owner's hand. The hand CC stamp table is G.kushCCDiscount (Kashta's -1 on
+     Piye): per side, per card id, cumulative, read by effectiveCost for every
+     card — so it is the generic hand-CC discount despite the name. Keyed by id:
+     every Religious card in hand right now is stamped once, and a later copy of
+     one of those ids inherits the discount (Kashta's limit, unchanged). */
+  function _stampHandCC(owner, cardId, n) {
+    if (!G.kushCCDiscount) G.kushCCDiscount = { player: {}, opp: {} };
+    var bag = G.kushCCDiscount[owner] || (G.kushCCDiscount[owner] = {});
+    bag[cardId] = (bag[cardId] || 0) + n;
+  }
+  function abilityVedas(owner, locId, slotIndex, sd, done) {
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    var seen = {}, hits = 0;
+    (hand || []).forEach(function (id) {
+      if (seen[id]) return;
+      var c = CARDS.find(function (x) { return x.id === id; });
+      if (!c || c.type !== 'Religious') return;
+      seen[id] = true; _stampHandCC(owner, id, 1); hits++;
+    });
+    if (hits && owner === 'player' && window.SOG && SOG.input && typeof SOG.input.refreshHandCostDisplays === 'function') {
+      SOG.input.refreshHandCostDisplays();
+    }
+    done();
+  }
+
+  /* Upanishads (106) — "Reincarnation": At Once, a random card of the OWNER's from
+     the discard or destroyed pile returns HERE, and it reveals again: it is placed
+     as a fresh copy of itself (printed stats — it is reborn, not restored) and
+     resolved through fireAtOnce, THE FUNNEL, so its At Once fires as if just
+     played (Meroe's repeat, the Akhenaten flush and the pulse all apply). The pile
+     entry is consumed. No candidate, or no open slot here → fizzle. */
+  function abilityUpanishads(owner, locId, slotIndex, sd, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var cands = priestCandidates(owner);
+    if (!cands.length || (slots[locId] || []).indexOf(null) === -1) { done(); return; }
+    var cand = cands[Math.floor(Math.random() * cands.length)];
+    if (cand.pile === 'destroyed') popDestroyed(owner, cand.entry);
+    else                           popDiscard(owner, cand.entry);
+    var before = (slots[locId] || []).slice();
+    if (!placeRevealedCard(owner, locId, cand.cardId)) { done(); return; }
+    var idx = -1, nsd = null;
+    (slots[locId] || []).forEach(function (s, i) { if (s && before.indexOf(s) === -1) { idx = i; nsd = s; } });
+    _indiaRepaint();
+    if (idx === -1) { done(); return; }
+    try { fireAtOnce(owner, cand.cardId, locId, idx, nsd, done); }
+    catch (e) { done(); }
+  }
+
+  /* End of Turn "+1 IP to your (other) <type> cards here" — Stupa (103, Religious,
+     other), Number Zero (116, Scientific, other), The Gupta (114, Scientific and
+     Cultural). Same shape as the Iron Furnace, minus the fire. "Other" is by
+     IDENTITY, so a twin is a legitimate other and a transcribing Rosetta is the
+     actor and skipped. */
+  function _endOfTurnTypeBuffHere(owner, locId, sd, types, srcId, excludeSelf, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var hits = 0, eid = nextEventId();
+    (slots[locId] || []).forEach(function (s) {
+      if (!s || !s.revealed) return;
+      if (excludeSelf && s === sd) return;
+      var c = CARDS.find(function (x) { return x.id === abilityIdOf(s); });
+      if (!c || types.indexOf(c.type) === -1) return;
+      addIPMod(s, 1, srcOf(sd, srcId), eid);
+      hits++;
+    });
+    if (hits) _indiaRepaint();
+    done();
+  }
+  function abilityStupa(owner, locId, slotIndex, sd, done)      { _endOfTurnTypeBuffHere(owner, locId, sd, ['Religious'], INDIA.STUPA, true, done); }
+  function abilityNumberZero(owner, locId, slotIndex, sd, done) { _endOfTurnTypeBuffHere(owner, locId, sd, ['Scientific'], INDIA.NUMBER_ZERO, true, done); }
+  function abilityGupta(owner, locId, slotIndex, sd, done)      { _endOfTurnTypeBuffHere(owner, locId, sd, ['Scientific', 'Cultural'], INDIA.GUPTA, false, done); }
+
+  /* Lord of the Beasts (92) — "Unleash the Beast": At Once, send a Beast token (93)
+     to a random OTHER location with an open slot on the owner's side. Every
+     firing sends one more (a re-trigger sends another). Nowhere to send it →
+     fizzle. The Beast is a real revealed card (spawnCardAt), vanilla, 4/4. */
+  function abilityPashupati(owner, locId, slotIndex, sd, done) {
+    var dests = _otherOpenLocs(owner, locId);
+    if (!dests.length) { done(); return; }
+    // The CONTROLLER chooses the destination (the same chooser shape the
+    // Phoenicians use for a host): the player through the location chooser, the
+    // AI by its contest rule — the open location where its own total is lowest.
+    _chooseLocation(owner, 'Choose where to send the Beast', dests, function (loc) {
+      if (loc) spawnCardAt(owner, loc.id, INDIA.BEAST);
+      done();
+    });
+  }
+
+  /* Missionary (105) — "Turn The Wheel": can move once (registry
+     movesOncePerBattle — input.js reads it like Lucy's once-per-battle flag);
+     on ARRIVING at a new location, +1 IP to every non-Religious revealed card
+     its CONTROLLER owns there. Fired from the shared move pipeline (game.js
+     applyMove → fireOnArrivedHere) after the card has landed. */
+  function abilityMissionaryArrival(owner, toLocId, sd) {
+    var eid = nextEventId(), hits = 0;
+    [owner === 'player' ? G.playerSlots : G.aiSlots].forEach(function (sl) {
+      (sl[toLocId] || []).forEach(function (s) {
+        if (!s || !s.revealed || s === sd) return;
+        var c = CARDS.find(function (x) { return x.id === s.cardId; });
+        if (!c || c.type === 'Religious') return;
+        addIPMod(s, 1, srcOf(sd, INDIA.MISSIONARY), eid);
+        hits++;
+      });
+    });
+    if (hits) _indiaRepaint();
+    return hits;
+  }
+  /* Generic arrival hook: a card's registry onArrivedHere(owner, toLocId, sd) fires
+     after it lands from a move. Resolved via abilityIdOf so a transcription carries it. */
+  function fireOnArrivedHere(owner, toLocId, sd) {
+    if (!sd) return;
+    var spec = CARD_ABILITIES[abilityIdOf(sd)];
+    if (spec && typeof spec.onArrivedHere === 'function') spec.onArrivedHere(owner, toLocId, sd);
+  }
+
+  /* Drainage System (91) — "Carried Away": At Once, clear all damage from the
+     owner's cards here (Drainage itself included) and gain that much IP. Uses
+     SOG.board.clearDamage, which only removes PERMANENT negative entries —
+     damage from a standing aura stays, so repeating this cannot farm IP off it. */
+  function abilityDrainageSystem(owner, locId, slotIndex, sd, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var total = 0;
+    (slots[locId] || []).forEach(function (s) {
+      if (s && s.revealed) total += SOG.board.clearDamage(s);
+    });
+    if (total > 0) addIPMod(sd, total, srcOf(sd, INDIA.DRAINAGE));
+    _indiaRepaint();
+    done();
+  }
+
+  /* Shudra (109) — "The Worker's Burden": NOT an aura. A card its controller
+     PLAYS at Shudra's location gets a permanent +1 (addIPMod, attributed to
+     Shudra) the moment it lands, and keeps it wherever it moves afterwards.
+     Cards already there when Shudra arrives, the opponent's plays, and Shudra
+     itself get nothing. onCardLandedHere fires at reveal for plays only, so a
+     card that MOVES in is not "played here". */
+  function abilityShudra(ctx, done) {
+    done = typeof done === 'function' ? done : function () {};
+    if (ctx.landedOwner !== ctx.owner) { done(); return; }
+    var slots = ctx.owner === 'player' ? G.playerSlots : G.aiSlots;
+    var landed = null;
+    (slots[ctx.locId] || []).forEach(function (s) { if (!landed && s && s.cardId === ctx.landedCardId && s !== ctx.slot) landed = s; });
+    if (landed) { addIPMod(landed, 1, srcOf(ctx.slot, INDIA.SHUDRA)); _indiaRepaint(); }
+    done();
+  }
+
+  /* Continuous India auras — evaluated inside evaluateContinuous (see the
+     "INDIA CONTINUOUS" block there): Brahmin 107, Dalit 110, Caste System 113,
+     Bhagavad Gita 116. Kept as data here so the block and the registry agree. */
+  function _indiaAuraAt(loc) {
+    var sides = ['player', 'opp'];
+    var all = [];                                               // every revealed card here, both sides
+    sides.forEach(function (own) {
+      var sl = (own === 'player' ? G.playerSlots : G.aiSlots)[loc.id] || [];
+      sl.forEach(function (s) { if (s && s.revealed) all.push({ s: s, own: own }); });
+    });
+    if (!all.length) return;
+    var typeOf = function (s) { var c = CARDS.find(function (x) { return x.id === s.cardId; }); return c ? c.type : null; };
+    var cont = function (s, delta, name, id) {
+      s.contMod = (s.contMod || 0) + delta;
+      s.contModSources.push({ source: name, delta: delta });
+      addBonus(s, delta, 'card', id, nextEventId(), 'A', true);
+    };
+    all.forEach(function (e) {
+      var aid = abilityIdOf(e.s);
+      if (aid === INDIA.BRAHMIN) {
+        // +1 per OTHER Religious or Political card its CONTROLLER owns here.
+        var n = all.filter(function (o) { var t = typeOf(o.s); return o.s !== e.s && o.own === e.own && (t === 'Religious' || t === 'Political'); }).length;
+        if (n > 0) cont(e.s, n, 'Brahmin', INDIA.BRAHMIN);
+      } else if (aid === INDIA.DALIT) {
+        // -1 to every OTHER card here, both sides.
+        all.forEach(function (o) { if (o.s !== e.s) cont(o.s, -1, 'Dalit', INDIA.DALIT); });
+      } else if (aid === INDIA.CASTE) {
+        // -1 to every card here (both sides) whose effective CC is 0, 1 or 2.
+        all.forEach(function (o) { if (effectiveCC(o.s) <= 2) cont(o.s, -1, 'Caste System', INDIA.CASTE); });
+      } else if (aid === INDIA.GITA) {
+        // Bhagavad Gita: +2 to its controller's total at THIS LOCATION (the boost
+        // table, not a card) while its CONTROLLER's revealed cards here — at least
+        // two of them — all differ in primary type. The opponent's cards do not
+        // count (locationTypeMixDistinct with owner set).
+        var gOwner = (e.own === 'player') ? 'player' : 'ai';
+        if (locationTypeMixDistinct(loc.id, { owner: gOwner })) addLocationBoost(loc.id, e.own, 2, INDIA.GITA, loc.id);
+      }
+    });
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     INDIA SET — BUCKET 2 (composites)
+  ═══════════════════════════════════════════════════════════════ */
+  INDIA.GREAT_BATH = 89; INDIA.GRANARY = 90; INDIA.INDUS_SEALS = 95; INDIA.FIRED_BRICK = 96;
+  INDIA.WEIGHTS = 97; INDIA.MERCHANT = 99; INDIA.ASHOKA = 102; INDIA.VAISHYA = 111;
+  INDIA.SANSKRIT = 114; INDIA.INOCULATION = 118; INDIA.ALLOY = 119;
+
+  /* ── Choosers ─────────────────────────────────────────────────────────────
+     Targeted effects let the CONTROLLER choose: the player through the shared
+     chooser modal (card faces, or location names for placements), the AI by the
+     `aiPick` rule the caller supplies. G._testChoose, when set, answers every
+     chooser synchronously (tests run with no DOM). */
+  function _otherOpenLocs(owner, excludeLocId) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    return G.locations.filter(function (loc) {
+      return loc.id !== excludeLocId && slots[loc.id] && slots[loc.id].indexOf(null) !== -1;
+    });
+  }
+  function _ownTotalAt(owner, locId) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots, t = 0;
+    (slots[locId] || []).forEach(function (s) { if (s && s.revealed) t += effectiveIP(s); });
+    return t;
+  }
+  function _chooseLocation(owner, title, locs, cb) {
+    if (!locs.length) { cb(null); return; }
+    if (typeof G._testChoose === 'function') { cb(G._testChoose('location', locs)); return; }
+    if (owner !== 'player') {
+      var best = locs.reduce(function (a, b) { return _ownTotalAt(owner, a.id) <= _ownTotalAt(owner, b.id) ? a : b; });
+      cb(best); return;
+    }
+    showLocationChooser(title, locs, cb);
+  }
+  /* Choose one of the owner's cards here (targets = [{sd, si}]). aiPick(targets)
+     returns the AI's choice. */
+  function _chooseCardHere(owner, title, targets, aiPick, cb) {
+    if (!targets.length) { cb(null); return; }
+    if (typeof G._testChoose === 'function') { cb(G._testChoose('card', targets)); return; }
+    if (owner !== 'player') { cb(aiPick(targets)); return; }
+    showDiscardChooser(title, targets.map(function (t) { return t.sd.cardId; }), function (chosenId) {
+      if (chosenId === null) { cb(null); return; }
+      cb(targets.find(function (t) { return t.sd.cardId === chosenId; }) || null);
+    });
+  }
+  /* Location chooser — the card chooser's modal (same panel, 5-second timer,
+     random auto-pick on timeout), listing locations by name. */
+  function showLocationChooser(title, locs, callback) {
+    var backdrop = document.createElement('div'); backdrop.className = 'discard-backdrop';
+    var panel    = document.createElement('div'); panel.className = 'discard-panel';
+    var settled = false, intervalId = null;
+    function resolve(loc) {
+      if (settled) return;
+      settled = true;
+      if (intervalId) { clearInterval(intervalId); intervalId = null; }
+      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+      callback(loc);
+    }
+    var DURATION_S = 5;
+    var timerWrap = document.createElement('div');
+    timerWrap.className = 'chooser-timer';
+    timerWrap.innerHTML =
+      '<svg class="chooser-timer-ring" viewBox="0 0 100 100" aria-hidden="true">' +
+        '<circle class="chooser-timer-track" cx="50" cy="50" r="44"></circle>' +
+        '<circle class="chooser-timer-arc"   cx="50" cy="50" r="44"></circle>' +
+      '</svg>' +
+      '<div class="chooser-timer-num">' + DURATION_S + '</div>';
+    panel.appendChild(timerWrap);
+    var titleEl = document.createElement('div'); titleEl.className = 'discard-title'; titleEl.textContent = title;
+    panel.appendChild(titleEl);
+    var row = document.createElement('div'); row.className = 'discard-card-row chooser-loc-row';
+    locs.forEach(function (loc) {
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'chooser-loc-btn';
+      btn.innerHTML = '<span class="chooser-loc-name"></span><span class="chooser-loc-region"></span>';
+      btn.querySelector('.chooser-loc-name').textContent   = loc.name || ('Location ' + loc.id);
+      btn.querySelector('.chooser-loc-region').textContent = loc.region || '';
+      btn.addEventListener('click', function () { resolve(loc); });
+      row.appendChild(btn);
+    });
+    panel.appendChild(row);
+    backdrop.appendChild(panel);
+    document.body.appendChild(backdrop);
+    var left = DURATION_S, numEl = timerWrap.querySelector('.chooser-timer-num'), arc = timerWrap.querySelector('.chooser-timer-arc');
+    intervalId = setInterval(function () {
+      left -= 1;
+      if (numEl) numEl.textContent = String(Math.max(0, left));
+      if (arc)   arc.style.strokeDashoffset = String(Math.round(276 * (1 - left / DURATION_S)));
+      if (left <= 0) resolve(locs[Math.floor(Math.random() * locs.length)]);
+    }, 1000);
+  }
+
+  /* ── MERGE (Indus Seals 95, Sanskrit 114, Alloy 119) ──────────────────────
+     The merging card vanishes into the host and hands over its IP — its printed
+     IP plus every permanent modifier it carried — as ONE addIPMod attributed to
+     it, plus the card's own `extra`. Its ABILITY does not transfer. The
+     Phoenicians' consumption mechanics are reused as-is: null the slot, compact,
+     forward the presentation pointer, and make the host the "last card played
+     here" so downstream readers (Papyrus, Pyramid, Alloy) see it. */
+  function _mergeInto(owner, locId, slotIndex, sd, hostSd, extra, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var idx = actorSlotIdx(owner, locId, sd, slotIndex);
+    if (idx !== -1) {
+      slots[locId][idx] = null;
+      clearSlotDOM(owner, locId, idx);
+      if (owner === 'player') { compactPlayerSlots(locId); syncPlayerSlots(locId); }
+      else                    { compactOppSlots(locId);    syncOppSlots(locId);    }
+    }
+    var gain = (sd.ip || 0) + (sd.ipMod || 0) + (extra || 0);
+    if (gain) addIPMod(hostSd, gain, srcOf(sd, sd.cardId));
+    sd._mergedInto = hostSd;
+    if (G.playOrderCounter == null) G.playOrderCounter = 0;
+    hostSd.playTime = ++G.playOrderCounter;
+    _indiaRepaint();
+    done();
+    return gain;
+  }
+  function _ownOthersHere(owner, locId, sd) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots, out = [];
+    (slots[locId] || []).forEach(function (s, i) { if (s && s.revealed && s !== sd) out.push({ sd: s, si: i }); });
+    return out;
+  }
+  function _typeOfSd(s) { var c = CARDS.find(function (x) { return x.id === s.cardId; }); return c ? c.type : null; }
+  /* Indus Seals / Sanskrit: merge into a chosen own card here; +extra if the host is `bonusType`. */
+  function _mergeChooser(selfId, bonusType, bonus, title) {
+    return function (owner, locId, slotIndex, sd, done) {
+      var targets = _ownOthersHere(owner, locId, sd);
+      if (!targets.length) { done(); return; }                    // no host → reveals as a plain card
+      var extraFor = function (t) { return _typeOfSd(t.sd) === bonusType ? bonus : 0; };
+      _chooseCardHere(owner, title, targets, function (ts) {
+        return ts.reduce(function (a, b) { return (effectiveIP(a.sd) + extraFor(a)) >= (effectiveIP(b.sd) + extraFor(b)) ? a : b; });
+      }, function (t) {
+        if (!t) { done(); return; }
+        _mergeInto(owner, locId, slotIndex, sd, t.sd, extraFor(t), done);
+      });
+    };
+  }
+  var abilityIndusSeals = _mergeChooser(95,  'Economic',  1, 'Choose a card for Indus Seals to merge into');
+  var abilitySanskrit   = _mergeChooser(114, 'Religious', 2, 'Choose a card for Sanskrit to merge into');
+  /* Alloy (119): merge with the LAST card the owner played here (highest playTime
+     among the owner's other cards here), then double the host's IP. Doubling is a
+     permanent +current, attributed to Alloy. No other card here → fizzle. */
+  function abilityAlloy(owner, locId, slotIndex, sd, done) {
+    var targets = _ownOthersHere(owner, locId, sd);
+    if (!targets.length) { done(); return; }
+    var host = targets.reduce(function (a, b) { return ((a.sd.playTime || 0) >= (b.sd.playTime || 0)) ? a : b; }).sd;
+    _mergeInto(owner, locId, slotIndex, sd, host, 0, function () {});
+    var cur = effectiveIP(host);
+    if (cur) addIPMod(host, cur, srcOf(sd, INDIA.ALLOY));
+    _indiaRepaint();
+    done();
+  }
+
+  /* Inoculation (118) — "Immunity": At Once, -1 IP to a chosen own card here, then
+     double its IP. The -1 is self-inflicted damage (it counts — that is the
+     Buddha's food); the doubling is a permanent +current, attributed to Inoculation. */
+  function abilityInoculation(owner, locId, slotIndex, sd, done) {
+    var targets = _ownOthersHere(owner, locId, sd);
+    if (!targets.length) { done(); return; }
+    _chooseCardHere(owner, 'Choose a card to inoculate', targets, function (ts) {
+      return ts.reduce(function (a, b) { return effectiveIP(a.sd) >= effectiveIP(b.sd) ? a : b; });
+    }, function (t) {
+      if (!t) { done(); return; }
+      var eid = nextEventId();
+      addIPMod(t.sd, -1, srcOf(sd, INDIA.INOCULATION), eid);
+      var cur = effectiveIP(t.sd);
+      if (cur) addIPMod(t.sd, cur, srcOf(sd, INDIA.INOCULATION), eid);
+      _indiaRepaint();
+      done();
+    });
+  }
+
+  /* Merchant (99, +1) / Vaishya (111, +2) — "Trade Route" / "The Trader's Duty":
+     when the OWNER plays an Economic card here, gain +N IP and move to another
+     location of the owner's with room; +1 MORE to itself if the played card is
+     from a different civilization (civOf: the India records carry
+     civilization "India"). Same reactor shape as the Egypt Merchant (76): owner
+     gate, type gate, fizzle if nowhere to go, then executeMoveAnimated. */
+  function _tradeRouteFor(selfId, gain) {
+    return function (ctx, done) {
+      done = typeof done === 'function' ? done : function () {};
+      var owner = ctx.owner, fromLoc = ctx.locId;
+      var landed = CARDS.find(function (c) { return c.id === ctx.landedCardId; });
+      if (ctx.landedOwner !== owner) { done(); return; }
+      if (!landed || landed.type !== 'Economic') { done(); return; }
+      var dest = randomOtherOpenLoc(owner, fromLoc);
+      if (!dest) { done(); return; }
+      var self = CARDS.find(function (c) { return c.id === selfId; });
+      var differentCiv = !!civOf(self) && !!civOf(landed) && civOf(self) !== civOf(landed);
+      var eid = nextEventId();
+      addIPMod(ctx.slot, gain + (differentCiv ? 1 : 0), srcOf(ctx.slot, selfId), eid);
+      _indiaRepaint();
+      if (!SOG.game || typeof SOG.game.executeMoveAnimated !== 'function') { done(); return; }
+      var advanced = false;
+      SOG.game.executeMoveAnimated(owner, selfId, fromLoc, dest.id, { sd: ctx.slot }, function () {
+        if (advanced) return; advanced = true; done();
+      });
+    };
+  }
+  var abilityIndiaMerchant = _tradeRouteFor(99, 1);
+  var abilityVaishyaTrader = _tradeRouteFor(111, 2);
+
+  /* Asoka (102) — "The Sword & The Scroll": At Once, destroy all the owner's OTHER
+     cards here (identity — never himself); for each destroyed, +2 IP to every
+     Religious card in the owner's hand (in-hand stamps, attributed to Asoka).
+     Each destroy goes through destroyCard (protection, piles, death triggers);
+     the index is re-resolved by identity before each one because it compacts. */
+  function abilityAshoka(owner, locId, slotIndex, sd, done) {
+    var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
+    var victims = (slots[locId] || []).filter(function (s) { return s && s.revealed && s !== sd; });
+    var n = 0;
+    victims.forEach(function (v) {
+      var i = (slots[locId] || []).indexOf(v);
+      if (i === -1) return;
+      var before = (slots[locId] || []).filter(Boolean).length;
+      destroyCard(owner, locId, i, {});
+      if ((slots[locId] || []).filter(Boolean).length < before) n++;   // protected cards stay
+    });
+    if (n > 0) {
+      var hand = owner === 'player' ? G.playerHand : G.aiHand;
+      (hand || []).forEach(function (id) {
+        var c = CARDS.find(function (x) { return x.id === id; });
+        if (c && c.type === 'Religious') stampHandBonus(owner, id, 2 * n, srcOf(sd, INDIA.ASHOKA));
+      });
+      if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+    }
+    _indiaRepaint();
+    done();
+  }
+
+  /* Great Bath (89) — "Sacred Water": when a card is PLAYED or MOVES here (either
+     side), restore it to its base IP — adjust-to-value toward the printed IP
+     (SOG.board.restoreToBaseIP), so buffs and damage stay on the ledger and the
+     adjustment is attributed to the Bath. Plays arrive through the reveal
+     pipeline's onCardLandedHere; moves through applyMove's onCardMovedHere. */
+  function abilityGreatBath(ctx, done) {
+    done = typeof done === 'function' ? done : function () {};
+    var slots = ctx.landedOwner === 'player' ? G.playerSlots : G.aiSlots;
+    var target = ctx.landedSlot || null;
+    if (!target) {
+      (slots[ctx.locId] || []).forEach(function (s) { if (!target && s && s.cardId === ctx.landedCardId) target = s; });
+    }
+    if (target && target !== ctx.slot) {
+      var d = SOG.board.restoreToBaseIP(target, srcOf(ctx.slot, INDIA.GREAT_BATH));
+      if (d) _indiaRepaint();
+    }
+    done();
+  }
+  /* Movement counterpart of fireOnCardLandedHere: cards at the destination with a
+     registry onCardMovedHere react to a card that just MOVED here (mover excluded
+     by identity; both sides). Sync — called from applyMove after the arrival hook. */
+  function fireOnCardMovedHere(movedOwner, movedCardId, locId, movedSd) {
+    if (locId == null) return;
+    ['player', 'opp'].forEach(function (side) {
+      var slots = (side === 'player' ? G.playerSlots : G.aiSlots)[locId];
+      if (!slots) return;
+      slots.slice().forEach(function (sd, i) {
+        if (!sd || !sd.revealed || sd === movedSd) return;
+        var spec = CARD_ABILITIES[abilityIdOf(sd)];
+        if (spec && typeof spec.onCardMovedHere === 'function') {
+          spec.onCardMovedHere({ owner: side, locId: locId, slotIndex: i, slot: sd,
+                                 landedOwner: movedOwner, landedCardId: movedCardId, landedSlot: movedSd }, function () {});
+        }
+      });
+    });
+  }
+
+  /* Granary (90) — "Surplus": End of Turn, +1 IP per Capital its owner did not
+     spend this turn. The Granary holds the IP itself. Player: G.capital is the
+     remainder at end of turn (unspent capital is otherwise lost at reset). AI:
+     the budget the brain planned against minus what it charged (ai.js
+     aiCapitalBudgetThisTurn / aiCapitalSpentThisTurn). */
+  function abilityGranary(owner, locId, slotIndex, sd, done) {
+    var unspent = (owner === 'player')
+      ? (G.capital || 0)
+      : Math.max(0, (G.aiCapitalBudgetThisTurn || 0) - (G.aiCapitalSpentThisTurn || 0));
+    if (unspent > 0) { addIPMod(sd, unspent, srcOf(sd, INDIA.GRANARY)); _indiaRepaint(); }
+    done();
+  }
+
+  /* Standardized Weights (97) — "Honest Measure": At Once, set every revealed card
+     here, BOTH sides (itself included), to 3 IP — adjust-to-value, attributed to
+     the Weights, so nothing on any ledger is reset. */
+  function abilityStandardizedWeights(owner, locId, slotIndex, sd, done) {
+    var eid = nextEventId(), hits = 0;
+    [G.playerSlots, G.aiSlots].forEach(function (sl) {
+      (sl[locId] || []).forEach(function (s) {
+        if (s && s.revealed && SOG.board.adjustIPToward(s, 3, srcOf(sd, INDIA.WEIGHTS), eid)) hits++;
+      });
+    });
+    if (hits) _indiaRepaint();
+    done();
+  }
+
+  /* Fired Brick (96) — "One Size": At Once, draw a card, then set each card in the
+     owner's hand to IP = its CC (the cost the hand badge shows for this owner).
+     The set is an in-hand ADJUST stamp (kind 'adjust'): the delta lands when the
+     card is played and is exempt from the damage ledger. Keyed by id, so twins
+     take one computed delta on their shared id. */
+  function _drawOne(owner) {
+    var deck = owner === 'player' ? G.playerDeck : G.aiDeck;
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    var cap  = (G.config && G.config.structure && G.config.structure.maxHandSize) || 7;
+    if (!deck || !deck.length || hand.length >= cap) return null;
+    var id = deck.shift();
+    hand.push(id);
+    noteCardEnteredHand(owner, id);
+    return id;
+  }
+  function abilityFiredBrick(owner, locId, slotIndex, sd, done) {
+    _drawOne(owner);
+    var hand = owner === 'player' ? G.playerHand : G.aiHand;
+    var seen = {};
+    (hand || []).forEach(function (id) {
+      if (seen[id]) return;
+      seen[id] = true;
+      var c = CARDS.find(function (x) { return x.id === id; });
+      var hs = handStats(owner, id);
+      if (!c || !hs) return;
+      var delta = hs.cc - hs.ip;
+      if (delta) stampHandBonus(owner, id, delta, srcOf(sd, INDIA.FIRED_BRICK), { kind: 'adjust' });
+    });
+    if (owner === 'player' && typeof rebuildPlayerHand === 'function') rebuildPlayerHand();
+    done();
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     INDIA SET — BUCKET 3 (Priest-King, Jain, Bhagavad Gita, The Buddha)
+  ═══════════════════════════════════════════════════════════════ */
+  INDIA.PRIEST_KING = 88; INDIA.BUDDHA = 101; INDIA.JAIN = 104; INDIA.GITA = 116;
+
+  /* Priest-King (88) — "Unknown Authority". The BORROW happens on entering hand
+     (registry onEnterHand → borrowAbilityFromDeckBottom, phase 1) and rides onto
+     his slot as sd.transcribedFrom — Rosetta's field — so Continuous and End of
+     Turn borrowed abilities dispatch through abilityIdOf with their own timing
+     and nothing here. This handler is the AT-ONCE half, and it is Rosetta's
+     shape exactly: fire the borrowed card's onAtOnce with the Priest-King as the
+     actor, so "here" and "itself" resolve around him. Deliberately a direct call,
+     not fireAtOnce — the dispatcher's Meroe repeat keys on the type of the card
+     REVEALED, and that card is a Political Priest-King (see the dispatcher's own
+     note on Rosetta). No borrow, a vanilla bottom card, or a borrowed Priest-King
+     (his own id: the regress guard, as Rosetta skips a Rosetta) → plain 6/5 body.
+     The ability NAME never changes: js/game/ui.js shows his own name over the
+     borrowed text (sd.borrowed). */
+  function abilityPriestKing(owner, locId, slotIndex, sd, done) {
+    var srcId = sd && sd.transcribedFrom;
+    if (srcId == null || srcId === INDIA.PRIEST_KING) { done(); return; }
+    var spec = CARD_ABILITIES[srcId];
+    if (spec && typeof spec.onAtOnce === 'function') {
+      spec.onAtOnce(owner, locId, actorSlotIdx(owner, locId, sd, slotIndex), sd, done);
+    } else {
+      done();
+    }
+  }
+
+  /* The Buddha (101) — "Four Noble Truths": Continuous, +2 IP for EACH of his
+     controller's cards in play with damage, the whole board (himself included if
+     damaged). Runs AFTER every per-location aura in evaluateContinuous so the
+     continuous layer of damage (a Dalit, the Sahara, Juvenal) is final before it
+     is counted. Each +2 is its own popup record naming the damaged card as the
+     source, pattern 'B' — one thumbnail per damaged card, as the destruction
+     chain shows — and its own contModSources line. Damage is read through
+     SOG.board.damageOn, so the adjust exemption and clearDamage both apply. */
+  function _applyBuddhaAuras() {
+    G.locations.forEach(function (loc) {
+      ['player', 'opp'].forEach(function (own) {
+        var sl = (own === 'player' ? G.playerSlots : G.aiSlots)[loc.id] || [];
+        sl.forEach(function (s) {
+          if (!s || !s.revealed || abilityIdOf(s) !== INDIA.BUDDHA) return;
+          var side = (own === 'player') ? 'player' : 'ai';
+          var damaged = SOG.board.cardsWithDamage(side);
+          damaged.forEach(function (h) {
+            s.contMod = (s.contMod || 0) + 2;
+            s.contModSources.push({ source: 'The Buddha', delta: 2, type: 'card', id: h.sd.cardId });
+            addBonus(s, 2, 'card', h.sd.cardId, nextEventId(), 'B', true);
+          });
+        });
+      });
+    });
+  }
+
   var CARD_ABILITIES = {
     2:  { onAtOnce: abilityScholarOfficials },
     3:  { onAtOnce: abilityJustinian        },
@@ -5571,7 +6516,45 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     83: { onAtOnce: abilityEzana             },           // Ezana — steal the lowest-IP Rel/Pol card from the opponent's DECK
     85: { onAtOnce: abilityNubianArchers     },           // Nubian Archers — -2 IP to a random opponent card, any location
     86: { onCardLandedHere: abilityTradeNetwork },        // Trade Network — Natural Resource played here → swap for a deck draw
-    87: { endOfTurn: abilityIronFurnace      }            // The Iron Furnace — End of Turn: +1 IP to Labor cards here
+    87: { endOfTurn: abilityIronFurnace      },           // The Iron Furnace — End of Turn: +1 IP to Labor cards here
+
+    /* ── INDIA SET (88-120). The `continuous: true` entries are markers: those
+       auras live in evaluateContinuous (_indiaAuraAt / _applyBuddhaAuras); the
+       entry records that the card IS wired. The Beast 93 is a vanilla token. */
+    107: { continuous: true                   },           // Brahmin — +1 per other own Religious/Political card here (_indiaAuraAt)
+    109: { onCardLandedHere: abilityShudra    },           // Shudra — a card the owner plays here gets a permanent +1
+    110: { continuous: true                   },           // Dalit — every other card here -1 (_indiaAuraAt)
+    113: { continuous: true                   },           // Caste System — cards here costing 0-2 get -1 (_indiaAuraAt)
+    91:  { onAtOnce: abilityDrainageSystem   },            // Drainage System — clear damage on own cards here, gain that much
+    92:  { onAtOnce: abilityPashupati        },            // Lord of the Beasts — send a Beast (93) to another location
+    94:  { onAtOnce: abilityCotton           },            // Cotton — +2 IP to own Labor cards here
+    98:  { onAtOnce: abilityIndiaFarmer      },            // Farmer — top card of deck +3 IP (in-deck stamp)
+    100: { onAtOnce: abilityIndiaPriest      },            // Priest — +1 IP per card in hand
+    103: { endOfTurn: abilityStupa           },            // Stupa — End of Turn: +1 to other own Religious cards here
+    105: { onArrivedHere: abilityMissionaryArrival, movesOncePerBattle: true },   // Missionary — move once; +1 to non-Religious cards on arrival
+    106: { onAtOnce: abilityUpanishads       },            // Upanishads — a random own discarded/destroyed card returns here and reveals again
+    108: { onAtOnce: abilityKshatriya        },            // Kshatriya — destroy an opponent card here with less IP
+    112: { onAtOnce: abilityVaishyaFarmer    },            // Vaishya (Farmer) — top card of deck +2 IP (in-deck stamp)
+    115: { endOfTurn: abilityGupta           },            // The Gupta — End of Turn: +1 to own Scientific + Cultural cards here
+    117: { endOfTurn: abilityNumberZero      },            // Number Zero — End of Turn: +1 to other own Scientific cards here
+    120: { onAtOnce: abilityVedas            },            // Vedas — -1 CC to Religious cards in hand
+    /* bucket 2 — composites */
+    89:  { onCardLandedHere: abilityGreatBath, onCardMovedHere: abilityGreatBath },   // Great Bath — restore a card played/moved here to base IP
+    90:  { endOfTurn: abilityGranary          },           // Granary — End of Turn: +1 per unspent Capital
+    95:  { onAtOnce: abilityIndusSeals        },           // Indus Seals — merge into a chosen card here (+1 if Economic)
+    96:  { onAtOnce: abilityFiredBrick        },           // Fired Brick — draw, then set each hand card's IP to its CC
+    97:  { onAtOnce: abilityStandardizedWeights },         // Standardized Weights — set every card here to 3 IP
+    99:  { onCardLandedHere: abilityIndiaMerchant },       // Merchant — Economic played here → +1 (+1 different civ) and move
+    102: { onAtOnce: abilityAshoka            },           // Asoka — destroy own other cards here; +2 per destroyed to Religious cards in hand
+    111: { onCardLandedHere: abilityVaishyaTrader },       // Vaishya (Trader) — Economic played here → +2 (+1 different civ) and move
+    114: { onAtOnce: abilitySanskrit          },           // Sanskrit — merge into a chosen card here (+2 if Religious)
+    118: { onAtOnce: abilityInoculation       },           // Inoculation — -1 to a chosen card here, then double it
+    119: { onAtOnce: abilityAlloy             },           // Alloy — merge with the last card played here, then double it
+    /* bucket 3 */
+    88:  { onEnterHand: borrowAbilityFromDeckBottom, onAtOnce: abilityPriestKing },   // Priest-King — borrows the deck-bottom card's ability on entering hand; fires a borrowed At Once
+    101: { continuous: true                   },           // The Buddha — +2 per own damaged card, whole board (evaluateContinuous → _applyBuddhaAuras)
+    104: { blocksPlayOfType: 'Military'       },           // Jain — Military cards cannot be PLAYED here (both sides; moves allowed)
+    116: { continuous: true                   }            // Bhagavad Gita — +2 to the location while the owner's cards there are all different types (_indiaAuraAt)
   };
 
   /* ═══════════════════════════════════════════════════════════════
@@ -5623,7 +6606,15 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     // Tool (26) has its own SFX (the hammer strike via SOG.RevealFx) and Soldier
     // (42) has its own hit SFX (the charge impact) — skip the generic 8-bit chime
     // for those too (keep the pulse).
-    var hasAtOnce = [4, 8, 9, 23, 26, 38, 39, 42, 46, 47, 49].indexOf(cardId) !== -1;
+    /* Cards that take the GENERIC chime + pulse: the At Once cards with no
+       flourish of their own. The Kush / Egypt boss cards absent from this list
+       each play their own sound inside their handler (or, for the Egypt Farmer
+       and the Chariots, in the reveal pipeline); Continuous cards whose At-Once
+       entry is a placeholder stay silent on purpose. Khufu (60), Nubian Gold (73),
+       Papyrus-Economic (74) and Purple Dye (75) had been missed; the India At Once
+       cards (91-120) have no flourish yet and take the generic beat too. */
+    var hasAtOnce = [4, 8, 9, 23, 26, 38, 39, 42, 46, 47, 49, 60, 73, 74, 75,
+                     91, 92, 94, 95, 96, 97, 98, 100, 102, 106, 108, 112, 114, 118, 119, 120].indexOf(cardId) !== -1;
     if (hasAtOnce) {
       if (typeof SFX !== 'undefined' && cardId !== 26 && cardId !== 42) SFX.atOnce();
       var atSlotEl = actorSlotEl(owner, locId, sd, slotIndex) || findSlotEl(owner, cardId);
@@ -5784,7 +6775,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
         });
       });
     });
-    if (!q.length) { finish(); return; }   // no end-of-turn cards → zero-cost no-op
+    if (!q.length) { applyLocationEndOfTurn(finish); return; }   // no end-of-turn cards → straight to the location rules
 
     // Global reveal order: earlier playTime first (stable across turns/sides).
     q.sort(function (a, b) {
@@ -5795,7 +6786,7 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
 
     var i = 0;
     (function next() {
-      if (i >= q.length) { finish(); return; }
+      if (i >= q.length) { applyLocationEndOfTurn(finish); return; }   // cards first, then the ground (India locations)
       var r = q[i++];
       r.sd._eotFiredTurn = G.turn;   // stamp BEFORE firing — re-entry safe
       r.spec.endOfTurn(r.owner, r.locId, r.slotIndex, r.sd, function () {
@@ -5812,6 +6803,20 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
      PUBLIC EXPORTS
   ═══════════════════════════════════════════════════════════════ */
   SOG.abilities = {
+    /* India primitives (phase 1) */
+    isPlayTypeBlockedAt:       isPlayTypeBlockedAt,
+    locationTypeMixDistinct:   locationTypeMixDistinct,
+    addLocationBoost:          addLocationBoost,
+    borrowAbilityFromDeckBottom: borrowAbilityFromDeckBottom,
+    borrowedAbilityOf:         borrowedAbilityOf,
+    noteCardEnteredHand:       noteCardEnteredHand,
+    abilityIdOf:               abilityIdOf,
+    fireOnArrivedHere:         fireOnArrivedHere,
+    fireOnCardMovedHere:       fireOnCardMovedHere,
+    showLocationChooser:       showLocationChooser,
+    applySeasonalLocations:    applySeasonalLocations,
+    resolveHiddenSeasons:      resolveHiddenSeasons,
+    applyLocationEndOfTurn:    applyLocationEndOfTurn,
     /* Dispatch + engine */
     fireAtOnce:                fireAtOnce,
     fireOnCardLandedHere:      fireOnCardLandedHere,

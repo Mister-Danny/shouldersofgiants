@@ -704,9 +704,10 @@
     if (!G.playerSlots[locId]) return false;
     var firstEmpty   = G.playerSlots[locId].indexOf(null);
     if (firstEmpty === -1) return false;
-    // Flooded location (Nebuchadnezzar flood mechanic) blocks NEW plays. Inert
-    // elsewhere — no location is ever flooded outside that battle.
-    if (!isLocationPlayable(locId)) return false;
+    // Flooded location (Nebuchadnezzar flood / Arcadium rivers), the Narmer
+    // advance gate, or a card in play that blocks this card's TYPE here (India,
+    // e.g. Jain) — all NEW-play gates; the card id lets the type rule apply.
+    if (!isLocationPlayable(locId, 'player', cardId)) return false;
     // Cost-zero via config (resource.model 'none').
     if (!_resourceFree() && effectiveCost(card, locId) > G.capital) return false;
     // Cards-per-turn cap via config (cfg.structure.cardsPerTurn; null = no cap).
@@ -779,8 +780,8 @@
   function commitPlay(cardId, locId) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
     if (!card) return;
-    // Flooded location → reject the play defensively (mirrors isLegalPlayTarget).
-    if (!isLocationPlayable(locId)) { var df = getSlotEl('player', locId, 0); if (df) SOG.ui.flashDeny(df); return; }
+    // Flooded / gated / type-blocked location → reject the play defensively (mirrors isLegalPlayTarget).
+    if (!isLocationPlayable(locId, 'player', cardId)) { var df = getSlotEl('player', locId, 0); if (df) SOG.ui.flashDeny(df); return; }
     // Cost-zero via config (resource.model 'none').
     var cost = _resourceFree() ? 0 : effectiveCost(card, locId);
     if (cost > G.capital) { var d = getSlotEl('player', locId, 0); if (d) SOG.ui.flashDeny(d); return; }
@@ -1030,7 +1031,7 @@
             return s && s.cardId === mv.cardId;
           });
         }
-        if (movedSd) { delete movedSd._advLucyMoved; delete movedSd._advChariotMoved; }
+        if (movedSd) { delete movedSd._advLucyMoved; delete movedSd._advChariotMoved; delete movedSd._advOnceMoved; }   // _advOnceMoved: registry once-per-battle movers (Missionary)
       }
     });
 
@@ -1201,7 +1202,13 @@
            sides. */
         if (s._defected) return;
         var card = CARDS.find(function (x) { return x.id === s.cardId; });
-        var mv = (s.cardId === 24 && !G.movedThisTurn[24]) ||   // Magellan
+        // Registry-driven "can move once" (India's Missionary 105): a card whose
+        // ability entry says movesOncePerBattle, until its once-per-BATTLE slot flag
+        // is set — Lucy's pattern, read from the registry instead of a hard-coded id.
+        var _spec = (SOG.abilities && SOG.abilities.CARD_ABILITIES) ? SOG.abilities.CARD_ABILITIES[s.transcribedFrom != null ? s.transcribedFrom : s.cardId] : null;
+        var _onceMover = !!(_spec && _spec.movesOncePerBattle && !s._advOnceMoved);
+        var mv = _onceMover ||
+                 (s.cardId === 24 && !G.movedThisTurn[24]) ||   // Magellan
                  (s.cardId === 25 && !G.columbusMoved)    ||    // Columbus
                  (s.cardId === 33 && !s._advLucyMoved) ||       // Lucy — First Steps: move once per BATTLE (persistent slot flag, mirrors Chariot's _advChariotMoved)
                  (s.cardId === 48 && !s._advChariotMoved) ||    // Chariot — moves once per BATTLE on its own (persistent slot flag, like Lucy); the move-enabler locations/cards below can still grant extra moves
@@ -1294,7 +1301,10 @@
       G.locMoveUsedThisTurn[fromLocId] = true;
     }
     if (cardId === 25) G.columbusMoved = true;
-    if (cardId === 33) sd._advLucyMoved = true;   // Lucy: once per BATTLE — flag rides the slot data (mirrors Chariot's _advChariotMoved). Set at QUEUE time, so resetTurn clears it when it snaps this move back (the move never happened); it only persists once the move RESOLVES at reveal.
+    if (cardId === 33) sd._advLucyMoved = true;
+    // Registry once-per-battle movers (Missionary): same slot-flag pattern as Lucy.
+    var _qSpec = (SOG.abilities && SOG.abilities.CARD_ABILITIES) ? SOG.abilities.CARD_ABILITIES[sd.transcribedFrom != null ? sd.transcribedFrom : sd.cardId] : null;
+    if (_qSpec && _qSpec.movesOncePerBattle) sd._advOnceMoved = true;   // Lucy: once per BATTLE — flag rides the slot data (mirrors Chariot's _advChariotMoved). Set at QUEUE time, so resetTurn clears it when it snaps this move back (the move never happened); it only persists once the move RESOLVES at reveal.
     if (cardId === 48 || cardId === 69) sd._advChariotMoved = true;   // Chariot (48) / Chariots (69, Egypt): once per BATTLE on its own — same persistent-slot-flag pattern as Lucy (resetTurn clears it on snap-back; persists once the move resolves)
 
     G.playerActionLog.push({ type: 'move', cardId: cardId, fromLocId: fromLocId, fromSlotIndex: fromSlotIndex, toLocId: toLocId });

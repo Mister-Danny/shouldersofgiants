@@ -55,7 +55,8 @@ SOG.collection = (function () {
         player can reach Kush with Narmer/Gilgamesh/Sargon/Hammurabi Giants unbeaten. */
   var HISTORY_CARD_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
   var ADVENTURE_GIANT_HOOKS = ['gilgamesh', 'sargon', 'hammurabi', 'hanging-gardens',
-                               'narmer', 'hatshepsut', 'ramses', 'akhenaten', 'kush'];
+                               'narmer', 'hatshepsut', 'ramses', 'akhenaten', 'kush',
+                               'greatbath', 'siddhartha', 'gupta'];
   function _isHistory(id) { return HISTORY_CARD_IDS.indexOf(id) !== -1; }
   function historyCardsUnlocked() {
     try {

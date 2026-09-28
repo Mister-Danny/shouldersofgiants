@@ -1343,6 +1343,10 @@ img    { display: block; }
     -2px  0   0 #fff,  2px  0   0 #fff,
      0   -2px 0 #fff,  0    2px 0 #fff;
 }
+/* Negative IP (damage has no floor). Same badge, tinted so the minus sign reads
+   as a value and not a smudge; nowrap keeps "-2" on one line at any size. */
+.db-overlay-ip { white-space: nowrap; }
+.db-overlay-ip.ip-negative { color: #ff7a6a; }
 
 /* ── Double-click flash animations ──────────────────────────────── */
 @keyframes flash-add {
@@ -3048,6 +3052,54 @@ body.kush-battle .battle-col[data-loc-id="153"]::before {
 body.kush-battle .battle-col[data-loc-id="151"]::before { background: url('../images/locations/meroe.jpg')             center / cover no-repeat; } /* Meroe             — REPEAT_LABOR_ECONOMIC_AT_ONCE */
 body.kush-battle .battle-col[data-loc-id="152"]::before { background: url('../images/locations/napata.jpg')            center / cover no-repeat; } /* Napata            — POLITICAL_PLUS_1_STAMP */
 body.kush-battle .battle-col[data-loc-id="153"]::before { background: url('../images/locations/nubian_gold_mines.jpg') center / cover no-repeat; } /* Nubian Gold Mines — GOLD_CHANCE_ON_PLAY */
+
+/* ── INDIA BATTLE location art (body.greatbath-battle / siddhartha-battle /
+   gupta-battle). Same shape as the Kush block. The two SEASONAL locations (the
+   Indus River 173, the Ganges Plain 179) paint their DRY art in ::before and
+   their WET art in a ::after layer that the shared flood/season module fades in
+   with .hg-flooded (see the FLOOD block below for the crossfade rule). ── */
+body.greatbath-battle  .battle-col[data-loc-id="171"]::before,
+body.greatbath-battle  .battle-col[data-loc-id="172"]::before,
+body.greatbath-battle  .battle-col[data-loc-id="173"]::before,
+body.siddhartha-battle .battle-col[data-loc-id="174"]::before,
+body.siddhartha-battle .battle-col[data-loc-id="175"]::before,
+body.siddhartha-battle .battle-col[data-loc-id="176"]::before,
+body.gupta-battle      .battle-col[data-loc-id="177"]::before,
+body.gupta-battle      .battle-col[data-loc-id="178"]::before,
+body.gupta-battle      .battle-col[data-loc-id="179"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  z-index: -1;
+}
+body.greatbath-battle  .battle-col[data-loc-id="171"]::before { background: url('../images/locations/citadel.jpeg')          center / cover no-repeat; } /* The Citadel      — NO_DAMAGE_HERE */
+body.greatbath-battle  .battle-col[data-loc-id="172"]::before { background: url('../images/locations/lower_town.jpeg')       center / cover no-repeat; } /* The Lower Town   — ALL_PLUS_ONE_HERE */
+body.greatbath-battle  .battle-col[data-loc-id="173"]::before { background: url('../images/locations/indus_river_dry.jpeg')  center / cover no-repeat; } /* The Indus River  — SEASON_WET_DRY (dry) */
+body.siddhartha-battle .battle-col[data-loc-id="174"]::before { background: url('../images/locations/kapilavastu.jpeg')      center / cover no-repeat; } /* Kapilavastu      — EOT_HIGHEST_MINUS_ONE_MOVE */
+body.siddhartha-battle .battle-col[data-loc-id="175"]::before { background: url('../images/locations/bodh_gaya.jpeg')        center / cover no-repeat; } /* Bodh Gaya        — EOT_ALL_PLUS_ONE */
+body.siddhartha-battle .battle-col[data-loc-id="176"]::before { background: url('../images/locations/ganges.jpeg')           center / cover no-repeat; } /* The Ganges       — EOT_LOWEST_PLUS_ONE */
+body.gupta-battle      .battle-col[data-loc-id="177"]::before { background: url('../images/locations/nalanda.jpeg')          center / cover no-repeat; } /* Nalanda          — DRAW_SCIENTIFIC_ON_PLAY */
+body.gupta-battle      .battle-col[data-loc-id="178"]::before { background: url('../images/locations/pataliputra.jpeg')      center / cover no-repeat; } /* Pataliputra      — ECHO_GAINS_PLUS_ONE */
+body.gupta-battle      .battle-col[data-loc-id="179"]::before { background: url('../images/locations/ganges_plain_dry.jpeg') center / cover no-repeat; } /* The Ganges Plain — MONSOON_CHANCE (dry) */
+/* Seasonal WET layers — faded in by .hg-flooded (shared crossfade rule below). */
+body.greatbath-battle  .battle-col[data-loc-id="173"]::after,
+body.gupta-battle      .battle-col[data-loc-id="179"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 1.05s ease;
+  pointer-events: none;
+}
+body.greatbath-battle  .battle-col[data-loc-id="173"]::after { background: url('../images/locations/indus_river_wet.jpeg')  center / cover no-repeat; } /* Indus — wet season */
+body.gupta-battle      .battle-col[data-loc-id="179"]::after { background: url('../images/locations/ganges_plain_wet.jpeg') center / cover no-repeat; } /* Ganges Plain — monsoon */
+/* The base rules above are body-scoped and so outrank the shared un-scoped
+   `.battle-col.hg-flooded::after` crossfade rule; restate the "on" opacity at the
+   same scope so the season module's class actually fades the wet art in. */
+body.greatbath-battle  .battle-col[data-loc-id="173"].hg-flooded::after,
+body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacity: 0.5; }
 
 /* FLOOD (shared — js/game/flood.js). Un-scoped on purpose: the Euphrates (101) and
    Tigris (103) flood in the Nebuchadnezzar battle AND in Arcadium, and only the flood
@@ -8252,6 +8304,20 @@ body.tut-locked #battle-reset-turn {
 
 /* Grayscale popup for locked card preview */
 .popup-locked .card-popup { filter: grayscale(1); }
+
+/* ── Location chooser (India: Lord of the Beasts picks a destination). Same
+   modal as the card chooser; the options are location names instead of faces. */
+.chooser-loc-row { gap: 14px; }
+.chooser-loc-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-width: 150px; padding: 12px 16px;
+  font-family: var(--font); text-transform: uppercase; letter-spacing: 0.05em;
+  color: #f0cf6c; background: #2a1608; border: 3px solid #d4aa50; border-radius: 2px;
+  cursor: pointer; text-shadow: 1px 1px 0 #000; box-shadow: 0 3px 0 #1a0c04, 0 4px 0 #000;
+}
+.chooser-loc-btn:hover { border-color: #f0cf6c; color: #fff5d8; }
+.chooser-loc-name   { font-size: 16px; }
+.chooser-loc-region { font-size: 11px; opacity: 0.8; text-transform: none; letter-spacing: 0; }
 
 /* ── Deck builder: 7th-grade history TEASER (Arcadium, locked). A type-group
    styled section at the bottom of the grid; the tiles reuse .db-card-locked. ── */

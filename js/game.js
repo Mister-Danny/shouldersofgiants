@@ -431,6 +431,7 @@
   function _activateTurn1() {
     // (Battle music already started at battle entry in _initGameBuild.)
     _rollArcadiumFloods();      // turn 1 rolls too (inert without cfg.flood)
+    if (SOG.abilities && SOG.abilities.applySeasonalLocations) SOG.abilities.applySeasonalLocations(G.turn);   // India rivers (inert without a seasonal key)
     _startSelectionTimer();
     if (typeof Analytics !== 'undefined') {
       if (typeof Analytics.setBoardProvider === 'function') Analytics.setBoardProvider(_analyticsBoard);
@@ -451,8 +452,14 @@
       G.aiHand = (aiSettings.playOrder || []).slice();
     } else {
       G.aiHand = G.aiDeck.splice(0, cfg.structure.handStart);
+    }    // Hand-entry hook (India: Priest-King borrows on entering hand). After BOTH
+    // deals so a borrow reads the deck as it stands once the opening hand is out.
+    if (SOG.abilities && SOG.abilities.noteCardEnteredHand) {
+      G.playerHand.forEach(function (id) { SOG.abilities.noteCardEnteredHand('player', id); });
+      G.aiHand.forEach(function (id)     { SOG.abilities.noteCardEnteredHand('ai', id); });
     }
   }
+
 
   /* Giant rematch = the Giant-tier battle the player has not yet won. Mirrors
      every boss module's own predicate (_isSargonGiantRematch etc.) and
@@ -1345,6 +1352,17 @@
       if (SOG.abilities && typeof SOG.abilities.fireMoveHereBonus === 'function') {
         SOG.abilities.fireMoveHereBonus(owner, toLocId, sd);
       }
+      // Card-level arrival abilities (registry onArrivedHere — India's Missionary):
+      // same commit point, after the location bonus, so the card has landed.
+      if (SOG.abilities && typeof SOG.abilities.fireOnArrivedHere === 'function') {
+        SOG.abilities.fireOnArrivedHere(owner, toLocId, sd);
+      }
+      // Cards at the destination that react to a card MOVING here (registry
+      // onCardMovedHere — India's Great Bath). Plays go through fireOnCardLandedHere
+      // at reveal; this is the movement counterpart, sync, mover excluded.
+      if (SOG.abilities && typeof SOG.abilities.fireOnCardMovedHere === 'function') {
+        SOG.abilities.fireOnCardMovedHere(owner, cardId, toLocId, sd);
+      }
 
       refreshMoveableCards();
       updateScores();
@@ -1476,6 +1494,9 @@
 
   function startReveal() {
     G.phase = 'reveal';
+    // The Ganges Plain's monsoon was rolled at turn start but kept hidden through
+    // selection; it shows itself now, before the flips (inert elsewhere).
+    if (SOG.abilities && SOG.abilities.resolveHiddenSeasons) SOG.abilities.resolveHiddenSeasons();
     /* onBeforeReveal (script hook): before the flip animation. Sync,
        fire-and-forget. No script → no-op. */
     SOG.BattleHooks.fire('onBeforeReveal', [G.turn]);
@@ -2067,8 +2088,8 @@
       var _maxHandF = (G.config.structure && G.config.structure.maxHandSize) || MAX_HAND_SIZE;
       var _pFlat    = Math.max(0, Math.min(_n, _maxHandF - G.playerHand.length, G.playerDeck.length));
       var _aFlat    = Math.max(0, Math.min(_n, _maxHandF - G.aiHand.length,     G.aiDeck.length));
-      G.playerDeck.splice(0, _pFlat).forEach(function (id) { G.playerHand.push(id); });
-      G.aiDeck.splice(0,     _aFlat).forEach(function (id) { G.aiHand.push(id); });
+      G.playerDeck.splice(0, _pFlat).forEach(function (id) { G.playerHand.push(id); if (SOG.abilities && SOG.abilities.noteCardEnteredHand) SOG.abilities.noteCardEnteredHand('player', id); });
+      G.aiDeck.splice(0,     _aFlat).forEach(function (id) { G.aiHand.push(id);     if (SOG.abilities && SOG.abilities.noteCardEnteredHand) SOG.abilities.noteCardEnteredHand('ai', id); });
     } else {
       var _maxHand = (G.config.structure && G.config.structure.maxHandSize) || MAX_HAND_SIZE;
       var playerCanDraw = replenishDrawCount(playerLocs, G.playerHand.length, G.playerDeck.length, _maxHand);
@@ -2078,8 +2099,8 @@
          longer occur. In 2P this side's hand/deck are this client's local mirror
          of the remote player; the remote computes its own real draw. */
       var aiCanDraw = replenishDrawCount(aiLocs, G.aiHand.length, G.aiDeck.length, _maxHand);
-      G.playerDeck.splice(0, playerCanDraw).forEach(function (id) { G.playerHand.push(id); });
-      G.aiDeck.splice(0, aiCanDraw).forEach(function (id) { G.aiHand.push(id); });
+      G.playerDeck.splice(0, playerCanDraw).forEach(function (id) { G.playerHand.push(id); if (SOG.abilities && SOG.abilities.noteCardEnteredHand) SOG.abilities.noteCardEnteredHand('player', id); });
+      G.aiDeck.splice(0, aiCanDraw).forEach(function (id) { G.aiHand.push(id);         if (SOG.abilities && SOG.abilities.noteCardEnteredHand) SOG.abilities.noteCardEnteredHand('ai', id); });
     }
 
     rebuildPlayerHand();
@@ -2098,6 +2119,7 @@
     /* Arcadium river floods: re-rolled at the start of every turn, BEFORE the
        script hook and before the AI plans its plays. Inert without cfg.flood. */
     _rollArcadiumFloods();
+    if (SOG.abilities && SOG.abilities.applySeasonalLocations) SOG.abilities.applySeasonalLocations(G.turn);   // India rivers
 
     /* onTurnStart (script hook): start of a selection phase (turns 2+). Sync,
        fire-and-forget. No script → no-op. */
