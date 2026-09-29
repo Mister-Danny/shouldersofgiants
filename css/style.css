@@ -1113,7 +1113,8 @@ img    { display: block; }
 .db-side {
   flex: 0 0 320px;
   box-sizing: border-box;
-  padding: 14px 16px 12px;
+  /* bottom padding keeps the last control clear of the music widget */
+  padding: 14px 16px 60px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -13235,6 +13236,10 @@ body[data-screen="overworld"] #overworld-overlay {
 #music-ctrl { display: none; }
 body[data-screen="home"] #music-ctrl,
 body[data-screen="deckbuilder"] #music-ctrl { display: flex; }
+/* Deck builder: the widget sits bottom-LEFT, in the free space under the
+   filters, so it no longer covers the cards. 16px matches the column's padding.
+   (Home keeps it bottom-right.) */
+body[data-screen="deckbuilder"] #music-ctrl { left: 16px; right: auto; }
 
 /* (Battle Options gear is now styled via .battle-icon-strip .btn-hud-icon.) */
 
