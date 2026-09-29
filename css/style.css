@@ -739,28 +739,46 @@ img    { display: block; }
 }
 
 
-/* ── Header (two-row: title row + slot-selector row) ──────────── */
+/* ── Header: ONE 56px bar, split on the same 320 / 960 line as the body ──
+   Left cell (over the filter column): back button + screen title.
+   Right cell (over the cards): deck tabs · ? · counter · Let's Play. */
 .db-header {
   flex-shrink: 0;
+  height: 56px;
+  box-sizing: border-box;
   display: flex;
-  flex-direction: column;
-  padding: 10px 20px 12px;
-  gap: 10px;
+  align-items: stretch;
   background: rgba(12, 6, 2, 0.94);
   border-bottom: 2px solid rgba(200, 160, 32, 0.55);
   box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 3px 12px rgba(0,0,0,0.5);
   position: relative;
   z-index: 10;
 }
-
-/* Top row: Home · Title block · Counter + Play */
-.db-header-row {
+.db-header-left {
+  flex: 0 0 320px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 16px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+  border-right: 2px solid rgba(200, 160, 32, 0.45);
 }
-.db-header-row-top {
-  align-items: flex-start;
+.db-header-right {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 16px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.db-header-divider {
+  flex-shrink: 0;
+  width: 2px;
+  height: 30px;
+  margin: 0 2px;
+  background: rgba(200, 160, 32, 0.35);
 }
 
 .btn-back {
@@ -778,7 +796,7 @@ img    { display: block; }
   box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 12px rgba(212, 170, 80, 0.15);
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
-  margin-top: 4px;     /* aligns with the title baseline since the title block grew */
+  margin-top: 4px;
 }
 .btn-back:hover {
   background: rgba(90, 56, 16, 0.98);
@@ -786,49 +804,38 @@ img    { display: block; }
   color: #fff5d8;
   box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 16px rgba(240, 207, 108, 0.35);
 }
-
-/* Title + subtitle (centered horizontally in the top row) */
-.db-title-block {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 2px;
-}
-
-.db-title {
-  margin: 0;
-  font-family: var(--font);
-  font-size: 22px;
-  color: var(--snes-yellow);
-  text-transform: uppercase;
-  letter-spacing: 0.10em;
-  text-shadow: 1px 1px 0 #000, 0 0 12px rgba(200, 160, 0, 0.30);
-}
-
-.db-subtitle {
-  font-family: var(--font);
-  font-size: 12px;
-  color: rgba(243, 230, 196, 0.55);
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  text-shadow: 1px 1px 0 #000;
+/* In the deck-builder bar every control is 36px tall and vertically centred. */
+.db-header .btn-back {
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  margin-top: 0;
   white-space: nowrap;
 }
 
-/* Right-side controls cluster */
-.db-header-right {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-shrink: 0;
-  margin-top: 2px;
+/* Title fills the rest of the left cell. It shrinks (then truncates) when the
+   back button carries a longer label such as "Back to Map". */
+.db-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font);
+  font-size: 18px;
+  color: #e8c060;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  text-shadow: 1px 1px 0 #000, 0 0 12px rgba(200, 160, 0, 0.30);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.db-header.long-back .db-title { font-size: 14px; letter-spacing: 0.10em; }
 
 /* "Let's Play" button + its tooltip-style hint stack */
 .db-play-wrap {
   position: relative;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -860,19 +867,23 @@ img    { display: block; }
   opacity: 1;
 }
 
-/* Plain-text deck counter — number goes gold only when the deck hits 15 */
+/* Deck counter — gold while building, green once the deck is complete */
 .db-counter {
+  flex-shrink: 0;
+  min-width: 74px;
+  text-align: center;
   font-family: var(--font);
-  font-size: 16px;
-  color: rgba(243, 230, 196, 0.75);
-  letter-spacing: 0.08em;
+  font-size: 15px;
+  color: #f4d678;
+  letter-spacing: 0.06em;
   text-shadow: 1px 1px 0 #000;
+  white-space: nowrap;
   transition: color 0.15s, text-shadow 0.15s;
 }
 
 .db-counter.complete {
-  color: #e8c060;
-  text-shadow: 1px 1px 0 #000, 0 0 8px rgba(220, 170, 60, 0.45);
+  color: #7ef08a;
+  text-shadow: 1px 1px 0 #000, 0 0 8px rgba(126, 240, 138, 0.35);
 }
 
 .db-counter.flash {
@@ -880,35 +891,38 @@ img    { display: block; }
 }
 
 @keyframes counter-flash {
-  0%, 100% { color: rgba(243, 230, 196, 0.75); }
-  25%, 75%  { color: #e85a3a; }
+  0%, 100% { color: #f4d678; transform: translateX(0); }
+  25%      { color: #e85a3a; transform: translateX(-4px); }
+  75%      { color: #e85a3a; transform: translateX(4px); }
 }
 
-/* Let's Play button — primary action, brighter than the Home utility button */
+/* Let's Play button — the primary action: filled gold when the deck is ready */
 .btn-save {
-  padding: 9px 22px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 18px;
   font-size: 13px;
   font-family: var(--font);
-  background: rgba(60, 36, 8, 0.92);
-  border: 2px solid rgba(212, 170, 80, 0.95);
+  background: linear-gradient(180deg, #f0d488 0%, #c9a24a 100%);
+  border: 2px solid #f0d890;
   border-radius: 2px;
-  color: #f4d678;
+  color: #2a1608;
   letter-spacing: 0.08em;
-  text-shadow: 1px 1px 0 #000, 0 0 8px rgba(212, 170, 80, 0.30);
-  box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 12px rgba(212, 170, 80, 0.15);
+  text-shadow: none;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 10px rgba(240, 207, 108, 0.35);
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
 }
 .btn-save:not(:disabled):hover {
-  background: rgba(90, 56, 16, 0.98);
-  border-color: #f0cf6c;
-  color: #fff5d8;
-  box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 16px rgba(240, 207, 108, 0.35);
+  background: linear-gradient(180deg, #fbe3a0 0%, #d9b258 100%);
+  border-color: #fff5d8;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 16px rgba(240, 207, 108, 0.55);
 }
 .btn-save:disabled {
-  background: rgba(12, 6, 2, 0.70);
-  border-color: rgba(100, 70, 10, 0.30);
-  color: rgba(140, 100, 30, 0.42);
+  background: rgba(40, 24, 8, 0.85);
+  border-color: rgba(150, 112, 40, 0.55);
+  color: #7a6a48;
   box-shadow: 0 2px 0 rgba(0,0,0,0.4);
   cursor: not-allowed;
 }
@@ -943,96 +957,84 @@ img    { display: block; }
 }
 
 
-/* ── Deck slot selector row (bottom of header) ──────────────────── */
+/* ── Deck slot tabs (inside the header's right cell) ─────────────── */
 
 .db-slot-row {
-  display: grid;
-  /* Six card-shaped tiles in a single horizontal row (D2d-b) */
-  grid-template-columns: repeat(6, 1fr);
-  gap: 14px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
 }
 
 .db-slot-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 6px 10px;
-  /* Short, wide tiles that fill each grid column (replaces the old portrait
-     3/4 card proportions, which read as oversized placeholder cards). */
-  width: 100%;
-  height: 54px;
-  /* Light goldish-brown — distinct from the dark wood panel behind it */
-  background: linear-gradient(180deg, #b8945a 0%, #a78648 100%);
-  border: 2px solid #6a4418;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.08s;
-  position: relative;
-  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  height: 36px;
   box-sizing: border-box;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 4px 0 8px;
+  background: rgba(40, 24, 8, 0.85);
+  border: 2px solid rgba(150, 112, 40, 0.55);
+  border-radius: 2px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
 .db-slot-card:hover {
-  background: linear-gradient(180deg, #c9a368 0%, #b8945a 100%);
-  border-color: #8a5a26;
+  background: rgba(70, 44, 14, 0.95);
+  border-color: rgba(212, 170, 80, 0.9);
 }
 
-/* Active slot — brighter gold-tan + bronze ring + soft inner glow */
+/* Active slot — filled gold */
 .db-slot-card.active {
-  background: linear-gradient(180deg, #e0bd75 0%, #c9a360 100%);
-  border-color: #d4aa50;
-  box-shadow:
-    inset 0 0 14px rgba(255, 235, 180, 0.45),
-    0 0 0 1px rgba(212, 170, 80, 0.55),
-    0 2px 0 rgba(0, 0, 0, 0.45);
+  background: linear-gradient(180deg, #e8c878 0%, #c9a24a 100%);
+  border-color: #f0d890;
   cursor: default;
 }
 
 .db-slot-name {
-  max-width: 100%;
+  flex: 1;
+  min-width: 0;
   font-family: var(--font);
-  font-size: 14px;
-  color: #2a1608;                         /* dark-brown text on light tan */
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  color: #b89a5a;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  text-shadow: 1px 1px 0 rgba(255, 235, 180, 0.35);
-  text-align: center;
+  text-shadow: 1px 1px 0 #000;
   /* Truncate long custom names cleanly */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .db-slot-card.active .db-slot-name {
-  color: #1a0c04;                         /* slightly darker for active emphasis */
-  text-shadow: 1px 1px 0 rgba(255, 245, 200, 0.50);
+  color: #2a1608;
+  text-shadow: none;
 }
 
-/* Pencil/edit icon — dark brown to read against the gold-tan slot fill */
+/* Pencil/edit icon */
 .db-slot-edit {
-  position: absolute;
-  top: 6px;
-  right: 6px;
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  background: rgba(184, 148, 90, 0.55);
-  border: 1px solid rgba(42, 22, 8, 0.35);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 2px;
-  color: rgba(42, 22, 8, 0.75);
-  font-size: 13px;
+  color: rgba(184, 154, 90, 0.8);
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .db-slot-edit:hover {
-  background: rgba(42, 22, 8, 0.18);
-  border-color: #2a1608;
-  color: #1a0c04;
+  border-color: rgba(212, 170, 80, 0.9);
+  color: #fff5d8;
 }
+.db-slot-card.active .db-slot-edit { color: rgba(42, 22, 8, 0.75); }
+.db-slot-card.active .db-slot-edit:hover { border-color: #2a1608; color: #1a0c04; background: rgba(42, 22, 8, 0.12); }
 
 
 /* ── Rename Deck modal ──────────────────────────────────────────── */
@@ -1101,102 +1103,229 @@ img    { display: block; }
 
 
 
-/* ── Scrollable card area ───────────────────────────────────────── */
+/* ── Body: filter column (320px, 25%) + cards (960px, 75%) ───────── */
+.db-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.db-side {
+  flex: 0 0 320px;
+  box-sizing: border-box;
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  background: rgba(18, 10, 3, 0.92);
+  border-right: 2px solid rgba(200, 160, 32, 0.45);
+}
+
+/* Search box */
+.db-search { position: relative; flex-shrink: 0; }
+.db-search input {
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 30px 0 34px;
+  font: 600 15px 'Source Sans 3', sans-serif;
+  color: #f3e6c4;
+  background: rgba(8, 4, 1, 0.85);
+  border: 2px solid rgba(180, 130, 40, 0.65);
+  border-radius: 2px;
+  outline: none;
+}
+.db-search input:focus { border-color: #f0cf6c; box-shadow: 0 0 8px rgba(240, 207, 108, 0.35); }
+.db-search input::placeholder { color: rgba(243, 230, 196, 0.45); font-weight: 400; }
+.db-search::before {
+  content: '\2315';
+  position: absolute;
+  left: 10px;
+  top: 5px;
+  font-size: 20px;
+  color: #d4aa50;
+  pointer-events: none;
+}
+.db-search-clear {
+  display: none;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: #d4aa50;
+  font-size: 15px;
+  line-height: 24px;
+  cursor: pointer;
+}
+.db-search.has-text .db-search-clear { display: block; }
+
+.db-side-group { flex-shrink: 0; display: flex; flex-direction: column; gap: 7px; }
+.db-side-label {
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(232, 192, 96, 0.85);
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(180, 130, 40, 0.35);
+}
+
+/* Sort buttons and filter chips share one look */
+.db-sort  { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.db-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.db-sort-btn,
+.db-chip {
+  --c: #d4aa50;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 600 13px 'Source Sans 3', sans-serif;
+  letter-spacing: 0.02em;
+  color: #d9c8a0;
+  white-space: nowrap;
+  background: rgba(8, 4, 1, 0.7);
+  border: 2px solid rgba(120, 90, 40, 0.6);
+  border-radius: 2px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.db-sort-btn { justify-content: center; gap: 6px; }
+.db-sort-btn:hover,
+.db-chip:hover { border-color: var(--c); color: #fff5d8; }
+.db-sort-btn.on,
+.db-chip.on {
+  background: var(--c);
+  border-color: #fff5d8;
+  color: #140a02;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--c) 60%, transparent);
+}
+.db-sort-arrow { font-size: 11px; visibility: hidden; }
+.db-sort-btn.on .db-sort-arrow { visibility: visible; }
+/* Type chips carry a dot in the type's colour */
+.db-chip-type::before {
+  content: '';
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.db-chip-type.on::before { background: #140a02; }
+.db-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.db-chip-count { margin-left: auto; font-weight: 400; font-size: 11px; opacity: 0.7; }
+
+/* Appears only while a search or filter is active */
+.db-clear-filters {
+  flex-shrink: 0;
+  margin-top: 2px;
+  padding: 8px 10px;
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: #ffb4a8;
+  background: rgba(60, 12, 8, 0.9);
+  border: 2px solid rgba(255, 122, 106, 0.8);
+  border-radius: 2px;
+  cursor: pointer;
+  visibility: hidden;
+}
+.db-side.filtering .db-clear-filters { visibility: visible; }
+.db-clear-filters:hover { background: rgba(90, 20, 12, 0.95); color: #ffd8d0; }
+
+.db-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Results strip: what is showing, in words */
+.db-strip {
+  flex: 0 0 40px;
+  box-sizing: border-box;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(24, 13, 4, 0.75);
+  border-bottom: 1px solid rgba(180, 130, 40, 0.3);
+}
+.db-result-count {
+  font: 600 14px 'Source Sans 3', sans-serif;
+  color: #f3e6c4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-result-count b { color: #f0cf6c; }
+.db-strip-hint {
+  flex-shrink: 0;
+  margin-left: auto;
+  font: 400 12px 'Source Sans 3', sans-serif;
+  color: rgba(243, 230, 196, 0.55);
+  white-space: nowrap;
+}
+
+/* ── Scrollable card area ──────────────────────────────────────────
+   5 across at 174 x 262, sized so 2.25 ROWS show: the third row peeks in,
+   which tells the player there is more below.
+     624 tall (720 - 56 bar - 40 strip), 14 top padding → 610 of cards:
+     2 rows (262 x 2) + 2 gaps (12 x 2) = 548, leaving 62 of row three. */
 .db-main {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 22px 24px 48px;
-  /* Aged parchment / map surface — same as the battle board */
-  background:
-    radial-gradient(ellipse at 94% 92%, rgba(100, 65, 10, 0.40) 0%, transparent 52%),
-    radial-gradient(ellipse at 8%  10%, rgba(140, 100, 30, 0.20) 0%, transparent 40%),
-    linear-gradient(158deg, #c9a96e 0%, #b89458 18%, #c5a464 48%, #b08a42 78%, #a27832 100%);
-  box-shadow: inset 0 0 36px rgba(60, 30, 0, 0.38);
+  box-sizing: border-box;
+  padding: 14px 16px 16px;
 }
 
 .db-main::-webkit-scrollbar       { width: 8px; }
 .db-main::-webkit-scrollbar-track { background: rgba(20, 10, 2, 0.80); }
 .db-main::-webkit-scrollbar-thumb {
-  background: rgba(160, 110, 30, 0.60);
+  background: rgba(180, 130, 40, 0.70);
   border: 1px solid rgba(100, 65, 10, 0.40);
 }
 .db-main::-webkit-scrollbar-thumb:hover { background: rgba(200, 150, 40, 0.80); }
+.db-side::-webkit-scrollbar       { width: 6px; }
+.db-side::-webkit-scrollbar-thumb { background: rgba(180, 130, 40, 0.5); }
 
-
-/* ── Type group section ─────────────────────────────────────────── */
-.db-type-group { margin-bottom: 26px; }
-
-.db-type-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 6px 14px;
-  /* Warm scroll/banner — dark centre fading to transparent at edges */
-  background: linear-gradient(
-    to right,
-    rgba(20, 10, 2, 0.88) 0%,
-    rgba(40, 22, 6, 0.75) 40%,
-    rgba(40, 22, 6, 0.75) 60%,
-    rgba(20, 10, 2, 0.88) 100%
-  );
-  border-left: 4px solid;         /* type color accent — set per type below */
-  border-top: 1px solid rgba(180, 130, 40, 0.28);
-  border-bottom: 1px solid rgba(180, 130, 40, 0.28);
-  border-right: none;
-  box-shadow: inset 0 1px 0 rgba(220, 170, 60, 0.08);
-}
-
-/* Type color as left-border accent */
-.type-political  .db-type-header { border-left-color: var(--c-political);   }
-.type-religious  .db-type-header { border-left-color: var(--c-religious);   }
-.type-military   .db-type-header { border-left-color: var(--c-military);    }
-.type-cultural   .db-type-header { border-left-color: var(--c-cultural);    }
-.type-exploration .db-type-header{ border-left-color: var(--c-exploration); }
-.type-scientific .db-type-header { border-left-color: var(--c-scientific); }
-.type-labor      .db-type-header { border-left-color: var(--c-labor);      }
-.type-economic   .db-type-header { border-left-color: var(--c-economic);   }
-.type-prehistory .db-type-header { border-left-color: var(--c-prehistory); }
-
-.db-type-pip {
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-  border-radius: 0;
-}
-
-/* Pip keeps type color as filled square */
-.type-political  .db-type-pip { background: var(--c-political);   }
-.type-religious  .db-type-pip { background: var(--c-religious);   }
-.type-military   .db-type-pip { background: var(--c-military);    }
-.type-cultural   .db-type-pip { background: var(--c-cultural);    }
-.type-exploration .db-type-pip{ background: var(--c-exploration); }
-.type-scientific .db-type-pip { background: var(--c-scientific); }
-.type-labor      .db-type-pip { background: var(--c-labor);      }
-.type-economic   .db-type-pip { background: var(--c-economic);   }
-.type-prehistory .db-type-pip { background: var(--c-prehistory); }
-
-/* Label: warm gold, consistent across all types */
-.db-type-label {
-  font-family: var(--font);
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: #d4aa50;
-  background: transparent;
-  text-shadow: 1px 1px 0 #000;
-}
-
-.db-type-count {
-  font-size: 12px;
-  color: rgba(180, 140, 60, 0.60);
-}
-
-/* Five-column card grid */
-.db-card-row {
+.db-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: var(--gap);
+  gap: 12px;
+}
+
+/* Heading between the player's cards and the ones still locked */
+.db-locked-divider {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding: 7px 14px;
+  font-family: var(--font);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: #f0cf6c;
+  text-shadow: 1px 1px 0 #000;
+  background: rgba(12, 6, 2, 0.8);
+  border-left: 4px solid #d4aa50;
+  border-top: 1px solid rgba(180, 130, 40, 0.28);
+  border-bottom: 1px solid rgba(180, 130, 40, 0.28);
+}
+.db-locked-divider:first-child { margin-top: 0; }
+
+.db-empty {
+  padding: 80px 0;
+  font: 400 16px 'Crimson Text', serif;
+  color: #d9c8a0;
+  text-align: center;
 }
 
 
@@ -1366,26 +1495,47 @@ img    { display: block; }
 .db-card.flash-add    { animation: flash-add    0.36s ease-out forwards; }
 .db-card.flash-remove { animation: flash-remove 0.36s ease-out forwards; }
 
-/* ── "IN DECK" badge — fades in at bottom when selected ── */
-.db-card-in-deck {
+/* ── Pick circle — bottom-right of every selectable tile ──
+   EMPTY when the card is out of the deck, a green CHECK when it is in.
+   Clicking it adds/removes the card (double-clicking the card does too).
+   The hit area is 36px around a 24px circle. It sits clear of the CC / IP
+   corners, the type icon and the name printed on the art. */
+.db-pick {
   position: absolute;
-  bottom: 0;
-  left: 0;
   right: 0;
-  padding: 22px 6px 6px;
-  background: linear-gradient(transparent, rgba(0, 10, 0, 0.92));
-  text-align: center;
-  font-family: var(--font);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  color: var(--snes-green);
-  text-shadow: 0 0 6px var(--snes-green), 1px 1px 0 #000;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  pointer-events: none;
+  bottom: 0;
+  z-index: 6;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
 }
-
-.db-card.selected .db-card-in-deck { opacity: 1; }
+.db-pick::before {
+  content: '';
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  border: 2px solid #fff5d8;
+  border-radius: 50%;
+  background: rgba(10, 5, 1, 0.72);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.85), 0 0 5px rgba(0, 0, 0, 0.6);
+  font: 700 15px/20px 'Source Sans 3', sans-serif;
+  text-align: center;
+  color: #0c1f0c;
+  transition: background 0.1s, border-color 0.1s, box-shadow 0.1s;
+}
+.db-pick:hover::before {
+  border-color: #6fe08a;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.85), 0 0 8px rgba(111, 224, 138, 0.9);
+}
+.db-card.selected .db-pick::before {
+  content: '\2713';
+  background: #6fe08a;
+  border-color: #0c1f0c;
+  box-shadow: 0 0 6px rgba(111, 224, 138, 0.8);
+}
 
 
 /* ══════════════════════════════════════════════════════════════════
@@ -8319,17 +8469,6 @@ body.tut-locked #battle-reset-turn {
 .chooser-loc-name   { font-size: 16px; }
 .chooser-loc-region { font-size: 11px; opacity: 0.8; text-transform: none; letter-spacing: 0; }
 
-/* ── Deck builder: 7th-grade history TEASER (Arcadium, locked). A type-group
-   styled section at the bottom of the grid; the tiles reuse .db-card-locked. ── */
-.db-teaser-group .db-type-header { border-left-color: #d4aa50; }
-.db-teaser-note {
-  font-family: var(--font);
-  font-size: 15px;
-  color: #f0cf6c;
-  text-shadow: 1px 1px 0 #000;
-  margin: -4px 0 12px 18px;
-  letter-spacing: 0.02em;
-}
 
 /* ================================================================
    UNLOCK CUTSCENE
@@ -11392,7 +11531,7 @@ body.prehistory-battle .db-overlay-ip {
 .db-help-icon {
   width: 28px;
   height: 28px;
-  margin-right: 14px;        /* extra spacing so it doesn't crowd the counter */
+  margin-right: 0;
   border-radius: 50%;
   border: 2px solid var(--snes-yellow);
   background: transparent;

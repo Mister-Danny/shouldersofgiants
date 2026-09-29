@@ -7,9 +7,18 @@
  *   window.Decks. All add/remove/rename operations auto-save through
  *   that module — there is no Save button.
  *
+ * Layout: one top bar (back · title | deck tabs · ? · counter · play), a left
+ *   column with search, sort and filters, and a flat 5-across card grid.
+ *
  * Card interactions:
- *   Single click  → opens read-only ability popup
- *   Double click  → toggles card in/out of active slot's deck
+ *   Single click        → opens read-only ability popup
+ *   Double click        → toggles card in/out of active slot's deck
+ *   Click the circle    → same toggle, in one click
+ *
+ * Which cards show:
+ *   owned cards          → selectable
+ *   cards not yet owned  → shown greyed out with a padlock, after the owned ones
+ *   7th-grade history    → hidden until owned (they unlock as a set)
  *
  * Slot row interactions:
  *   Click slot card        → switches active slot (re-renders grid + counter)
@@ -32,9 +41,35 @@
   var SLOT_COUNT = (window.Decks && window.Decks.SLOT_COUNT) || 3;
   var TYPE_ORDER = ['Prehistory', 'Political', 'Religious', 'Military', 'Cultural', 'Exploration', 'Scientific', 'Labor', 'Economic'];
 
+  /* Era filter groups. Several card eras fold into one button so the column
+     stays short; every era not named here belongs to the 7th-grade history set. */
+  var ERA_GROUPS = ['Prehistory', 'Mesopotamia', 'Egypt', 'Kush', 'India', 'World History'];
+  function eraGroup(card) {
+    var e = card.era || '';
+    if (e === 'Prehistory' || e === 'Mesopotamia' || e === 'Egypt') return e;
+    if (e === 'Kush' || e === 'Aksumite') return 'Kush';
+    if (e === 'Harappan' || e === 'Early India') return 'India';
+    return 'World History';
+  }
+
+  /* Sort keys. Each leads with itself and breaks ties with the others, so the
+     default "Type" order is Type, then CC, then IP. All run low to high;
+     clicking the active key again reverses the LEADING key only. */
+  var SORTS = [
+    { key: 'type', label: 'Type', chain: ['type', 'cc', 'ip'] },
+    { key: 'cc',   label: 'CC',   chain: ['cc', 'ip', 'type'] },
+    { key: 'ip',   label: 'IP',   chain: ['ip', 'cc', 'type'] }
+  ];
+
+  /* Heading over the greyed-out cards the player does not own yet. Editable. */
+  var LOCKED_HEADING = '\uD83D\uDD12 Locked cards \u2014 collect them in Adventure Mode';
+
   /* ── State ───────────────────────────────────────────────────── */
   var popupCardId = null;       // ID of card currently shown in popup
   var renameSlot  = null;       // slot currently being renamed (1/2/3)
+  // What the grid is showing. Reset each time the builder opens; kept when
+  // the player switches deck slots.
+  var view = { q: '', types: {}, eras: {}, sort: 'type', dir: 1 };
 
   /* ── DOM refs ────────────────────────────────────────────────── */
   var mainEl    = document.getElementById('db-main');
@@ -43,6 +78,20 @@
   var saveHint  = document.getElementById('db-save-hint');
   var backBtn   = document.getElementById('db-back');
   var slotRowEl = document.getElementById('db-slot-row');
+  var headerEl  = document.querySelector('#screen-deckbuilder .db-header');
+
+  // Search / sort / filter column
+  var sideEl        = document.getElementById('db-side');
+  var searchBoxEl   = document.getElementById('db-search');
+  var searchInputEl = document.getElementById('db-search-input');
+  var searchClearEl = document.getElementById('db-search-clear');
+  var sortEl        = document.getElementById('db-sort');
+  var typeGroupEl   = document.getElementById('db-type-group');
+  var typeChipsEl   = document.getElementById('db-type-chips');
+  var eraGroupEl    = document.getElementById('db-era-group');
+  var eraChipsEl    = document.getElementById('db-era-chips');
+  var clearFiltersEl = document.getElementById('db-clear-filters');
+  var resultCountEl = document.getElementById('db-result-count');
 
   // Card-detail popup (read-only)
   var backdropEl      = document.getElementById('card-popup-backdrop');
@@ -132,7 +181,11 @@
       : window.deckBuilderFromOverworld
         ? '&#8592; Back to Map'
         : '&#8592; Home';
+    // A longer back label ("Back to Map") leaves less room for the title.
+    if (headerEl) headerEl.classList.toggle('long-back', backBtn.textContent.length > 8);
+    resetView();
     renderSlotRow();
+    renderControls();
     renderAllGroups();
     updateUI();
     mainEl.scrollTop = 0;
@@ -202,95 +255,224 @@
 
   /* ── Rendering ───────────────────────────────────────────────── */
 
+  /* ── Which cards the builder shows ───────────────────────────── */
+
+  function isHistoryCard(id) {
+    var col = window.SOG && SOG.collection;
+    return !!(col && col.HISTORY_CARD_IDS && col.HISTORY_CARD_IDS.indexOf(id) !== -1);
+  }
+
+  /* Every card the builder lists, as { card, locked }.
+       owned (isCardAvailable)  → listed, selectable
+       7th-grade history card   → listed ONLY once owned; never shown locked
+       any other unowned card   → listed greyed out (locked: true)
+       tokens                   → never listed */
+  function shownCards() {
+    var out = [];
+    CARDS.forEach(function (card) {
+      if (card.token) return;
+      if (isCardAvailable(card)) { out.push({ card: card, locked: false }); return; }
+      if (isHistoryCard(card.id)) return;
+      out.push({ card: card, locked: true });
+    });
+    return out;
+  }
+
+  /* ── Search, filters and sort ────────────────────────────────── */
+
+  function resetView() {
+    view.q = ''; view.types = {}; view.eras = {}; view.sort = 'type'; view.dir = 1;
+    if (searchInputEl) searchInputEl.value = '';
+    if (searchBoxEl) searchBoxEl.classList.remove('has-text');
+  }
+
+  function activeKeys(bag) { return Object.keys(bag).filter(function (k) { return bag[k]; }); }
+  function isFiltering() { return !!(view.q || activeKeys(view.types).length || activeKeys(view.eras).length); }
+
+  // Everything the search box looks through for one card.
+  function haystack(card) {
+    return [card.name, card.abilityName, card.ability, card.type, card.type2,
+            card.era, card.civilization, eraGroup(card)]
+      .filter(Boolean).join(' ').toLowerCase();
+  }
+
+  /* OR inside a category (Military or Religious), AND across categories
+     (…and Egypt), AND every word typed in the search box. */
+  function matchesView(card) {
+    var ts = activeKeys(view.types), es = activeKeys(view.eras);
+    if (ts.length && ts.indexOf(card.type) === -1 && ts.indexOf(card.type2) === -1) return false;
+    if (es.length && es.indexOf(eraGroup(card)) === -1) return false;
+    if (view.q) {
+      var h = haystack(card);
+      var words = view.q.split(/\s+/);
+      for (var i = 0; i < words.length; i++) { if (h.indexOf(words[i]) === -1) return false; }
+    }
+    return true;
+  }
+
+  function sortValue(card, key) { return key === 'type' ? TYPE_ORDER.indexOf(card.type) : card[key]; }
+  function sortCards(list) {
+    var chain = SORTS.filter(function (x) { return x.key === view.sort; })[0].chain;
+    return list.slice().sort(function (a, b) {
+      for (var i = 0; i < chain.length; i++) {
+        var d = sortValue(a.card, chain[i]) - sortValue(b.card, chain[i]);
+        if (d) return i === 0 ? d * view.dir : d;
+      }
+      return a.card.name.localeCompare(b.card.name);
+    });
+  }
+
+  function typeColor(type) {
+    var v = getComputedStyle(document.documentElement).getPropertyValue('--c-' + type.toLowerCase());
+    return (v && v.trim()) || '#d4aa50';
+  }
+
+  function buildChip(label, kind, count, bag) {
+    var el = document.createElement('div');
+    el.className = 'db-chip db-chip-' + kind + (bag[label] ? ' on' : '');
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-pressed', bag[label] ? 'true' : 'false');
+    if (kind === 'type') el.style.setProperty('--c', typeColor(label));
+    var name = document.createElement('span'); name.className = 'db-chip-label'; name.textContent = label;
+    var n = document.createElement('span');    n.className = 'db-chip-count';    n.textContent = count;
+    el.appendChild(name); el.appendChild(n);
+    el.addEventListener('click', function () {
+      bag[label] = !bag[label];
+      el.classList.toggle('on', !!bag[label]);
+      el.setAttribute('aria-pressed', bag[label] ? 'true' : 'false');
+      renderAllGroups();
+      mainEl.scrollTop = 0;
+    });
+    return el;
+  }
+
+  function paintSort() {
+    if (!sortEl) return;
+    Array.prototype.forEach.call(sortEl.querySelectorAll('.db-sort-btn'), function (b) {
+      var on = b.dataset.key === view.sort;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.querySelector('.db-sort-arrow').textContent = (on && view.dir < 0) ? '▼' : '▲';
+      b.title = on ? (view.dir > 0 ? 'Low to high. Click to reverse.' : 'High to low. Click to reverse.')
+                   : 'Sort by ' + b.dataset.label;
+    });
+  }
+
+  /* Builds the sort buttons and the filter chips. A chip appears only when at
+     least one listed card would match it, so a new player is not shown filters
+     for cards that are hidden from them. */
+  function renderControls() {
+    if (!sideEl) return;
+    var shown = shownCards();
+
+    sortEl.innerHTML = '';
+    SORTS.forEach(function (x) {
+      var b = document.createElement('div');
+      b.className = 'db-sort-btn';
+      b.dataset.key = x.key; b.dataset.label = x.label;
+      b.setAttribute('role', 'button');
+      var name = document.createElement('span'); name.textContent = x.label;
+      var arrow = document.createElement('span'); arrow.className = 'db-sort-arrow';
+      b.appendChild(name); b.appendChild(arrow);
+      b.addEventListener('click', function () {
+        if (view.sort === x.key) view.dir = -view.dir;
+        else { view.sort = x.key; view.dir = 1; }
+        paintSort();
+        renderAllGroups();
+        mainEl.scrollTop = 0;
+      });
+      sortEl.appendChild(b);
+    });
+    paintSort();
+
+    typeChipsEl.innerHTML = '';
+    TYPE_ORDER.forEach(function (t) {
+      var n = shown.filter(function (x) { return x.card.type === t || x.card.type2 === t; }).length;
+      if (n) typeChipsEl.appendChild(buildChip(t, 'type', n, view.types));
+    });
+    typeGroupEl.style.display = typeChipsEl.children.length ? '' : 'none';
+
+    eraChipsEl.innerHTML = '';
+    ERA_GROUPS.forEach(function (e) {
+      var n = shown.filter(function (x) { return eraGroup(x.card) === e; }).length;
+      if (n) eraChipsEl.appendChild(buildChip(e, 'era', n, view.eras));
+    });
+    eraGroupEl.style.display = eraChipsEl.children.length ? '' : 'none';
+  }
+
+  function clearFilters() {
+    view.q = ''; view.types = {}; view.eras = {};
+    searchInputEl.value = '';
+    searchBoxEl.classList.remove('has-text');
+    renderControls();          // chips hold the old filter bags — rebuild them
+    renderAllGroups();
+    mainEl.scrollTop = 0;
+  }
+
+  function setSearch(text) {
+    view.q = String(text || '').trim().toLowerCase();
+    searchBoxEl.classList.toggle('has-text', !!searchInputEl.value);
+    renderAllGroups();
+    mainEl.scrollTop = 0;
+  }
+
+  /* ── Rendering ───────────────────────────────────────────────── */
+
+  /* One flat grid: the player's cards first, then (under a heading) the cards
+     they have not collected yet, both in the chosen sort order. */
   function renderAllGroups() {
     mainEl.innerHTML = '';
-    renderCardGroups();
-    renderHistoryTeaser();
+    var all     = shownCards();
+    var matched = all.filter(function (x) { return matchesView(x.card); });
+    var owned   = sortCards(matched.filter(function (x) { return !x.locked; }));
+    var locked  = sortCards(matched.filter(function (x) { return x.locked; }));
+
+    if (matched.length) {
+      var grid = document.createElement('div');
+      grid.className = 'db-grid';
+      owned.forEach(function (x) { grid.appendChild(buildCardEl(x.card, false)); });
+      if (locked.length) {
+        var divider = document.createElement('div');
+        divider.className = 'db-locked-divider';
+        divider.textContent = LOCKED_HEADING + ' (' + locked.length + ')';
+        grid.appendChild(divider);
+        locked.forEach(function (x) { grid.appendChild(buildCardEl(x.card, true)); });
+      }
+      mainEl.appendChild(grid);
+    } else {
+      var empty = document.createElement('div');
+      empty.className = 'db-empty';
+      empty.textContent = 'No cards match. Clear a filter or change the search.';
+      mainEl.appendChild(empty);
+    }
+
+    renderResultCount(all.length, owned.length, locked.length);
   }
 
-  /* ── 7TH-GRADE HISTORY TEASER (Arcadium only) ──────────────────────────────
-     The 25 history cards (SOG.collection.HISTORY_CARD_IDS) unlock as a set once
-     every Giant in Adventure Mode is beaten (SOG.collection.historyCardsUnlocked).
-     Until then, Arcadium's deck builder shows them in one greyed-out, unselectable
-     section under the owned cards, with the unlock hint. Once unlocked they are
-     simply owned and flow into their normal type groups above, so this section
-     disappears on its own. Not shown from the overworld / versus / multiplayer
-     entries, and not under the dev unlock-all override (those cards are already
-     selectable then). Text is editable here. */
-  var HISTORY_TEASER = {
-    title: '7th Grade History',
-    note:  'Beat all of the Giants currently in Adventure Mode to unlock.'
-  };
-  function _isArcadiumEntry() {
-    return !window.deckBuilderFromOverworld && !window.multiplayerMode && !window.versusStudentMode;
-  }
-  function renderHistoryTeaser() {
-    var col = window.SOG && SOG.collection;
-    if (!col || !col.HISTORY_CARD_IDS || typeof col.historyCardsUnlocked !== 'function') return;
-    if (!_isArcadiumEntry() || col.historyCardsUnlocked() || devUnlockAll()) return;
-    var cards = col.HISTORY_CARD_IDS.map(function (id) {
-      return CARDS.find(function (c) { return c.id === id; });
-    }).filter(Boolean);
-    if (!cards.length) return;
-
-    var section = document.createElement('section');
-    section.className = 'db-type-group db-teaser-group';
-
-    var header = document.createElement('div');
-    header.className = 'db-type-header';
-    header.innerHTML =
-      '<div class="db-type-pip"></div>' +
-      '<span class="db-type-label"></span>' +
-      '<span class="db-type-count">(' + cards.length + ')</span>';
-    header.querySelector('.db-type-label').textContent = HISTORY_TEASER.title;
-
-    var note = document.createElement('div');
-    note.className = 'db-teaser-note';
-    note.textContent = '\uD83D\uDD12 ' + HISTORY_TEASER.note;
-
-    var row = document.createElement('div');
-    row.className = 'db-card-row';
-    cards.forEach(function (card) { row.appendChild(buildCardEl(card, true)); });
-
-    section.appendChild(header);
-    section.appendChild(note);
-    section.appendChild(row);
-    mainEl.appendChild(section);
-  }
-
-  /* Single unified layout for every context: the collection grouped by type,
-     in TYPE_ORDER. No Progression type-locks — every shown card is owned, so
-     every shown card is selectable. */
-  function renderCardGroups() {
-    TYPE_ORDER.forEach(function (type) {
-      var cards = CARDS.filter(function (c) { return c.type === type && isCardAvailable(c); });
-      // Empty groups never render.
-      if (!cards.length) return;
-
-      var section = document.createElement('section');
-      section.className = 'db-type-group type-' + type.toLowerCase();
-
-      var header = document.createElement('div');
-      header.className = 'db-type-header';
-      header.innerHTML =
-        '<div class="db-type-pip"></div>' +
-        '<span class="db-type-label">' + type + '</span>' +
-        '<span class="db-type-count">(' + cards.length + ')</span>';
-
-      var row = document.createElement('div');
-      row.className = 'db-card-row';
-      cards.forEach(function (card) { row.appendChild(buildCardEl(card, false)); });
-
-      section.appendChild(header);
-      section.appendChild(row);
-      mainEl.appendChild(section);
-    });
+  /* The strip above the grid says what is showing, in words:
+       "Egypt or India · Military or Religious · "move" — 3 of 92 cards (1 locked)" */
+  function renderResultCount(total, ownedShown, lockedShown) {
+    if (sideEl) sideEl.classList.toggle('filtering', isFiltering());
+    if (!resultCountEl) return;
+    var parts = [];
+    if (activeKeys(view.eras).length)  parts.push(activeKeys(view.eras).join(' or '));
+    if (activeKeys(view.types).length) parts.push(activeKeys(view.types).join(' or '));
+    if (view.q) parts.push('“' + view.q + '”');
+    resultCountEl.textContent = '';
+    resultCountEl.appendChild(document.createTextNode((parts.length ? parts.join(' · ') : 'All cards') + ' — '));
+    var b = document.createElement('b');
+    b.textContent = String(ownedShown + lockedShown);
+    resultCountEl.appendChild(b);
+    resultCountEl.appendChild(document.createTextNode(
+      ' of ' + total + ' cards' + (lockedShown ? ' (' + lockedShown + ' locked)' : '')));
   }
 
   function buildCardEl(card, locked) {
     var el = document.createElement('div');
     el.className = 'db-card type-' + card.type.toLowerCase() +
-                   (isSelected(card.id) ? ' selected' : '') +
+                   // A locked tile never shows as picked, even if a saved deck
+                   // still holds the card (e.g. one built under the dev override).
+                   (!locked && isSelected(card.id) ? ' selected' : '') +
                    (locked ? ' db-card-locked' : '');
     el.dataset.id = card.id;
 
@@ -303,6 +485,8 @@
     ph.textContent = card.name.charAt(0);
 
     var img = window.buildCardImg(card);
+    img.loading  = 'lazy';      // the grid can hold 100+ cards; load art as it scrolls in
+    img.decoding = 'async';
 
     imgWrap.appendChild(ph);
     imgWrap.appendChild(img);
@@ -315,14 +499,32 @@
     ipEl.className = 'db-overlay-ip';
     ipEl.textContent = card.ip;
 
-    var badge = document.createElement('div');
-    badge.className = 'db-card-in-deck';
-    badge.textContent = 'IN DECK';
-
     el.appendChild(imgWrap);
     el.appendChild(ccEl);
     el.appendChild(ipEl);
-    el.appendChild(badge);
+
+    /* Pick circle (selectable cards only): empty when the card is out of the
+       deck, a green check when it is in. One click on it toggles the card —
+       the same toggle a double-click on the card performs. It swallows its own
+       clicks so they never reach the card's single/double-click handler (no
+       popup, no second toggle), and it ignores a click that lands within
+       DBLCLICK_MS of the last one, so double-clicking the circle toggles once. */
+    if (!locked) {
+      var pick = document.createElement('div');
+      pick.className = 'db-pick';
+      pick.setAttribute('role', 'checkbox');
+      paintPick(pick, isSelected(card.id));
+      var lastPickAt = 0;
+      pick.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var now = Date.now();
+        if (now - lastPickAt < 350) return;
+        lastPickAt = now;
+        toggleFromCard(el, card);
+      });
+      pick.addEventListener('dblclick', function (e) { e.stopPropagation(); });
+      el.appendChild(pick);
+    }
 
     if (locked) {
       var lockOverlay = document.createElement('div');
@@ -347,17 +549,7 @@
       if (clickTimer) {
         clearTimeout(clickTimer);
         clickTimer = null;
-        var wasSelected = isSelected(card.id);
-        var ok = toggleCard(card.id);
-        if (ok) {
-          flashCard(el, !wasSelected);
-          if (window.DeckBuilderTutorial &&
-              typeof window.DeckBuilderTutorial.notifyCardDblClick === 'function') {
-            window.DeckBuilderTutorial.notifyCardDblClick(card.id);
-          }
-        } else {
-          flashCounter();
-        }
+        toggleFromCard(el, card);
       } else {
         clickTimer = setTimeout(function () {
           clickTimer = null;
@@ -374,6 +566,30 @@
   }
 
   /* ── Selection logic ─────────────────────────────────────────── */
+
+  /* The one add/remove path for a tile, shared by the double-click and the
+     pick circle: toggle, flash the tile (or the counter when the deck is
+     full), and tell the tutorial — its "double-click a card" step advances on
+     either gesture. */
+  function toggleFromCard(el, card) {
+    var wasSelected = isSelected(card.id);
+    var ok = toggleCard(card.id);
+    if (ok) {
+      flashCard(el, !wasSelected);
+      if (window.DeckBuilderTutorial &&
+          typeof window.DeckBuilderTutorial.notifyCardDblClick === 'function') {
+        window.DeckBuilderTutorial.notifyCardDblClick(card.id);
+      }
+    } else {
+      flashCounter();
+    }
+    return ok;
+  }
+
+  function paintPick(pick, on) {
+    pick.setAttribute('aria-checked', on ? 'true' : 'false');
+    pick.title = on ? 'In deck. Click to remove.' : 'Click to add to deck.';
+  }
 
   /**
    * Adds or removes the card from the active slot.
@@ -397,7 +613,10 @@
 
   function setCardSelected(id, on) {
     var el = mainEl.querySelector('[data-id="' + id + '"]');
-    if (el) el.classList.toggle('selected', on);
+    if (!el) return;
+    el.classList.toggle('selected', on);
+    var pick = el.querySelector('.db-pick');
+    if (pick) paintPick(pick, on);
   }
 
   /* ── Visual feedback ─────────────────────────────────────────── */
@@ -657,6 +876,23 @@
   backdropEl.addEventListener('click', function (e) {
     if (e.target === backdropEl) closePopup();
   });
+
+  // Search / filter wiring
+  if (searchInputEl) {
+    searchInputEl.addEventListener('input', function () { setSearch(searchInputEl.value); });
+    searchInputEl.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();                 // Escape here clears the search, nothing else
+      searchInputEl.value = '';
+      setSearch('');
+    });
+    searchClearEl.addEventListener('click', function () {
+      searchInputEl.value = '';
+      setSearch('');
+      searchInputEl.focus();
+    });
+    clearFiltersEl.addEventListener('click', clearFilters);
+  }
 
   // Rename modal wiring
   renameSaveBtn.addEventListener('click', commitRename);

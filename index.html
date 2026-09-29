@@ -225,33 +225,63 @@
   ════════════════════════════════════════════════════════════════ -->
   <div id="screen-deckbuilder" class="screen">
 
+    <!-- One top bar, split on the same 320 / 960 line as the body below:
+         screen identity over the filter column, deck controls over the cards. -->
     <header class="db-header">
-
-      <!-- Top row: Home · Title/Subtitle · Counter + Let's Play -->
-      <div class="db-header-row db-header-row-top">
+      <div class="db-header-left">
         <button class="btn-back" id="db-back">&#8592; Home</button>
-        <div class="db-title-block">
-          <h2 class="db-title">Deck Builder</h2>
-          <div class="db-subtitle">Double-click a card to add or remove</div>
-        </div>
-        <div class="db-header-right">
-          <button class="db-help-icon" id="db-help-icon"
-                  aria-label="Replay tutorial" title="Replay tutorial">?</button>
-          <span class="db-counter" id="db-counter">0 / 15</span>
-          <div class="db-play-wrap">
-            <button class="btn-save" id="db-save" disabled>Let's Play</button>
-            <span class="db-save-hint" id="db-save-hint">Deck must have 15 cards to play</span>
-          </div>
+        <h2 class="db-title">Deck Builder</h2>
+      </div>
+      <div class="db-header-right">
+        <!-- Deck slot tabs (injected by deckbuilder.js) -->
+        <nav class="db-slot-row" id="db-slot-row" aria-label="Deck slots"></nav>
+        <div class="db-header-divider" aria-hidden="true"></div>
+        <button class="db-help-icon" id="db-help-icon"
+                aria-label="Replay tutorial" title="Replay tutorial">?</button>
+        <span class="db-counter" id="db-counter">0 / 15</span>
+        <div class="db-play-wrap">
+          <button class="btn-save" id="db-save" disabled>Let's Play</button>
+          <span class="db-save-hint" id="db-save-hint">Deck must have 15 cards to play</span>
         </div>
       </div>
-
-      <!-- Bottom row: deck slot selector (slot cards injected by JS) -->
-      <nav class="db-slot-row" id="db-slot-row" aria-label="Deck slots"></nav>
-
     </header>
 
-    <!-- Card grid — injected by deckbuilder.js -->
-    <main class="db-main" id="db-main"></main>
+    <div class="db-body">
+
+      <!-- Left column: search, sort and filters (chips injected by deckbuilder.js) -->
+      <aside class="db-side" id="db-side" aria-label="Search and filters">
+        <div class="db-search" id="db-search">
+          <input id="db-search-input" type="text" placeholder="Search cards&hellip;"
+                 autocomplete="off" spellcheck="false" aria-label="Search cards">
+          <button class="db-search-clear" id="db-search-clear" type="button"
+                  aria-label="Clear search" title="Clear search">&#10005;</button>
+        </div>
+        <div class="db-side-group">
+          <div class="db-side-label">Sort by</div>
+          <div class="db-sort" id="db-sort"></div>
+        </div>
+        <div class="db-side-group" id="db-type-group">
+          <div class="db-side-label">Type</div>
+          <div class="db-chips" id="db-type-chips"></div>
+        </div>
+        <div class="db-side-group" id="db-era-group">
+          <div class="db-side-label">Era</div>
+          <div class="db-chips" id="db-era-chips"></div>
+        </div>
+        <button class="db-clear-filters" id="db-clear-filters" type="button">&#10005; Clear all filters</button>
+      </aside>
+
+      <section class="db-content">
+        <!-- What is showing, in words -->
+        <div class="db-strip">
+          <span class="db-result-count" id="db-result-count"></span>
+          <span class="db-strip-hint">Double-click a card or click its circle to add or remove &middot; scroll for more</span>
+        </div>
+        <!-- Card grid — injected by deckbuilder.js -->
+        <main class="db-main" id="db-main"></main>
+      </section>
+
+    </div>
 
     <!-- Save confirmation toast -->
     <div class="save-toast" id="save-toast">&#10003;&nbsp; Deck Saved</div>
