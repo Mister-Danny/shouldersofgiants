@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Deck Builder Mock</title>
+<meta name="viewport" content="width=1280, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<base href="/">
+<link rel="stylesheet" href="css/style.css">
+<!--
+  MOCK ONLY — not wired into the game. Compares two deck-builder grid densities
+  at the real 1280x720 stage size, using the game's own stylesheet, fonts, card
+  data and card art. Search and filters work here so the layout can be judged
+  under real filtering, but none of this code is the production build.
+    ?rows=2  → 6 columns, two full rows visible
+    ?rows=3  → 9 columns, three full rows visible
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #mk-viewport { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #mk-stage { width: 1280px; height: 720px; position: relative; flex-shrink: 0; transform-origin: center center; overflow: hidden; }
+
+  /* Screen background: the deck builder's own parchment-dark weave. */
+  .mk-screen { position: absolute; inset: 0; display: flex; flex-direction: column;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 1px, transparent 1px, transparent 9px),
+      repeating-linear-gradient(0deg,  rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 1px, transparent 1px, transparent 13px),
+      linear-gradient(168deg, #2c1a08 0%, #1e1106 35%, #261608 65%, #1a0e04 100%); }
+
+  /* ── ROW 1: the trimmed header — one 46px row (was 141px in two rows) ── */
+  .mk-header { flex-shrink: 0; height: 46px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 10px;
+    background: rgba(12, 6, 2, 0.94); border-bottom: 2px solid rgba(200, 160, 32, 0.55); }
+  .mk-btn { font-family: var(--font); font-size: 11px; letter-spacing: 0.08em; color: #f4d678; background: rgba(60, 36, 8, 0.92);
+    border: 2px solid rgba(212, 170, 80, 0.95); border-radius: 2px; padding: 5px 12px; cursor: pointer; text-shadow: 1px 1px 0 #000; white-space: nowrap; }
+  .mk-title { font-family: var(--font); font-size: 13px; letter-spacing: 0.14em; color: #e8c060; text-transform: uppercase; text-shadow: 1px 1px 0 #000; margin: 0 4px 0 2px; white-space: nowrap; }
+  .mk-tabs { display: flex; gap: 6px; flex: 1; min-width: 0; }
+  .mk-tab { flex: 1; min-width: 0; height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 0 8px; box-sizing: border-box;
+    font-family: var(--font); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #b89a5a;
+    background: rgba(40, 24, 8, 0.85); border: 2px solid rgba(150, 112, 40, 0.55); border-radius: 2px; cursor: pointer; white-space: nowrap; overflow: hidden; }
+  .mk-tab.active { color: #2a1608; background: linear-gradient(180deg, #e8c878 0%, #c9a24a 100%); border-color: #f0d890; text-shadow: none; }
+  .mk-tab span.mk-pencil { opacity: 0.7; font-size: 11px; }
+  .mk-counter { font-family: var(--font); font-size: 14px; color: #7ef08a; letter-spacing: 0.06em; text-shadow: 1px 1px 0 #000; white-space: nowrap; }
+  .mk-help { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(212, 170, 80, 0.9); color: #f4d678; font: 600 12px var(--font); display: flex; align-items: center; justify-content: center; }
+
+  /* ── ROWS 2-3: search + filters, in the space the old header wasted. Two 31px
+     lines: search + TYPE chips, then ERA chips + the active summary and Clear. ── */
+  .mk-filters { flex-shrink: 0; box-sizing: border-box; padding: 0 16px;
+    background: rgba(24, 13, 4, 0.92); border-bottom: 1px solid rgba(180, 130, 40, 0.35); }
+  .mk-frow { height: 31px; display: flex; align-items: center; gap: 8px; }
+  .mk-search { position: relative; flex: 0 0 300px; }
+  .mk-search input { width: 100%; box-sizing: border-box; height: 25px; padding: 0 26px 0 28px; font: 600 13px 'Source Sans 3', sans-serif; color: #f3e6c4;
+    background: rgba(8, 4, 1, 0.85); border: 2px solid rgba(180, 130, 40, 0.65); border-radius: 2px; outline: none; }
+  .mk-search input:focus { border-color: #f0cf6c; box-shadow: 0 0 8px rgba(240, 207, 108, 0.35); }
+  .mk-search input::placeholder { color: rgba(243, 230, 196, 0.45); font-weight: 400; }
+  .mk-search::before { content: '\2315'; position: absolute; left: 8px; top: 2px; font-size: 16px; color: #d4aa50; pointer-events: none; }
+  .mk-search .mk-x { position: absolute; right: 6px; top: 4px; width: 18px; height: 18px; line-height: 16px; text-align: center; color: #d4aa50; cursor: pointer; font-size: 14px; display: none; }
+  .mk-search.has-text .mk-x { display: block; }
+  .mk-sep { width: 1px; height: 22px; background: rgba(180, 130, 40, 0.4); flex-shrink: 0; }
+  .mk-label { font-family: var(--font); font-size: 9px; letter-spacing: 0.12em; color: rgba(232, 192, 96, 0.7); text-transform: uppercase; flex-shrink: 0; }
+  .mk-chips { display: flex; gap: 4px; flex-shrink: 0; }
+  .mk-chip { --c: #d4aa50; height: 24px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none;
+    font: 600 11px 'Source Sans 3', sans-serif; letter-spacing: 0.02em; color: #d9c8a0; white-space: nowrap;
+    background: rgba(8, 4, 1, 0.7); border: 2px solid rgba(120, 90, 40, 0.6); border-radius: 13px; transition: background 0.1s, border-color 0.1s, color 0.1s; }
+  .mk-chip::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+  .mk-chip:hover { border-color: var(--c); color: #fff5d8; }
+  .mk-chip.on { background: var(--c); border-color: #fff5d8; color: #140a02; box-shadow: 0 0 8px color-mix(in srgb, var(--c) 60%, transparent); }
+  .mk-chip.on::before { background: #140a02; }
+  .mk-chip.era { --c: #d4aa50; border-radius: 2px; }
+  .mk-chip.era::before { display: none; }
+  .mk-result { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .mk-count { font: 600 12px 'Source Sans 3', sans-serif; color: #f3e6c4; white-space: nowrap; }
+  .mk-count b { color: #f0cf6c; }
+  .mk-clear { font-family: var(--font); font-size: 9px; letter-spacing: 0.1em; color: #ffb4a8; background: rgba(60, 12, 8, 0.9); border: 2px solid rgba(255, 122, 106, 0.8); border-radius: 2px; padding: 4px 8px; cursor: pointer; white-space: nowrap; visibility: hidden; }
+  .mk-filters.filtering .mk-clear { visibility: visible; }
+
+  /* ── GRID ── */
+  .mk-main { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 20px; box-sizing: border-box; }
+  .mk-main::-webkit-scrollbar { width: 8px; }
+  .mk-main::-webkit-scrollbar-track { background: rgba(20, 10, 2, 0.80); }
+  .mk-main::-webkit-scrollbar-thumb { background: rgba(180, 130, 40, 0.7); }
+  .mk-grid { display: grid; }
+  /* Tile widths are FIXED so the row count is exact at the 1280x720 stage:
+       chrome = 46 header + 63 filters = 109  →  grid area 611, less 20 padding = 591
+       2 rows: (591 - 12) / 2 = 289 high → 193 wide, 6 across
+       3 rows: (591 - 20) / 3 = 190 high → 127 wide, 9 across */
+  .mk-grid { justify-content: center; }
+  .rows-2 .mk-grid { grid-template-columns: repeat(6, 193px); gap: 12px; }
+  .rows-3 .mk-grid { grid-template-columns: repeat(9, 127px); gap: 10px; }
+  .mk-empty { font: 400 16px 'Crimson Text', serif; color: #d9c8a0; text-align: center; padding: 80px 0; }
+  .mk-grid .db-card:hover { transform: translateY(-2px); }
+
+  /* mock-only switcher, OUTSIDE the stage */
+  #mk-switch { position: fixed; left: 12px; bottom: 10px; z-index: 50; display: flex; gap: 6px; align-items: center; font: 600 12px 'Source Sans 3', sans-serif; color: #bbb; }
+  #mk-switch a { color: #f0cf6c; text-decoration: none; border: 1px solid #6a5420; padding: 3px 8px; border-radius: 3px; }
+  #mk-switch a.cur { background: #f0cf6c; color: #140a02; }
+  #mk-readout { position: fixed; right: 12px; bottom: 10px; z-index: 50; font: 400 12px 'Source Sans 3', sans-serif; color: #bbb; }
+</style>
+</head>
+<body>
+<div id="mk-viewport">
+  <div id="mk-stage">
+    <div class="mk-screen" id="mk-screen">
+      <header class="mk-header">
+        <button class="mk-btn">&#8592; Home</button>
+        <div class="mk-title">Deck Builder</div>
+        <nav class="mk-tabs" id="mk-tabs"></nav>
+        <div class="mk-help" title="Double-click a card to add or remove. Click once to read it.">?</div>
+        <div class="mk-counter" id="mk-counter">15 / 15</div>
+        <button class="mk-btn">Let's Play</button>
+      </header>
+      <div class="mk-filters" id="mk-filters">
+        <div class="mk-frow">
+          <div class="mk-search" id="mk-searchbox">
+            <input id="mk-q" type="text" placeholder="Search name, ability, type, era…" autocomplete="off" spellcheck="false">
+            <span class="mk-x" id="mk-qx" title="Clear search">&#10005;</span>
+          </div>
+          <div class="mk-sep"></div>
+          <span class="mk-label">Type</span>
+          <div class="mk-chips" id="mk-types"></div>
+        </div>
+        <div class="mk-frow">
+          <span class="mk-label">Era</span>
+          <div class="mk-chips" id="mk-eras"></div>
+          <div class="mk-result">
+            <span class="mk-count" id="mk-count"></span>
+            <button class="mk-clear" id="mk-clear">&#10005; Clear all</button>
+          </div>
+        </div>
+      </div>
+      <main class="mk-main" id="mk-main"><div class="mk-grid" id="mk-grid"></div></main>
+    </div>
+  </div>
+</div>
+<div id="mk-switch">Mock layout: <a id="sw2" href="/mockups/deckbuilder-mock.html?rows=2">2 rows · 6 across</a><a id="sw3" href="/mockups/deckbuilder-mock.html?rows=3">3 rows · 9 across</a><a href="/mockups/deckbuilder-mock-sidebar.html">sidebar · 2.25 rows</a></div>
+<div id="mk-readout"></div>
+
+<script>window.SOG = window.SOG || {};</script>
+<script src="js/cards.js"></script>
+<script>
+(function () {
+  'use strict';
+  var rows = /rows=3/.test(location.search) ? 3 : 2;
+  document.getElementById('mk-screen').classList.add('rows-' + rows);
+  document.getElementById('sw' + rows).classList.add('cur');
+
+  // Scale the fixed 1280x720 stage to the window, as SOG.Stage does.
+  var stage = document.getElementById('mk-stage');
+  function fit() { var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720); stage.style.transform = 'scale(' + s + ')'; }
+  window.addEventListener('resize', fit); fit();
+
+  var TYPE_ORDER = ['Prehistory', 'Political', 'Religious', 'Military', 'Cultural', 'Exploration', 'Scientific', 'Labor', 'Economic'];
+  var ERA_GROUPS = ['Prehistory', 'Mesopotamia', 'Egypt', 'Kush', 'India', 'World History'];
+  function eraGroup(c) {
+    var e = c.era || '';
+    if (e === 'Prehistory' || e === 'Mesopotamia' || e === 'Egypt') return e;
+    if (e === 'Kush' || e === 'Aksumite') return 'Kush';
+    if (e === 'Harappan' || e === 'Early India') return 'India';
+    return 'World History';
+  }
+  var cards = CARDS.filter(function (c) { return !c.token; }).slice().sort(function (a, b) {
+    return (TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type)) || (a.cc - b.cc) || a.name.localeCompare(b.name);
+  });
+  var inDeck = {}; [26, 27, 28, 29, 30, 31, 32, 36, 33, 34, 35, 38, 39, 40, 41].forEach(function (id) { inDeck[id] = true; });
+
+  // deck tabs
+  var tabs = document.getElementById('mk-tabs');
+  ['Deck 1', 'Deck 2', 'Deck 3', 'Deck 4', 'Deck 5', 'Deck 6'].forEach(function (n, i) {
+    var t = document.createElement('div'); t.className = 'mk-tab' + (i === 0 ? ' active' : '');
+    t.innerHTML = '<span></span><span class="mk-pencil">&#9998;</span>'; t.firstChild.textContent = n; tabs.appendChild(t);
+  });
+
+  var state = { q: '', types: {}, eras: {} };
+  function chip(host, label, cls, color, bag) {
+    var el = document.createElement('div'); el.className = 'mk-chip ' + cls; el.textContent = label;
+    if (color) el.style.setProperty('--c', color);
+    el.addEventListener('click', function () { bag[label] = !bag[label]; el.classList.toggle('on', !!bag[label]); render(); });
+    host.appendChild(el); return el;
+  }
+  var cssVar = function (n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); };
+  TYPE_ORDER.forEach(function (t) { chip(document.getElementById('mk-types'), t, 'type', cssVar('--c-' + t.toLowerCase()) || '#d4aa50', state.types); });
+  ERA_GROUPS.forEach(function (e) { chip(document.getElementById('mk-eras'), e, 'era', null, state.eras); });
+
+  var q = document.getElementById('mk-q'), box = document.getElementById('mk-searchbox');
+  q.addEventListener('input', function () { state.q = q.value.trim().toLowerCase(); box.classList.toggle('has-text', !!q.value); render(); });
+  q.addEventListener('keydown', function (e) { if (e.key === 'Escape') { q.value = ''; state.q = ''; box.classList.remove('has-text'); render(); } });
+  document.getElementById('mk-qx').addEventListener('click', function () { q.value = ''; state.q = ''; box.classList.remove('has-text'); render(); q.focus(); });
+  document.getElementById('mk-clear').addEventListener('click', function () {
+    q.value = ''; state.q = ''; box.classList.remove('has-text'); state.types = {}; state.eras = {};
+    Array.prototype.forEach.call(document.querySelectorAll('.mk-chip.on'), function (c) { c.classList.remove('on'); });
+    // chips hold a reference to the old bags — rebuild them against the fresh state
+    document.getElementById('mk-types').innerHTML = ''; document.getElementById('mk-eras').innerHTML = '';
+    TYPE_ORDER.forEach(function (t) { chip(document.getElementById('mk-types'), t, 'type', cssVar('--c-' + t.toLowerCase()) || '#d4aa50', state.types); });
+    ERA_GROUPS.forEach(function (e) { chip(document.getElementById('mk-eras'), e, 'era', null, state.eras); });
+    render();
+  });
+
+  function hay(c) { return [c.name, c.abilityName, c.ability, c.type, c.type2, c.era, c.civilization, eraGroup(c)].filter(Boolean).join(' ').toLowerCase(); }
+  function active(bag) { return Object.keys(bag).filter(function (k) { return bag[k]; }); }
+  function matches(c) {
+    var ts = active(state.types), es = active(state.eras);
+    if (ts.length && ts.indexOf(c.type) === -1 && ts.indexOf(c.type2) === -1) return false;   // OR within types
+    if (es.length && es.indexOf(eraGroup(c)) === -1) return false;                              // OR within eras, AND across
+    if (state.q) { var h = hay(c); if (!state.q.split(/\s+/).every(function (w) { return h.indexOf(w) !== -1; })) return false; }
+    return true;
+  }
+  function tile(c) {
+    var el = document.createElement('div');
+    el.className = 'db-card type-' + c.type.toLowerCase() + (inDeck[c.id] ? ' selected' : '');
+    var wrap = document.createElement('div'); wrap.className = 'db-card-img-wrap';
+    var img = document.createElement('img'); img.className = 'db-card-img'; img.alt = c.name; img.loading = 'lazy';
+    // the tile is small: prefer the small art, fall back to the full card
+    img.src = c.imageSm || c.image.replace(/\.jpg$/, '@sm.jpg');
+    img.onerror = function () { this.onerror = null; this.src = c.image; };
+    wrap.appendChild(img);
+    var cc = document.createElement('div'); cc.className = 'db-overlay-cc'; cc.textContent = c.cc;
+    var ip = document.createElement('div'); ip.className = 'db-overlay-ip'; ip.textContent = c.ip;
+    var badge = document.createElement('div'); badge.className = 'db-card-in-deck'; badge.textContent = 'IN DECK';
+    el.appendChild(wrap); el.appendChild(cc); el.appendChild(ip); el.appendChild(badge);
+    el.title = c.name + ' — ' + c.type + (c.era ? ' · ' + c.era : '');
+    return el;
+  }
+  function render() {
+    var grid = document.getElementById('mk-grid'); grid.innerHTML = '';
+    var shown = cards.filter(matches);
+    shown.forEach(function (c) { grid.appendChild(tile(c)); });
+    var main = document.getElementById('mk-main');
+    var empty = main.querySelector('.mk-empty'); if (empty) empty.remove();
+    if (!shown.length) { var e = document.createElement('div'); e.className = 'mk-empty'; e.textContent = 'No cards match. Clear a filter or change the search.'; main.appendChild(e); }
+    var filtering = !!(state.q || active(state.types).length || active(state.eras).length);
+    document.getElementById('mk-filters').classList.toggle('filtering', filtering);
+    var parts = []; if (active(state.eras).length) parts.push(active(state.eras).join(' or ')); if (active(state.types).length) parts.push(active(state.types).join(' or ')); if (state.q) parts.push('“' + state.q + '”');
+    document.getElementById('mk-count').innerHTML = (filtering ? parts.join(' · ') + ' — ' : '') + '<b>' + shown.length + '</b> of ' + cards.length;
+    var first = grid.querySelector('.db-card');
+    if (first) { var r = first.getBoundingClientRect(), s = stage.getBoundingClientRect().width / 1280;
+      document.getElementById('mk-readout').textContent = 'tile ' + Math.round(r.width / s) + ' x ' + Math.round(r.height / s) + ' stage px · ' + (rows === 2 ? '6 across, 12 visible' : '9 across, 27 visible'); }
+  }
+  render();
+})();
+</script>
+</body>
+</html>
