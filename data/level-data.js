@@ -430,8 +430,8 @@ window.SOG_LEVEL_DATA = {
       presentation: {
         bodyClass: 'greatbath-battle',
         allyAvatar: 'player',
-        opponentAvatar: 'images/portraits/priestking.jpeg',
-        opponentBubblePortrait: 'images/portraits/priestking.jpeg',
+        opponentAvatar: 'images/portraits/india_priest_king.jpeg',
+        opponentBubblePortrait: 'images/portraits/india_priest_king.jpeg',
         popAlly: true
       },
 
@@ -439,7 +439,7 @@ window.SOG_LEVEL_DATA = {
 
       // Dialogue is drafted separately — every array is intentionally empty for
       // now (the level runtime skips empty blocks). 
-      note: 'India: Priest-King (The Great Bath node). Dialogue drafted separately (all arrays empty). Portrait priestking.jpeg is a PLACEHOLDER until real art exists.',
+      note: 'India: Priest-King (The Great Bath node). Dialogue drafted separately (all arrays empty).',
       dialogue: {
         nodeIntro: [],
         opening: [],
@@ -484,8 +484,8 @@ window.SOG_LEVEL_DATA = {
       presentation: {
         bodyClass: 'siddhartha-battle',
         allyAvatar: 'player',
-        opponentAvatar: 'images/portraits/buddha.jpeg',
-        opponentBubblePortrait: 'images/portraits/buddha.jpeg',
+        opponentAvatar: 'images/portraits/india_the_buddha.jpeg',
+        opponentBubblePortrait: 'images/portraits/india_the_buddha.jpeg',
         popAlly: true
       },
 
@@ -493,7 +493,7 @@ window.SOG_LEVEL_DATA = {
 
       // Dialogue is drafted separately — every array is intentionally empty for
       // now (the level runtime skips empty blocks). 
-      note: 'India: Siddhartha (The Buddha). Dialogue drafted separately (all arrays empty). Portrait buddha.jpeg is a PLACEHOLDER until real art exists.',
+      note: 'India: Siddhartha (The Buddha). Dialogue drafted separately (all arrays empty).',
       dialogue: {
         nodeIntro: [],
         opening: [],
@@ -538,8 +538,8 @@ window.SOG_LEVEL_DATA = {
       presentation: {
         bodyClass: 'gupta-battle',
         allyAvatar: 'player',
-        opponentAvatar: 'images/portraits/gupta.jpeg',
-        opponentBubblePortrait: 'images/portraits/gupta.jpeg',
+        opponentAvatar: 'images/portraits/india_the_gupta.jpeg',
+        opponentBubblePortrait: 'images/portraits/india_the_gupta.jpeg',
         popAlly: true
       },
 
@@ -547,7 +547,7 @@ window.SOG_LEVEL_DATA = {
 
       // Dialogue is drafted separately — every array is intentionally empty for
       // now (the level runtime skips empty blocks). 
-      note: 'India: The Gupta. Dialogue drafted separately (all arrays empty). Portrait gupta.jpeg is a PLACEHOLDER until real art exists.',
+      note: 'India: The Gupta. Dialogue drafted separately (all arrays empty).',
       dialogue: {
         nodeIntro: [],
         opening: [],

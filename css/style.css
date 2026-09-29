@@ -13241,6 +13241,59 @@ body[data-screen="deckbuilder"] #music-ctrl { display: flex; }
    (Home keeps it bottom-right.) */
 body[data-screen="deckbuilder"] #music-ctrl { left: 16px; right: auto; }
 
+/* …and it is dressed to match the filter column: a play button shaped like
+   the sort buttons and a gold volume slider. No box and no label of its own. */
+body[data-screen="deckbuilder"] #music-ctrl {
+  bottom: 14px;
+  width: 286px;              /* the column's inner width: lines up with the search box */
+  min-width: 0;
+  box-sizing: border-box;
+  gap: 7px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+body[data-screen="deckbuilder"] .music-controls { gap: 10px; }
+body[data-screen="deckbuilder"] .music-ctrl-btn {
+  width: 36px;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0;
+  font-size: 12px;
+  color: #f0cf6c;
+  background: rgba(8, 4, 1, 0.7);
+  border: 2px solid rgba(120, 90, 40, 0.6);
+  border-radius: 2px;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+body[data-screen="deckbuilder"] .music-ctrl-btn:hover {
+  color: #fff5d8;
+  border-color: #d4aa50;
+  text-shadow: none;
+}
+body[data-screen="deckbuilder"] .music-volume-slider {
+  height: 6px;
+  margin-left: 0;
+  background: rgba(8, 4, 1, 0.85);
+  border: 1px solid rgba(180, 130, 40, 0.65);
+}
+body[data-screen="deckbuilder"] .music-volume-slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  background: #f0cf6c;
+  border: 1px solid #2a1608;
+  box-shadow: 0 0 4px rgba(212, 170, 80, 0.5);
+}
+body[data-screen="deckbuilder"] .music-volume-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #f0cf6c;
+  border: 1px solid #2a1608;
+  box-shadow: 0 0 4px rgba(212, 170, 80, 0.5);
+}
+
 /* (Battle Options gear is now styled via .battle-icon-strip .btn-hud-icon.) */
 
 /* ══════════════════════════════════════════════════════════════════
