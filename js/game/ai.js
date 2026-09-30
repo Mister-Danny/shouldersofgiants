@@ -1522,8 +1522,10 @@
           now gates OFF for the Serf tier (Serf leaves movers in place).
 
      PER-BOSS SIGNATURE (thin, declarative — see _GIANT_SIGNATURES):
-       holdForEndgame : cardIds held out of the pool until the positional
+       holdForEndgame : cardIds held out of the pool until the endgame
                         (last-two) turns.
+       positionalTurns: how many FINAL turns the Giant concentrates on its two
+                        most-winnable locations (default 2; 1 = Serf-like).
        preferType     : a card TYPE the Giant favours on ties (epsilon nudge).
        cardBias(id,ctx): optional fn for richer future-boss preferences.
   ═══════════════════════════════════════════════════════════════ */
@@ -1764,8 +1766,11 @@
   var _GIANT_SIGNATURES = {
 
     // GILGAMESH — gentlest Giant: hold Gilgamesh-the-card for the endgame + a light
-    // Cultural tiebreak.
-    gilgamesh: { holdForEndgame: [43], preferType: 'Cultural' },
+    // Cultural tiebreak. positionalTurns 1: he is the first Giant and the biggest
+    // choke point in playtesting, and in his 4-turn battle the shared two-turn
+    // concentration is half the game. He now spreads his plays until the FINAL
+    // turn, like a Serf, while still holding his own card for the last two turns.
+    gilgamesh: { holdForEndgame: [43], preferType: 'Cultural', positionalTurns: 1 },
 
     // SARGON — land Sargon (37) in the CENTRE (his +3 then hits BOTH flanks), then
     // reinforce the flanks he is boosting.
@@ -2342,13 +2347,21 @@
 
     // UPGRADE 1: always commit fully (no 33% hold-back).
     // UPGRADE 2: positional on the LAST TWO turns (Serf concentrates only on the last).
-    var positional = _turn >= turns - 1;
+    //   The ENDGAME window (last two turns) is when held cards are released and
+    //   setup stops paying. The CONCENTRATION window — how many final turns the
+    //   Giant spends stacking its two most-winnable locations — is the same two
+    //   turns by default, but a signature can shorten it (sig.positionalTurns:
+    //   Gilgamesh uses 1, the Serf's own rhythm) to soften one boss without
+    //   touching the others.
+    var endgame    = _turn >= turns - 1;
+    var positionalTurns = (sig.positionalTurns > 0) ? sig.positionalTurns : 2;
+    var positional = _turn >= turns - positionalTurns + 1;
 
     var hand    = (ctx.hand || G.aiHand).slice();
     var capital = (typeof ctx.capital === 'number') ? ctx.capital : 0;
 
     // SIGNATURE: hold cards out of this turn's pool —
-    //   • holdForEndgame (static): held until the positional window (turns 4-5).
+    //   • holdForEndgame (static): held until the endgame window (last two turns).
     //   • holdCard(id,ctx)  (dynamic): held on any NON-final turn (e.g. Hammurabi
     //     waits for a worthwhile victim); the final turn always plays (use it or
     //     lose it). Never stall a whole turn on holds — if the ONLY cards are held,
@@ -2357,7 +2370,7 @@
     var holdSet  = sig.holdForEndgame || [];
     if (holdSet.length || typeof sig.holdCard === 'function') {
       var _filtered = hand.filter(function (id) {
-        if (!positional && holdSet.indexOf(id) !== -1) return false;
+        if (!endgame && holdSet.indexOf(id) !== -1) return false;
         if (!lastTurn && typeof sig.holdCard === 'function' && sig.holdCard(id, ctx)) return false;
         return true;
       });
@@ -2392,7 +2405,7 @@
            because my Merchant is standing there"). Signatures without it add
            +0, so every other boss is byte-identical. */
         var adj = marginal
-                + _giantSetupBonus(o.cardId, turnsLeft, positional)
+                + _giantSetupBonus(o.cardId, turnsLeft, endgame)
                 + _giantTypeBias(o.cardId, sig.preferType)
                 + (typeof sig.cardBias === 'function' ? (sig.cardBias(o.cardId, ctx) || 0) : 0)
                 + (typeof sig.playBias === 'function' ? (sig.playBias(o.cardId, o.locId, ctx) || 0) : 0);
