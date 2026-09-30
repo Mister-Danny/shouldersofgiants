@@ -14,7 +14,7 @@
  *
  * The other novelty is the DECK:
  *
- *   5x Hyksos (67)          -1 IP bodies that cross onto YOUR side of a location
+ *   5x Hyksos (67)          -2 IP bodies that cross onto YOUR side of a location
  *   5x Soldier (70)         destroy one of your 1-CC cards here
  *   5x Chariots (69)        move once per battle, striking -2 on arrival
  *
@@ -95,6 +95,8 @@ SOG.HyksosBattle = (function () {
   };
 
   var HYKSOS_CARD_ID = 67;
+  // His printed IP (negative), read from the card so the valuation follows a retune.
+  function _hyksosIP() { var c = CARDS.find(function (x) { return x.id === HYKSOS_CARD_ID; }); return c ? c.ip : -2; }
   var SOLDIER_ID     = 70;
   var CHARIOT_ID     = 69;
   var HYKSOS_WIN_GOLD = 20;   // paid once, with the card (see _onWin)
@@ -202,12 +204,12 @@ SOG.HyksosBattle = (function () {
      AI — INVADER temperament
      ────────────────────────────────────────────────────────────
      Three card rules, in priority order:
-       1. HYKSOS DEFECT INTO STRENGTH. His -1 crosses to the player's side, so
+       1. HYKSOS DEFECT INTO STRENGTH. His -2 crosses to the player's side, so
           he is worth most where the player has invested most — the subtraction
           bites the total that decides the location, and the slot he takes is a
           slot the player never gets back. He is REJECTED where the player's
           side is full: he cannot cross, and would sit on the AI's own board at
-          -1. (The same judgement, in the same terms, as ai.js's cardLocBias
+          -2. (The same judgement, in the same terms, as ai.js's cardLocBias
           case 67 — this selector picks WHICH card, that one scores placement.)
        2. CHARIOTS EARLY. Their move is once per BATTLE and the arrival strike
           is the payoff, so a Chariot played on the last turn is a 2 IP body with
@@ -355,18 +357,18 @@ SOG.HyksosBattle = (function () {
         var contest = (theirIP[locId] > mineIP[locId])
           ? Math.min(theirIP[locId] - mineIP[locId], 8) * 0.45 : 0;
         /* DEFECTING AT THEBES IS THE BEST DEFECTION ON THE BOARD (board rule A).
-           He crosses and subtracts 1 from THEIR Thebes total, a 2-point swing in the
-           gap — and at Thebes a 2-point swing can flip a 4-point bonus. Scored from
-           the POST-CROSSING gap, because that is the board the -1 actually creates.
+           He crosses and subtracts his printed IP from THEIR Thebes total, twice
+           that in the gap — and at Thebes that swing can flip a 4-point bonus. Scored
+           from the POST-CROSSING gap, because that is the board he actually creates.
            He also eats a slot in the decisive centre, which the denial term above
            already prices but which matters more here than anywhere else. */
         var defect = 0;
         if (locId === thebesId && thebesId !== null) {
-          var gapAfter = mineIP[locId] - (theirIP[locId] - 1);
+          var gapAfter = mineIP[locId] - (theirIP[locId] + _hyksosIP());   // his printed IP is negative
           var gapNow   = mineIP[locId] - theirIP[locId];
           /* Same binary logic as thebesValue: flipping the lead is the prize, and
              widening one we already hold is only insurance. */
-          defect = (gapNow <= 0 && gapAfter > 0) ? 3.5      // the -1 alone flips Thebes
+          defect = (gapNow <= 0 && gapAfter > 0) ? 3.5      // his penalty alone flips Thebes
                  : (gapNow > 0)                  ? 0.8      // lead already banked — insurance
                  : 1.0;                                     // still behind, but closer
         }

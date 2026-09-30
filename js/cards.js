@@ -533,7 +533,7 @@ const CARDS = [
     imageSm: "images/cards/egyptcards/bookofthedead@0.3x.jpg", locked: true
   },
   {
-    id: 67, name: "Hyksos", cc: 3, ip: -1,                      // WIRED (At Once: crosses to the opponent's side of this location)
+    id: 67, name: "Hyksos", cc: 3, ip: -2,                      // WIRED (At Once: crosses to the opponent's side of this location). -2 (was -1): the battle played too easy at -1.
     type: "Political", type2: null, era: "Egypt",               // Political: foreign RULE, not a raiding party — the Hyksos took the throne. Note this puts him inside Hieroglyphics' (62) "+1 to your Religious and Political cards here" aura and Purple Dye's (75) +2, and takes him out of Tigris' MILITARY_PLUS_1_HERE and Scandinavia's MILITARY_FREE_MOVE_AWAY. Because he DEFECTS on reveal, the aura that reaches him is normally the INVADED side's, softening a -1 to 0.
     abilityName: "Foreign Rule",
     /* A NEGATIVE-IP card whose whole point is to land on someone else. Crossing is a
@@ -541,8 +541,11 @@ const CARDS = [
        other, which is the only thing "whose card is this" means in this engine — so
        the -1 scores against them, their per-location effects count it, and their
        auras reach it. If the opponent's side of this location is FULL he cannot
-       cross and STAYS at -1 on his owner's side: a misplayed invasion hurts you.
-       The invaded side may not move him afterwards (sd._defected). */
+       cross and STAYS at -2 on his owner's side: a misplayed invasion hurts you.
+       The invaded side may not move him afterwards (sd._defected).
+       He gains and loses IP like any other card: the invaded side's auras (Fire,
+       Domesticated Animal, Scribe) reach him once he is theirs, which is why he
+       is -2 and not -1 — a single +1 aura no longer cancels him. */
     ability: "At Once:\nMoves to your opponent's side of this location.",
     image:   "images/cards/egyptcards/hyksos@0.5x.jpg",
     imageSm: "images/cards/egyptcards/hyksos@0.3x.jpg", locked: true

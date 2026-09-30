@@ -73,6 +73,8 @@ const ALLOW = [
     why: '_faceCard compares AGAINST the definition on purpose, to detect an inherited sd.cc' },
   { needle: "(frozenCC != null && frozenCC !== c.cc)",
     why: 'wrapSourceFace, same deliberate comparison against the definition' },
+  { needle: 'function _hyksosIP()',
+    why: 'the Hyksos AI prices a card still in HAND by the printed penalty that will cross; the comparison on the line is the id lookup' },
   { needle: 'var cost = card.cc;',
     why: 'effectiveCost itself — card.cc is the INPUT being discounted' },
   { needle: 'if (card.cc === 5 &&',
