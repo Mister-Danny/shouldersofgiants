@@ -628,9 +628,22 @@ var Overworld = (function () {
     try { return localStorage.getItem(flag) === 'true'; } catch (e) { return false; }
   }
 
+  /* ── Release gate (js/feature-flags.js) ─────────────────────────────────
+     While the content past Kush is closed, a map outside RELEASED_MAPS cannot
+     be entered: exits into it are hidden (_isVisible), loadMap refuses it, and
+     a save already standing on one is moved back (loadState). A local host
+     always has every map open. */
+  function _mapOpen(mapId) {
+    var f = window.SOG_FEATURES;
+    return !f || typeof f.isMapOpen !== 'function' || f.isMapOpen(mapId);
+  }
+  var RELEASE_FALLBACK_MAP = 'mesopotamia';   // where the road past Kush begins
+
   /* Should this node / exit / prop be on screen right now? */
   function _isVisible(o) {
     if (!o) return false;
+    // An exit (it has a target map) into a closed map is never shown.
+    if (o.target && !_mapOpen(o.target)) return false;
     if (o.showFrom  && !_milestoneReached(o.showFrom))  return false;
     if (o.showUntil &&  _milestoneReached(o.showUntil)) return false;
     // Legacy escape hatch — see NODE_BEHAVIOUR above.
@@ -746,6 +759,15 @@ var Overworld = (function () {
   function loadState() {
     currentMapId = localStorage.getItem(KEY_MAP) || 'eastafrica';
     if (!MAPS[currentMapId]) currentMapId = 'eastafrica';
+    // Release gate: a save standing on a closed map (a player who walked to
+    // India before it was closed) comes back to Mesopotamia's spawn. Its saved
+    // position belongs to the other map, so it is dropped. Progress flags and
+    // earned cards are left exactly as they are.
+    if (!_mapOpen(currentMapId) && MAPS[RELEASE_FALLBACK_MAP]) {
+      log('loadState() — map "' + currentMapId + '" is closed; returning to ' + RELEASE_FALLBACK_MAP);
+      currentMapId = RELEASE_FALLBACK_MAP;
+      try { localStorage.setItem(KEY_MAP, currentMapId); localStorage.removeItem(KEY_POS); } catch (e) {}
+    }
     try {
       var p = localStorage.getItem(KEY_POS);
       currentPos = p ? JSON.parse(p) : { x: MAPS[currentMapId].spawn.x, y: MAPS[currentMapId].spawn.y };
@@ -1029,6 +1051,13 @@ var Overworld = (function () {
     opts = opts || {};
     var data = MAPS[mapId];
     if (!data) { console.warn('[Overworld] Unknown map:', mapId); return; }
+    // Release gate: whatever asked for a closed map gets the fallback instead.
+    if (!_mapOpen(mapId) && MAPS[RELEASE_FALLBACK_MAP]) {
+      console.warn('[Overworld] Map "' + mapId + '" is closed (content past Kush) — loading ' + RELEASE_FALLBACK_MAP);
+      mapId = RELEASE_FALLBACK_MAP;
+      data  = MAPS[mapId];
+      currentPos = { x: data.spawn.x, y: data.spawn.y };
+    }
 
     currentMapId = mapId;
     // Fix 4: toggle body class so Explorer dialogue box can be re-centred on foreign maps
@@ -4161,7 +4190,16 @@ var Overworld = (function () {
      battle that exists so far → the end-of-content popup (see resumeAfterBattle).
      Update this as new bosses ship. END_OF_CONTENT_DELAY_MS is the pause between
      the Giant stamp landing and the popup appearing (editable). */
-  var END_OF_CONTENT          = { hook: 'gupta', tier: 'giant' };   // India shipped: the Gupta is the last built boss
+  var END_OF_CONTENT_BUILT    = { hook: 'gupta', tier: 'giant' };   // the Gupta is the last built boss
+  /* …but the last boss a player can REACH is what ends the game for them. While
+     the content past Kush is closed (js/feature-flags.js) that is the Kush Giant. */
+  function _endOfContent() {
+    var f = window.SOG_FEATURES;
+    if (f && typeof f.contentPastKushOpen === 'function' && !f.contentPastKushOpen() && f.LAST_RELEASED_BOSS) {
+      return { hook: f.LAST_RELEASED_BOSS, tier: 'giant' };
+    }
+    return END_OF_CONTENT_BUILT;
+  }
   var END_OF_CONTENT_DELAY_MS = 900;
   var ERECT_GAP_MS   = 500;   // pause between the stamp and the Giant erect beats (editable)
   function _playReturnFlagAnim(giantFlagEl, onProceed) {
@@ -5962,6 +6000,7 @@ var Overworld = (function () {
          END_OF_CONTENT forward as new bosses ship. */
       var _endSeen = false;
       try { _endSeen = localStorage.getItem(KEY_END_OF_CONTENT_SEEN) === 'true'; } catch (e) {}
+      var END_OF_CONTENT = _endOfContent();
       if (!_endSeen && _tierBeaten(END_OF_CONTENT.hook, END_OF_CONTENT.tier)) {
         isDialogueLocked = true;
         cancelIdle();

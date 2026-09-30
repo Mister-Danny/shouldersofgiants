@@ -261,10 +261,12 @@ test('Pataliputra: every permanent gain here gets +1 more, attributed to the loc
 });
 
 /* ── PART 3: gating ─────────────────────────────────────────────────────── */
-test('the history cards now need all twelve Giants, India included; the end-of-content beat keys on the Gupta', () => {
+/* This is the BUILT state: what applies once the content past Kush is open. While
+   it is closed the release gate narrows both (see test/release-gate.test.js). */
+test('built content: the history cards need all twelve Giants, India included; the last built boss is the Gupta', () => {
   const src = read('js/sog-collection.js');
   const m = src.match(/ADVENTURE_GIANT_HOOKS = \[([^\]]+)\]/);
   const hooks = m[1].match(/'([a-z-]+)'/g).map((s) => s.replace(/'/g, ''));
   loose.deepEqual(hooks, ['gilgamesh', 'sargon', 'hammurabi', 'hanging-gardens', 'narmer', 'hatshepsut', 'ramses', 'akhenaten', 'kush', 'greatbath', 'siddhartha', 'gupta']);
-  assert.match(read('js/overworld.js'), /END_OF_CONTENT\s*=\s*\{ hook: 'gupta', tier: 'giant' \}/);
+  assert.match(read('js/overworld.js'), /END_OF_CONTENT_BUILT\s*=\s*\{ hook: 'gupta', tier: 'giant' \}/);
 });

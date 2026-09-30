@@ -58,9 +58,18 @@ SOG.collection = (function () {
                                'narmer', 'hatshepsut', 'ramses', 'akhenaten', 'kush',
                                'greatbath', 'siddhartha', 'gupta'];
   function _isHistory(id) { return HISTORY_CARD_IDS.indexOf(id) !== -1; }
+  /* The Giants that count right now. While the content past Kush is closed
+     (js/feature-flags.js) the India Giants cannot be fought, so they are not
+     required — otherwise the history cards could never unlock online. */
+  function _requiredGiantHooks() {
+    var f = window.SOG_FEATURES;
+    if (!f || typeof f.contentPastKushOpen !== 'function' || f.contentPastKushOpen()) return ADVENTURE_GIANT_HOOKS;
+    var closed = f.UNRELEASED_GIANT_HOOKS || [];
+    return ADVENTURE_GIANT_HOOKS.filter(function (h) { return closed.indexOf(h) === -1; });
+  }
   function historyCardsUnlocked() {
     try {
-      return ADVENTURE_GIANT_HOOKS.every(function (h) {
+      return _requiredGiantHooks().every(function (h) {
         return localStorage.getItem('sog_node_' + h + '_giant_beaten') === 'true';
       });
     } catch (e) { return false; }
