@@ -846,12 +846,19 @@ var Overworld = (function () {
     return _charShadowEl;
   }
 
+  /* `frame` is the FRAME NUMBER in the file name. A per-frame registration shift
+     (SOG.Adventurers walkFrameDx, source px) is applied AFTER the mirror, so it
+     flips with it and the left walk is registered exactly like the right. */
   function setWalkFrame(dir, frame) {
+    var ch = _char();
     var base = (dir === 'left') ? 'right' : dir;
-    charEl.src = SOG.Adventurers.frameUrl(_char(), base, frame);
+    charEl.src = SOG.Adventurers.frameUrl(ch, base, frame);
+    var dxSrc = (ch.walkFrameDx && ch.walkFrameDx[base] && ch.walkFrameDx[base][frame]) || 0;
+    var dx = dxSrc ? dxSrc * (charEl.offsetWidth || 92) / (ch.frameSize || 160) : 0;
+    var shift = dx ? ' translateX(' + dx.toFixed(2) + 'px)' : '';
     charEl.style.transform = (dir === 'left')
-      ? 'translate(-50%, -100%) scaleX(-1)'
-      : 'translate(-50%, -100%)';
+      ? 'translate(-50%, -100%) scaleX(-1)' + shift
+      : 'translate(-50%, -100%)' + shift;
   }
 
   /* GAIT — one walk's animation state, shared by every segment of a walkPath so
@@ -866,11 +873,21 @@ var Overworld = (function () {
   /* Advance the gait by `px` stage pixels in direction `dir` and show the
      matching frame — only when it changes, so the src is not reset every tick. */
   function _stepGait(dir, px) {
+    var ch = _char();
     var base = (dir === 'left') ? 'right' : dir;
-    var fc = _char().walk[base] || 4;
+    var order = SOG.Adventurers.walkOrder(ch, base);
+    if (!order.length) order = [1];
     gait.dir = dir;
     gait.phase = (gait.phase + px / (WALK_CYCLE_PX[dir] || 72)) % 1;
-    var frame = Math.min(fc, Math.floor(gait.phase * fc) + 1);
+    // Each frame holds its weighted share of the cycle (walkFrameWeight, default 1).
+    var wts = (ch.walkFrameWeight && ch.walkFrameWeight[base]) || {};
+    var total = 0, i;
+    for (i = 0; i < order.length; i++) total += (wts[order[i]] != null ? wts[order[i]] : 1);
+    var at = gait.phase * total, acc = 0, frame = order[order.length - 1];
+    for (i = 0; i < order.length; i++) {
+      acc += (wts[order[i]] != null ? wts[order[i]] : 1);
+      if (at < acc) { frame = order[i]; break; }
+    }
     var key = dir + ':' + frame;
     if (key !== gait.shown) { setWalkFrame(dir, frame); gait.shown = key; }
   }

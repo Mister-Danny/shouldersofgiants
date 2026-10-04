@@ -35,6 +35,25 @@
       path: 'images/metaworld/character sprites/female/',
       prefix: 'adventurer-female-',
       walk: { down: 4, right: 6, up: 8 },        // 'left' mirrors 'right'
+      /* SIDE-WALK TUNING (overworld). Her six side frames show only ONE leg
+         crossing: the near (lighter) leg leads in 01-03, 05, 06 and the far leg
+         leads in 04 alone, with no passing pose either side, and the head drifts
+         6 source px forward over 01->04 then snaps back. Three knobs, all keyed
+         by FRAME NUMBER so new in-between frames slot in without renumbering:
+           walkFrames   play order. Add passing frames here (e.g. 07 between 03
+                        and 04, 08 between 04 and 05 → [1,2,3,7,4,8,5,6]) and
+                        raise walk.right to the highest frame number.
+           walkFrameDx  source-px shift that pins the head to the frame centre
+                        (x = 80 of 160), so the body glides instead of lurching
+                        and the mirrored left walk lines up with the right.
+           walkFrameWeight  share of the stride each frame holds (default 1):
+                        the far-leg step (04) gets more, the two arm-forward
+                        transition frames (03, 05) less, so both steps and both
+                        arm swings get about equal time. */
+      walkFrames:      { right: [1, 2, 3, 4, 5, 6] },
+      walkFrameDx:     { right: { 1: 1.8, 2: -1.2, 3: -4.3, 4: -4.7, 5: -4.4, 6: -3.5 } },
+      walkFrameWeight: { right: { 3: 0.5, 4: 2, 5: 0.5 } },
+      frameSize: 160,                            // source px of every sprite frame
       idleFrames: 6,                             // preloaded only (no player yet)
       mapIdle: { seq: 'map', frames: 9 },        // 1s/frame reading-the-map loop
       standing: 'adventurer-female-standing.png',
@@ -45,7 +64,8 @@
     male: {
       path: 'images/metaworld/character sprites/male_sprite/',
       prefix: 'adventurer-male-',
-      walk: { down: 7, right: 7, up: 7 },
+      walk: { down: 7, right: 7, up: 7 },        // clean two-step cycles; no tuning needed
+      frameSize: 160,
       idleFrames: 7,
       mapIdle: { seq: 'mapidle', frames: 12 },   // longer loop, same 1s/frame rate
       standing: 'adventurer-male-idle-01.png',   // no dedicated standing frame shipped
@@ -83,10 +103,20 @@
   /* Every frame this character can show — walk cycles, the idle cycle, the
      map-reading idle, the standing pose, and any character-specific extras.
      Used by overworld.js to warm the image cache on map load. */
+  /* The frame numbers a walk sequence plays, in order (1..n unless the
+     character lists its own order — see walkFrames). */
+  function walkOrder(ch, seq) {
+    var list = ch.walkFrames && ch.walkFrames[seq];
+    if (list && list.length) return list.slice();
+    var out = [];
+    for (var i = 1; i <= (ch.walk[seq] || 0); i++) out.push(i);
+    return out;
+  }
+
   function allFrameUrls(ch) {
     var out = [], d, i;
     for (d in ch.walk) {
-      for (i = 1; i <= ch.walk[d]; i++) out.push(frameUrl(ch, d, i));
+      walkOrder(ch, d).forEach(function (n) { out.push(frameUrl(ch, d, n)); });
     }
     for (i = 1; i <= ch.idleFrames; i++) out.push(frameUrl(ch, 'idle', i));
     for (i = 1; i <= ch.mapIdle.frames; i++) out.push(frameUrl(ch, ch.mapIdle.seq, i));
@@ -146,6 +176,7 @@
     activeId: activeId,
     active: active,
     frameUrl: frameUrl,
+    walkOrder: walkOrder,
     standingUrl: standingUrl,
     allFrameUrls: allFrameUrls,
     portrait: portrait,

@@ -674,14 +674,19 @@ var HomeFlow = (function () {
   /* ── Sprite frame cycler ───────────────────────────────────── */
   function startWalkAnim(el, dir) {
     stopWalkAnim(el);
-    var frame = 1;
-    setWalkFrame(el, dir, frame);
+    // Frames play in the character's own order (SOG.Adventurers.walkOrder), so
+    // in-between frames added out of numeric order still play in sequence.
+    var i = 0;
+    var orderOf = function () {
+      var ch = SOG.Adventurers.get(el._advId);
+      var o = SOG.Adventurers.walkOrder(ch, (dir === 'left') ? 'right' : dir);
+      return o.length ? o : [1];
+    };
+    setWalkFrame(el, dir, orderOf()[0]);
     var iv = setInterval(function () {
-      var ch   = SOG.Adventurers.get(el._advId);
-      var base = (dir === 'left') ? 'right' : dir;
-      var fc   = ch.walk[base] || 4;
-      frame = (frame % fc) + 1;
-      setWalkFrame(el, dir, frame);
+      var order = orderOf();
+      i = (i + 1) % order.length;
+      setWalkFrame(el, dir, order[i]);
     }, WALK_FRAME_MS);
     el._walkInterval = iv;
     walkIntervals.push(iv);
