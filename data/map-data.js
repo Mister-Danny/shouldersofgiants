@@ -207,7 +207,7 @@ window.SOG_MAP_DATA = {
         zone:    { x: 40, y: 82, w: 20, h: 18 },
         walkTo:  { x: 50, y: 88 },
         target:  'upper-egypt',
-        entryAt: { x: 50, y: 12 },
+        entryAt: { x: 50, y: 19 },
         showFrom: 'narmer-beaten',
         note: 'Bottom of Lower Egypt — the way upriver.'
       }
@@ -218,8 +218,7 @@ window.SOG_MAP_DATA = {
   'upper-egypt': {
     displayName: 'Upper Egypt',
     image: 'images/metaworld/maps/upperegypt.jpg',
-    imageFit: { offsetX: 0.5 },
-    spawn: { x: 50, y: 12 },
+    spawn: { x: 50, y: 19 },
     startsFogged: true,
     props: [],
     nodes: [
@@ -459,7 +458,7 @@ window.SOG_MAP_DATA = {
         zone:    { x: 80, y: 5, w: 20, h: 30 },
         walkTo:  { x: 88, y: 15 },
         target:  'india',
-        entryAt: { x: 10, y: 85 },
+        entryAt: { x: 26, y: 24 },
         showFrom: 'egypt-complete',
         note: 'Scaffolded — drag the zone where it belongs.'
       }
@@ -471,7 +470,7 @@ window.SOG_MAP_DATA = {
     displayName: 'India',
     image: 'images/metaworld/maps/india1.jpg',
     imageFit: { scale: 1.11 },
-    spawn: { x: 10, y: 85 },
+    spawn: { x: 26, y: 24 },
     startsFogged: true,
     props: [],
     nodes: [

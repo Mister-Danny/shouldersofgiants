@@ -13,10 +13,13 @@
    - Frame counts differ per character AND per sequence (the female's
      walk cycles are 4/6/8 frames, the male's are uniform 7s; her
      map-reading idle is 9 frames named "map", his is 12 named
-     "mapidle"). Frame RATE is shared — WALK_FRAME_MS / MAP_FRAME_MS
-     stay in the consumers — so a longer sequence simply runs longer.
+     "mapidle"). The overworld walk advances frames by DISTANCE (one
+     full cycle = two steps, see overworld.js WALK_CYCLE_PX), so a
+     longer walk sequence just shows its frames at a faster rate; the
+     map-reading idle stays on a fixed MAP_FRAME_MS.
    - The male set ships no dedicated standing frame; his idle-01 serves
-     as the resting pose.
+     as the resting pose. He has no back-facing standing frame either,
+     so after walking up he turns to face front (standingBack: null).
 
    Selection is owned by home.js (localStorage 'sog_selected_adventurer',
    written by the character-select click). This module only reads it,
@@ -35,7 +38,8 @@
       idleFrames: 6,                             // preloaded only (no player yet)
       mapIdle: { seq: 'map', frames: 9 },        // 1s/frame reading-the-map loop
       standing: 'adventurer-female-standing.png',
-      extraFrames: ['adventurer-female-standing-backward.png'],
+      standingBack: 'adventurer-female-standing-backward.png',   // rest pose after walking UP
+      extraFrames: [],
       portrait: 'images/portraits/femaleexplorer portrait.jpeg'
     },
     male: {
@@ -45,6 +49,7 @@
       idleFrames: 7,
       mapIdle: { seq: 'mapidle', frames: 12 },   // longer loop, same 1s/frame rate
       standing: 'adventurer-male-idle-01.png',   // no dedicated standing frame shipped
+      standingBack: null,                        // no back-facing frame shipped → faces front
       extraFrames: [],
       portrait: 'images/portraits/male_explorer.jpg'
     }
@@ -68,7 +73,12 @@
     return ch.path + ch.prefix + seq + '-' + _pad(n) + '.png';
   }
 
-  function standingUrl(ch) { return ch.path + ch.standing; }
+  /* The resting pose. facing 'up' (she just walked away from the camera) uses
+     the back-facing frame when the character ships one; otherwise front. */
+  function standingUrl(ch, facing) {
+    if (facing === 'up' && ch.standingBack) return ch.path + ch.standingBack;
+    return ch.path + ch.standing;
+  }
 
   /* Every frame this character can show — walk cycles, the idle cycle, the
      map-reading idle, the standing pose, and any character-specific extras.
@@ -81,6 +91,7 @@
     for (i = 1; i <= ch.idleFrames; i++) out.push(frameUrl(ch, 'idle', i));
     for (i = 1; i <= ch.mapIdle.frames; i++) out.push(frameUrl(ch, ch.mapIdle.seq, i));
     out.push(standingUrl(ch));
+    if (ch.standingBack) out.push(ch.path + ch.standingBack);
     (ch.extraFrames || []).forEach(function (f) { out.push(ch.path + f); });
     return out;
   }

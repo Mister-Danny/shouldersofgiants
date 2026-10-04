@@ -696,7 +696,22 @@ var Overworld = (function () {
   var MAPS = _buildMaps();
 
   /* ── Animation timing ──────────────────────────────────────── */
-  var WALK_FRAME_MS = 125;    // 8 fps walk
+  /* WALKING is measured in STAGE PIXELS, never in map %. The map area is
+     1280×600, so 1% across is 12.8 px but 1% down is only 6 px — timing and
+     facing computed in % made her walk 2.1× faster sideways than up/down and
+     play the up/down cycle on most diagonals.
+       WALK_SPEED_PX   one constant speed in every direction (px/s)
+       WALK_MIN_SEC    shortest segment, so a tiny hop still reads as a step
+       WALK_CYCLE_PX   distance covered by ONE full walk cycle (two steps) for
+                       the 92 px figure. Frames advance by distance, so the feet
+                       keep pace with the ground at any speed: a 6-frame cycle
+                       over 72 px is a frame every 12 px, an 8-frame one every
+                       9 px. Up/down are a little shorter — that axis is
+                       foreshortened on a top-down map. */
+  var WALK_SPEED_PX = 130;
+  var WALK_MIN_SEC  = 0.25;
+  var WALK_CYCLE_PX = { right: 72, left: 72, down: 64, up: 64 };
+  var IDLE_TICK_MS  = 125;    // standing-idle tick (8 ticks = one 1 s "loop")
   var MAP_FRAME_MS  = 1000;   // 1 s per map-reading frame
   var IDLE_DELAY_MS = 15000;
 
@@ -807,6 +822,28 @@ var Overworld = (function () {
   function positionChar(xPct, yPct) {
     charEl.style.left = xPct + '%';
     charEl.style.top  = yPct + '%';
+    var sh = _charShadow();
+    if (sh) { sh.style.left = xPct + '%'; sh.style.top = yPct + '%'; }
+  }
+
+  /* The Explorer's ground shadow: a sibling of the sprite, centred on her feet
+     (the sprite's anchor), always directly BEHIND her in the overlay. Re-attached
+     after anything clears the overlay (loadMap empties it). */
+  var CHAR_SHADOW = { w: 48, h: 14 };   // px — her visible figure is ~46 px wide
+  var _charShadowEl = null;
+  function _charShadow() {
+    if (!overlayEl || !charEl || charEl.parentNode !== overlayEl) return null;
+    if (!_charShadowEl) {
+      _charShadowEl = document.createElement('div');
+      _charShadowEl.className = 'ow-ground-shadow';
+      _charShadowEl.id = 'overworld-character-shadow';
+      _charShadowEl.style.width  = CHAR_SHADOW.w + 'px';
+      _charShadowEl.style.height = CHAR_SHADOW.h + 'px';
+    }
+    if (_charShadowEl.parentNode !== overlayEl || _charShadowEl.nextSibling !== charEl) {
+      overlayEl.insertBefore(_charShadowEl, charEl);
+    }
+    return _charShadowEl;
   }
 
   function setWalkFrame(dir, frame) {
@@ -817,21 +854,32 @@ var Overworld = (function () {
       : 'translate(-50%, -100%)';
   }
 
-  function startWalkAnim(dir) {
-    if (walkInterval) clearInterval(walkInterval);
-    var frame = 1;
-    setWalkFrame(dir, frame);
-    walkInterval = setInterval(function () {
-      var base = (dir === 'left') ? 'right' : dir;
-      var fc = _char().walk[base] || 4;
-      frame = (frame % fc) + 1;
-      setWalkFrame(dir, frame);
-    }, WALK_FRAME_MS);
+  /* GAIT — one walk's animation state, shared by every segment of a walkPath so
+     the cycle does NOT restart at a waypoint. `phase` is the position within
+     the current two-step cycle (0..1); it advances by distance travelled and
+     carries over a change of direction, so the feet stay in step through a
+     bend even though the cycles have different frame counts. */
+  var gait = { dir: null, phase: 0, shown: null };
+
+  function _resetGait() { gait.dir = null; gait.phase = 0; gait.shown = null; }
+
+  /* Advance the gait by `px` stage pixels in direction `dir` and show the
+     matching frame — only when it changes, so the src is not reset every tick. */
+  function _stepGait(dir, px) {
+    var base = (dir === 'left') ? 'right' : dir;
+    var fc = _char().walk[base] || 4;
+    gait.dir = dir;
+    gait.phase = (gait.phase + px / (WALK_CYCLE_PX[dir] || 72)) % 1;
+    var frame = Math.min(fc, Math.floor(gait.phase * fc) + 1);
+    var key = dir + ':' + frame;
+    if (key !== gait.shown) { setWalkFrame(dir, frame); gait.shown = key; }
   }
 
-  function setStanding() {
+  /* facing: the last walk direction. 'up' rests in the back-facing pose when the
+     character ships one (the female does; the male has none and faces front). */
+  function setStanding(facing) {
     if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
-    charEl.src = SOG.Adventurers.standingUrl(_char());
+    charEl.src = SOG.Adventurers.standingUrl(_char(), facing);
     charEl.style.transform = 'translate(-50%, -100%)';
   }
 
@@ -841,11 +889,12 @@ var Overworld = (function () {
     isMoving = true;
     cancelIdle();
     startFootsteps();
+    _resetGait();
     var i = 0;
     function next() {
       if (i >= waypoints.length) {
         isMoving = false;
-        setStanding();
+        setStanding(gait.dir);
         stopFootsteps();
         saveState();
         if (onDone) onDone();
@@ -944,18 +993,29 @@ var Overworld = (function () {
     return wps.concat([dest]);
   }
 
+  /* Stage pixels per 1% of the map, from the overlay's LAYOUT size (offsetWidth
+     ignores the stage's own scale transform, so this is 12.8 × 6 at any window
+     size). Falls back to the 1280×600 map area if the overlay isn't laid out. */
+  function _pxPerPct() {
+    var w = (overlayEl && overlayEl.offsetWidth)  || 1280;
+    var h = (overlayEl && overlayEl.offsetHeight) || 600;
+    return { x: w / 100, y: h / 100 };
+  }
+
   function walkToWaypoint(wp, onDone) {
     var from = { x: currentPos.x, y: currentPos.y };
-    var dx = wp.x - from.x;
-    var dy = wp.y - from.y;
-    var distance = Math.sqrt(dx * dx + dy * dy);
+    var k  = _pxPerPct();
+    var dxPx = (wp.x - from.x) * k.x;
+    var dyPx = (wp.y - from.y) * k.y;
+    var distancePx = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
 
+    // Facing from the PIXEL delta. A tie (an exact 45° diagonal) walks sideways.
     var dir;
-    if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? 'right' : 'left';
-    else                              dir = dy > 0 ? 'down'  : 'up';
+    if (Math.abs(dxPx) >= Math.abs(dyPx)) dir = dxPx >= 0 ? 'right' : 'left';
+    else                                   dir = dyPx > 0 ? 'down'  : 'up';
 
-    startWalkAnim(dir);
-    var duration = Math.max(0.6, distance * 0.08);
+    _stepGait(dir, 0);   // show this direction's current-phase frame at once
+    var duration = Math.max(WALK_MIN_SEC, distancePx / WALK_SPEED_PX);
 
     if (typeof gsap !== 'undefined') {
       // Tween a disposable proxy rather than `currentPos` itself —
@@ -968,9 +1028,12 @@ var Overworld = (function () {
         duration: duration,
         ease: 'none',
         onUpdate: function () {
+          var stepPx = Math.sqrt(Math.pow((proxy.x - currentPos.x) * k.x, 2) +
+                                 Math.pow((proxy.y - currentPos.y) * k.y, 2));
           currentPos.x = proxy.x;
           currentPos.y = proxy.y;
           positionChar(currentPos.x, currentPos.y);
+          _stepGait(dir, stepPx);
         },
         onComplete: function () {
           currentPos.x = wp.x; currentPos.y = wp.y;
@@ -1021,9 +1084,236 @@ var Overworld = (function () {
       charEl.style.transform = 'translate(-50%, -100%)';
       ticks++;
       if (ticks >= TICKS_PER_LOOP) { ticks = 0; loop++; if (loop >= loops) { if (onDone) onDone(); return; } }
-      idleRoutineTimer = setTimeout(step, WALK_FRAME_MS);
+      idleRoutineTimer = setTimeout(step, IDLE_TICK_MS);
     }
     step();
+  }
+
+  /* ══ NODE + PROP DRESSING ═════════════════════════════════════════════════
+     Three things every overworld node gets, wherever it was created (loadMap,
+     a reveal cinematic, a replay): a ground shadow under its art, the gold pulse
+     if it is the player's next objective, and the hover name label. They are
+     applied by ONE pass (_dressOverlay) that a MutationObserver runs whenever
+     the overlay's children change, so the six node-building code paths need no
+     changes and a future one is covered automatically. Props get the same
+     ground shadow. Nothing here moves an element: anchors are unchanged. */
+
+  /* The visible art's bounds inside an image, in natural pixels, cached per src.
+     Read from the alpha channel on a ≤256 px canvas (cheap, once per image). A
+     canvas that can't be read (file://) falls back to the whole image. */
+  var _artBoxCache = {};
+  function _artBox(src, cb) {
+    var c = _artBoxCache[src];
+    if (c && c.ready) { cb(c); return; }
+    if (c) { c.waiters.push(cb); return; }
+    c = _artBoxCache[src] = { ready: false, waiters: [cb] };
+    var im = new Image();
+    var finish = function () {
+      c.ready = true;
+      var w = c.waiters; c.waiters = [];
+      w.forEach(function (fn) { fn(c); });
+    };
+    im.onload = function () {
+      var W = im.naturalWidth, H = im.naturalHeight;
+      c.W = W; c.H = H; c.box = { x0: 0, y0: 0, x1: W, y1: H };
+      try {
+        var k = Math.min(1, 256 / Math.max(W, H));
+        var cw = Math.max(1, Math.round(W * k)), ch = Math.max(1, Math.round(H * k));
+        var cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+        var cx = cv.getContext('2d'); cx.drawImage(im, 0, 0, cw, ch);
+        var d = cx.getImageData(0, 0, cw, ch).data;
+        var x0 = cw, y0 = ch, x1 = -1, y1 = -1;
+        for (var y = 0; y < ch; y++) {
+          for (var x = 0; x < cw; x++) {
+            if (d[(y * cw + x) * 4 + 3] > 128) {
+              if (x < x0) x0 = x; if (x > x1) x1 = x;
+              if (y < y0) y0 = y; if (y > y1) y1 = y;
+            }
+          }
+        }
+        if (x1 >= 0) c.box = { x0: x0 / k, y0: y0 / k, x1: (x1 + 1) / k, y1: (y1 + 1) / k };
+      } catch (e) { /* unreadable canvas → whole-image bounds */ }
+      finish();
+    };
+    im.onerror = function () { c.W = 0; c.H = 0; c.box = null; finish(); };
+    im.src = src;
+  }
+
+  /* Size + place a ground ellipse under art drawn `drawW` px wide (layout px,
+     before any node scale). Centred on the art's horizontal middle, a touch wider
+     than the art, centred just above its lowest visible row — the art covers the
+     upper half, the lower half shows as the shadow it casts on the ground. */
+  var GROUND_SHADOW = { widthOfArt: 1.05, aspect: 0.26, minH: 7, maxH: 24, rise: 0.15 };
+  function _placeGroundShadow(el, art, drawW) {
+    if (!art || !art.box || !art.W) return false;
+    var f = drawW / art.W;
+    var artW = (art.box.x1 - art.box.x0) * f;
+    var w = artW * GROUND_SHADOW.widthOfArt;
+    var h = Math.max(GROUND_SHADOW.minH, Math.min(GROUND_SHADOW.maxH, w * GROUND_SHADOW.aspect));
+    el.style.width  = w + 'px';
+    el.style.height = h + 'px';
+    el.style.left   = ((art.box.x0 + art.box.x1) / 2) * f + 'px';
+    el.style.top    = (art.box.y1 * f - h * GROUND_SHADOW.rise) + 'px';
+    return true;
+  }
+
+  function _shadowNode(nodeEl) {
+    if (nodeEl._owShadowed) return;
+    var img = nodeEl.querySelector(':scope > img');
+    if (!img) return;
+    nodeEl._owShadowed = true;
+    _artBox(img.getAttribute('src'), function (art) {
+      var drawW = img.offsetWidth || parseFloat(getComputedStyle(img).width) || 84;
+      var sh = document.createElement('div');
+      sh.className = 'ow-ground-shadow';
+      if (_placeGroundShadow(sh, art, drawW)) nodeEl.insertBefore(sh, img);
+    });
+  }
+
+  /* A prop is a bare <img> (no wrapper to hold a child), so its shadow lives in a
+     sibling box with the prop's natural size and the SAME position + transform —
+     it lands exactly under the art at any scale, rotation or flip. */
+  function _shadowProp(propEl) {
+    if (propEl._owShadowed) return;
+    propEl._owShadowed = true;
+    _artBox(propEl.getAttribute('src'), function (art) {
+      if (!art || !art.W || propEl.parentNode !== overlayEl) return;
+      var box = document.createElement('div');
+      box.className = 'overworld-topo-prop-shadow';
+      box.style.left = propEl.style.left;
+      box.style.top  = propEl.style.top;
+      box.style.width  = art.W + 'px';
+      box.style.height = art.H + 'px';
+      box.style.transform = propEl.style.transform;
+      box.style.transformOrigin = propEl.style.transformOrigin || 'center center';
+      var sh = document.createElement('div');
+      sh.className = 'ow-ground-shadow';
+      if (!_placeGroundShadow(sh, art, art.W)) return;
+      box.appendChild(sh);
+      overlayEl.insertBefore(box, propEl);
+    });
+  }
+
+  /* ── NEXT OBJECTIVE ─────────────────────────────────────────────────────────
+     Which visible node(s) on THIS map the player should go to next:
+       1. Any visible battle node whose FIRST tier is unbeaten — the Serf of a
+          two-tier boss (Gilgamesh also counts a Giant win, see
+          _bossClearedForUnlock), or the single fight of a one-off battle (the
+          Neanderthal camp, Ötzi's signpost, Darius). That is the node that opens
+          map progress; normally there is exactly one.
+       2. Only when every first tier here is beaten: the battle nodes whose GIANT
+          is still unbeaten (the Giant is what opens the next region).
+       3. Nothing otherwise — a cleared map pulses nothing; the way on is an exit.
+     Markets and other non-battle nodes are never the objective: nothing in the
+     game waits on a market visit (the one scripted first visit walks the player
+     there itself). */
+  function _firstTierCleared(n) {
+    if (n.id === 'prehistory') {
+      return !!(window.SOG && SOG.Adventure && SOG.Adventure.Prehistory &&
+                SOG.Adventure.Prehistory.isBattleComplete());
+    }
+    if (n.id === 'egypt-signpost') {
+      try { return localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) === 'true'; } catch (e) { return false; }
+    }
+    if (!n.hook) return true;                       // a battle node we can't read stays dark
+    if (n.tiers === 2) return _bossClearedForUnlock(n.hook);
+    return _tierBeaten(n.hook, 'serf') || _tierBeaten(n.hook, 'giant');
+  }
+  function _objectiveNodeIds() {
+    if (!overlayEl) return [];
+    // "Visible" = actually on screen, not the node's showFrom flag: a reveal
+    // cinematic fades a node in BEFORE it sets that flag (D2a sets the
+    // Mesopotamia arrival flag after Uruk has appeared).
+    var battles = [];
+    Array.prototype.forEach.call(overlayEl.querySelectorAll('.overworld-node'), function (el) {
+      var n = _nodeDataById(el.dataset.id);
+      if (n && n.kind === 'battle') battles.push(n);
+    });
+    var first = battles.filter(function (n) { return !_firstTierCleared(n); });
+    if (first.length) return first.map(function (n) { return n.id; });
+    return battles.filter(function (n) { return n.tiers === 2 && n.hook && !_tierBeaten(n.hook, 'giant'); })
+                  .map(function (n) { return n.id; });
+  }
+  function _refreshObjectiveGlow() {
+    if (!overlayEl) return;
+    var ids = _objectiveNodeIds();
+    Array.prototype.forEach.call(overlayEl.querySelectorAll('.overworld-node'), function (el) {
+      el.classList.toggle('is-objective', ids.indexOf(el.dataset.id) !== -1);
+    });
+  }
+
+  /* ── HOVER NAME LABEL ───────────────────────────────────────────────────────
+     The map data's `label` when a node sets one, else its `name`. One floating
+     element, placed under the hovered node's ground shadow (its visible base),
+     falling back to the bottom of its image box. */
+  var _nodeLabelEl = null;
+  function _nodeLabel() {
+    if (!_nodeLabelEl) {
+      _nodeLabelEl = document.createElement('div');
+      _nodeLabelEl.className = 'overworld-node-label overworld-node-label--float';
+    }
+    if (_nodeLabelEl.parentNode !== overlayEl) overlayEl.appendChild(_nodeLabelEl);
+    return _nodeLabelEl;
+  }
+  function _nodeDataById(id) {
+    var map = MAPS[currentMapId];
+    var list = (map && map.nodes) || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+  function _showNodeLabel(nodeEl) {
+    var n = _nodeDataById(nodeEl.dataset.id);
+    var text = n && (n.label || n.name);
+    if (!text) return;
+    var lab = _nodeLabel();
+    lab.textContent = text;
+    var ov = overlayEl.getBoundingClientRect();
+    var k = overlayEl.offsetWidth ? ov.width / overlayEl.offsetWidth : 1;   // stage scale
+    var img = nodeEl.querySelector(':scope > img');
+    var sh  = nodeEl.querySelector(':scope > .ow-ground-shadow');
+    var r   = (img || nodeEl).getBoundingClientRect();
+    var bottom = sh ? sh.getBoundingClientRect().bottom : r.bottom;
+    lab.style.left = ((r.left + r.width / 2 - ov.left) / k) + 'px';
+    lab.style.top  = ((bottom - ov.top) / k + 2) + 'px';
+    lab.classList.add('is-visible');
+  }
+  function _hideNodeLabel() {
+    if (_nodeLabelEl) _nodeLabelEl.classList.remove('is-visible');
+  }
+  function _wireNodeLabels() {
+    if (!overlayEl || overlayEl._owLabelsWired) return;
+    overlayEl._owLabelsWired = true;
+    overlayEl.addEventListener('mouseover', function (e) {
+      var node = e.target.closest && e.target.closest('.overworld-node');
+      if (node && overlayEl.contains(node)) _showNodeLabel(node);
+    });
+    overlayEl.addEventListener('mouseout', function (e) {
+      var node = e.target.closest && e.target.closest('.overworld-node');
+      if (!node) return;
+      if (e.relatedTarget && node.contains(e.relatedTarget)) return;   // still inside it
+      _hideNodeLabel();
+    });
+  }
+
+  /* The single dressing pass + the observer that runs it. */
+  var _dressQueued = false;
+  function _dressOverlay() {
+    _dressQueued = false;
+    if (!overlayEl) return;
+    Array.prototype.forEach.call(overlayEl.querySelectorAll('.overworld-node'), _shadowNode);
+    Array.prototype.forEach.call(overlayEl.querySelectorAll('.overworld-topo-prop'), _shadowProp);
+    _refreshObjectiveGlow();
+  }
+  function _queueDress() {
+    if (_dressQueued) return;
+    _dressQueued = true;
+    setTimeout(_dressOverlay, 0);
+  }
+  function _watchOverlay() {
+    if (!overlayEl || overlayEl._owObserved || typeof MutationObserver === 'undefined') return;
+    overlayEl._owObserved = true;
+    new MutationObserver(_queueDress).observe(overlayEl, { childList: true });
+    _wireNodeLabels();
   }
 
   /* ── Load a map (swap image, build overlay, place character) ── */
@@ -1137,13 +1427,8 @@ var Overworld = (function () {
       img.draggable = false;
       if (n.flipX) img.style.transform = 'scaleX(-1)';
       nodeEl.appendChild(img);
-      // Optional hover label (e.g. "To Egypt" on the signpost node).
-      if (n.label) {
-        var labelEl = document.createElement('div');
-        labelEl.className = 'overworld-node-label';
-        labelEl.textContent = n.label;
-        nodeEl.appendChild(labelEl);
-      }
+      // The hover name label (n.label, else n.name) is the overlay's floating
+      // label — see _showNodeLabel. Not a child: it would shift the node's anchor.
       nodeEl.addEventListener('click', function () { onNodeClick(n); });
       // Adventure Mode completion badges
       if (n.id === 'prehistory' &&
@@ -1486,6 +1771,9 @@ var Overworld = (function () {
       if (!_isVisible(n)) return;
       _renderNodeFlags(n);
     });
+    // Every battle return re-renders flags through here — the moment a win can
+    // move the next objective, so the glow follows it.
+    _refreshObjectiveGlow();
     if (deferStamp) {
       // The caller drives the stamp thunk on its own timed cue (return choreography).
       // Hide the freshly-won stamp so it doesn't flash static before that thunk.
@@ -2422,7 +2710,7 @@ var Overworld = (function () {
   function _placeProps() {
     if (!overlayEl) return;
     // Always clear first (defensive — loadMap also wipes the overlay).
-    overlayEl.querySelectorAll('.overworld-topo-prop').forEach(function (el) {
+    overlayEl.querySelectorAll('.overworld-topo-prop, .overworld-topo-prop-shadow').forEach(function (el) {
       if (el.parentNode) el.parentNode.removeChild(el);
     });
     var map = MAPS[currentMapId];
@@ -5284,12 +5572,6 @@ var Overworld = (function () {
       img.draggable = false;
       if (n.flipX) img.style.transform = 'scaleX(-1)';
       nodeEl.appendChild(img);
-      if (n.label) {
-        var labelEl = document.createElement('div');
-        labelEl.className = 'overworld-node-label';
-        labelEl.textContent = n.label;
-        nodeEl.appendChild(labelEl);
-      }
       nodeEl.addEventListener('click', function () { onNodeClick(n); });
       if (n.id === 'prehistory' &&
           window.SOG && SOG.Adventure && SOG.Adventure.Prehistory &&
@@ -5502,6 +5784,7 @@ var Overworld = (function () {
       console.warn('[Overworld] Missing DOM elements');
       return;
     }
+    _watchOverlay();   // ground shadows, objective glow, hover labels (see NODE + PROP DRESSING)
 
     loadState();
 
