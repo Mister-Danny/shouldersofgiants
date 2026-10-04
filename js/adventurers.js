@@ -34,10 +34,10 @@
     female: {
       path: 'images/metaworld/character sprites/female/',
       prefix: 'adventurer-female-',
-      walk: { down: 4, right: 6, up: 8 },        // 'left' mirrors 'right'
-      /* SIDE-WALK TUNING (overworld). Her six side frames show only ONE leg
-         crossing: the near (lighter) leg leads in 01-03, 05, 06 and the far leg
-         leads in 04 alone, with no passing pose either side, and the head drifts
+      walk: { down: 4, right: 8, up: 8 },        // 'left' mirrors 'right'; right = highest frame number
+      /* SIDE-WALK TUNING (overworld). Her original six side frames show only ONE
+         leg crossing: the near (lighter) leg leads in 01-03, 05, 06 and the far
+         leg in 04 alone, with no passing pose either side, and the head drifts
          6 source px forward over 01->04 then snaps back. Three knobs, all keyed
          by FRAME NUMBER so new in-between frames slot in without renumbering:
            walkFrames   play order. Add passing frames here (e.g. 07 between 03
@@ -50,9 +50,19 @@
                         the far-leg step (04) gets more, the two arm-forward
                         transition frames (03, 05) less, so both steps and both
                         arm swings get about equal time. */
-      walkFrames:      { right: [1, 2, 3, 4, 5, 6] },
-      walkFrameDx:     { right: { 1: 1.8, 2: -1.2, 3: -4.3, 4: -4.7, 5: -4.4, 6: -3.5 } },
-      walkFrameWeight: { right: { 3: 0.5, 4: 2, 5: 0.5 } },
+      /* 07 and 08 are the passing in-betweens, keyed from generated art (raw
+         sources live in reference/sprite-sources/female/, git-ignored):
+           07 (between 03 and 04): far leg lifted, near leg planted. A composite —
+              legs from the first 07 render, upper body from 08, joined at the hips.
+           08 (between 04 and 05): near leg lifted and passing, far leg planted.
+         Both had a second arm hanging at the hip that 03-05 don't draw; it is
+         painted out with 04's backpack side, and 08's near knee (rendered almost
+         white) is toned to the shin colour. Each is scaled to the 159 px figure
+         height, colour-matched to 03-05, and pinned like the others. With both
+         passing poses in, every frame holds an equal share of the stride. */
+      walkFrames:      { right: [1, 2, 3, 7, 4, 8, 5, 6] },
+      walkFrameDx:     { right: { 1: 1.8, 2: -1.2, 3: -4.3, 4: -4.7, 5: -4.4, 6: -3.5, 7: -4.4, 8: -4.0 } },
+      walkFrameWeight: { right: {} },
       frameSize: 160,                            // source px of every sprite frame
       idleFrames: 6,                             // preloaded only (no player yet)
       mapIdle: { seq: 'map', frames: 9 },        // 1s/frame reading-the-map loop

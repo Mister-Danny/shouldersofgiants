@@ -16,3 +16,6 @@ node_modules
 firebase-debug.log
 firestore-debug.log
 .firebase
+
+# Raw art sources (generated masters on green, composites) — kept locally, never shipped
+reference/sprite-sources/
