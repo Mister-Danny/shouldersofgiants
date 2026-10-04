@@ -892,12 +892,21 @@ var Overworld = (function () {
     if (key !== gait.shown) { setWalkFrame(dir, frame); gait.shown = key; }
   }
 
-  /* facing: the last walk direction. 'up' rests in the back-facing pose when the
-     character ships one (the female does; the male has none and faces front). */
+  /* facing: the last walk direction. 'up' rests in the back-facing pose and
+     'left'/'right' in the side pose (mirrored for left) when the character ships
+     them — the female does; the male has neither and faces front. The side pose
+     is pinned like the walk frames (standingSideDx, applied after the mirror), so
+     the stop plants her feet with no shift. */
   function setStanding(facing) {
     if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
-    charEl.src = SOG.Adventurers.standingUrl(_char(), facing);
-    charEl.style.transform = 'translate(-50%, -100%)';
+    var ch = _char();
+    charEl.src = SOG.Adventurers.standingUrl(ch, facing);
+    var side = (facing === 'left' || facing === 'right') && ch.standingSide;
+    var dx = (side && ch.standingSideDx) ? ch.standingSideDx * (charEl.offsetWidth || 92) / (ch.frameSize || 160) : 0;
+    var shift = dx ? ' translateX(' + dx.toFixed(2) + 'px)' : '';
+    charEl.style.transform = (side && facing === 'left')
+      ? 'translate(-50%, -100%) scaleX(-1)' + shift
+      : 'translate(-50%, -100%)' + shift;
   }
 
   /* ── Walking through waypoints ─────────────────────────────── */

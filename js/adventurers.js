@@ -68,6 +68,13 @@
       mapIdle: { seq: 'map', frames: 9 },        // 1s/frame reading-the-map loop
       standing: 'adventurer-female-standing.png',
       standingBack: 'adventurer-female-standing-backward.png',   // rest pose after walking UP
+      /* Rest pose after walking SIDEWAYS (mirrored for left), so she plants her
+         feet instead of turning to face the camera. Keyed from generated art
+         (raw in reference/sprite-sources/female/), scaled to the walk frames'
+         159 px figure and colour-matched to 03-05. standingSideDx pins its head
+         to the frame centre, where every pinned walk frame's head already is. */
+      standingSide:   'adventurer-female-standing-right.png',
+      standingSideDx: -0.4,
       extraFrames: [],
       portrait: 'images/portraits/femaleexplorer portrait.jpeg'
     },
@@ -80,6 +87,7 @@
       mapIdle: { seq: 'mapidle', frames: 12 },   // longer loop, same 1s/frame rate
       standing: 'adventurer-male-idle-01.png',   // no dedicated standing frame shipped
       standingBack: null,                        // no back-facing frame shipped → faces front
+      standingSide: null,                        // no side rest frame → faces front after a side walk
       extraFrames: [],
       portrait: 'images/portraits/male_explorer.jpg'
     }
@@ -107,6 +115,7 @@
      the back-facing frame when the character ships one; otherwise front. */
   function standingUrl(ch, facing) {
     if (facing === 'up' && ch.standingBack) return ch.path + ch.standingBack;
+    if ((facing === 'left' || facing === 'right') && ch.standingSide) return ch.path + ch.standingSide;
     return ch.path + ch.standing;
   }
 
@@ -132,6 +141,7 @@
     for (i = 1; i <= ch.mapIdle.frames; i++) out.push(frameUrl(ch, ch.mapIdle.seq, i));
     out.push(standingUrl(ch));
     if (ch.standingBack) out.push(ch.path + ch.standingBack);
+    if (ch.standingSide) out.push(ch.path + ch.standingSide);
     (ch.extraFrames || []).forEach(function (f) { out.push(ch.path + f); });
     return out;
   }
