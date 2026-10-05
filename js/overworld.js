@@ -2336,8 +2336,12 @@ var Overworld = (function () {
     var isPrehistory = node.id === 'prehistory' && currentMapId === 'eastafrica';
     var preh         = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
     if (isPrehistory && preh && preh.isBattleComplete()) {
-      log('Prehistory node clicked — battle already won, launching directly (no walk)');
-      preh.startNeanderthalBattle();
+      // Replay: walk to the camp first (like the Ötzi signpost replay), then
+      // launch. It used to launch straight from wherever she stood.
+      walkPath(_routeTo(node.id), function () {
+        log('Prehistory node — battle already won, launching the replay');
+        preh.startNeanderthalBattle();
+      });
       return;
     }
 
