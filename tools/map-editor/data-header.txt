@@ -23,6 +23,8 @@
    is the bottom-centre of the (trimmed) art — its base line — which is also
    what depth-sorts them. A node's optional `stand: { dx, dy }` (map-%, from
    its point) is where the Explorer stops; omitted = just in front of it.
+   `standFacing` ('up'|'down'|'left'|'right') overrides which way she then
+   faces; omitted = toward the node's art.
 
    `kind` is recorded but NOT yet consumed by the game — onNodeClick still
    dispatches on literal node id. Wiring kind-based dispatch is Phase 2; until

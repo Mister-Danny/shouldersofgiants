@@ -164,7 +164,8 @@ function standEl(n) {
   const p = standPos(n);
   el.style.left = p.x + '%';
   el.style.top  = p.y + '%';
-  el.title = `${n.id}: Explorer stands here${n.stand ? ' (custom)' : ' (default)'} — drag to move`;
+  el.title = `${n.id}: Explorer stands here${n.stand ? ' (custom)' : ' (default)'}` +
+             `${n.standFacing ? ', facing ' + n.standFacing : ''} — drag to move`;
   el.addEventListener('pointerdown', e => beginDrag(e, { type: 'stand', id: n.id }));
   return el;
 }

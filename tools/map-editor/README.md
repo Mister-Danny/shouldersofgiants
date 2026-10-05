@@ -132,6 +132,11 @@ front of the base line); drag it to give the node its own (`stand: { dx, dy }`,
 map-% from the node's point), which turns it solid. It moves with the node.
 "Back to default" in the inspector clears it. Routes end at stand points.
 
+On arrival she turns to look at the node (back view when it is above her,
+side view when it is beside her). **Faces on arrival** in the inspector
+(`standFacing`: up / down / left / right) overrides that per node — e.g. the
+East Africa signpost, where she stands to its left and reads it.
+
 `#stage` is aspect-locked to 1280:600 and uses the same `object-fit: cover` as
 the game, so a position dragged here is the position rendered in-game. Nothing
 is converted on save.

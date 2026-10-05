@@ -546,17 +546,30 @@ var Overworld = (function () {
 
   // Walk-off target offset (relative to the explorer's current position) for
   // leaving East Africa toward Egypt: she walks up-and-right off the screen
-  // edge, then the map transition fades in. Halved from the original 96/-96 to
-  // cut the dead footstep tail (sprite already off-screen, footsteps still
-  // playing) by ~half WITHOUT changing the visible walk's speed or direction —
-  // same heading, just a shorter off-screen run. Shared by the D1 first-win
-  // cinematic and the To Egypt exit box.
+  // edge, then the map transition fades in. This is the HEADING (and the
+  // longest the walk can be); _walkOffPoint cuts it at the edge she clears
+  // first, so there is no dead footstep tail with the sprite already gone.
+  // Shared by the D1 first-win cinematic and the To Egypt exit box.
   var EGYPT_WALKOFF = { dx: 48, dy: -48 };
   // Map-x (%) at which the Explorer's whole 92px sprite box has just cleared
   // the right edge: 100% + half her width (46px of 1280 = 3.6%). A walk-off
   // aimed here ends the moment she leaves the screen, so the transition fades
   // in with no silent off-screen footsteps.
   var WALKOFF_RIGHT_X = 104;
+  // Top edge: she is anchored at her feet, so once they cross y = 0 the whole
+  // sprite is above the (clipped) map. Half a percent more clears her shadow.
+  var WALKOFF_TOP_Y = -0.5;
+
+  /* A walk-off waypoint along (dx, dy) from `from`, cut short at the first
+     screen edge she fully clears (top or right), so the transition fades in as
+     she leaves rather than after a stretch of silent off-screen footsteps. */
+  function _walkOffPoint(from, dx, dy) {
+    var t = 1;
+    if (dy < 0) t = Math.min(t, (WALKOFF_TOP_Y - from.y) / dy);
+    if (dx > 0) t = Math.min(t, (WALKOFF_RIGHT_X - from.x) / dx);
+    t = Math.max(0, t);
+    return { x: from.x + dx * t, y: from.y + dy * t };
+  }
 
   /* ════════════════════════════════════════════════════════════
      MAP DATA — layout + sequencing in data/map-data.js
@@ -926,7 +939,7 @@ var Overworld = (function () {
     function next() {
       if (i >= waypoints.length) {
         isMoving = false;
-        setStanding(gait.dir);
+        _restPose(gait.dir);          // at a node: turn to face it
         stopFootsteps();
         saveState();
         if (onDone) onDone();
@@ -980,6 +993,43 @@ var Overworld = (function () {
     return { x: n.x + (o.dx || 0), y: n.y + (o.dy || 0) };
   }
 
+  /* ── ARRIVAL FACING ────────────────────────────────────────────────────────
+     When the Explorer comes to rest on a node's stand point — a click, a route,
+     a scripted walk, a teleport, a map load onto a saved spot — she turns to
+     look at it: the direction from her stand point to the art's centre picks
+     her rest pose (above her → back view, beside → side view, mirrored for
+     left). With the default stand point centred in front of the base that is
+     almost always the back view: looking at the landmark. A node may force a
+     direction with `standFacing: 'up' | 'down' | 'left' | 'right'` (map data,
+     editable in tools/map-editor). Characters without back/side standing art
+     (the male Explorer) fall back to the front pose — see setStanding. */
+  function _nodeAtStand(pos) {
+    var map = MAPS[currentMapId];
+    if (!map || !overlayEl || !pos) return null;
+    for (var i = 0; i < (map.nodes || []).length; i++) {
+      var n = map.nodes[i], sp = _standPos(n);
+      if (Math.abs(sp.x - pos.x) < 0.05 && Math.abs(sp.y - pos.y) < 0.05 &&
+          overlayEl.querySelector('.overworld-node[data-id="' + n.id + '"]')) return n;
+    }
+    return null;
+  }
+  function _facingFor(n) {
+    if (n.standFacing) return n.standFacing;
+    var sp = _standPos(n);
+    var a = _nodeArt(n, overlayEl && overlayEl.querySelector('.overworld-node[data-id="' + n.id + '"]'));
+    var cx = a ? a.cx : n.x, cy = a ? a.cy : n.y - 5;      // unloaded art: assume "above"
+    var k = _pxPerPct(), dx = (cx - sp.x) * k.x, dy = (cy - sp.y) * k.y;
+    if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 'right' : 'left';
+    return dy < 0 ? 'up' : 'down';
+  }
+  /* Rest pose for wherever she now stands: facing the node she is at, else
+     `fallback` (the walk's last direction, or the front pose). */
+  function _restPose(fallback) {
+    var n = _nodeAtStand(currentPos);
+    setStanding(n ? _facingFor(n) : fallback);
+    return n;
+  }
+
   /* ── DEPTH SORT ────────────────────────────────────────────────────────────
      Everything that stands on the ground — the Explorer, nodes, props, a node's
      flags and stamps, Ötzi and ambush riders — is z-sorted by its FEET (its base
@@ -998,11 +1048,11 @@ var Overworld = (function () {
     var img = nodeEl && nodeEl.querySelector(':scope > img');
     if (!img || !img.offsetWidth || !img.offsetHeight) return null;
     var s = n.scale || 1, r = (n.rotation || 0) * Math.PI / 180;
-    var w = img.offsetWidth * s, h = img.offsetHeight * s;
+    var w = img.offsetWidth * s, h = img.offsetHeight * s, k = _pxPerPct();
     // Centre = half the height up from the base, turned with the node.
     return { w: w, h: h,
-             cx: n.x + (Math.sin(r) * h / 2) / 12.8,
-             cy: n.y - (Math.cos(r) * h / 2) / 6 };
+             cx: n.x + (Math.sin(r) * h / 2) / k.x,
+             cy: n.y - (Math.cos(r) * h / 2) / k.y };
   }
   /* Run fn(art) once the node's image is laid out (now, or on its load). A
      missing image still calls fn — with null — so a cinematic waiting on it
@@ -1043,21 +1093,35 @@ var Overworld = (function () {
   /* A saved position INSIDE a node's art — saved before nodes stood on their
      base line, when walks ended on a node's centre — would put the Explorer
      behind the building. Return that node's stand point instead; any other
-     position unchanged. The art box is the node's laid-out width × its
-     image's aspect (square until the image has loaded), unrotated. */
-  function _standClearOfNodes(pos) {
+     position unchanged. Tested only against art that is laid out (its real
+     size and aspect, unrotated); a node whose image is still loading is
+     checked when it arrives, and if she is still standing on that spot she
+     steps to its stand point then (`onLate`). Guessing the unloaded size
+     instead misfires on large nodes and moves her to a neighbour. */
+  function _artHolds(n, img, pos) {
+    var w = img.offsetWidth * (n.scale || 1), h = img.offsetHeight * (n.scale || 1), k = _pxPerPct();
+    var dx = (pos.x - n.x) * k.x, dy = (pos.y - n.y) * k.y;
+    return Math.abs(dx) < w / 2 && dy < 0 && dy > -h;
+  }
+  function _standClearOfNodes(pos, onLate) {
     var map = MAPS[currentMapId];
     if (!map || !overlayEl) return pos;
+    var saved = { x: pos.x, y: pos.y }, at = saved;
     for (var i = 0; i < (map.nodes || []).length; i++) {
-      var n = map.nodes[i];
-      var img = overlayEl.querySelector('.overworld-node[data-id="' + n.id + '"] > img');
-      if (!img) continue;                                   // not on screen
-      var w = (img.offsetWidth || 84) * (n.scale || 1);
-      var h = img.naturalWidth ? w * img.naturalHeight / img.naturalWidth : w;
-      var dx = (pos.x - n.x) * 12.8, dy = (pos.y - n.y) * 6;
-      if (Math.abs(dx) < w / 2 && dy < 0 && dy > -h) return _standPos(n);
+      (function (n) {
+        var img = overlayEl.querySelector('.overworld-node[data-id="' + n.id + '"] > img');
+        if (!img) return;                                   // not on screen
+        if (img.complete && img.offsetHeight) {
+          if (_artHolds(n, img, at)) at = _standPos(n);
+          return;
+        }
+        img.addEventListener('load', function () {
+          if (isMoving || currentPos.x !== saved.x || currentPos.y !== saved.y) return;
+          if (_artHolds(n, img, saved) && onLate) onLate(_standPos(n));
+        }, { once: true });
+      })(map.nodes[i]);
     }
-    return pos;
+    return at;
   }
 
   function _endpointPos(map, id) {
@@ -1186,6 +1250,10 @@ var Overworld = (function () {
   }
   function startIdleRoutine() {
     if (isMoving || isTransitioning) return;
+    // Looking at a landmark: stay turned to it rather than swing round to the
+    // camera for the map-reading idle.
+    var _at = _nodeAtStand(currentPos);
+    if (_at && _facingFor(_at) !== 'down') return;
     playMapAnim(2, function () {
       playStanding(2, function () { startIdleRoutine(); });
     });
@@ -1627,10 +1695,14 @@ var Overworld = (function () {
     overlayEl.appendChild(charEl);
 
     // Position character
-    var startPos = opts.entryAt || (opts.useSaved ? _standClearOfNodes(currentPos) : data.spawn);
+    var startPos = opts.entryAt || (opts.useSaved ? _standClearOfNodes(currentPos, function (sp) {
+      currentPos.x = sp.x; currentPos.y = sp.y;
+      positionChar(sp.x, sp.y);
+      _restPose();
+    }) : data.spawn);
     currentPos.x = startPos.x; currentPos.y = startPos.y;
     positionChar(currentPos.x, currentPos.y);
-    setStanding();
+    _restPose();                  // on a node's stand point: face it
 
     // Fog handling — first visit to a fogged map rolls fog away
     var firstVisit = visitedMaps.indexOf(mapId) === -1;
@@ -1817,14 +1889,24 @@ var Overworld = (function () {
     return _tierBeaten(hook, 'serf');
   }
 
-  /* Where a boss node's two flags stand, from its trimmed art (stage px):
-     each pole foot `edge` of the art's half-width out from its centre line and
-     `plant` of its height up from its base line — tucked just behind the art's
-     edges, so the banners fly beside the building whatever its width. */
-  var FLAG_FIT = { edge: 0.75, plant: 0.12 };
+  /* Where a boss node's two flags stand, from its trimmed art (stage px). The
+     flags are TUCKED IN BEHIND the node: each pole stands `inset` of the art's
+     width either side of its centre line (a fraction, so it survives any node
+     scale), and the cluster sorts one step behind the node, so the building
+     hides the pole feet. A foot sits `plantMin` of the art's height above the
+     base line — raised further only as far as needed for the cloth to clear
+     the roofline (`clothShow` of the pole's length above the art's top), and
+     never above `plantMax`. The fan tilt then carries each banner out past the
+     side of the art, so the cloth reads above or beside it on narrow steles,
+     wide cities and small nodes alike. POLE_LEN is the flag art's foot-to-tip
+     run at --flag-size (105px × 0.77). */
+  var FLAG_FIT = { inset: 0.18, plantMin: 0.12, plantMax: 0.55, clothShow: 0.6 };
+  var POLE_LEN = 81;
   function _fitFlags(cluster, art) {
-    cluster.style.setProperty('--flag-spread', (art.w / 2 * FLAG_FIT.edge).toFixed(1) + 'px');
-    cluster.style.setProperty('--flag-plant',  (art.h * FLAG_FIT.plant).toFixed(1) + 'px');
+    var plant = Math.max(art.h * FLAG_FIT.plantMin,
+                Math.min(art.h * FLAG_FIT.plantMax, art.h - POLE_LEN * FLAG_FIT.clothShow));
+    cluster.style.setProperty('--flag-spread', (art.w * FLAG_FIT.inset).toFixed(1) + 'px');
+    cluster.style.setProperty('--flag-plant',  plant.toFixed(1) + 'px');
   }
 
   /* Render the two flags (+ any earned stamps) for a boss node, as a cluster
@@ -2318,7 +2400,7 @@ var Overworld = (function () {
       // ignores both walkTo and the route graph — routing it would replace the
       // drama with a tidy walk to a box edge.
       var path = exit.walkOff
-        ? [{ x: currentPos.x + EGYPT_WALKOFF.dx, y: currentPos.y + EGYPT_WALKOFF.dy }]
+        ? [_walkOffPoint(currentPos, EGYPT_WALKOFF.dx, EGYPT_WALKOFF.dy)]
         : _routeTo(exit.id);
       walkPath(path, function () {
         transitionToMap(exit.target, exit.entryAt);
@@ -2826,12 +2908,12 @@ var Overworld = (function () {
     currentPos.x = _at.x;
     currentPos.y = _at.y;
     positionChar(currentPos.x, currentPos.y);
-    setStanding();
+    _restPose();
 
     // === SCENE 1: East Africa ===
     runDialogue(D1_SCENE1_DIALOGUE, function () {
       // After "Let's go!" — Explorer walks off the right edge
-      walkPath([{ x: currentPos.x + EGYPT_WALKOFF.dx, y: currentPos.y + EGYPT_WALKOFF.dy }], function () {
+      walkPath([_walkOffPoint(currentPos, EGYPT_WALKOFF.dx, EGYPT_WALKOFF.dy)], function () {
         // Travel transition 1: East Africa → Egypt
         _d1TravelTo('egypt', { x: 10, y: 85 }, function () {
           // === SCENE 2: Egypt ===
@@ -3025,7 +3107,7 @@ var Overworld = (function () {
 
     var img = document.createElement('img');
     img.src = nodeData.image;
-    img.alt = nodeData.name || 'Walls of Uruk';
+    img.alt = nodeData.name || 'Gilgamesh';
     img.draggable = false;
     nodeEl.appendChild(img);
 
@@ -3855,6 +3937,10 @@ var Overworld = (function () {
                 arrived++;
                 if (arrived >= total) {
                   horse.fadeOut(700);
+                  // Turn from whatever she was looking at to face the horde.
+                  var _hx = 0;
+                  _ambushSprites.forEach(function (s) { _hx += parseFloat(s.el.style.left) || 0; });
+                  setStanding(_hx / Math.max(1, _ambushSprites.length) >= px ? 'right' : 'left');
                   // ── BEAT 3: the exchange, in the comic bubbles ──
                   hud.enterDialogueMode(null, function () {
                     if (typeof hud.swapNpcPortrait === 'function') {
@@ -3989,7 +4075,7 @@ var Overworld = (function () {
       nodeEl.style.transform = _nodeTransform(node);
       var img = document.createElement('img');
       img.src = node.image;   // from the map data, never a literal
-      img.alt = node.name || 'Akkad';
+      img.alt = node.name || 'Sargon';
       img.draggable = false;
       nodeEl.appendChild(img);
       nodeEl.addEventListener('click', (function (nd) {
@@ -4203,7 +4289,7 @@ var Overworld = (function () {
       nodeEl.style.transform = _nodeTransform(node);
       var img = document.createElement('img');
       img.src = node.image;   // from the map data, never a literal
-      img.alt = node.name || 'The Hanging Gardens';
+      img.alt = node.name || 'Nebuchadnezzar';
       img.draggable = false;
       nodeEl.appendChild(img);
       nodeEl.addEventListener('click', (function (nd) {
@@ -4492,9 +4578,14 @@ var Overworld = (function () {
     // battle screen; make sure it's the current map (defensive).
     if (currentMapId !== 'mesopotamia') loadMap('mesopotamia', {});
     _playMapMusic();   // resume the overworld track (covers the path that skips loadMap)
-    _refreshNodeFlags(true);   // render flags with the just-won stamp DEFERRED (the timed choreo thunks it)
+    // Re-render nodes FIRST — the market node now passes its showIf (Gilgamesh
+    // beaten) — with the just-won stamp DEFERRED (the timed choreo thunks it).
+    // This rebuilds every flag cluster, so it must come before the Giant flag is
+    // hidden below: done after, it swapped in a fresh, visible Giant flag (and
+    // thunked the stamp at once), and the erect beat animated a detached element.
+    _refreshNodes(true);
 
-    // First-win only: _refreshNodeFlags just rendered Gilgamesh's GIANT flag for the
+    // First-win only: the re-render just drew Gilgamesh's GIANT flag for the
     // first time (his Serf flag is now beaten). Hide it so it can ERECT as its own beat,
     // after the Serf stamp lands (shared with every boss's Serf-win return).
     var giantFlagEl = _consumePendingFlagReveal();
@@ -4505,12 +4596,11 @@ var Overworld = (function () {
       var _ua = _standPos(uruk);
       currentPos.x = _ua.x; currentPos.y = _ua.y;
       positionChar(_ua.x, _ua.y);
-      setStanding();
+      _restPose();
     }
 
-    // Re-render nodes — the market node now passes its showIf (Gilgamesh beaten).
-    // Start it hidden so it can fade in AFTER the map is revealed.
-    _refreshNodes();
+    // The market (re-rendered above) starts hidden so it can fade in AFTER the
+    // map is revealed.
     var marketEl = overlayEl && overlayEl.querySelector('[data-id="market"]');
     if (marketEl) marketEl.style.opacity = '0';
 
@@ -5736,7 +5826,7 @@ var Overworld = (function () {
   /* Tear down and re-place all node elements for the current map.
      Used after a flag change (e.g. post-victory) so newly-unlocked
      nodes like the Egypt signpost appear without a full map reload. */
-  function _refreshNodes() {
+  function _refreshNodes(deferStamp) {
     if (!overlayEl) return;
     overlayEl.querySelectorAll('.overworld-node').forEach(function (el) {
       el.parentNode.removeChild(el);
@@ -5772,7 +5862,7 @@ var Overworld = (function () {
       }
       overlayEl.appendChild(nodeEl);
     });
-    _refreshNodeFlags();   // keep boss flags/stamps in sync with the re-rendered nodes
+    _refreshNodeFlags(deferStamp);   // keep boss flags/stamps in sync with the re-rendered nodes
   }
 
   /* ── Otzi encounter ─────────────────────────────────────────────
@@ -6529,7 +6619,7 @@ var Overworld = (function () {
         startIdleRoutine();               // map-reading idle → reads as ALIVE, not frozen
         setTimeout(function () {
           cancelIdle();
-          setStanding();
+          _restPose();
           runDialogue(EGYPT_ONRAMP_DIALOGUE, function () {
             try { localStorage.setItem(KEY_EGYPT_NODE_LIVE, 'true'); } catch (e) {}
             isDialogueLocked = false;

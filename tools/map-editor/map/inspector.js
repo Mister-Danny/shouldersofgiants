@@ -42,6 +42,11 @@ function renderInspector() {
       <div class="f"><label>stand dx %</label><input id="i-sdx" type="number" step="0.1" value="${n.stand ? n.stand.dx : ''}" placeholder="0"></div>
       <div class="f"><label>stand dy %</label><input id="i-sdy" type="number" step="0.1" value="${n.stand ? n.stand.dy : ''}" placeholder="${r2(STAND_DEFAULT_DY)}"></div>
     </div>
+    <div class="f"><label>faces on arrival</label>
+      <select id="i-sface">
+        ${[['', 'toward the node (auto)'], ['up', 'up — back to camera'], ['down', 'down — toward camera'], ['left', 'left'], ['right', 'right']]
+          .map(([v, l]) => `<option value="${v}" ${v === (n.standFacing || '') ? 'selected' : ''}>${l}</option>`).join('')}
+      </select></div>
     <p class="note">x/y is the art's base line (bottom-centre). <b>Stand</b> is where the Explorer stops, relative to it — drag the teal foot-mark on the map, or type here. ${n.stand ? '<a href="#" id="i-sreset">Back to default</a>' : 'Default: just in front of the base line.'}</p>
     <div class="f2">
       <div class="f"><label>scale</label><input id="i-scale" type="number" step="0.05" value="${n.scale ?? ''}" placeholder="1"></div>
@@ -71,6 +76,7 @@ function renderInspector() {
     else n.stand = { dx: Number(dx) || 0, dy: dy === '' ? r2(STAND_DEFAULT_DY) : Number(dy) };
     requestRender();
   };
+  bind('#i-sface', 'change', v => { if (v) n.standFacing = v; else delete n.standFacing; requestRender(); });
   bind('#i-sdx', 'input', setStand);
   bind('#i-sdy', 'input', setStand);
   const sreset = $('#i-sreset');
