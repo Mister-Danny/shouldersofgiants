@@ -1464,12 +1464,36 @@ var Overworld = (function () {
     lab.textContent = text;
     var ov = overlayEl.getBoundingClientRect();
     var k = overlayEl.offsetWidth ? ov.width / overlayEl.offsetWidth : 1;   // stage scale
-    var img = nodeEl.querySelector(':scope > img');
     var sh  = nodeEl.querySelector(':scope > .ow-ground-shadow');
-    var r   = (img || nodeEl).getBoundingClientRect();
+    // The node's box, not its <img>: the img grows 8% on hover, the box doesn't,
+    // so the placement is the same however the pointer arrives.
+    var r   = nodeEl.getBoundingClientRect();
     var bottom = sh ? sh.getBoundingClientRect().bottom : r.bottom;
-    lab.style.left = ((r.left + r.width / 2 - ov.left) / k) + 'px';
-    lab.style.top  = ((bottom - ov.top) / k + 2) + 'px';
+    // Stage px. Below the node's ground shadow by default (pulled up to stay on
+    // the map above the HUD); ABOVE its art when below would cover a
+    // neighbouring node and above covers less — e.g. Nebuchadnezzar's label
+    // over the walls of Uruk.
+    var cx = (r.left + r.width / 2 - ov.left) / k;
+    var lw = lab.offsetWidth, lh = lab.offsetHeight;
+    var below = Math.min((bottom - ov.top) / k + 2, overlayEl.offsetHeight - lh - 2);
+    var above = (r.top - ov.top) / k - lh - 4;
+    var covers = function (top) {
+      var area = 0;
+      Array.prototype.forEach.call(overlayEl.querySelectorAll('.overworld-node'), function (el) {
+        if (el === nodeEl) return;
+        // The neighbour's box inset to roughly its visible art: isometric and
+        // tapered art leaves the box's top and side corners transparent.
+        var o = el.getBoundingClientRect(), ix = o.width * 0.12, it = o.height * 0.15;
+        var x0 = Math.max(cx - lw / 2, (o.left + ix - ov.left) / k), x1 = Math.min(cx + lw / 2, (o.right - ix - ov.left) / k);
+        var y0 = Math.max(top, (o.top + it - ov.top) / k), y1 = Math.min(top + lh, (o.bottom - ov.top) / k);
+        if (x1 > x0 && y1 > y0) area += (x1 - x0) * (y1 - y0);
+      });
+      return area;
+    };
+    var top = below, under = covers(below);
+    if (under > 0 && above >= 0 && covers(above) < under) top = above;
+    lab.style.left = cx + 'px';
+    lab.style.top  = top + 'px';
     lab.classList.add('is-visible');
   }
   function _hideNodeLabel() {
@@ -4108,7 +4132,7 @@ var Overworld = (function () {
     overlayEl.insertBefore(storm, charEl);
 
     // 3) Mid-storm: fade the node in (flourish kept). Over the LENGTH OF THE SFX,
-    //    the node also GROWS to 3x its resting size then SHRINKS back to its spot —
+    //    the node also GROWS (to a ~190px peak) then SHRINKS back to its spot —
     //    centred so it swells in place. End: remove the storm, finish.
     var STORM_MS   = 1700;
     var REST_SCALE = (node.scale || 1);
@@ -4121,9 +4145,14 @@ var Overworld = (function () {
       // (_centreHoldY) while it rests on its base line.
       gsap.set(nodeEl, { xPercent: -50, yPercent: -100, transformOrigin: '50% 100%', scale: REST_SCALE });
       var halfS = (SFX_MS / 1000) / 2;
-      _whenNodeArt(node, nodeEl, function () {
+      _whenNodeArt(node, nodeEl, function (a) {
+        // Swell to a fixed on-screen peak (~190px tall, what the original 3×
+        // reached on the old, smaller node), not 3× whatever the node's rest
+        // size is — at the Pass 3 scale 3× was ~345px and swamped the map.
+        var SWELL_PEAK_PX = 190;
+        var PEAK = REST_SCALE * Math.max(1.3, Math.min(3, a ? SWELL_PEAK_PX / a.h : 3));
         gsap.timeline()
-          .to(nodeEl, { scale: REST_SCALE * 3, y: _centreHoldY(nodeEl, REST_SCALE * 3, REST_SCALE),
+          .to(nodeEl, { scale: PEAK, y: _centreHoldY(nodeEl, PEAK, REST_SCALE),
                         duration: halfS, ease: 'sine.inOut' })
           .to(nodeEl, { scale: REST_SCALE, y: 0, duration: halfS, ease: 'sine.inOut' });
       });
