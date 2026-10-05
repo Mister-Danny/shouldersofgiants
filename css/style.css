@@ -9304,7 +9304,7 @@ body.tut-locked #battle-reset-turn {
   user-select: none;
   text-align: center;
 }
-.overworld-node > img:not(.ow-cast-shadow) {
+.overworld-node > img:not(.ow-cast-shadow):not(.ow-ground-rim) {
   width: 84px;
   /* SEATED: the visible base sits SINK_PX into the ground, not on the trim's
      transparent padding (--seat, node-local px, set by overworld.js). */
@@ -9319,13 +9319,13 @@ body.tut-locked #battle-reset-turn {
   transform-origin: 50% 100%;
   transition: scale 120ms ease-out;
 }
-.overworld-node:hover > img:not(.ow-cast-shadow) { scale: 1.08; }
+.overworld-node:hover > img:not(.ow-cast-shadow):not(.ow-ground-rim) { scale: 1.08; }
 /* The gold pulse marks ONLY the player's next objective (overworld.js
    _refreshObjectiveGlow) — never a beaten node or a market. */
-.overworld-node.is-objective > img:not(.ow-cast-shadow) {
+.overworld-node.is-objective > img:not(.ow-cast-shadow):not(.ow-ground-rim) {
   animation: overworld-node-pulse 2.2s ease-in-out infinite;
 }
-[data-id="egypt-signpost"] > img:not(.ow-cast-shadow) { width: 126px; }
+[data-id="egypt-signpost"] > img:not(.ow-cast-shadow):not(.ow-ground-rim) { width: 126px; }
 
 /* ── Boss-node tier flags + victory stamps (flag/stamp progression) ──────────
    Two flags per boss node (Serf + Giant) are planted BEHIND the node and fan out
@@ -9341,8 +9341,8 @@ body.tut-locked #battle-reset-turn {
    Art: images/ui_images/{serfflag,giantflag,victorystamp}.png (lowercase). */
 .node-flags {
   /* ── EDITABLE KNOBS (tune by eye) ─────────────────────────────── */
-  --flag-size:      105px;   /* GIANT flag's width ≈ node size */
-  --flag-serf-size:  91px;   /* SERF flag ~13% smaller than the Giant, so the two read apart at a glance */
+  --flag-size:       74px;   /* GIANT flag's width — ~70% of a node, so it reads as a marker */
+  --flag-serf-size:  64px;   /* SERF flag ~13% smaller than the Giant, so the two read apart at a glance */
   --flag-spread: 24px;    /* each POLE's distance from the node's centre line (JS sets it per node) */
   --flag-plant:  12px;    /* how far ABOVE the node's base line the pole feet stand (JS sets it per node) */
   --flag-tilt:   13deg;   /* outward fan angle of the two flags, about each pole's foot */
@@ -9351,8 +9351,8 @@ body.tut-locked #battle-reset-turn {
   --serf-pole-x:  73.8%;
   --giant-pole-x: 26.6%;
   --pole-foot-y:  88.7%;
-  --stamp-size:      31px;   /* GIANT victory-stamp size */
-  --stamp-serf-size: 27px;   /* SERF stamp ~13% smaller, to match the smaller serf flag */
+  --stamp-size:      22px;   /* GIANT victory-stamp size */
+  --stamp-serf-size: 19px;   /* SERF stamp ~13% smaller, to match the smaller serf flag */
   --stamp-tilt:  30deg;   /* stamp lean, mirrored per tier (serf +, giant −); follows the banner */
   /* Per-tier stamp anchor WITHIN its flag: cx = horizontal % (←smaller = left),
      cy = vertical % from the top (↑bigger = lower). Serf/Giant fully independent. */
@@ -9378,7 +9378,9 @@ body.tut-locked #battle-reset-turn {
   left: 0;
   top: 0;                          /* both anchored at the cluster point */
   width: var(--flag-size);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+  /* a small shadow under the overworld's one sun (front-left: falls up and
+     to the right — SUN in overworld.js) */
+  filter: drop-shadow(3px -2px 1px rgba(0, 0, 0, 0.4));
 }
 /* Each flag's POLE FOOT lands --flag-spread left/right of the node's centre line,
    --flag-plant above its base line, then the flag fans outward by --flag-tilt
@@ -10276,7 +10278,7 @@ body.tut-locked #battle-reset-turn {
 }
 
 /* Prehistory node: amplified pulse used after 30s of idle waiting */
-.overworld-node.overworld-node-urgent > img:not(.ow-cast-shadow) {
+.overworld-node.overworld-node-urgent > img:not(.ow-cast-shadow):not(.ow-ground-rim) {
   animation: overworld-node-pulse-urgent 1.1s ease-in-out infinite !important;
 }
 @keyframes overworld-node-pulse-urgent {
@@ -11618,10 +11620,15 @@ body.prehistory-battle .db-overlay-ip {
   font-weight: bold;
   border: 2px solid #1a0a04;
   border-radius: 50%;
-  box-shadow: 0 2px 0 #000, 0 0 8px rgba(248, 208, 0, 0.5);
+  /* bevel, glow, and a small cast shadow under the overworld's one sun
+     (front-left: shadows fall up and to the right — see SUN in overworld.js) */
+  box-shadow: 0 2px 0 #000, 0 0 8px rgba(248, 208, 0, 0.5), 3px -3px 2px rgba(0, 0, 0, 0.35);
   z-index: 3;
   pointer-events: none;
 }
+/* The East Africa signpost wears its ✓ ON the sign board, right of the
+   plaque — beside the post it read as floating in empty grass. */
+.overworld-node[data-id="egypt-signpost"] { --badge-x: 74%; --badge-y: 41%; }
 
 /* Home-screen Adventure Mode button — warm gold accent */
 .btn-home-adventure {

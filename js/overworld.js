@@ -1094,7 +1094,7 @@ var Overworld = (function () {
      and its visual centre in map-%. Read from the laid-out <img>, so it needs
      the image to have loaded; null until then. */
   function _nodeArt(n, nodeEl) {
-    var img = nodeEl && nodeEl.querySelector(':scope > img:not(.ow-cast-shadow)');
+    var img = nodeEl && nodeEl.querySelector(':scope > img:not(.ow-cast-shadow):not(.ow-ground-rim)');
     if (!img || !img.offsetWidth || !img.offsetHeight) return null;
     var s = n.scale || 1, r = (n.rotation || 0) * Math.PI / 180;
     var w = img.offsetWidth * s, h = img.offsetHeight * s, k = _pxPerPct();
@@ -1109,12 +1109,30 @@ var Overworld = (function () {
   function _whenNodeArt(n, nodeEl, fn) {
     var a = _nodeArt(n, nodeEl);
     if (a) { fn(a); return; }
-    var img = nodeEl && nodeEl.querySelector(':scope > img:not(.ow-cast-shadow)');
+    var img = nodeEl && nodeEl.querySelector(':scope > img:not(.ow-cast-shadow):not(.ow-ground-rim)');
     if (!img) { fn(null); return; }
-    var done = false;
-    var go = function () { if (done) return; done = true; fn(_nodeArt(n, nodeEl)); };
-    img.addEventListener('load', go, { once: true });
-    img.addEventListener('error', go, { once: true });
+    _whenLaidOut(img, function (ok) { fn(ok ? _nodeArt(n, nodeEl) : null); });
+  }
+  /* fn(true) once the image has a laid-out size, fn(false) if it fails to
+     load. Waiting on 'load' alone is not enough: a map built while its screen
+     is hidden (boot, a battle return, the dev panel) has every image loaded at
+     ZERO size, and 'load' never fires again — so wait for the size itself. */
+  function _whenLaidOut(img, fn) {
+    if (img.offsetWidth && img.offsetHeight) { fn(true); return; }
+    var done = false, ro = null;
+    var finish = function (ok) {
+      if (done) return;
+      done = true;
+      if (ro) ro.disconnect();
+      img.removeEventListener('load', check);
+      img.removeEventListener('error', fail);
+      fn(ok);
+    };
+    var check = function () { if (img.offsetWidth && img.offsetHeight) finish(true); };
+    var fail  = function () { finish(false); };
+    if (typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(check); ro.observe(img); }
+    img.addEventListener('load', check);
+    img.addEventListener('error', fail);
   }
 
   /* A reveal effect layer (dust, dirt, sparkles) centred on a node's art and
@@ -1158,16 +1176,16 @@ var Overworld = (function () {
     var saved = { x: pos.x, y: pos.y }, at = saved;
     for (var i = 0; i < (map.nodes || []).length; i++) {
       (function (n) {
-        var img = overlayEl.querySelector('.overworld-node[data-id="' + n.id + '"] > img:not(.ow-cast-shadow)');
+        var img = overlayEl.querySelector('.overworld-node[data-id="' + n.id + '"] > img:not(.ow-cast-shadow):not(.ow-ground-rim)');
         if (!img) return;                                   // not on screen
         if (img.complete && img.offsetHeight) {
           if (_artHolds(n, img, at)) at = _standPos(n);
           return;
         }
-        img.addEventListener('load', function () {
-          if (isMoving || currentPos.x !== saved.x || currentPos.y !== saved.y) return;
+        _whenLaidOut(img, function (ok) {
+          if (!ok || isMoving || currentPos.x !== saved.x || currentPos.y !== saved.y) return;
           if (_artHolds(n, img, saved) && onLate) onLate(_standPos(n));
-        }, { once: true });
+        });
       })(map.nodes[i]);
     }
     return at;
@@ -1368,10 +1386,14 @@ var Overworld = (function () {
                 front corner
        band     how far up from the contour the seam is drawn before blurring
        blur     softness, as a share of the art's width
-       drop     screen px the seam sits below the art
+       drop     screen px the seam sits below the art. Keep it 0: the seam is
+                cut AT the contour, so any drop bares a strip of terrain
+                between base and seam that reads as a pale ring
        opacity  of the seam */
-  var GROUND    = { zone: 0.45, band: 0.08, blur: 0.07, drop: 2, opacity: 0.75 };
-  var CAST_ON   = false;  // cast shadows: off while the grounding is judged on its own
+  var GROUND    = { zone: 0.45, band: 0.08, blur: 0.07, drop: 0, opacity: 0.75 };
+  var CAST_ON   = true;
+  var ART_WORK_PX = 240;   // longest side of the art copy all of this is built from
+  var CPU2D = { willReadFrequently: true };   // canvases read back → keep them off the GPU
 
   /* The cast shadow's transform, about the caster's foot: flatten to `length`
      (negative = folded down toward the viewer), lean away from the sun, then
@@ -1402,53 +1424,65 @@ var Overworld = (function () {
     var c = _artInfoCache[src];
     if (c && c.ready) { cb(c); return; }
     if (c) { c.waiters.push(cb); return; }
-    c = _artInfoCache[src] = { ready: false, waiters: [cb] };
+    c = _artInfoCache[src] = { ready: false, waiters: [cb], src: src };
     var im = new Image();
     var finish = function () {
       c.ready = true;
       var w = c.waiters; c.waiters = [];
       w.forEach(function (fn) { fn(c); });
     };
+    var pending = 1;                    // the build itself + each image encode
+    var done = function () { if (--pending === 0) finish(); };
     im.onload = function () {
       var W = im.naturalWidth, H = im.naturalHeight;
       c.W = W; c.H = H; c.pad = 0; c.fx0 = 0; c.fx1 = W; c.sil = null;
       try {
+        // Everything is read from a SMALL copy of the art (longest side
+        // ART_WORK_PX) on CPU-backed canvases: reading full-size art back off
+        // the GPU stalled a first map load for over a second. One working
+        // pixel is about one screen pixel at the sizes nodes are drawn, so
+        // the seat stays within a pixel. From here W/H/d are the working
+        // copy; c.W/c.H stay natural.
+        var k = Math.min(1, ART_WORK_PX / Math.max(W, H));
+        W = Math.max(1, Math.round(W * k)); H = Math.max(1, Math.round(H * k));
         var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-        var cx = cv.getContext('2d'); cx.drawImage(im, 0, 0);
+        var cx = cv.getContext('2d', CPU2D); cx.drawImage(im, 0, 0, W, H);
         var d = cx.getImageData(0, 0, W, H).data;
         var bottom = -1;
         for (var y = H - 1; y >= 0 && bottom < 0; y--) {
           for (var x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 8) { bottom = y; break; }
         }
+        k = W / c.W;
         if (bottom >= 0) {
-          c.pad = H - 1 - bottom;
+          c.pad = (H - 1 - bottom) * c.H / H;
           var band = Math.max(3, Math.round(H * 0.1)), x0 = W, x1 = -1;
           for (var yy = bottom; yy > bottom - band && yy >= 0; yy--) {
             for (var xx = 0; xx < W; xx++) {
               if (d[(yy * W + xx) * 4 + 3] > 8) { if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; }
             }
           }
-          if (x1 >= x0) { c.fx0 = x0; c.fx1 = x1 + 1; }
+          if (x1 >= x0) { c.fx0 = x0 / k; c.fx1 = (x1 + 1) / k; }
         }
+        c.k = k;
         var sv = document.createElement('canvas'); sv.width = W; sv.height = H;
-        var sx = sv.getContext('2d');
+        var sx = sv.getContext('2d', CPU2D);
         sx.filter = 'blur(' + Math.max(1, W * 0.006).toFixed(1) + 'px)';   // once, at build
-        sx.drawImage(im, 0, 0);
+        sx.drawImage(im, 0, 0, W, H);
         sx.filter = 'none';
         sx.globalCompositeOperation = 'source-in';
         sx.fillStyle = '#000';
         sx.fillRect(0, 0, W, H);
-        c.sil = sv.toDataURL('image/png');
+        pending++; _canvasURL(sv, function (u) { c.sil = u; done(); });
         // GROUND rim: ambient occlusion along the art's LOWER CONTOUR — per
         // column, its bottom-most opaque pixel — so a diamond plinth gets a
         // dark seam along both front edges, not just its lowest corner. A
         // column whose lowest pixel sits above the base zone (a palm frond, a
         // banner overhanging the air) casts none. Blurred once, at build; the
         // part under the art is hidden by it, the spill outside is the seam.
-        var b = Math.max(2, Math.round(W * GROUND.blur)), base = H - 1 - c.pad;
+        var b = Math.max(2, Math.round(W * GROUND.blur)), base = H - 1 - Math.round(c.pad * c.k);
         var zone = base - H * GROUND.zone, depth = Math.max(3, Math.round(H * GROUND.band));
         var mv = document.createElement('canvas'); mv.width = W + 2 * b; mv.height = H + 3 * b;
-        var mx = mv.getContext('2d'); mx.fillStyle = '#000';
+        var mx = mv.getContext('2d', CPU2D); mx.fillStyle = '#000';
         var raw = [], lo = [], first = -1, last = -1, start = -1;
         for (var cx2 = 0; cx2 < W; cx2++) {
           raw[cx2] = -1; lo[cx2] = -1;
@@ -1483,7 +1517,7 @@ var Overworld = (function () {
         };
         if (start >= 0) { walk(start, -1); walk(start + 1, 1); }
         var av = document.createElement('canvas'); av.width = mv.width; av.height = mv.height;
-        var ax = av.getContext('2d');
+        var ax = av.getContext('2d', CPU2D);
         ax.filter = 'blur(' + (b * 0.6).toFixed(1) + 'px)';
         ax.drawImage(mv, 0, 0);
         ax.filter = 'none';
@@ -1500,23 +1534,117 @@ var Overworld = (function () {
             else if (xi > last) cut = lo[last] + (xi - last);
             else if (lo[xi] >= 0) cut = lo[xi];
             else if (lo[xi] <= -2) cut = -2 - lo[xi];
-            ax.fillRect(X, 0, 1, cut);
+            ax.fillRect(X, 0, 1, Math.max(0, cut - 1));   // 1 px under the art: no hairline
           }
           ax.globalCompositeOperation = 'source-over';
         }
-        c.ground = av.toDataURL('image/png'); c.groundPad = b;
+        c.groundPad = b / c.k;                                  // natural px
+        pending++; _canvasURL(av, function (u) { c.ground = u; done(); });
+        // Kept for the cast-shadow bake (_bakeCast): the silhouette canvas and
+        // the ground line, as "how far down is the ground under column x".
+        c.silCv = sv; c.base = base;
+        c.groundAt = function (x) {
+          if (first < 0) return base;
+          if (x < first) return lo[first];
+          if (x > last)  return lo[last];
+          var v = lo[Math.round(x)];
+          return v >= 0 ? v : (v <= -2 ? -2 - v : base);
+        };
       } catch (e) { /* unreadable canvas (file://) → no silhouette, no seat */ }
-      finish();
+      done();
     };
     im.onerror = function () { c.W = 0; finish(); };
     im.src = src;
+  }
+
+  /* A canvas as an image URL, encoded with toBlob — off the critical path,
+     where toDataURL encoded every layer synchronously on a map's first load. */
+  function _canvasURL(cv, cb) {
+    if (cv.toBlob && window.URL && URL.createObjectURL) {
+      cv.toBlob(function (bl) { cb(bl ? URL.createObjectURL(bl) : cv.toDataURL('image/png')); }, 'image/png');
+    } else {
+      cb(cv.toDataURL('image/png'));
+    }
+  }
+  function _whenURL(bk, fn) { if (bk.url) fn(bk.url); else bk.waiters.push(fn); }
+
+  /* The CAST shadow, baked once per image + pose into its own image, in the
+     caster's LOCAL frame (natural px; the node/prop transform then scales,
+     turns and mirrors it with the art). `M` is the caster's on-screen linear
+     map [a, b, c, d] (x' = a·x + c·y, y' = b·x + d·y) — its rotation and any
+     flip — so the shadow is flattened and leaned in SCREEN terms under the
+     one sun, then mapped back: L = M⁻¹·S·M, about the art's foot. `mirror`
+     draws the art flipped (a node's img mirrors itself; its shadow, a
+     sibling, does not). The shadow is then CUT along the art's ground line:
+     only what falls BEHIND the base survives, so an isometric plinth never
+     gets a smudge in front of its own edges. */
+  var _castCache = {};
+  function _bakeCast(a, M, mirror, o) {
+    o = o || {};
+    var len  = o.length  != null ? o.length  : SUN.length;
+    var lean = o.angle   != null ? o.angle   : SUN.lean;
+    var key = a.src + '|' + M.map(function (v) { return v.toFixed(3); }).join(',') +
+              '|' + (mirror ? 1 : 0) + '|' + len + '|' + lean;
+    if (_castCache[key]) return _castCache[key];
+    var W = a.silCv.width, H = a.silCv.height, fx = W / 2, fy = a.base + 1;   // working px
+    var t = Math.tan(lean * Math.PI / 180) * (SUN.side === 'left' ? 1 : -1);
+    var ls = SUN.front ? len : -len;
+    var S = [1, 0, -t * ls, ls];                       // [a, b, c, d]
+    var mul = function (P, Q) {                        // P·Q
+      return [P[0] * Q[0] + P[2] * Q[1], P[1] * Q[0] + P[3] * Q[1],
+              P[0] * Q[2] + P[2] * Q[3], P[1] * Q[2] + P[3] * Q[3]];
+    };
+    var det = M[0] * M[3] - M[1] * M[2];
+    var Mi = [M[3] / det, -M[1] / det, -M[2] / det, M[0] / det];
+    var L = mul(Mi, mul(S, M));
+    // Bounds of the mapped art rect, plus room for the softening.
+    var blur = Math.max(1, W * 0.01), m = Math.ceil(blur * 3);
+    var xs = [], ys = [];
+    [[0, 0], [W, 0], [0, H], [W, H]].forEach(function (q) {
+      var u = q[0] - fx, v = q[1] - fy;
+      xs.push(fx + L[0] * u + L[2] * v); ys.push(fy + L[1] * u + L[3] * v);
+    });
+    var x0 = Math.floor(Math.min.apply(null, xs)) - m, y0 = Math.floor(Math.min.apply(null, ys)) - m;
+    var x1 = Math.ceil(Math.max.apply(null, xs)) + m,  y1 = Math.ceil(Math.max.apply(null, ys)) + m;
+    var cv = document.createElement('canvas');
+    cv.width = x1 - x0; cv.height = y1 - y0;
+    var cx = cv.getContext('2d', CPU2D);
+    cx.filter = 'blur(' + blur.toFixed(1) + 'px)';
+    cx.setTransform(L[0], L[1], L[2], L[3],
+                    fx - (L[0] * fx + L[2] * fy) - x0, fy - (L[1] * fx + L[3] * fy) - y0);
+    if (mirror) { cx.translate(W, 0); cx.scale(-1, 1); }
+    cx.drawImage(a.silCv, 0, 0);
+    cx.setTransform(1, 0, 0, 1, 0, 0);
+    cx.filter = 'none';
+    // Cut along the ground line (local columns; mirrored with the art).
+    cx.globalCompositeOperation = 'destination-out';
+    for (var X = 0; X < cv.width; X++) {
+      var lx = X + x0;
+      var g = a.groundAt(mirror ? W - 1 - lx : lx);
+      cx.fillRect(X, g - y0, 1, cv.height);
+    }
+    var out = { url: null, waiters: [],                              // natural px
+                x: x0 / a.k, y: y0 / a.k, w: cv.width / a.k, h: cv.height / a.k };
+    _canvasURL(cv, function (u) {
+      out.url = u;
+      out.waiters.forEach(function (fn) { fn(u); }); out.waiters = [];
+    });
+    _castCache[key] = out;
+    return out;
+  }
+  /* The on-screen linear map of rotate(r) then scale(sx, sy) — a caster's
+     transform minus its uniform size. */
+  function _poseMatrix(rotDeg, flipX, flipY) {
+    var r = rotDeg * Math.PI / 180, cs = Math.cos(r), sn = Math.sin(r);
+    var fx = flipX ? -1 : 1, fy = flipY ? -1 : 1;
+    return [cs * fx, sn * fx, -sn * fy, cs * fy];
   }
 
   /* Seat + shadows for a node. Node-local px (the node's own scale applies on
      top), so screen-px constants are divided by the node's scale. */
   function _shadowNode(nodeEl) {
     if (nodeEl._owShadowed) return;
-    var img = nodeEl.querySelector(':scope > img:not(.ow-cast-shadow)');
+    var img = nodeEl.querySelector(':scope > img:not(.ow-cast-shadow):not(.ow-ground-rim)');
     if (!img) return;
     nodeEl._owShadowed = true;
     var n = _nodeDataById(nodeEl.dataset.id) || {};
@@ -1524,7 +1652,7 @@ var Overworld = (function () {
       if (!a.W) return;
       var place = function () {
         var dw = img.offsetWidth, dh = img.offsetHeight;
-        if (!dw || !dh) { img.addEventListener('load', place, { once: true }); return; }
+        if (!dw || !dh) { _whenLaidOut(img, function (ok) { if (ok) place(); }); return; }
         var f = dw / a.W, s = n.scale || 1;
         // SEAT: the visible base (not the trim padding) lands SINK_PX below
         // the node's point — planted, no hairline gap.
@@ -1534,14 +1662,15 @@ var Overworld = (function () {
         var mirror = img.style.transform.indexOf('scaleX(-1)') !== -1;
         // CAST: the art's own silhouette, flattened behind it, foot on its base.
         var o = n.shadow || {};
-        if (CAST_ON && a.sil && !o.off) {
+        if (CAST_ON && a.silCv && !o.off) {
+          var bk = _bakeCast(a, _poseMatrix(n.rotation || 0, false, false), mirror, o);
           var cs = document.createElement('img');
           cs.className = 'ow-cast-shadow';
           cs.alt = ''; cs.draggable = false;
-          cs.src = a.sil;
-          cs.style.width = dw + 'px';
-          cs.style.transformOrigin = '50% ' + foot.toFixed(2) + 'px';
-          cs.style.transform = _castTransform(o, mirror, n.rotation || 0);
+          _whenURL(bk, function (u) { cs.src = u; });
+          cs.style.width = (bk.w * f).toFixed(2) + 'px';
+          cs.style.left  = (bk.x * f).toFixed(2) + 'px';
+          cs.style.top   = (bk.y * f).toFixed(2) + 'px';
           cs.style.opacity = o.opacity != null ? o.opacity : SUN.opacity;
           nodeEl.insertBefore(cs, img);
         }
@@ -1589,16 +1718,16 @@ var Overworld = (function () {
       box.style.transformOrigin = propEl.style.transformOrigin || 'center bottom';
       box.style.translate = '0 ' + seat;
       var foot = a.H - a.pad;
-      if (CAST_ON && a.sil) {
+      if (CAST_ON && a.silCv) {
+        // The box carries the prop's rotation and flip: bake for that pose.
+        var flipY = /scale\([-\d.]+,\s*-/.test(propEl.style.transform);
+        var bk = _bakeCast(a, _poseMatrix(rot, flip, flipY), false, null);
         var cs = document.createElement('img');
         cs.className = 'ow-cast-shadow';
-        cs.alt = ''; cs.src = a.sil;
-        cs.style.width = a.W + 'px';
-        cs.style.transformOrigin = '50% ' + foot + 'px';
-        // The box carries the prop's rotation and flip; undo both around the
-        // flattening so the shadow falls the screen's way (uniform scale cancels).
-        var F = flip ? 'scaleX(-1) ' : '';
-        cs.style.transform = F + _castTransform(null, false, rot) + (flip ? ' scaleX(-1)' : '');
+        cs.alt = ''; _whenURL(bk, function (u) { cs.src = u; });
+        cs.style.width = bk.w + 'px';
+        cs.style.left  = bk.x + 'px';
+        cs.style.top   = bk.y + 'px';
         cs.style.opacity = SUN.opacity;
         box.appendChild(cs);
       }
@@ -2150,9 +2279,9 @@ var Overworld = (function () {
      never above `plantMax`. The fan tilt then carries each banner out past the
      side of the art, so the cloth reads above or beside it on narrow steles,
      wide cities and small nodes alike. POLE_LEN is the flag art's foot-to-tip
-     run at --flag-size (105px × 0.77). */
+     run at --flag-size (74px × 0.77). */
   var FLAG_FIT = { inset: 0.18, plantMin: 0.12, plantMax: 0.55, clothShow: 0.6 };
-  var POLE_LEN = 81;
+  var POLE_LEN = 57;
   function _fitFlags(cluster, art) {
     var plant = Math.max(art.h * FLAG_FIT.plantMin,
                 Math.min(art.h * FLAG_FIT.plantMax, art.h - POLE_LEN * FLAG_FIT.clothShow));
