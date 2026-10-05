@@ -3,7 +3,7 @@ import { toast } from '../shared/toast.js';
 import { requestRender } from '../shared/notify.js';
 import { pickArt } from '../shared/art-picker.js';
 import { State, markDirty, node, exit, prop, uniqueId } from './state.js';
-import { findRoute, bend } from './routes.js';
+import { findRoute, bend, standPos } from './routes.js';
 import { uniqueMilestoneId, milestoneUsage } from './milestones.js';
 
 /* ── Commands ─────────────────────────────────────────────────────────────
@@ -66,6 +66,12 @@ export const KINDS = {
   node:  {
     get: t => { const n = node(t.id); return { x: n.x, y: n.y }; },
     set: (t, x, y) => { const n = node(t.id); n.x = r2(x); n.y = r2(y); }
+  },
+  // A node's stand point: shown at its absolute position, stored as an offset
+  // from the node's point so it moves with the node.
+  stand: {
+    get: t => standPos(node(t.id)),
+    set: (t, x, y) => { const n = node(t.id); n.stand = { dx: r2(x - n.x), dy: r2(y - n.y) }; }
   },
   exit:  {
     get: t => { const x = exit(t.id); return { x: x.zone.x, y: x.zone.y }; },
@@ -222,7 +228,8 @@ export function addNodeFlow() {
       name: name || 'New Node',
       kind: 'battle',
       image: chosen.path,
-      // Drop it dead centre; the point is to drag it somewhere anyway.
+      // Drop it dead centre (its base line on the centre); the point is to
+      // drag it somewhere anyway. Stand point: the default, in front of it.
       x: 50, y: 50
     });
     State.sel = { type: 'node', id };

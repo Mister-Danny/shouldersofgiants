@@ -120,8 +120,17 @@ per-node `note` field, which round-trips.
 
 Percentages of the map container, origin top-left. The container is 1280×600
 stage px (the 1280×720 stage minus the 120px HUD strip), so 1% x ≈ 12.8px and
-1% y ≈ 6px. Nodes are centred on their point — the small gold circle in the
-editor is the actual anchor, which is often nowhere near the middle of the art.
+1% y ≈ 6px. Nodes and props STAND on their point: x/y is the bottom-centre of
+the art (the art files are trimmed to their visible edges, so that is where the
+building meets the ground). The small gold circle at the bottom of each node is
+that anchor; it is also what the game depth-sorts by (lower on the map = in
+front).
+
+The small teal foot-mark just below each node is its **stand point** — where
+the Explorer stops when she walks to it. Hollow = the default (centred, 10px in
+front of the base line); drag it to give the node its own (`stand: { dx, dy }`,
+map-% from the node's point), which turns it solid. It moves with the node.
+"Back to default" in the inspector clears it. Routes end at stand points.
 
 `#stage` is aspect-locked to 1280:600 and uses the same `object-fit: cover` as
 the game, so a position dragged here is the position rendered in-game. Nothing

@@ -188,6 +188,9 @@ var FIELDS = {
       OPT('hook',        function (n) { return n.hook ? 'hook:  ' + q(n.hook) : null; }),
       OPT('tiers',       function (n) { return n.tiers != null ? 'tiers: ' + num(n.tiers) : null; }),
       OPT('flagNudge',   function (n) { return n.flagNudge ? 'flagNudge: { dx: ' + num(n.flagNudge.dx || 0) + ', dy: ' + num(n.flagNudge.dy || 0) + ' }' : null; }),
+      // Where the Explorer stops at this node, relative to its point (map-%).
+      // Omitted = the default, just in front of the base line (overworld.js _standPos).
+      OPT('stand',       function (n) { return n.stand ? 'stand: { dx: ' + num(n.stand.dx || 0) + ', dy: ' + num(n.stand.dy || 0) + ' }' : null; }),
       OPT('serfFlagOn',  function (n) { return n.serfFlagOn ? 'serfFlagOn: ' + q(n.serfFlagOn) : null; }),
       OPT('victoryFlag', function (n) { return n.victoryFlag ? 'victoryFlag: true' : null; }),
       GATE('showFrom'), GATE('showUntil')
@@ -255,12 +258,13 @@ function serialise(doc) {
     s += '    image: ' + q(m.image) + ',\n';
     /* How the background is framed inside the 1280x600 map area. Omitted when
        it is the plain centred default, so most maps stay uncluttered. */
-    if (m.imageFit && (m.imageFit.anchor || m.imageFit.scale || m.imageFit.offsetX || m.imageFit.offsetY)) {
+    if (m.imageFit && (m.imageFit.anchor || m.imageFit.scale || m.imageFit.offsetX || m.imageFit.offsetY || m.imageFit.smooth)) {
       var f = m.imageFit, bits = [];
       if (f.anchor)  bits.push('anchor: ' + q(f.anchor));
       if (f.scale)   bits.push('scale: ' + scaleNum(f.scale));
       if (f.offsetX) bits.push('offsetX: ' + num(f.offsetX));
       if (f.offsetY) bits.push('offsetY: ' + num(f.offsetY));
+      if (f.smooth)  bits.push('smooth: true');
       s += '    imageFit: { ' + bits.join(', ') + ' },\n';
     }
     s += '    spawn: { x: ' + num(m.spawn.x) + ', y: ' + num(m.spawn.y) + ' },\n';

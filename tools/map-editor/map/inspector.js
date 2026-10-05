@@ -7,6 +7,7 @@ import { bind, snapshot, snapshotOnce, deleteSelection } from './commands.js';
 // this node already has a level authored — never mutated from here, and
 // level/state.js has zero imports of its own, so this can't become a cycle.
 import { State as levelState } from '../level/state.js';
+import { STAND_DEFAULT_DY } from './routes.js';
 
 /* ── Inspector ────────────────────────────────────────────────────────────
    Painted BY render.js (render() calls renderInspector as its last step —
@@ -38,6 +39,11 @@ function renderInspector() {
       <div class="f"><label>y %</label><input id="i-y" type="number" step="0.1" value="${n.y}"></div>
     </div>
     <div class="f2">
+      <div class="f"><label>stand dx %</label><input id="i-sdx" type="number" step="0.1" value="${n.stand ? n.stand.dx : ''}" placeholder="0"></div>
+      <div class="f"><label>stand dy %</label><input id="i-sdy" type="number" step="0.1" value="${n.stand ? n.stand.dy : ''}" placeholder="${r2(STAND_DEFAULT_DY)}"></div>
+    </div>
+    <p class="note">x/y is the art's base line (bottom-centre). <b>Stand</b> is where the Explorer stops, relative to it — drag the teal foot-mark on the map, or type here. ${n.stand ? '<a href="#" id="i-sreset">Back to default</a>' : 'Default: just in front of the base line.'}</p>
+    <div class="f2">
       <div class="f"><label>scale</label><input id="i-scale" type="number" step="0.05" value="${n.scale ?? ''}" placeholder="1"></div>
       <div class="f"><label>rotation °</label><input id="i-rot" type="number" step="1" value="${n.rotation || 0}"></div>
     </div>
@@ -59,6 +65,16 @@ function renderInspector() {
   bind('#i-x',     'input', v => { n.x = Number(v); requestRender(); });
   bind('#i-y',     'input', v => { n.y = Number(v); requestRender(); });
   bind('#i-scale', 'input', v => { if (v === '') delete n.scale; else n.scale = Number(v); requestRender(); });
+  const setStand = () => {
+    const dx = $('#i-sdx').value, dy = $('#i-sdy').value;
+    if (dx === '' && dy === '') delete n.stand;
+    else n.stand = { dx: Number(dx) || 0, dy: dy === '' ? r2(STAND_DEFAULT_DY) : Number(dy) };
+    requestRender();
+  };
+  bind('#i-sdx', 'input', setStand);
+  bind('#i-sdy', 'input', setStand);
+  const sreset = $('#i-sreset');
+  if (sreset) sreset.onclick = e => { e.preventDefault(); snapshot(); delete n.stand; markDirty(); requestRender(); };
   bind('#i-rot',   'input', v => { const r = Number(v); if (r) n.rotation = r; else delete n.rotation; requestRender(); });
   bind('#i-image', 'input', v => { n.image = v; requestRender(); });
   bind('#i-note',  'input', v => { if (v) n.note = v; else delete n.note; });

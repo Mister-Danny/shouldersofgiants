@@ -9226,7 +9226,7 @@ body.tut-locked #battle-reset-turn {
   justify-content: center;
   border: 2px dashed rgba(255, 215, 0, 0);
   transition: border-color 0.2s ease, background 0.2s ease;
-  z-index: 15;
+  z-index: 5000;   /* above the depth-sorted band (overworld.js _depthZ, ~400–2800) */
 }
 .overworld-exit:hover {
   border-color: rgba(255, 215, 0, 0.5);
@@ -9291,10 +9291,14 @@ body.tut-locked #battle-reset-turn {
   z-index: 30;
 }
 
-/* Civilization node (Prehistory) */
+/* Civilization node. A node STANDS on its point: left/top is the bottom-centre
+   of its (trimmed) art — its base line — and it rotates and scales about that
+   point. overworld.js sets the full transform (_nodeTransform) and its z-index
+   (depth-sorted by that base line, _applyDepth). */
 .overworld-node {
   position: absolute;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;
   cursor: pointer;
   pointer-events: auto;
   user-select: none;
@@ -9305,9 +9309,11 @@ body.tut-locked #battle-reset-turn {
   height: auto;
   display: block;
   margin: 0 auto;
-  /* Hover grows the art 8%. The `scale` property composes with any inline
+  /* Hover grows the art 8%, up from its base line (so the building never
+     sinks into the ground). The `scale` property composes with any inline
      `transform` (flipX nodes set scaleX(-1)) instead of overwriting it. */
   scale: 1;
+  transform-origin: 50% 100%;
   transition: scale 120ms ease-out;
 }
 .overworld-node:hover > img { scale: 1.08; }
@@ -9317,22 +9323,32 @@ body.tut-locked #battle-reset-turn {
   animation: overworld-node-pulse 2.2s ease-in-out infinite;
 }
 [data-id="egypt-signpost"] > img { width: 126px; }
+/* The East Africa signpost's ✓ sits ON the sign board (the right half of the
+   arrow, clear of the owl/ox carving), not off its corner. */
+[data-id="egypt-signpost"] { --badge-x: 74%; --badge-y: 26%; }
 
 /* ── Boss-node tier flags + victory stamps (flag/stamp progression) ──────────
    Two flags per boss node (Serf + Giant) are planted BEHIND the node and fan out
    from behind it — pole bases occluded by the node (z-index below it), banners
    sticking out; beating a tier stamps that tier's flag (tracked independently).
-   The cluster is a 0-size anchor at the node's centre (JS positions it at the map
-   %-coords; per-node nudges live in FLAG_LAYOUT in overworld.js). All the by-eye
-   knobs are the CSS custom properties below — tweak freely.
+   The cluster is a 0-size anchor on the node's base line (JS positions it at the
+   node's map %-coords + its flagNudge). The two poles stand at the ART's edges:
+   overworld.js measures the node's trimmed art and sets --flag-spread and
+   --flag-plant per node (FLAG_FIT), so narrow and wide art both get their flags
+   beside the building. The other by-eye knobs are the custom properties below.
    Art: images/ui_images/{serfflag,giantflag,victorystamp}.png (lowercase). */
 .node-flags {
   /* ── EDITABLE KNOBS (tune by eye) ─────────────────────────────── */
   --flag-size:      105px;   /* GIANT flag's width ≈ node size */
   --flag-serf-size:  91px;   /* SERF flag ~13% smaller than the Giant, so the two read apart at a glance */
-  --flag-spread: 30px;    /* how far left/right each flag's base sits from node centre */
-  --flag-rise:   16px;    /* push the flag bases DOWN into/behind the node (+ = lower) */
-  --flag-tilt:   13deg;   /* outward fan angle of the two flags */
+  --flag-spread: 24px;    /* each POLE's distance from the node's centre line (JS sets it per node) */
+  --flag-plant:  12px;    /* how far ABOVE the node's base line the pole feet stand (JS sets it per node) */
+  --flag-tilt:   13deg;   /* outward fan angle of the two flags, about each pole's foot */
+  /* Where the pole's FOOT is in each flag image (serf pole on the right of its
+     banner, giant pole on the left) — art facts, not knobs. */
+  --serf-pole-x:  73.8%;
+  --giant-pole-x: 26.6%;
+  --pole-foot-y:  88.7%;
   --stamp-size:      31px;   /* GIANT victory-stamp size */
   --stamp-serf-size: 27px;   /* SERF stamp ~13% smaller, to match the smaller serf flag */
   --stamp-tilt:  30deg;   /* stamp lean, mirrored per tier (serf +, giant −); follows the banner */
@@ -9350,26 +9366,29 @@ body.tut-locked #battle-reset-turn {
 
   position: absolute;
   width: 0;
-  height: 0;                       /* 0-size anchor point at the node centre */
-  z-index: -1;                     /* BEHIND the node — the node occludes the pole bases */
+  height: 0;                       /* 0-size anchor point on the node's base line */
+  /* z-index: set inline to one BEHIND its node (overworld.js _renderNodeFlags),
+     so the node occludes the pole bases and the pair depth-sorts as one. */
   pointer-events: none;            /* flags never intercept node clicks */
 }
 .node-flag {
   position: absolute;
-  left: 50%;
-  top: 50%;                        /* both anchored at the node centre */
+  left: 0;
+  top: 0;                          /* both anchored at the cluster point */
   width: var(--flag-size);
-  transform-origin: 50% 100%;      /* fan around the pole base */
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
 }
-/* Bottom-centre of each flag lands at the node centre (translate -50%,-100%), sunk
-   by --flag-rise, then fanned outward by --flag-tilt (serf left, giant right). */
+/* Each flag's POLE FOOT lands --flag-spread left/right of the node's centre line,
+   --flag-plant above its base line, then the flag fans outward by --flag-tilt
+   about that foot (serf left, giant right). */
 .node-flag-serf {
   width: var(--flag-serf-size);    /* serf flag smaller than the giant (distinct at a glance) */
-  transform: translate(calc(-50% - var(--flag-spread) + var(--serf-dx)), calc(-100% + var(--flag-rise))) rotate(calc(-1 * var(--flag-tilt) + var(--serf-rot)));
+  transform-origin: var(--serf-pole-x) var(--pole-foot-y);
+  transform: translate(calc(-1 * var(--serf-pole-x) - var(--flag-spread) + var(--serf-dx)), calc(-1 * var(--pole-foot-y) - var(--flag-plant))) rotate(calc(-1 * var(--flag-tilt) + var(--serf-rot)));
 }
 .node-flag-giant {
-  transform: translate(calc(-50% + var(--flag-spread) + var(--giant-dx)), calc(-100% + var(--flag-rise))) rotate(calc(var(--flag-tilt) + var(--giant-rot)));
+  transform-origin: var(--giant-pole-x) var(--pole-foot-y);
+  transform: translate(calc(-1 * var(--giant-pole-x) + var(--flag-spread) + var(--giant-dx)), calc(-1 * var(--pole-foot-y) - var(--flag-plant))) rotate(calc(var(--flag-tilt) + var(--giant-rot)));
 }
 
 /* ── Per-node flag nudges (set the --*-dx / --*-rot vars above) ─────────────── */
@@ -9416,14 +9435,15 @@ body.tut-locked #battle-reset-turn {
 }
 /* Inside a node: behind its art, within the node's own stacking context. */
 .overworld-node > .ow-ground-shadow { z-index: -1; }
-/* A prop's shadow is a sibling box with the prop's own size and transform. */
-.overworld-topo-prop-shadow { position: absolute; pointer-events: none; z-index: -2; }
+/* A prop's shadow is a sibling box with the prop's own size and transform. It
+   and the Explorer's shadow lie on the GROUND (z 2), under everything that
+   stands up — the depth-sorted band (overworld.js _depthZ) starts far above. */
+.overworld-topo-prop-shadow { position: absolute; pointer-events: none; z-index: 2; }
+#overworld-character-shadow { z-index: 2; }
 
-/* Topography buildings sit BEHIND the flags (flags are -1, buildings -2) so the
-   banners read in front of the settlement art. Still above the map (both inside
-   the #overworld-overlay stacking context).
-   Renamed from .egypt-topo-prop — props are per-map data now, not Egypt-only. */
-.overworld-topo-prop { z-index: -2; }
+/* Topography props (renamed from .egypt-topo-prop — props are per-map data now)
+   are depth-sorted by their base line like nodes: z-index set inline by
+   overworld.js _applyDepth. */
 .overworld-node-label {
   font-family: 'CT Galbite', monospace;
   font-size: 16px;
@@ -9448,7 +9468,7 @@ body.tut-locked #battle-reset-turn {
   margin-top: 0;
   transform: translateX(-50%);
   pointer-events: none;
-  z-index: 20;
+  z-index: 5100;   /* above the depth-sorted band and the exits */
   padding: 2px 8px;
   background: rgba(0, 0, 0, 0.55);
   border-radius: 3px;
@@ -9519,11 +9539,11 @@ body.tut-locked #battle-reset-turn {
   will-change: left, top;
 }
 /* An ambush horde: a soft ground shadow so three layered sprites read with depth
-   instead of as flat cut-outs, and a z-index band of their own so the group
-   overlaps consistently regardless of DOM order. */
+   instead of as flat cut-outs. Each rider is depth-sorted by its feet
+   (createOwSpriteAnimator), so the group overlaps consistently — and correctly
+   against the Explorer and the nodes — regardless of DOM order. */
 .ow-ambush-sprite {
   filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55));
-  z-index: 6;
 }
 
 /* ══ OVERWORLD DIRT TRAIL ═════════════════════════════════════════
@@ -9537,7 +9557,7 @@ body.tut-locked #battle-reset-turn {
   left: 0; top: 0;
   width: 100%; height: 100%;
   pointer-events: none;
-  z-index: 5;
+  z-index: 3;   /* on the ground; the ambush sets it one behind its rider instead */
 }
 .ow-dirt-grain {
   position: absolute;
@@ -11515,12 +11535,17 @@ body.prehistory-battle .db-overlay-ip {
 /* Completed-node treatment: gold checkmark badge overlaid on the
    Prehistory node once the battle is won. Sits above the node image,
    below the location label. Phase F adds .overworld-node-complete
-   on entry to the overworld after a victory. */
+   on entry to the overworld after a victory.
+   Placed from the ART's edges: the node box IS the trimmed art, so the badge
+   is centred on its top-right corner (--badge-x/--badge-y, % of the art) on
+   narrow and wide art alike. It is inside the node, so it is counter-scaled
+   by the node's scale (--node-s, set by overworld.js) to stay 28px on screen. */
 .overworld-node.overworld-node-complete::before {
   content: '\2713';   /* ✓ */
   position: absolute;
-  top: -6px;
-  right: -10px;
+  left: var(--badge-x, 100%);
+  top:  var(--badge-y, 0%);
+  transform: translate(-50%, -50%) scale(calc(1 / var(--node-s, 1)));
   width: 28px;
   height: 28px;
   display: flex;

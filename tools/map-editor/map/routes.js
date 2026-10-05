@@ -11,9 +11,20 @@ import { State } from './state.js';
    Routes are undirected: one entry serves both directions, and the game
    walks the bends in reverse when travelling the other way. */
 
+/* Where the Explorer stops at a node — its STAND POINT, not the node's own
+   point (that is the art's base line; she would stand on the building). Same
+   rule as the game (js/overworld.js _standPos): `stand: { dx, dy }` (map-%,
+   from the node's point) when set, else centred STAND_DEFAULT_DY below it.
+   10px on the 600px-tall map = 1.6667%. Keep in step with STAND_DEFAULT_PX. */
+export const STAND_DEFAULT_DY = 10 / 6;
+export const standPos = n => {
+  const o = n.stand || { dx: 0, dy: STAND_DEFAULT_DY };
+  return { x: n.x + (o.dx || 0), y: n.y + (o.dy || 0) };
+};
+
 export const endpointsOf = m => [
   { id: 'spawn', x: m.spawn.x, y: m.spawn.y, kind: 'spawn' },
-  ...(m.nodes || []).map(n => ({ id: n.id, x: n.x, y: n.y, kind: 'node' })),
+  ...(m.nodes || []).map(n => ({ id: n.id, ...standPos(n), kind: 'node' })),
   ...(m.exits || []).map(e => ({ id: e.id, x: e.walkTo.x, y: e.walkTo.y, kind: 'exit' }))
 ];
 export const endpointPos = (m, id) => endpointsOf(m).find(e => e.id === id);

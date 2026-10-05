@@ -19,3 +19,6 @@ firestore-debug.log
 
 # Raw art sources (generated masters on green, composites) — kept locally, never shipped
 reference/sprite-sources/
+
+# Untrimmed overworld node/prop art (Pass 2 trimmed the shipped copies) — local only
+reference/overworld-art-untrimmed/

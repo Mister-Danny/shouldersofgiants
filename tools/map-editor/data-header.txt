@@ -19,7 +19,10 @@
 
    COORDINATES — x/y are percentages of the map container, origin top-left.
    The container is 1280×600 stage px (the 1280×720 stage minus the 120px HUD),
-   so 1% x ≈ 12.8px and 1% y ≈ 6px. Nodes are centred on their point.
+   so 1% x ≈ 12.8px and 1% y ≈ 6px. Nodes and props STAND on their point: x/y
+   is the bottom-centre of the (trimmed) art — its base line — which is also
+   what depth-sorts them. A node's optional `stand: { dx, dy }` (map-%, from
+   its point) is where the Explorer stops; omitted = just in front of it.
 
    `kind` is recorded but NOT yet consumed by the game — onNodeClick still
    dispatches on literal node id. Wiring kind-based dispatch is Phase 2; until

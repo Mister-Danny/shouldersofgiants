@@ -243,7 +243,8 @@ main { flex: 1; display: flex; min-height: 0; }
 /* ── Placed things ────────────────────────────────────────────────────── */
 .n {
   position: absolute;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;   /* stands on its point, like the game */
   cursor: grab;
   text-align: center;
 }
@@ -276,13 +277,13 @@ main { flex: 1; display: flex; min-height: 0; }
 .n:hover .tag, .n.sel .tag { opacity: 1; }
 .n.sel { outline: 1px dashed var(--gold-hi); outline-offset: 4px; }
 
-/* Crosshair marking the node's true anchor point — the art is decorative and
-   often much larger than the point it is pinned to, so without this you cannot
-   tell what you are actually positioning. */
+/* Crosshair marking the node's true anchor point — the bottom-centre of its
+   art, i.e. its base line. The art is trimmed to its visible edges, so this is
+   where the building meets the ground; it is also what depth-sorts it. */
 .n::after {
   content: "";
   position: absolute;
-  left: 50%; top: 50%;
+  left: 50%; top: 100%;
   width: 9px; height: 9px;
   margin: -5px 0 0 -5px;
   border: 1px solid var(--gold-hi);
@@ -643,7 +644,7 @@ button.danger:hover { background: var(--danger); color: #fff; }
 #timeline .chk { color: var(--dim); font-size: 11px; text-transform: none; letter-spacing: 0; white-space: nowrap; }
 
 /* ── Topography props ─────────────────────────────────────────────────── */
-.prop { position: absolute; cursor: grab; }
+.prop { position: absolute; cursor: grab; transform-origin: 50% 100%; }   /* stands on its point */
 .prop img { display: block; pointer-events: none; }
 .prop.sel { outline: 1px dashed var(--gold-hi); outline-offset: 3px; }
 
@@ -668,6 +669,22 @@ button.danger:hover { background: var(--danger); color: #fff; }
   cursor: grab;
 }
 .spawn.sel { box-shadow: 0 0 0 3px rgba(248,208,0,0.35); }
+
+/* A node's STAND POINT — where the Explorer stops when she walks to it. A
+   small foot-mark: hollow while it is the default (just in front of the base
+   line), solid once the node has its own. Drag to set; it moves with the node. */
+.stand {
+  position: absolute;
+  width: 11px; height: 7px;
+  margin: -4px 0 0 -6px;
+  border-radius: 50%;
+  border: 1.5px solid #6fd4c8;
+  background: rgba(0,0,0,0.35);
+  cursor: grab;
+  opacity: 0.55;
+}
+.stand.custom { background: #6fd4c8; }
+.stand:hover, .stand.sel { opacity: 1; box-shadow: 0 0 0 3px rgba(111,212,200,0.35); }
 .spawn::after {
   content: "spawn";
   position: absolute; left: 50%; top: 15px;

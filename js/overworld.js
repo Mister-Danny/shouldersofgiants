@@ -552,6 +552,11 @@ var Overworld = (function () {
   // same heading, just a shorter off-screen run. Shared by the D1 first-win
   // cinematic and the To Egypt exit box.
   var EGYPT_WALKOFF = { dx: 48, dy: -48 };
+  // Map-x (%) at which the Explorer's whole 92px sprite box has just cleared
+  // the right edge: 100% + half her width (46px of 1280 = 3.6%). A walk-off
+  // aimed here ends the moment she leaves the screen, so the transition fades
+  // in with no silent off-screen footsteps.
+  var WALKOFF_RIGHT_X = 104;
 
   /* ════════════════════════════════════════════════════════════
      MAP DATA — layout + sequencing in data/map-data.js
@@ -822,6 +827,7 @@ var Overworld = (function () {
   function positionChar(xPct, yPct) {
     charEl.style.left = xPct + '%';
     charEl.style.top  = yPct + '%';
+    charEl.style.zIndex = _depthZ(yPct);   // her feet are her anchor
     var sh = _charShadow();
     if (sh) { sh.style.left = xPct + '%'; sh.style.top = yPct + '%'; }
   }
@@ -949,14 +955,109 @@ var Overworld = (function () {
      on a node makes that node the nearest endpoint, which is the right answer
      without having to track anything. */
 
-  /* The resting transform for a node element. Nodes are centred on their point,
-     then rotated, then scaled — the same order the topography props use, so the
-     two behave identically once you start tilting things. */
+  /* The resting transform for a node element. A node STANDS on its point: x/y
+     is the bottom-centre of its (trimmed) art — the visible base line — and it
+     rotates and scales about that point (transform-origin 50% 100%, in the CSS).
+     Same order as the topography props, so the two behave identically once you
+     start tilting things. */
   function _nodeTransform(n) {
-    var t = 'translate(-50%,-50%)';
+    var t = 'translate(-50%,-100%)';
     if (n.rotation) t += ' rotate(' + n.rotation + 'deg)';
     if (n.scale && n.scale !== 1) t += ' scale(' + n.scale + ')';
     return t;
+  }
+
+  /* ── STAND POINTS ──────────────────────────────────────────────────────────
+     Where the Explorer stops when she goes to a node: never the node's own point
+     (that is the building's base line — she would stand ON it), but just in
+     front of it. Default: centred, STAND_DEFAULT_PX below the base line. A node
+     may override it with `stand: { dx, dy }` (map-%, relative to the node's
+     point) — set by dragging the node's stand marker in tools/map-editor, which
+     uses the same default (tools/map-editor/map/routes.js STAND_DEFAULT_DY). */
+  var STAND_DEFAULT_PX = 10;
+  function _standPos(n) {
+    var o = n.stand || { dx: 0, dy: STAND_DEFAULT_PX / 6 };   // 600px map: 1% y = 6px
+    return { x: n.x + (o.dx || 0), y: n.y + (o.dy || 0) };
+  }
+
+  /* ── DEPTH SORT ────────────────────────────────────────────────────────────
+     Everything that stands on the ground — the Explorer, nodes, props, a node's
+     flags and stamps, Ötzi and ambush riders — is z-sorted by its FEET (its base
+     line): lower on the map = nearer = in front. z = DEPTH_BASE + 2 per stage px,
+     leaving the odd numbers between for things that sort WITH a node (its flags
+     sit one behind it, its reveal effects one in front). Ground shadows sit
+     under the whole band (z 2); exits, the hover label and reveal UI sit above it
+     (CSS, 5000+). The band is ~400–2800 for anything from -50% to 150% of y. */
+  var DEPTH_BASE = 1000;
+  function _depthZ(yPct) { return DEPTH_BASE + 2 * Math.round(yPct * 6); }
+
+  /* The node's art box on screen (stage px, unrotated): its width, its height,
+     and its visual centre in map-%. Read from the laid-out <img>, so it needs
+     the image to have loaded; null until then. */
+  function _nodeArt(n, nodeEl) {
+    var img = nodeEl && nodeEl.querySelector(':scope > img');
+    if (!img || !img.offsetWidth || !img.offsetHeight) return null;
+    var s = n.scale || 1, r = (n.rotation || 0) * Math.PI / 180;
+    var w = img.offsetWidth * s, h = img.offsetHeight * s;
+    // Centre = half the height up from the base, turned with the node.
+    return { w: w, h: h,
+             cx: n.x + (Math.sin(r) * h / 2) / 12.8,
+             cy: n.y - (Math.cos(r) * h / 2) / 6 };
+  }
+  /* Run fn(art) once the node's image is laid out (now, or on its load). A
+     missing image still calls fn — with null — so a cinematic waiting on it
+     never stalls. */
+  function _whenNodeArt(n, nodeEl, fn) {
+    var a = _nodeArt(n, nodeEl);
+    if (a) { fn(a); return; }
+    var img = nodeEl && nodeEl.querySelector(':scope > img');
+    if (!img) { fn(null); return; }
+    var done = false;
+    var go = function () { if (done) return; done = true; fn(_nodeArt(n, nodeEl)); };
+    img.addEventListener('load', go, { once: true });
+    img.addEventListener('error', go, { once: true });
+  }
+
+  /* A reveal effect layer (dust, dirt, sparkles) centred on a node's art and
+     sorted just in front of it. Placed on the base line at once, then moved to
+     the art's centre as soon as the image is laid out. */
+  function _placeNodeEffect(layer, n, nodeEl) {
+    layer.style.left = n.x + '%';
+    layer.style.top  = n.y + '%';
+    layer.style.zIndex = _depthZ(n.y) + 1;
+    _whenNodeArt(n, nodeEl, function (a) {
+      if (!a) return;
+      layer.style.left = a.cx + '%';
+      layer.style.top  = a.cy + '%';
+    });
+  }
+
+  /* Reveal tweens that scale a node about its CENTRE (the Uruk drop-in, the
+     Sargon swell) while it rests on its base: with the transform origin on the
+     base line, scale k lifts the centre by (k - rest)·h/2, so that much is
+     added back as y. Call once the image is laid out (_whenNodeArt). */
+  function _centreHoldY(nodeEl, k, rest) {
+    return (k - rest) * (nodeEl.offsetHeight || 0) / 2;
+  }
+
+  /* A saved position INSIDE a node's art — saved before nodes stood on their
+     base line, when walks ended on a node's centre — would put the Explorer
+     behind the building. Return that node's stand point instead; any other
+     position unchanged. The art box is the node's laid-out width × its
+     image's aspect (square until the image has loaded), unrotated. */
+  function _standClearOfNodes(pos) {
+    var map = MAPS[currentMapId];
+    if (!map || !overlayEl) return pos;
+    for (var i = 0; i < (map.nodes || []).length; i++) {
+      var n = map.nodes[i];
+      var img = overlayEl.querySelector('.overworld-node[data-id="' + n.id + '"] > img');
+      if (!img) continue;                                   // not on screen
+      var w = (img.offsetWidth || 84) * (n.scale || 1);
+      var h = img.naturalWidth ? w * img.naturalHeight / img.naturalWidth : w;
+      var dx = (pos.x - n.x) * 12.8, dy = (pos.y - n.y) * 6;
+      if (Math.abs(dx) < w / 2 && dy < 0 && dy > -h) return _standPos(n);
+    }
+    return pos;
   }
 
   function _endpointPos(map, id) {
@@ -964,7 +1065,7 @@ var Overworld = (function () {
     if (id === 'spawn') return map.spawn;
     var i;
     for (i = 0; i < (map.nodes || []).length; i++) {
-      if (map.nodes[i].id === id) return { x: map.nodes[i].x, y: map.nodes[i].y };
+      if (map.nodes[i].id === id) return _standPos(map.nodes[i]);
     }
     for (i = 0; i < (map.exits || []).length; i++) {
       if (map.exits[i].id === id) return map.exits[i].walkTo;
@@ -977,7 +1078,7 @@ var Overworld = (function () {
   function _endpointList(map) {
     var out = [{ id: 'spawn', pos: map.spawn }];
     (map.nodes || []).forEach(function (n) {
-      if (_isVisible(n)) out.push({ id: n.id, pos: { x: n.x, y: n.y } });
+      if (_isVisible(n)) out.push({ id: n.id, pos: _standPos(n) });
     });
     (map.exits || []).forEach(function (e) {
       if (_isVisible(e)) out.push({ id: e.id, pos: e.walkTo });
@@ -1321,6 +1422,23 @@ var Overworld = (function () {
     });
   }
 
+  /* Depth for everything the observer sees arrive: nodes and props from their
+     point (their base line), Ötzi from his feet. Runs in the observer's
+     microtask, so a new element is sorted before it is first painted. A node
+     also gets --node-s (its scale) so its ✓ badge can hold a constant size. */
+  function _applyDepth() {
+    if (!overlayEl) return;
+    Array.prototype.forEach.call(overlayEl.querySelectorAll(
+      '.overworld-node, .overworld-topo-prop, #overworld-otzi-sprite'), function (el) {
+      var y = parseFloat(el.style.top);
+      if (isFinite(y)) el.style.zIndex = _depthZ(y);
+      if (el.classList.contains('overworld-node')) {
+        var n = _nodeDataById(el.dataset.id);
+        el.style.setProperty('--node-s', (n && n.scale) || 1);
+      }
+    });
+  }
+
   /* The single dressing pass + the observer that runs it. */
   var _dressQueued = false;
   function _dressOverlay() {
@@ -1338,7 +1456,7 @@ var Overworld = (function () {
   function _watchOverlay() {
     if (!overlayEl || overlayEl._owObserved || typeof MutationObserver === 'undefined') return;
     overlayEl._owObserved = true;
-    new MutationObserver(_queueDress).observe(overlayEl, { childList: true });
+    new MutationObserver(function () { _applyDepth(); _queueDress(); }).observe(overlayEl, { childList: true });
     _wireNodeLabels();
   }
 
@@ -1407,6 +1525,7 @@ var Overworld = (function () {
                   bottom' keeps the bottom, default centres and crops both
          scale    zoom, to cover a gap left by an offset
          offsetX  nudge, in % of the image
+         smooth   true for painted art: normal filtering, not pixel-crisp
 
        Egypt used to be a hard-coded special case here (top-pinned and zoomed
        1.08 so the Nile Delta survived); it is now just the first map to carry
@@ -1420,6 +1539,9 @@ var Overworld = (function () {
     mapImgEl.style.objectPosition  = anchor;
     mapImgEl.style.transformOrigin = anchor;
     mapImgEl.style.transform       = tf.trim();
+    // smooth: true renders a painted (non pixel-art) background with normal
+    // filtering instead of the pixel-crisp default.
+    mapImgEl.style.imageRendering  = fit.smooth ? 'auto' : '';
 
     // Update the HUD region label to the current map's display name (dynamic —
     // never hardcoded). Guarded: a no-op if the HUD isn't present/ready.
@@ -1505,7 +1627,7 @@ var Overworld = (function () {
     overlayEl.appendChild(charEl);
 
     // Position character
-    var startPos = opts.entryAt || (opts.useSaved ? currentPos : data.spawn);
+    var startPos = opts.entryAt || (opts.useSaved ? _standClearOfNodes(currentPos) : data.spawn);
     currentPos.x = startPos.x; currentPos.y = startPos.y;
     positionChar(currentPos.x, currentPos.y);
     setStanding();
@@ -1695,6 +1817,16 @@ var Overworld = (function () {
     return _tierBeaten(hook, 'serf');
   }
 
+  /* Where a boss node's two flags stand, from its trimmed art (stage px):
+     each pole foot `edge` of the art's half-width out from its centre line and
+     `plant` of its height up from its base line — tucked just behind the art's
+     edges, so the banners fly beside the building whatever its width. */
+  var FLAG_FIT = { edge: 0.75, plant: 0.12 };
+  function _fitFlags(cluster, art) {
+    cluster.style.setProperty('--flag-spread', (art.w / 2 * FLAG_FIT.edge).toFixed(1) + 'px');
+    cluster.style.setProperty('--flag-plant',  (art.h * FLAG_FIT.plant).toFixed(1) + 'px');
+  }
+
   /* Render the two flags (+ any earned stamps) for a boss node, as a cluster
      positioned at the node's map %-coords. Appended to overlayEl (NOT the node
      element) so flag sizing is independent of each node's own scale. Reuses lowercase
@@ -1702,8 +1834,8 @@ var Overworld = (function () {
   function _renderNodeFlags(node) {
     var hook = _bossHook(node);
     if (!hook || !overlayEl) return;
-    // Nudge relative to the node CENTRE, in map-%. Editable per node in the
-    // map editor; 0/0 is dead-centre and right for most art.
+    // Nudge relative to the node's point (its base line), in map-%. Editable
+    // per node in the map editor; 0/0 is right for most art.
     var lay = node.flagNudge || { dx: 0, dy: 0 };
 
     var cluster = document.createElement('div');
@@ -1711,6 +1843,11 @@ var Overworld = (function () {
     cluster.dataset.hook = hook;
     cluster.style.left = (node.x + lay.dx) + '%';
     cluster.style.top  = (node.y + lay.dy) + '%';
+    // Sorts WITH its node, one step behind it: the node hides the pole feet.
+    cluster.style.zIndex = _depthZ(node.y) - 1;
+    // Poles at the art's edges, feet just up from its base (FLAG_FIT).
+    var nodeEl = overlayEl.querySelector('.overworld-node[data-id="' + node.id + '"]');
+    if (nodeEl) _whenNodeArt(node, nodeEl, function (a) { if (a) _fitFlags(cluster, a); });
 
     _flagTiers(node).forEach(function (pair) {
       var tier = pair[0], art = pair[1];
@@ -2680,13 +2817,14 @@ var Overworld = (function () {
     var nodeEl = overlayEl && overlayEl.querySelector('[data-id="egypt-signpost"]');
     if (nodeEl) nodeEl.classList.add('overworld-node-complete');
 
-    // Place Explorer at the egypt-signpost node position — that's where she was
+    // Place Explorer at the egypt-signpost's stand point — that's where she was
     // standing when the Otzi encounter was triggered (the walk-to-node path ends
-    // at the node coords). Falls back to spawn if the node data is somehow absent.
+    // there). Falls back to spawn if the node data is somehow absent.
     var _signpost = null;
     MAPS.eastafrica.nodes.forEach(function (n) { if (n.id === 'egypt-signpost') _signpost = n; });
-    currentPos.x = _signpost ? _signpost.x : MAPS.eastafrica.spawn.x;
-    currentPos.y = _signpost ? _signpost.y : MAPS.eastafrica.spawn.y;
+    var _at = _signpost ? _standPos(_signpost) : MAPS.eastafrica.spawn;
+    currentPos.x = _at.x;
+    currentPos.y = _at.y;
     positionChar(currentPos.x, currentPos.y);
     setStanding();
 
@@ -2702,8 +2840,8 @@ var Overworld = (function () {
           // through the walk-off and are cleared when loadMap swaps to the
           // Mesopotamia map below.
           runDialogue(D1_SCENE2_DIALOGUE, function () {
-            // Explorer walks off the right edge.
-            walkPath([{ x: 115, y: currentPos.y }], function () {
+            // Explorer walks off the right edge — just past it, not beyond.
+            walkPath([{ x: WALKOFF_RIGHT_X, y: currentPos.y }], function () {
               // Travel transition 2: Egypt → Mesopotamia
               _d1TravelTo('mesopotamia', { x: 10, y: 85 }, function () {
                 // === SCENE 3: Mesopotamia ===
@@ -2757,13 +2895,14 @@ var Overworld = (function () {
         'position:absolute',
         'left:' + p.x + '%',
         'top:'  + p.y + '%',
-        'transform:translate(-50%,-50%) rotate(' + (p.rotation || 0) + 'deg) scale(' + sx + ',' + sy + ')',
-        'transform-origin:center center',
+        // Like a node, a prop stands on its point: x/y is its art's bottom-centre.
+        'transform:translate(-50%,-100%) rotate(' + (p.rotation || 0) + 'deg) scale(' + sx + ',' + sy + ')',
+        'transform-origin:center bottom',
         'pointer-events:none',
         'user-select:none'
       ].join(';');
-      // Prepend so the props paint at the BACK (behind nodes + character),
-      // regardless of when this runs relative to node placement.
+      // Depth-sorted by its base line like everything else (_applyDepth);
+      // prepended only so DOM order is stable.
       overlayEl.insertBefore(el, overlayEl.firstChild);
     });
   }
@@ -2900,16 +3039,18 @@ var Overworld = (function () {
     // Insert before charEl so Explorer sprite paints above the node
     overlayEl.insertBefore(nodeEl, charEl);
 
-    if (typeof gsap !== 'undefined') {
-      // Entrance: starts at DOUBLE size (scale 2.7 = 1.35×2), raised up, then
-      // FALLS DOWN and settles to its normal position/scale, playing uruk.mp3 as
-      // it lands. xPercent/yPercent keep it centred on the 72%/82% point (the
-      // translate(-50%,-50%) equivalent), so the final state is the resting one.
-      // Tuning knobs: fallDistance (y:-110), fall duration (0.7s), start scale (2.7).
-      gsap.set(nodeEl, { xPercent: -50, yPercent: -50, transformOrigin: '50% 50%' });
+    if (typeof gsap !== 'undefined') _whenNodeArt(nodeData, nodeEl, function () {
+      // Entrance: starts at DOUBLE size, raised up, then FALLS DOWN and settles
+      // to its resting scale (the map data's, so it matches every later render),
+      // playing uruk.mp3 as it lands. xPercent/yPercent/origin are the resting
+      // translate(-50%,-100%) about the base; _centreHoldY keeps the scaling
+      // centred on the art, as it always was. Tuning knobs: fallDistance
+      // (y:-110), fall duration (0.7s), start scale (2× rest).
+      var REST = nodeData.scale || 1;
+      gsap.set(nodeEl, { xPercent: -50, yPercent: -100, transformOrigin: '50% 100%' });
       gsap.fromTo(nodeEl,
-        { opacity: 0, scale: 2.7, y: -110 },
-        { opacity: 1, scale: 1.35, y: 0, duration: 0.7, ease: 'power2.in',
+        { opacity: 0, scale: REST * 2, y: -110 + _centreHoldY(nodeEl, REST * 2, REST) },
+        { opacity: 1, scale: REST, y: 0, duration: 0.7, ease: 'power2.in',
           onComplete: function () {
             log('[D2a] Walls of Uruk node dropped in');
             // Hold the Explorer's next line until BOTH the landing animation AND the
@@ -2919,8 +3060,9 @@ var Overworld = (function () {
             var settleDone = false, sfxDone = false;
             function maybeProceed() { if (settleDone && sfxDone) proceed(); }
             // Squash-settle on landing — wait for it to complete.
-            gsap.fromTo(nodeEl, { scale: 1.55 },
-              { scale: 1.35, duration: 0.22, ease: 'power2.out',
+            var SQUASH = REST * 1.55 / 1.35;   // the original 1.55-over-1.35 squash
+            gsap.fromTo(nodeEl, { scale: SQUASH, y: _centreHoldY(nodeEl, SQUASH, REST) },
+              { scale: REST, y: 0, duration: 0.22, ease: 'power2.out',
                 onComplete: function () { settleDone = true; maybeProceed(); } });
             // Impact sfx — wait for the audio to fully end. Graceful fallbacks so a
             // blocked/erroring play() can't stall the arrival sequence.
@@ -2937,7 +3079,7 @@ var Overworld = (function () {
             setTimeout(proceed, 7000);
           }
         });
-    } else {
+    }); else {
       nodeEl.style.opacity = '1';
       if (onDone) setTimeout(onDone, 0);
     }
@@ -3430,11 +3572,20 @@ var Overworld = (function () {
     el.style.left = (opts.x || 0) + '%';
     el.style.top  = (opts.y || 0) + '%';
     if (opts.width)  el.style.width  = opts.width;
-    if (opts.zIndex != null) el.style.zIndex = opts.zIndex;
+    // Depth-sorted by its FEET: the sprite is centred on its point
+    // (translate -50%,-50%), so its feet are half its height below it. Kept
+    // current as it moves; an explicit opts.zIndex pins it instead.
+    function syncDepth() {
+      if (opts.zIndex != null) { el.style.zIndex = opts.zIndex; return; }
+      var y = parseFloat(el.style.top);
+      if (isFinite(y)) el.style.zIndex = _depthZ(y + (el.offsetHeight / 2) / 6);
+    }
+    el.addEventListener('load', syncDepth, { once: true });
     // Under the Explorer, like the Sargon node reveal does, so the player sprite
     // always reads as in front of the scenery.
     if (charEl && charEl.parentNode === overlayEl) overlayEl.insertBefore(el, charEl);
     else overlayEl.appendChild(el);
+    syncDepth();
 
     var i = 0, timer = null;
     var fps = opts.fps || 12;
@@ -3458,16 +3609,18 @@ var Overworld = (function () {
         gsap.to(el, {
           left: x + '%', top: y + '%',
           duration: dur / 1000, ease: ease || 'power1.inOut',
-          onComplete: function () { if (cb) cb(); }
+          onUpdate: syncDepth,
+          onComplete: function () { syncDepth(); if (cb) cb(); }
         });
       } else {
         el.style.transition = 'left ' + dur + 'ms linear, top ' + dur + 'ms linear';
         el.style.left = x + '%';
         el.style.top  = y + '%';
+        syncDepth();
         setTimeout(function () { if (cb) cb(); }, dur);
       }
     }
-    return { el: el, start: start, stop: stop, moveTo: moveTo, destroy: destroy };
+    return { el: el, start: start, stop: stop, moveTo: moveTo, destroy: destroy, syncDepth: syncDepth };
   }
 
   /* A LOOPING sfx with a fade-out, for a cinematic whose length is not the clip's.
@@ -3509,6 +3662,8 @@ var Overworld = (function () {
     if (!overlayEl) return { stop: function () {} };
     var layer = document.createElement('div');
     layer.className = 'ow-dirt-trail';
+    // opts.zIndex: sort with the sprite kicking it up (one behind it).
+    if (opts.zIndex != null) layer.style.zIndex = opts.zIndex;
     if (charEl && charEl.parentNode === overlayEl) overlayEl.insertBefore(layer, charEl);
     else overlayEl.appendChild(layer);
 
@@ -3692,7 +3847,7 @@ var Overworld = (function () {
                 // Read the sprite's live % position so the trail follows it.
                 var l = parseFloat(h.el.style.left), tp = parseFloat(h.el.style.top);
                 return isFinite(l) && isFinite(tp) ? { x: l, y: tp } : null;
-              });
+              }, { zIndex: (parseInt(h.el.style.zIndex, 10) || _depthZ(stopY)) - 1 });
               trails.push(t);
               h.moveTo(stopX, stopY, cfg.gallopMs, 'power2.out', function () {
                 h.stop();                     // freeze mid-stride: they've halted
@@ -3844,11 +3999,10 @@ var Overworld = (function () {
     }
     nodeEl.style.opacity = '0';
 
-    // 2) Dust-storm particle layer at the node's position.
+    // 2) Dust-storm particle layer on the node's art.
     var storm = document.createElement('div');
     storm.className = 'sargon-duststorm';
-    storm.style.left = node.x + '%';
-    storm.style.top  = node.y + '%';
+    _placeNodeEffect(storm, node, nodeEl);
     var GRAINS = 26;
     for (var i = 0; i < GRAINS; i++) {
       var g = document.createElement('span');
@@ -3877,12 +4031,16 @@ var Overworld = (function () {
       : 7372;   // sargonintro.mp3 length (fallback when duration isn't known yet)
     if (typeof gsap !== 'undefined') {
       gsap.to(nodeEl, { opacity: 1, duration: 0.8, delay: 0.6, ease: 'power1.out' });
-      // Grow → shrink across the intro SFX, anchored on the node's centre/spot.
-      gsap.set(nodeEl, { xPercent: -50, yPercent: -50, transformOrigin: '50% 50%', scale: REST_SCALE });
+      // Grow → shrink across the intro SFX, swelling about the art's centre
+      // (_centreHoldY) while it rests on its base line.
+      gsap.set(nodeEl, { xPercent: -50, yPercent: -100, transformOrigin: '50% 100%', scale: REST_SCALE });
       var halfS = (SFX_MS / 1000) / 2;
-      gsap.timeline()
-        .to(nodeEl, { scale: REST_SCALE * 3, duration: halfS, ease: 'sine.inOut' })
-        .to(nodeEl, { scale: REST_SCALE,     duration: halfS, ease: 'sine.inOut' });
+      _whenNodeArt(node, nodeEl, function () {
+        gsap.timeline()
+          .to(nodeEl, { scale: REST_SCALE * 3, y: _centreHoldY(nodeEl, REST_SCALE * 3, REST_SCALE),
+                        duration: halfS, ease: 'sine.inOut' })
+          .to(nodeEl, { scale: REST_SCALE, y: 0, duration: halfS, ease: 'sine.inOut' });
+      });
     } else {
       setTimeout(function () { nodeEl.style.opacity = '1'; }, 600);
     }
@@ -3952,11 +4110,10 @@ var Overworld = (function () {
     }
     nodeEl.style.opacity = '0';
 
-    // 2) Dirt-clod burst layer at the node's position.
+    // 2) Dirt-clod burst layer on the node's art.
     var dirt = document.createElement('div');
     dirt.className = 'hammurabi-dirt';
-    dirt.style.left = node.x + '%';
-    dirt.style.top  = node.y + '%';
+    _placeNodeEffect(dirt, node, nodeEl);
     var CLODS = 24;
     for (var i = 0; i < CLODS; i++) {
       var c = document.createElement('span');
@@ -3981,7 +4138,7 @@ var Overworld = (function () {
     //    first), with a small back-out settle. End: remove dirt, finish.
     var RISE_MS = 1850;   // a touch slower so the reveal doesn't rush by
     if (typeof gsap !== 'undefined') {
-      gsap.set(nodeEl, { xPercent: -50, yPercent: -50, scale: node.scale || 1, transformOrigin: '50% 100%' });
+      gsap.set(nodeEl, { xPercent: -50, yPercent: -100, scale: node.scale || 1, transformOrigin: '50% 100%' });
       gsap.fromTo(nodeEl,
         { y: 50, opacity: 0 },
         { y: 0, opacity: 1, duration: 1.25, delay: 0.3, ease: 'back.out(1.3)' });
@@ -4056,11 +4213,10 @@ var Overworld = (function () {
     }
     nodeEl.style.opacity = '0';
 
-    // 2) Sparkle particle layer at the node's position (twinkle in → drift → fade).
+    // 2) Sparkle particle layer on the node's art (twinkle in → drift → fade).
     var sparkle = document.createElement('div');
     sparkle.className = 'hanging-gardens-sparkle';
-    sparkle.style.left = node.x + '%';
-    sparkle.style.top  = node.y + '%';
+    _placeNodeEffect(sparkle, node, nodeEl);
     var SPARKS = 32;
     for (var i = 0; i < SPARKS; i++) {
       var s = document.createElement('span');
@@ -4082,7 +4238,7 @@ var Overworld = (function () {
     // 3) Soft magical fade-in + glow, then clean up the sparkles and finish.
     var SHIMMER_MS = 2100;
     if (typeof gsap !== 'undefined') {
-      gsap.set(nodeEl, { xPercent: -50, yPercent: -50, scale: node.scale || 1, transformOrigin: '50% 50%' });
+      gsap.set(nodeEl, { xPercent: -50, yPercent: -100, scale: node.scale || 1, transformOrigin: '50% 100%' });
       nodeEl.classList.add('hanging-gardens-reveal-glow');           // CSS pulse-glow (filter only)
       gsap.fromTo(nodeEl, { opacity: 0 }, { opacity: 1, duration: 1.4, delay: 0.35, ease: 'sine.out' });
     } else {
@@ -4343,11 +4499,12 @@ var Overworld = (function () {
     // after the Serf stamp lands (shared with every boss's Serf-win return).
     var giantFlagEl = _consumePendingFlagReveal();
 
-    // Land at the Uruk node.
+    // Land at the Uruk node (its stand point, in front of the walls).
     var uruk = _findMesoNode('walls-of-uruk');
     if (uruk) {
-      currentPos.x = uruk.x; currentPos.y = uruk.y;
-      positionChar(uruk.x, uruk.y);
+      var _ua = _standPos(uruk);
+      currentPos.x = _ua.x; currentPos.y = _ua.y;
+      positionChar(_ua.x, _ua.y);
       setStanding();
     }
 
@@ -4423,7 +4580,7 @@ var Overworld = (function () {
     pivotDur:       1.20,   // s  — PHASE 2: tilt-to-angle duration
     pivotOvershoot: 2.4,    // GSAP back.out strength on the pivot settle (higher = tilts further PAST, then back)
     overlap:        0.15,   // s  — pivot starts this long BEFORE the rise ends (keep small so phases stay legible)
-    origin:         '50% 100%',   // pole base — both the rise (scaleY) and the pivot (rotation) hinge here
+    origin:         '50% 100%',   // fallback only: the erect hinges on the flag's own pole foot (CSS transform-origin)
     // SFX (SOG.sfx named one-shots — obey Master/SFX volume + mute; null = silent):
     thudSfx:   'flagThud',  // pole PLANTING — fires at thudAtSec into the erect timeline
     flapSfx:   'flagFlap',  // flag BENDING/settling — fires at flapAtSec into the timeline
@@ -4455,8 +4612,10 @@ var Overworld = (function () {
     if (!img || typeof gsap === 'undefined') { if (onComplete) onComplete(); return; }
 
     var rest = _flagRestAngle(flagEl);          // resting tilt in the flag's own frame
+    // Hinge on the same point the flag's resting tilt does — its pole foot.
+    var origin = getComputedStyle(flagEl).transformOrigin || FLAG_ERECT.origin;
     // Start collapsed at the base + counter-rotated to VERTICAL (net angle 0), transparent.
-    gsap.set(img, { scaleY: 0, rotation: -rest, opacity: 0, transformOrigin: FLAG_ERECT.origin });
+    gsap.set(img, { scaleY: 0, rotation: -rest, opacity: 0, transformOrigin: origin });
     // On finish, WIPE all GSAP inline props so the img returns to its EXACT pristine CSS
     // state (size/position/rotation) — guarantees the rest pose matches what's established.
     var tl = gsap.timeline({ onComplete: function () { gsap.set(img, { clearProps: 'all' }); if (onComplete) onComplete(); } });
@@ -5649,10 +5808,11 @@ var Overworld = (function () {
     sprite.src       = 'images/Otzi.jpg';
     sprite.alt       = 'Otzi';
     sprite.draggable = false;
-    // Nudge 4% right and 7% down from the signpost so he stands
-    // visually between the explorer (arriving from SE) and the sign.
-    sprite.style.left = (node.x + 4) + '%';
-    sprite.style.top  = (node.y + 7) + '%';
+    // Just right of the signpost, feet on its base line, so he stands
+    // visually between the explorer and the sign. (Same screen spot as the
+    // old +4%/+7% from the sign's centre, before nodes stood on their base.)
+    sprite.style.left = (node.x + 3.47) + '%';
+    sprite.style.top  = (node.y - 0.07) + '%';
     overlayEl.appendChild(sprite);
     if (typeof gsap !== 'undefined') {
       gsap.fromTo(sprite, { opacity: 0, scale: 0.7 },

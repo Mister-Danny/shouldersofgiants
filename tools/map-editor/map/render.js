@@ -1,6 +1,6 @@
 import { $, $$, esc, fmt } from '../shared/utils.js';
 import { State, markDirty } from './state.js';
-import { endpointsOf, findRoute, routePoints, sameRoute } from './routes.js';
+import { endpointsOf, findRoute, routePoints, sameRoute, standPos } from './routes.js';
 import { visibleNow } from './milestones.js';
 import { selectMap, snapshot, snapshotOnce } from './commands.js';
 import { beginDrag } from './drag.js';
@@ -78,13 +78,14 @@ function render() {
   $('#scrub-label').textContent = ms ? (ms.label || ms.id) : '—';
 
   // Wipe everything except the persistent <svg> path layer.
-  $$('.n, .exit, .wp, .prop, .spawn', overlay).forEach(el => el.remove());
+  $$('.n, .stand, .exit, .wp, .prop, .spawn', overlay).forEach(el => el.remove());
   document.body.classList.toggle('route-mode', State.mode === 'route');
 
   // Props first — they are scenery and must paint behind the nodes, same as
   // the game's insertBefore(overlay.firstChild).
   (m.props || []).forEach((p, i) => overlay.appendChild(applyVis(propEl(p, i), p)));
   (m.nodes || []).forEach(n => overlay.appendChild(applyVis(nodeEl(n), n)));
+  (m.nodes || []).forEach(n => overlay.appendChild(applyVis(standEl(n), n)));
   (m.exits || []).forEach(x => overlay.appendChild(applyVis(exitEl(x), x)));
 
   overlay.appendChild(spawnEl(m));
@@ -120,6 +121,7 @@ function applyFit(el, fit) {
   el.style.objectPosition  = anchor;
   el.style.transformOrigin = anchor;
   el.style.transform       = t.trim();
+  el.style.imageRendering  = fit.smooth ? 'auto' : '';
 }
 
 function nodeEl(n) {
@@ -128,8 +130,9 @@ function nodeEl(n) {
   el.dataset.id = n.id;
   el.style.left = n.x + '%';
   el.style.top  = n.y + '%';
-  // Same order as the game and the props: centre, rotate, scale.
-  let t = 'translate(-50%,-50%)';
+  // Same as the game: the node STANDS on its point (bottom-centre of its art)
+  // and rotates/scales about it (.n transform-origin 50% 100%).
+  let t = 'translate(-50%,-100%)';
   if (n.rotation) t += ` rotate(${n.rotation}deg)`;
   if (n.scale && n.scale !== 1) t += ` scale(${n.scale})`;
   el.style.transform = t;
@@ -152,6 +155,20 @@ function nodeEl(n) {
   return el;
 }
 
+/* Where the Explorer stops at this node. Hollow = the default (just in front
+   of the base line); solid = a per-node override. Drag it to set one. */
+function standEl(n) {
+  const el = document.createElement('div');
+  const sel = State.sel && (State.sel.type === 'stand' || State.sel.type === 'node') && State.sel.id === n.id;
+  el.className = 'stand' + (n.stand ? ' custom' : '') + (sel ? ' sel' : '');
+  const p = standPos(n);
+  el.style.left = p.x + '%';
+  el.style.top  = p.y + '%';
+  el.title = `${n.id}: Explorer stands here${n.stand ? ' (custom)' : ' (default)'} — drag to move`;
+  el.addEventListener('pointerdown', e => beginDrag(e, { type: 'stand', id: n.id }));
+  return el;
+}
+
 /* Topography. Mirrors the game's _placeProps transform exactly — the signed
    scale for flips and the rotation both have to match or what you position
    here is not what renders. */
@@ -164,7 +181,8 @@ function propEl(p, i) {
   const sc = p.scale == null ? 1 : p.scale;
   const sx = sc * (p.flipX ? -1 : 1);
   const sy = sc * (p.flipY ? -1 : 1);
-  el.style.transform = `translate(-50%,-50%) rotate(${p.rotation || 0}deg) scale(${sx},${sy})`;
+  // Stands on its point like a node: x/y is the art's bottom-centre.
+  el.style.transform = `translate(-50%,-100%) rotate(${p.rotation || 0}deg) scale(${sx},${sy})`;
 
   const img = document.createElement('img');
   img.src = '/' + p.image;
@@ -286,14 +304,15 @@ function renderFitPanel() {
       <div class="f"><label>nudge y %</label><input id="fit-oy" type="number" step="0.5" value="${fit.offsetY || 0}"></div>
     </div>
     <div class="f"><label>nudge x %</label><input id="fit-ox" type="number" step="0.5" value="${fit.offsetX || 0}"></div>
+    <div class="f"><label><input id="fit-smooth" type="checkbox" ${fit.smooth ? 'checked' : ''}> smooth (painted art, not pixel-crisp)</label></div>
     <p class="note" id="fit-report">measuring…</p>
     <div class="rowbtns"><button class="ghost sm" id="fit-reset">Reset framing</button></div>`;
 
   const set = (k, v) => {
     snapshotOnce();
     m.imageFit = m.imageFit || {};
-    if (v === '' || v === 0 || v === null || (k === 'scale' && Number(v) === 1)) delete m.imageFit[k];
-    else m.imageFit[k] = k === 'anchor' ? v : Number(v);
+    if (v === '' || v === 0 || v === false || v === null || (k === 'scale' && Number(v) === 1)) delete m.imageFit[k];
+    else m.imageFit[k] = k === 'anchor' || k === 'smooth' ? v : Number(v);
     if (m.imageFit.anchor === 'center center') delete m.imageFit.anchor;
     if (!Object.keys(m.imageFit).length) delete m.imageFit;
     markDirty(); render();
@@ -302,6 +321,7 @@ function renderFitPanel() {
   $('#fit-scale').oninput   = e => set('scale', e.target.value);
   $('#fit-oy').oninput      = e => set('offsetY', e.target.value);
   $('#fit-ox').oninput      = e => set('offsetX', e.target.value);
+  $('#fit-smooth').onchange = e => set('smooth', e.target.checked);
   $('#fit-reset').onclick   = () => { snapshot(); delete m.imageFit; markDirty(); render(); };
 
   reportCrop();
