@@ -9323,9 +9323,6 @@ body.tut-locked #battle-reset-turn {
   animation: overworld-node-pulse 2.2s ease-in-out infinite;
 }
 [data-id="egypt-signpost"] > img { width: 126px; }
-/* The East Africa signpost's ✓ sits ON the sign board (the middle of its right
-   half, clear of the owl/ox carving), not off its corner. */
-[data-id="egypt-signpost"] { --badge-x: 66%; --badge-y: 33%; }
 
 /* ── Boss-node tier flags + victory stamps (flag/stamp progression) ──────────
    Two flags per boss node (Serf + Giant) are planted BEHIND the node and fan out
@@ -11571,18 +11568,17 @@ body.prehistory-battle .db-overlay-ip {
    Prehistory node once the battle is won. Sits above the node image,
    below the location label. Phase F adds .overworld-node-complete
    on entry to the overworld after a victory.
-   Placed ON the art, not off a corner: the node box IS the trimmed art, so
-   --badge-x/--badge-y (% of the art) put the badge's centre over its lower
-   right — attached to the building, overlapping its edge — on narrow and wide
-   art alike. (The box's top corners are often empty sky: a campfire's smoke,
-   a signpost's arrow tip.) A node can move it with its own --badge-x/y. It is
-   inside the node, so it is counter-scaled by the node's scale (--node-s, set
-   by overworld.js) to stay 24px on screen. */
+   At the node's BOTTOM-RIGHT corner, clear of its art: the node box IS the
+   trimmed art, so the badge sits just outside its right edge (2px gap) with
+   its bottom level with the art's base, the same on every node. A node can
+   move it with its own --badge-x/--badge-y (the badge's centre). It is
+   inside the node, so it is counter-scaled by the node's scale (--node-s,
+   set by overworld.js) to stay 24px on screen. */
 .overworld-node.overworld-node-complete::before {
   content: '\2713';   /* ✓ */
   position: absolute;
-  left: var(--badge-x, 82%);
-  top:  var(--badge-y, 70%);
+  left: var(--badge-x, calc(100% + 14px / var(--node-s, 1)));
+  top:  var(--badge-y, calc(100% - 12px / var(--node-s, 1)));
   transform: translate(-50%, -50%) scale(calc(1 / var(--node-s, 1)));
   width: 24px;
   height: 24px;
