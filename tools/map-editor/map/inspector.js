@@ -42,6 +42,12 @@ function renderInspector() {
       <div class="f"><label>stand dx %</label><input id="i-sdx" type="number" step="0.1" value="${n.stand ? n.stand.dx : ''}" placeholder="0"></div>
       <div class="f"><label>stand dy %</label><input id="i-sdy" type="number" step="0.1" value="${n.stand ? n.stand.dy : ''}" placeholder="${r2(STAND_DEFAULT_DY)}"></div>
     </div>
+    <div class="f"><label class="chk"><input id="i-shoff" type="checkbox" ${n.shadow && n.shadow.off ? '' : 'checked'}> cast shadow</label></div>
+    <div class="f2">
+      <div class="f"><label>shadow length</label><input id="i-shlen" type="number" step="0.05" value="${n.shadow && n.shadow.length != null ? n.shadow.length : ''}" placeholder="sun default"></div>
+      <div class="f"><label>shadow angle °</label><input id="i-shang" type="number" step="1" value="${n.shadow && n.shadow.angle != null ? n.shadow.angle : ''}" placeholder="sun default"></div>
+    </div>
+    <div class="f"><label>shadow opacity</label><input id="i-shop" type="number" step="0.05" min="0" max="1" value="${n.shadow && n.shadow.opacity != null ? n.shadow.opacity : ''}" placeholder="sun default"></div>
     <div class="f"><label>faces on arrival</label>
       <select id="i-sface">
         ${[['', 'toward the node (auto)'], ['up', 'up — back to camera'], ['down', 'down — toward camera'], ['left', 'left'], ['right', 'right']]
@@ -77,6 +83,19 @@ function renderInspector() {
     requestRender();
   };
   bind('#i-sface', 'change', v => { if (v) n.standFacing = v; else delete n.standFacing; requestRender(); });
+  // Cast-shadow override: only what differs from the sun's defaults is stored.
+  const setShadow = () => {
+    const o = {};
+    if (!$('#i-shoff').checked) o.off = true;
+    [['#i-shlen', 'length'], ['#i-shang', 'angle'], ['#i-shop', 'opacity']].forEach(([sel, k]) => {
+      const v = $(sel).value; if (v !== '') o[k] = Number(v);
+    });
+    if (Object.keys(o).length) n.shadow = o; else delete n.shadow;
+  };
+  bind('#i-shoff', 'change', setShadow);
+  bind('#i-shlen', 'input', setShadow);
+  bind('#i-shang', 'input', setShadow);
+  bind('#i-shop',  'input', setShadow);
   bind('#i-sdx', 'input', setStand);
   bind('#i-sdy', 'input', setStand);
   const sreset = $('#i-sreset');

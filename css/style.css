@@ -9304,8 +9304,11 @@ body.tut-locked #battle-reset-turn {
   user-select: none;
   text-align: center;
 }
-.overworld-node > img {
+.overworld-node > img:not(.ow-cast-shadow) {
   width: 84px;
+  /* SEATED: the visible base sits SINK_PX into the ground, not on the trim's
+     transparent padding (--seat, node-local px, set by overworld.js). */
+  translate: 0 var(--seat, 0px);
   height: auto;
   display: block;
   margin: 0 auto;
@@ -9316,13 +9319,13 @@ body.tut-locked #battle-reset-turn {
   transform-origin: 50% 100%;
   transition: scale 120ms ease-out;
 }
-.overworld-node:hover > img { scale: 1.08; }
+.overworld-node:hover > img:not(.ow-cast-shadow) { scale: 1.08; }
 /* The gold pulse marks ONLY the player's next objective (overworld.js
    _refreshObjectiveGlow) — never a beaten node or a market. */
-.overworld-node.is-objective > img {
+.overworld-node.is-objective > img:not(.ow-cast-shadow) {
   animation: overworld-node-pulse 2.2s ease-in-out infinite;
 }
-[data-id="egypt-signpost"] > img { width: 126px; }
+[data-id="egypt-signpost"] > img:not(.ow-cast-shadow) { width: 126px; }
 
 /* ── Boss-node tier flags + victory stamps (flag/stamp progression) ──────────
    Two flags per boss node (Serf + Giant) are planted BEHIND the node and fan out
@@ -9421,24 +9424,47 @@ body.tut-locked #battle-reset-turn {
   top:  var(--stamp-giant-cy);
   transform: translate(-50%, -50%) rotate(calc(-1 * var(--stamp-tilt)));   /* mirror lean for the giant flag */
 }
-/* GROUND SHADOW — one soft ellipse under the Explorer's feet and each node's
-   and prop's base line. overworld.js sizes and places it (_groundShadowFor);
-   this is the only look, so all three read as standing on the same ground. */
-.ow-ground-shadow {
+/* SHADOWS — one sun (overworld.js SUN). Every node, prop and the Explorer get
+   a CONTACT shadow (tight and dark at the base: the "touching the ground" cue)
+   and a CAST shadow (the art's own silhouette, flattened and leaning away from
+   the sun). overworld.js sizes and places both; these are the only looks.
+   Plain images and gradients under cheap transforms — no CSS filters/blur. */
+.ow-contact-shadow {
   position: absolute;
   pointer-events: none;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: radial-gradient(ellipse at center,
-              rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.32) 40%, rgba(0, 0, 0, 0) 70%);
+              rgba(20, 12, 4, 0.55) 0%, rgba(20, 12, 4, 0.36) 42%, rgba(20, 12, 4, 0) 72%);
 }
-/* Inside a node: behind its art, within the node's own stacking context. */
-.overworld-node > .ow-ground-shadow { z-index: -1; }
-/* A prop's shadow is a sibling box with the prop's own size and transform. It
-   and the Explorer's shadow lie on the GROUND (z 2), under everything that
+.ow-cast-shadow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+/* GROUND rim: the art's own blurred silhouette over its base band (a plain
+   image overworld.js builds once per art) — the "touching the ground" cue. */
+.ow-ground-rim {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+/* Inside a node: behind its art, within the node's own stacking context —
+   cast under rim under art — and seated with it (--seat). */
+.overworld-node > .ow-cast-shadow { z-index: -2; translate: 0 var(--seat, 0px); }
+.overworld-node > .ow-ground-rim  { z-index: -1; }
+/* A prop's shadows sit in a sibling box with the prop's own size and transform. They
+   and the Explorer's shadows lie on the GROUND (z 2), under everything that
    stands up — the depth-sorted band (overworld.js _depthZ) starts far above. */
 .overworld-topo-prop-shadow { position: absolute; pointer-events: none; z-index: 2; }
 #overworld-character-shadow { z-index: 2; }
+#overworld-character-castshadow { width: 92px; transform-origin: 50% 100%; z-index: 2; }
 
 /* Topography props (renamed from .egypt-topo-prop — props are per-map data now)
    are depth-sorted by their base line like nodes: z-index set inline by
@@ -9512,7 +9538,7 @@ body.tut-locked #battle-reset-turn {
   /* Gold halo with a thin WARM DARK rim under it: the rim gives the gold an
      edge to read against pale sand, where gold-on-yellow alone vanishes; on
      green it just reads as a crisper glow. (No dark silhouette shadow —
-     grounding is the .ow-ground-shadow ellipse.) */
+     grounding is the contact + cast shadows.) */
   0%, 100% {
     filter: drop-shadow(0 0 1px rgba(70, 35, 5, 0.55))
             drop-shadow(0 0 4px rgba(255, 205, 40, 0.35));
@@ -9858,7 +9884,7 @@ body.tut-locked #battle-reset-turn {
 /* Player character sprite. Smooth resampling like every overworld sprite (the
    160 px art is drawn at 92 px — nearest-neighbour dropped ~42% of its pixels
    and made the outline shimmer frame to frame). No silhouette filter: she is
-   grounded by the .ow-ground-shadow ellipse at her feet instead. */
+   grounded by the contact + cast shadows at her feet instead. */
 #overworld-character {
   position: absolute;
   width: 92px;
@@ -10250,7 +10276,7 @@ body.tut-locked #battle-reset-turn {
 }
 
 /* Prehistory node: amplified pulse used after 30s of idle waiting */
-.overworld-node.overworld-node-urgent > img {
+.overworld-node.overworld-node-urgent > img:not(.ow-cast-shadow) {
   animation: overworld-node-pulse-urgent 1.1s ease-in-out infinite !important;
 }
 @keyframes overworld-node-pulse-urgent {

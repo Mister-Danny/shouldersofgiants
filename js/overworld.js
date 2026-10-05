@@ -842,27 +842,76 @@ var Overworld = (function () {
     charEl.style.top  = yPct + '%';
     charEl.style.zIndex = _depthZ(yPct);   // her feet are her anchor
     var sh = _charShadow();
-    if (sh) { sh.style.left = xPct + '%'; sh.style.top = yPct + '%'; }
+    if (sh) {
+      sh.contact.style.left = sh.cast.style.left = xPct + '%';
+      sh.contact.style.top  = sh.cast.style.top  = yPct + '%';
+    }
   }
 
-  /* The Explorer's ground shadow: a sibling of the sprite, centred on her feet
-     (the sprite's anchor), always directly BEHIND her in the overlay. Re-attached
-     after anything clears the overlay (loadMap empties it). */
-  var CHAR_SHADOW = { w: 48, h: 14 };   // px — her visible figure is ~46 px wide
-  var _charShadowEl = null;
+  /* The Explorer's shadows, under the same sun as the nodes: a CONTACT shadow
+     at her feet (the sprite's anchor — her frames have no padding below the
+     feet) and a CAST shadow made from her current frame's silhouette. Both lie
+     on the ground layer, behind every standing thing. The cast shadow follows
+     her through every walk frame, mirrored ones and registration shifts
+     included: an observer copies each change of her src / transform / opacity
+     onto it. Re-attached after anything clears the overlay (loadMap empties it). */
+  var _charShadowEls = null;
   function _charShadow() {
     if (!overlayEl || !charEl || charEl.parentNode !== overlayEl) return null;
-    if (!_charShadowEl) {
-      _charShadowEl = document.createElement('div');
-      _charShadowEl.className = 'ow-ground-shadow';
-      _charShadowEl.id = 'overworld-character-shadow';
-      _charShadowEl.style.width  = CHAR_SHADOW.w + 'px';
-      _charShadowEl.style.height = CHAR_SHADOW.h + 'px';
+    if (!_charShadowEls) {
+      var contact = document.createElement('img');      // her GROUND rim (per frame)
+      contact.className = 'ow-ground-rim';
+      contact.id = 'overworld-character-shadow';
+      contact.alt = ''; contact.draggable = false;
+      var cast = document.createElement('img');
+      cast.className = 'ow-cast-shadow';
+      cast.id = 'overworld-character-castshadow';
+      cast.alt = ''; cast.draggable = false;
+      _charShadowEls = { contact: contact, cast: cast };
+      if (typeof MutationObserver !== 'undefined') {
+        new MutationObserver(_syncCharCast).observe(charEl,
+          { attributes: true, attributeFilter: ['src', 'style'] });
+      }
+      _syncCharCast();
     }
-    if (_charShadowEl.parentNode !== overlayEl || _charShadowEl.nextSibling !== charEl) {
-      overlayEl.insertBefore(_charShadowEl, charEl);
-    }
-    return _charShadowEl;
+    var els = _charShadowEls;
+    if (els.cast.parentNode !== overlayEl)    overlayEl.insertBefore(els.cast, charEl);
+    if (els.contact.parentNode !== overlayEl) overlayEl.insertBefore(els.contact, charEl);
+    return els;
+  }
+  function _syncCharCast() {
+    var els = _charShadowEls;
+    if (!els || !charEl) return;
+    var cast = els.cast, src = charEl.getAttribute('src');
+    var tf = charEl.style.transform || '';
+    var mirror = tf.indexOf('scaleX(-1)') !== -1;
+    var shift = (tf.match(/translateX\([^)]*\)/) || [''])[0];   // per-frame registration
+    cast.style.transform = 'translate(-50%, -100%) ' + _castTransform(null, mirror) +
+                           (shift ? ' ' + shift : '');
+    var vis = charEl.style.opacity, disp = charEl.style.display, hide = charEl.style.visibility;
+    var op = vis === '' ? 1 : parseFloat(vis);
+    cast.style.opacity = op * SUN.opacity;
+    cast.style.display = CAST_ON ? disp : 'none';
+    els.contact.style.display = disp;
+    cast.style.visibility = els.contact.style.visibility = hide;
+    els.contact.style.opacity = op * GROUND.opacity;
+    var rim = els.contact;
+    var placeRim = function (a) {
+      // The rim canvas is the frame plus blur room: groundPad each side, 3×
+      // below. Align its frame area with her sprite box (feet on the anchor),
+      // then mirror and register exactly like the sprite.
+      var k = (charEl.offsetWidth || 92) / a.W;
+      rim.style.width = ((a.W + 2 * a.groundPad) * k).toFixed(2) + 'px';
+      rim.style.transform = 'translate(-50%, ' + (-a.H * k + GROUND.drop).toFixed(2) + 'px)' +
+                            (mirror ? ' scaleX(-1)' : '') + (shift ? ' ' + shift : '');
+    };
+    if (cast._for === src) { if (rim._info) placeRim(rim._info); return; }
+    cast._for = src;
+    _artInfo(src, function (a) {
+      if (cast._for !== src) return;
+      if (a.sil) cast.src = a.sil;
+      if (a.ground) { rim.src = a.ground; rim._info = a; placeRim(a); }
+    });
   }
 
   /* `frame` is the FRAME NUMBER in the file name. A per-frame registration shift
@@ -1045,7 +1094,7 @@ var Overworld = (function () {
      and its visual centre in map-%. Read from the laid-out <img>, so it needs
      the image to have loaded; null until then. */
   function _nodeArt(n, nodeEl) {
-    var img = nodeEl && nodeEl.querySelector(':scope > img');
+    var img = nodeEl && nodeEl.querySelector(':scope > img:not(.ow-cast-shadow)');
     if (!img || !img.offsetWidth || !img.offsetHeight) return null;
     var s = n.scale || 1, r = (n.rotation || 0) * Math.PI / 180;
     var w = img.offsetWidth * s, h = img.offsetHeight * s, k = _pxPerPct();
@@ -1060,7 +1109,7 @@ var Overworld = (function () {
   function _whenNodeArt(n, nodeEl, fn) {
     var a = _nodeArt(n, nodeEl);
     if (a) { fn(a); return; }
-    var img = nodeEl && nodeEl.querySelector(':scope > img');
+    var img = nodeEl && nodeEl.querySelector(':scope > img:not(.ow-cast-shadow)');
     if (!img) { fn(null); return; }
     var done = false;
     var go = function () { if (done) return; done = true; fn(_nodeArt(n, nodeEl)); };
@@ -1109,7 +1158,7 @@ var Overworld = (function () {
     var saved = { x: pos.x, y: pos.y }, at = saved;
     for (var i = 0; i < (map.nodes || []).length; i++) {
       (function (n) {
-        var img = overlayEl.querySelector('.overworld-node[data-id="' + n.id + '"] > img');
+        var img = overlayEl.querySelector('.overworld-node[data-id="' + n.id + '"] > img:not(.ow-cast-shadow)');
         if (!img) return;                                   // not on screen
         if (img.complete && img.offsetHeight) {
           if (_artHolds(n, img, at)) at = _standPos(n);
@@ -1285,23 +1334,75 @@ var Overworld = (function () {
   }
 
   /* ══ NODE + PROP DRESSING ═════════════════════════════════════════════════
-     Three things every overworld node gets, wherever it was created (loadMap,
-     a reveal cinematic, a replay): a ground shadow under its art, the gold pulse
-     if it is the player's next objective, and the hover name label. They are
-     applied by ONE pass (_dressOverlay) that a MutationObserver runs whenever
-     the overlay's children change, so the six node-building code paths need no
-     changes and a future one is covered automatically. Props get the same
-     ground shadow. Nothing here moves an element: anchors are unchanged. */
+     What every overworld node gets, wherever it was created (loadMap, a reveal
+     cinematic, a replay): it is SEATED on its base line, it gets a CONTACT
+     shadow and a CAST shadow, the gold pulse if it is the player's next
+     objective, and the hover name label. Applied by ONE pass (_dressOverlay)
+     that a MutationObserver runs whenever the overlay's children change, so
+     the node-building code paths need no changes and a future one is covered
+     automatically. Props get the same seat and shadows. The shadows live
+     INSIDE the node, so they appear, grow and move with it through every
+     reveal (Uruk's drop-in, the earth-rises, Sargon's swell, the shimmer). */
 
-  /* The visible art's bounds inside an image, in natural pixels, cached per src.
-     Read from the alpha channel on a ≤256 px canvas (cheap, once per image). A
-     canvas that can't be read (file://) falls back to the whole image. */
-  var _artBoxCache = {};
-  function _artBox(src, cb) {
-    var c = _artBoxCache[src];
+  /* ── ONE SUN ───────────────────────────────────────────────────────────────
+     The node art is drawn front-lit, mostly from the LEFT (see the Pass 4
+     lighting audit), so the sun sits in front of the scene and to the left,
+     high up: every shadow falls BEHIND its caster (up the screen), leaning
+     RIGHT, and is short. Change the sun here and every shadow follows.
+       side     'left' | 'right'   which side the light comes from
+       front    true  → sun on the viewer's side, shadows fall behind (up)
+                false → sun behind the scene (like the maps' hill shading),
+                        shadows fall toward the viewer (down)
+       lean     degrees a shadow leans away from the sun
+       length   shadow length as a share of the caster's height
+       opacity  of the cast shadow
+     A node can override the cast shadow in map data: `shadow: { off: true }`
+     or any of { length, angle, opacity } — edited in tools/map-editor. */
+  var SUN = { side: 'left', front: true, lean: 32, length: 0.3, opacity: 0.3 };
+  var SINK_PX   = 1.5;    // the art's visible base sits this far INTO the ground
+  /* GROUNDING (the "attached to the map" cue, before any cast shadow): a soft
+     dark seam just BELOW the art's lower contour — where a plinth's front
+     edges, a ring of stones or a pair of boots meet the terrain.
+       zone     how high (share of height) the contour may rise and still count
+                as ground — a diamond plinth's side corners sit well above its
+                front corner
+       band     how far up from the contour the seam is drawn before blurring
+       blur     softness, as a share of the art's width
+       drop     screen px the seam sits below the art
+       opacity  of the seam */
+  var GROUND    = { zone: 0.45, band: 0.08, blur: 0.07, drop: 2, opacity: 0.75 };
+  var CAST_ON   = false;  // cast shadows: off while the grounding is judged on its own
+
+  /* The cast shadow's transform, about the caster's foot: flatten to `length`
+     (negative = folded down toward the viewer), lean away from the sun, then
+     mirror if the art is drawn flipped. `rot` is the caster's own rotation
+     (deg): the shadow sits inside it, so it is rotated back to the screen
+     before flattening and forward again after — every shadow falls the same
+     way under the one sun, however its caster is turned. */
+  function _castTransform(o, mirror, rot) {
+    o = o || {};
+    var len  = o.length  != null ? o.length  : SUN.length;
+    var lean = o.angle   != null ? o.angle   : SUN.lean;
+    var away = SUN.side === 'left' ? 1 : -1;                 // +1 = leans right
+    // skewX(+a) carries points ABOVE the foot left and points BELOW it right.
+    var skew = SUN.front ? -away * lean : away * lean;
+    var flat = 'skewX(' + skew + 'deg) scaleY(' + (SUN.front ? len : -len) + ')';
+    if (rot) flat = 'rotate(' + (-rot) + 'deg) ' + flat + ' rotate(' + rot + 'deg)';
+    return flat + (mirror ? ' scaleX(-1)' : '');
+  }
+
+  /* Per image (natural px, cached by src): its size, how far its visible
+     bottom row (alpha > 8) sits above the image's bottom edge (the trim's
+     padding), the footprint — the visible span of its bottom rows — and a
+     SILHOUETTE: the art in flat black, edges softened by a hair, drawn once on
+     a canvas and kept as an image URL. No CSS filters or blur at run time —
+     the shadows are plain images under cheap transforms, for Chromebooks. */
+  var _artInfoCache = {};
+  function _artInfo(src, cb) {
+    var c = _artInfoCache[src];
     if (c && c.ready) { cb(c); return; }
     if (c) { c.waiters.push(cb); return; }
-    c = _artBoxCache[src] = { ready: false, waiters: [cb] };
+    c = _artInfoCache[src] = { ready: false, waiters: [cb] };
     var im = new Image();
     var finish = function () {
       c.ready = true;
@@ -1310,81 +1411,207 @@ var Overworld = (function () {
     };
     im.onload = function () {
       var W = im.naturalWidth, H = im.naturalHeight;
-      c.W = W; c.H = H; c.box = { x0: 0, y0: 0, x1: W, y1: H };
+      c.W = W; c.H = H; c.pad = 0; c.fx0 = 0; c.fx1 = W; c.sil = null;
       try {
-        var k = Math.min(1, 256 / Math.max(W, H));
-        var cw = Math.max(1, Math.round(W * k)), ch = Math.max(1, Math.round(H * k));
-        var cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
-        var cx = cv.getContext('2d'); cx.drawImage(im, 0, 0, cw, ch);
-        var d = cx.getImageData(0, 0, cw, ch).data;
-        var x0 = cw, y0 = ch, x1 = -1, y1 = -1;
-        for (var y = 0; y < ch; y++) {
-          for (var x = 0; x < cw; x++) {
-            if (d[(y * cw + x) * 4 + 3] > 128) {
-              if (x < x0) x0 = x; if (x > x1) x1 = x;
-              if (y < y0) y0 = y; if (y > y1) y1 = y;
+        var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        var cx = cv.getContext('2d'); cx.drawImage(im, 0, 0);
+        var d = cx.getImageData(0, 0, W, H).data;
+        var bottom = -1;
+        for (var y = H - 1; y >= 0 && bottom < 0; y--) {
+          for (var x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 8) { bottom = y; break; }
+        }
+        if (bottom >= 0) {
+          c.pad = H - 1 - bottom;
+          var band = Math.max(3, Math.round(H * 0.1)), x0 = W, x1 = -1;
+          for (var yy = bottom; yy > bottom - band && yy >= 0; yy--) {
+            for (var xx = 0; xx < W; xx++) {
+              if (d[(yy * W + xx) * 4 + 3] > 8) { if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; }
             }
           }
+          if (x1 >= x0) { c.fx0 = x0; c.fx1 = x1 + 1; }
         }
-        if (x1 >= 0) c.box = { x0: x0 / k, y0: y0 / k, x1: (x1 + 1) / k, y1: (y1 + 1) / k };
-      } catch (e) { /* unreadable canvas → whole-image bounds */ }
+        var sv = document.createElement('canvas'); sv.width = W; sv.height = H;
+        var sx = sv.getContext('2d');
+        sx.filter = 'blur(' + Math.max(1, W * 0.006).toFixed(1) + 'px)';   // once, at build
+        sx.drawImage(im, 0, 0);
+        sx.filter = 'none';
+        sx.globalCompositeOperation = 'source-in';
+        sx.fillStyle = '#000';
+        sx.fillRect(0, 0, W, H);
+        c.sil = sv.toDataURL('image/png');
+        // GROUND rim: ambient occlusion along the art's LOWER CONTOUR — per
+        // column, its bottom-most opaque pixel — so a diamond plinth gets a
+        // dark seam along both front edges, not just its lowest corner. A
+        // column whose lowest pixel sits above the base zone (a palm frond, a
+        // banner overhanging the air) casts none. Blurred once, at build; the
+        // part under the art is hidden by it, the spill outside is the seam.
+        var b = Math.max(2, Math.round(W * GROUND.blur)), base = H - 1 - c.pad;
+        var zone = base - H * GROUND.zone, depth = Math.max(3, Math.round(H * GROUND.band));
+        var mv = document.createElement('canvas'); mv.width = W + 2 * b; mv.height = H + 3 * b;
+        var mx = mv.getContext('2d'); mx.fillStyle = '#000';
+        var raw = [], lo = [], first = -1, last = -1, start = -1;
+        for (var cx2 = 0; cx2 < W; cx2++) {
+          raw[cx2] = -1; lo[cx2] = -1;
+          for (var cy = base; cy >= zone; cy--) {
+            if (d[(cy * W + cx2) * 4 + 3] > 8) { raw[cx2] = cy; break; }
+          }
+          if (raw[cx2] >= 0 && (start < 0 || raw[cx2] > raw[start])) start = cx2;
+        }
+        // Follow the ground line out from its lowest point; a sudden jump up
+        // (the gap between two legs, under an arch) is not ground — the line
+        // holds its last level across it.
+        var tol = Math.max(3, Math.round(W * 0.02));
+        var walk = function (from, step) {
+          var prev = raw[from], on = true;
+          for (var xw = from; xw >= 0 && xw < W; xw += step) {
+            // Ground continues smoothly from the column before (an oval's
+            // steep ends), or comes back to the level it left (the far leg).
+            var near = raw[xw] >= 0 && (Math.abs(raw[xw] - prev) <= tol ||
+                       (on && Math.abs(raw[xw] - raw[xw - step]) <= tol));
+            on = near;
+            if (near) {
+              prev = lo[xw] = raw[xw];
+              if (first < 0 || xw < first) first = xw;
+              if (xw > last) last = xw;
+              mx.fillRect(xw + b, raw[xw] - depth, 1, depth + 1);
+            } else if (raw[xw] >= 0 && raw[xw] < prev) {
+              lo[xw] = -2 - prev;                       // gap: keep the line
+            } else if (raw[xw] < 0) {
+              lo[xw] = -2 - prev;
+            }
+          }
+        };
+        if (start >= 0) { walk(start, -1); walk(start + 1, 1); }
+        var av = document.createElement('canvas'); av.width = mv.width; av.height = mv.height;
+        var ax = av.getContext('2d');
+        ax.filter = 'blur(' + (b * 0.6).toFixed(1) + 'px)';
+        ax.drawImage(mv, 0, 0);
+        ax.filter = 'none';
+        // Keep only what falls BELOW the contour: the blur's sideways and
+        // upward spill would read as a halo up a pyramid's slope or a leg.
+        // Past either end of the footprint the line keeps falling away, so
+        // the seam tapers off at the corners instead of trailing sideways.
+        if (first >= 0) {
+          ax.globalCompositeOperation = 'destination-out';
+          var cut = lo[first];
+          for (var X = 0; X < av.width; X++) {
+            var xi = X - b;
+            if (xi < first) cut = lo[first] + (first - xi);
+            else if (xi > last) cut = lo[last] + (xi - last);
+            else if (lo[xi] >= 0) cut = lo[xi];
+            else if (lo[xi] <= -2) cut = -2 - lo[xi];
+            ax.fillRect(X, 0, 1, cut);
+          }
+          ax.globalCompositeOperation = 'source-over';
+        }
+        c.ground = av.toDataURL('image/png'); c.groundPad = b;
+      } catch (e) { /* unreadable canvas (file://) → no silhouette, no seat */ }
       finish();
     };
-    im.onerror = function () { c.W = 0; c.H = 0; c.box = null; finish(); };
+    im.onerror = function () { c.W = 0; finish(); };
     im.src = src;
   }
 
-  /* Size + place a ground ellipse under art drawn `drawW` px wide (layout px,
-     before any node scale). Centred on the art's horizontal middle, a touch wider
-     than the art, centred just above its lowest visible row — the art covers the
-     upper half, the lower half shows as the shadow it casts on the ground. */
-  var GROUND_SHADOW = { widthOfArt: 1.05, aspect: 0.26, minH: 7, maxH: 24, rise: 0.15 };
-  function _placeGroundShadow(el, art, drawW) {
-    if (!art || !art.box || !art.W) return false;
-    var f = drawW / art.W;
-    var artW = (art.box.x1 - art.box.x0) * f;
-    var w = artW * GROUND_SHADOW.widthOfArt;
-    var h = Math.max(GROUND_SHADOW.minH, Math.min(GROUND_SHADOW.maxH, w * GROUND_SHADOW.aspect));
-    el.style.width  = w + 'px';
-    el.style.height = h + 'px';
-    el.style.left   = ((art.box.x0 + art.box.x1) / 2) * f + 'px';
-    el.style.top    = (art.box.y1 * f - h * GROUND_SHADOW.rise) + 'px';
-    return true;
-  }
-
+  /* Seat + shadows for a node. Node-local px (the node's own scale applies on
+     top), so screen-px constants are divided by the node's scale. */
   function _shadowNode(nodeEl) {
     if (nodeEl._owShadowed) return;
-    var img = nodeEl.querySelector(':scope > img');
+    var img = nodeEl.querySelector(':scope > img:not(.ow-cast-shadow)');
     if (!img) return;
     nodeEl._owShadowed = true;
-    _artBox(img.getAttribute('src'), function (art) {
-      var drawW = img.offsetWidth || parseFloat(getComputedStyle(img).width) || 84;
-      var sh = document.createElement('div');
-      sh.className = 'ow-ground-shadow';
-      if (_placeGroundShadow(sh, art, drawW)) nodeEl.insertBefore(sh, img);
+    var n = _nodeDataById(nodeEl.dataset.id) || {};
+    _artInfo(img.getAttribute('src'), function (a) {
+      if (!a.W) return;
+      var place = function () {
+        var dw = img.offsetWidth, dh = img.offsetHeight;
+        if (!dw || !dh) { img.addEventListener('load', place, { once: true }); return; }
+        var f = dw / a.W, s = n.scale || 1;
+        // SEAT: the visible base (not the trim padding) lands SINK_PX below
+        // the node's point — planted, no hairline gap.
+        var seat = a.pad * f + SINK_PX / s;
+        nodeEl.style.setProperty('--seat', seat.toFixed(2) + 'px');
+        var foot = dh - a.pad * f;                     // visible base, image px
+        var mirror = img.style.transform.indexOf('scaleX(-1)') !== -1;
+        // CAST: the art's own silhouette, flattened behind it, foot on its base.
+        var o = n.shadow || {};
+        if (CAST_ON && a.sil && !o.off) {
+          var cs = document.createElement('img');
+          cs.className = 'ow-cast-shadow';
+          cs.alt = ''; cs.draggable = false;
+          cs.src = a.sil;
+          cs.style.width = dw + 'px';
+          cs.style.transformOrigin = '50% ' + foot.toFixed(2) + 'px';
+          cs.style.transform = _castTransform(o, mirror, n.rotation || 0);
+          cs.style.opacity = o.opacity != null ? o.opacity : SUN.opacity;
+          nodeEl.insertBefore(cs, img);
+        }
+        // GROUND rim: the art's own blurred silhouette over its base band,
+        // dropped a couple of px — hugs the real bottom edge, any shape.
+        if (a.ground) {
+          var gr = document.createElement('img');
+          gr.className = 'ow-ground-rim';
+          gr.alt = ''; gr.draggable = false;
+          gr.src = a.ground;
+          gr.style.width = ((a.W + 2 * a.groundPad) * f).toFixed(2) + 'px';
+          gr.style.left  = (-a.groundPad * f).toFixed(2) + 'px';
+          gr.style.translate = '0 ' + (seat + GROUND.drop / s).toFixed(2) + 'px';
+          if (mirror) gr.style.transform = 'scaleX(-1)';
+          gr.style.opacity = GROUND.opacity;
+          nodeEl.insertBefore(gr, img);
+        }
+      };
+      place();
     });
   }
 
-  /* A prop is a bare <img> (no wrapper to hold a child), so its shadow lives in a
-     sibling box with the prop's natural size and the SAME position + transform —
-     it lands exactly under the art at any scale, rotation or flip. */
+  /* A prop is a bare <img> (no wrapper to hold children), so its shadows live
+     in a sibling box with the prop's natural size and the SAME position +
+     transform — they land exactly under the art at any scale, rotation or
+     flip. The prop and its box are both seated with the `translate` property
+     (screen px, applied after their transform). */
   function _shadowProp(propEl) {
     if (propEl._owShadowed) return;
     propEl._owShadowed = true;
-    _artBox(propEl.getAttribute('src'), function (art) {
-      if (!art || !art.W || propEl.parentNode !== overlayEl) return;
+    _artInfo(propEl.getAttribute('src'), function (a) {
+      if (!a.W || propEl.parentNode !== overlayEl) return;
+      var sc = Math.abs(parseFloat((propEl.style.transform.match(/scale\(([-\d.]+)/) || [])[1]) || 1);
+      var rot = parseFloat((propEl.style.transform.match(/rotate\(([-\d.]+)deg/) || [])[1]) || 0;
+      var flip = /scale\(-/.test(propEl.style.transform);
+      var seat = (a.pad * sc + SINK_PX).toFixed(2) + 'px';
+      propEl.style.translate = '0 ' + seat;
       var box = document.createElement('div');
       box.className = 'overworld-topo-prop-shadow';
       box.style.left = propEl.style.left;
       box.style.top  = propEl.style.top;
-      box.style.width  = art.W + 'px';
-      box.style.height = art.H + 'px';
+      box.style.width  = a.W + 'px';
+      box.style.height = a.H + 'px';
       box.style.transform = propEl.style.transform;
-      box.style.transformOrigin = propEl.style.transformOrigin || 'center center';
-      var sh = document.createElement('div');
-      sh.className = 'ow-ground-shadow';
-      if (!_placeGroundShadow(sh, art, art.W)) return;
-      box.appendChild(sh);
+      box.style.transformOrigin = propEl.style.transformOrigin || 'center bottom';
+      box.style.translate = '0 ' + seat;
+      var foot = a.H - a.pad;
+      if (CAST_ON && a.sil) {
+        var cs = document.createElement('img');
+        cs.className = 'ow-cast-shadow';
+        cs.alt = ''; cs.src = a.sil;
+        cs.style.width = a.W + 'px';
+        cs.style.transformOrigin = '50% ' + foot + 'px';
+        // The box carries the prop's rotation and flip; undo both around the
+        // flattening so the shadow falls the screen's way (uniform scale cancels).
+        var F = flip ? 'scaleX(-1) ' : '';
+        cs.style.transform = F + _castTransform(null, false, rot) + (flip ? ' scaleX(-1)' : '');
+        cs.style.opacity = SUN.opacity;
+        box.appendChild(cs);
+      }
+      if (a.ground) {
+        var gr = document.createElement('img');
+        gr.className = 'ow-ground-rim';
+        gr.alt = ''; gr.src = a.ground;
+        gr.style.width = (a.W + 2 * a.groundPad) + 'px';
+        gr.style.left  = (-a.groundPad) + 'px';
+        gr.style.translate = '0 ' + (GROUND.drop / sc).toFixed(2) + 'px';
+        gr.style.opacity = GROUND.opacity;
+        box.appendChild(gr);
+      }
       overlayEl.insertBefore(box, propEl);
     });
   }
@@ -1464,7 +1691,7 @@ var Overworld = (function () {
     lab.textContent = text;
     var ov = overlayEl.getBoundingClientRect();
     var k = overlayEl.offsetWidth ? ov.width / overlayEl.offsetWidth : 1;   // stage scale
-    var sh  = nodeEl.querySelector(':scope > .ow-ground-shadow');
+    var sh  = nodeEl.querySelector(':scope > .ow-ground-rim');
     // The node's box, not its <img>: the img grows 8% on hover, the box doesn't,
     // so the placement is the same however the pointer arrives.
     var r   = nodeEl.getBoundingClientRect();

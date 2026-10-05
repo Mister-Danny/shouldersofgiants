@@ -193,6 +193,17 @@ var FIELDS = {
       OPT('stand',       function (n) { return n.stand ? 'stand: { dx: ' + num(n.stand.dx || 0) + ', dy: ' + num(n.stand.dy || 0) + ' }' : null; }),
       // Which way she faces on arrival; omitted = toward the art (overworld.js _facingFor).
       OPT('standFacing', function (n) { return n.standFacing ? 'standFacing: ' + q(n.standFacing) : null; }),
+      // Cast-shadow override (overworld.js SUN): { off: true } or any of
+      // { length, angle, opacity }. Omitted = the sun's defaults.
+      OPT('shadow',      function (n) {
+        var o = n.shadow; if (!o) return null;
+        var bits = [];
+        if (o.off) bits.push('off: true');
+        if (o.length  != null) bits.push('length: '  + scaleNum(o.length));
+        if (o.angle   != null) bits.push('angle: '   + num(o.angle));
+        if (o.opacity != null) bits.push('opacity: ' + scaleNum(o.opacity));
+        return bits.length ? 'shadow: { ' + bits.join(', ') + ' }' : null;
+      }),
       OPT('serfFlagOn',  function (n) { return n.serfFlagOn ? 'serfFlagOn: ' + q(n.serfFlagOn) : null; }),
       OPT('victoryFlag', function (n) { return n.victoryFlag ? 'victoryFlag: true' : null; }),
       GATE('showFrom'), GATE('showUntil')
@@ -497,6 +508,9 @@ function validate(doc) {
       seen[n.id] = true;
       if (!n.image) return 'node "' + n.id + '" has no image';
       if (!isNum(n.x) || !isNum(n.y)) return 'node "' + n.id + '" has non-numeric coordinates';
+      if (n.shadow && (typeof n.shadow !== 'object' ||
+          ['length', 'angle', 'opacity'].some(function (k) { return n.shadow[k] != null && !isNum(n.shadow[k]); })))
+        return 'node "' + n.id + '" has a shadow override that is not { off, length, angle, opacity } numbers';
       if (n.standFacing && ['up', 'down', 'left', 'right'].indexOf(n.standFacing) === -1)
         return 'node "' + n.id + '" has standFacing "' + n.standFacing + '" — use up, down, left or right';
       checkGates(n, 'node "' + n.id + '"');
