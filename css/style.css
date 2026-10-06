@@ -9341,8 +9341,12 @@ body.tut-locked #battle-reset-turn {
    Art: images/ui_images/{serfflag,giantflag,victorystamp}.png (lowercase). */
 .node-flags {
   /* ── EDITABLE KNOBS (tune by eye) ─────────────────────────────── */
-  --flag-size:       74px;   /* GIANT flag's width — ~70% of a node, so it reads as a marker */
-  --flag-serf-size:  64px;   /* SERF flag ~13% smaller than the Giant, so the two read apart at a glance */
+  /* --flag-scale sizes the whole cluster (flags + stamps). overworld.js sets it
+     per boss (FLAG_SCALE / FLAG_SCALE_BY_HOOK) so its pole maths uses the
+     same number; this is only the fallback. */
+  --flag-scale:     1.15;
+  --flag-size:      calc(74px * var(--flag-scale));   /* GIANT flag's width */
+  --flag-serf-size: calc(64px * var(--flag-scale));   /* SERF flag ~13% smaller than the Giant, so the two read apart at a glance */
   --flag-spread: 24px;    /* each POLE's distance from the node's centre line (JS sets it per node) */
   --flag-plant:  12px;    /* how far ABOVE the node's base line the pole feet stand (JS sets it per node) */
   --flag-tilt:   13deg;   /* outward fan angle of the two flags, about each pole's foot */
@@ -9351,8 +9355,8 @@ body.tut-locked #battle-reset-turn {
   --serf-pole-x:  73.8%;
   --giant-pole-x: 26.6%;
   --pole-foot-y:  88.7%;
-  --stamp-size:      22px;   /* GIANT victory-stamp size */
-  --stamp-serf-size: 19px;   /* SERF stamp ~13% smaller, to match the smaller serf flag */
+  --stamp-size:      calc(22px * var(--flag-scale));   /* GIANT victory-stamp size */
+  --stamp-serf-size: calc(19px * var(--flag-scale));   /* SERF stamp ~13% smaller, to match the smaller serf flag */
   --stamp-tilt:  30deg;   /* stamp lean, mirrored per tier (serf +, giant −); follows the banner */
   /* Per-tier stamp anchor WITHIN its flag: cx = horizontal % (←smaller = left),
      cy = vertical % from the top (↑bigger = lower). Serf/Giant fully independent. */
@@ -9361,9 +9365,10 @@ body.tut-locked #battle-reset-turn {
   --stamp-giant-cx: 55%;
   --stamp-giant-cy: 48%;
   /* Per-flag nudges — defaults 0, overridden PER NODE below. dx = horizontal (% of
-     flag width; − = left, + = right); rot = extra rotation (− = CCW, + = CW). */
-  --serf-dx:  0px;  --serf-rot:  0deg;
-  --giant-dx: 0px;  --giant-rot: 0deg;
+     flag width, or px; − = left, + = right); dy = vertical (px; + = down);
+     rot = extra rotation (− = CCW, + = CW). 1% of the map ≈ 12.8px across, 6px down. */
+  --serf-dx:  0px;  --serf-dy:  0px;  --serf-rot:  0deg;
+  --giant-dx: 0px;  --giant-dy: 0px;  --giant-rot: 0deg;
   /* ─────────────────────────────────────────────────────────────── */
 
   position: absolute;
@@ -9388,17 +9393,19 @@ body.tut-locked #battle-reset-turn {
 .node-flag-serf {
   width: var(--flag-serf-size);    /* serf flag smaller than the giant (distinct at a glance) */
   transform-origin: var(--serf-pole-x) var(--pole-foot-y);
-  transform: translate(calc(-1 * var(--serf-pole-x) - var(--flag-spread) + var(--serf-dx)), calc(-1 * var(--pole-foot-y) - var(--flag-plant))) rotate(calc(-1 * var(--flag-tilt) + var(--serf-rot)));
+  transform: translate(calc(-1 * var(--serf-pole-x) - var(--flag-spread) + var(--serf-dx)), calc(-1 * var(--pole-foot-y) - var(--flag-plant) + var(--serf-dy))) rotate(calc(-1 * var(--flag-tilt) + var(--serf-rot)));
 }
 .node-flag-giant {
   transform-origin: var(--giant-pole-x) var(--pole-foot-y);
-  transform: translate(calc(-1 * var(--giant-pole-x) + var(--flag-spread) + var(--giant-dx)), calc(-1 * var(--pole-foot-y) - var(--flag-plant))) rotate(calc(var(--flag-tilt) + var(--giant-rot)));
+  transform: translate(calc(-1 * var(--giant-pole-x) + var(--flag-spread) + var(--giant-dx)), calc(-1 * var(--pole-foot-y) - var(--flag-plant) + var(--giant-dy))) rotate(calc(var(--flag-tilt) + var(--giant-rot)));
 }
 
 /* ── Per-node flag nudges (set the --*-dx / --*-rot vars above) ─────────────── */
 .node-flags[data-hook="narmer"]    { --serf-dx: -1%; --serf-rot: -5deg; }  /* serf left 1%, 5° CCW */
-.node-flags[data-hook="sargon"]    { --serf-dx: -8%; }                      /* serf left 8% */
-.node-flags[data-hook="hammurabi"] { --serf-dx: -1%; --giant-dx: 1%; }      /* serf left 1%, giant right 1% */
+.node-flags[data-hook="sargon"]    { --serf-dx: calc(-8% - 12.8px); }       /* serf left 8% + 1% of the map */
+.node-flags[data-hook="hammurabi"] { --serf-dx: calc(-1% - 8px); --giant-dx: calc(1% + 8px); }  /* spread a little wider */
+.node-flags[data-hook="hatshepsut"] { --giant-dx: 12.8px; --giant-dy: 6px; }  /* giant right 1% + down 1% of the map */
+.node-flags[data-hook="ramses"]     { --serf-dx: -12.8px; --giant-dx: 12.8px; }  /* each 1% of the map wider */
 .node-flag-img {
   display: block;
   width: 100%;

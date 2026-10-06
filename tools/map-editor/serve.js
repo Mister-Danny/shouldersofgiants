@@ -194,7 +194,8 @@ var FIELDS = {
       // Which way she faces on arrival; omitted = toward the art (overworld.js _facingFor).
       OPT('standFacing', function (n) { return n.standFacing ? 'standFacing: ' + q(n.standFacing) : null; }),
       // Cast-shadow override (overworld.js SUN): { off: true } or any of
-      // { length, angle, opacity }. Omitted = the sun's defaults.
+      // { length, angle, opacity, soft }. Omitted = the sun's defaults.
+      // soft = blur multiplier (2 = twice as diffuse).
       OPT('shadow',      function (n) {
         var o = n.shadow; if (!o) return null;
         var bits = [];
@@ -202,6 +203,7 @@ var FIELDS = {
         if (o.length  != null) bits.push('length: '  + scaleNum(o.length));
         if (o.angle   != null) bits.push('angle: '   + num(o.angle));
         if (o.opacity != null) bits.push('opacity: ' + scaleNum(o.opacity));
+        if (o.soft    != null) bits.push('soft: '    + scaleNum(o.soft));
         return bits.length ? 'shadow: { ' + bits.join(', ') + ' }' : null;
       }),
       OPT('serfFlagOn',  function (n) { return n.serfFlagOn ? 'serfFlagOn: ' + q(n.serfFlagOn) : null; }),
@@ -509,8 +511,8 @@ function validate(doc) {
       if (!n.image) return 'node "' + n.id + '" has no image';
       if (!isNum(n.x) || !isNum(n.y)) return 'node "' + n.id + '" has non-numeric coordinates';
       if (n.shadow && (typeof n.shadow !== 'object' ||
-          ['length', 'angle', 'opacity'].some(function (k) { return n.shadow[k] != null && !isNum(n.shadow[k]); })))
-        return 'node "' + n.id + '" has a shadow override that is not { off, length, angle, opacity } numbers';
+          ['length', 'angle', 'opacity', 'soft'].some(function (k) { return n.shadow[k] != null && !isNum(n.shadow[k]); })))
+        return 'node "' + n.id + '" has a shadow override that is not { off, length, angle, opacity, soft } numbers';
       if (n.standFacing && ['up', 'down', 'left', 'right'].indexOf(n.standFacing) === -1)
         return 'node "' + n.id + '" has standFacing "' + n.standFacing + '" — use up, down, left or right';
       checkGates(n, 'node "' + n.id + '"');

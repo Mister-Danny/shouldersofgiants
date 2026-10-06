@@ -1374,9 +1374,12 @@ var Overworld = (function () {
        lean     degrees a shadow leans away from the sun
        length   shadow length as a share of the caster's height
        opacity  of the cast shadow
+       footprint  how far a WIDE caster's shadow slides back, as a share of
+                its height (see _bakeCast)
      A node can override the cast shadow in map data: `shadow: { off: true }`
-     or any of { length, angle, opacity } — edited in tools/map-editor. */
-  var SUN = { side: 'left', front: true, lean: 32, length: 0.3, opacity: 0.3 };
+     or any of { length, angle, opacity, soft } (soft multiplies the blur) —
+     edited in tools/map-editor. */
+  var SUN = { side: 'left', front: true, lean: 32, length: 0.3, opacity: 0.3, footprint: 0.22 };
   var SINK_PX   = 1.5;    // the art's visible base sits this far INTO the ground
   /* GROUNDING (the "attached to the map" cue, before any cast shadow): a soft
      dark seam just BELOW the art's lower contour — where a plinth's front
@@ -1543,6 +1546,26 @@ var Overworld = (function () {
         // Kept for the cast-shadow bake (_bakeCast): the silhouette canvas and
         // the ground line, as "how far down is the ground under column x".
         c.silCv = sv; c.base = base;
+        // The art's own bottom edge per column (any height), for the CAST
+        // cut: a shadow only shows above it — behind the caster, never
+        // pooled under an overhang (Sargon's head rests on its beard tip;
+        // the ground line held across it put a shadow beneath the head).
+        var bot = [], bFirst = -1, bLast = -1;
+        for (var bx = 0; bx < W; bx++) {
+          bot[bx] = -1;
+          for (var by = H - 1; by >= 0; by--) {
+            if (d[(by * W + bx) * 4 + 3] > 8) { bot[bx] = by; break; }
+          }
+          if (bot[bx] >= 0) { if (bFirst < 0) bFirst = bx; bLast = bx; }
+        }
+        c.bottomAt = function (x) {
+          if (bFirst < 0) return base;
+          x = Math.round(x);
+          if (x <= bFirst) return bot[bFirst];
+          if (x >= bLast)  return bot[bLast];
+          for (var i = x; i >= bFirst; i--) if (bot[i] >= 0) return bot[i];
+          return base;
+        };
         c.groundAt = function (x) {
           if (first < 0) return base;
           if (x < first) return lo[first];
@@ -1583,10 +1606,18 @@ var Overworld = (function () {
     o = o || {};
     var len  = o.length  != null ? o.length  : SUN.length;
     var lean = o.angle   != null ? o.angle   : SUN.lean;
-    var key = a.src + '|' + M.map(function (v) { return v.toFixed(3); }).join(',') +
-              '|' + (mirror ? 1 : 0) + '|' + len + '|' + lean;
-    if (_castCache[key]) return _castCache[key];
     var W = a.silCv.width, H = a.silCv.height, fx = W / 2, fy = a.base + 1;   // working px
+    // STANDING art (taller than wide: a stele, a signpost) lays its shadow
+    // flat behind it from its foot. WIDE art (a city, a head, a plinth) is a
+    // footprint seen from above: its shadow is its silhouette slid back along
+    // the same sun direction, so it shows along the back and sunward-far
+    // edges the way the stele's does — flattening it about its front corner
+    // would hide the whole shadow under the art. `o.mode` can force either.
+    var foot = o.mode ? o.mode === 'footprint' : a.W > a.H * 1.05;
+    var soft = o.soft != null ? o.soft : 1;
+    var key = a.src + '|' + M.map(function (v) { return v.toFixed(3); }).join(',') +
+              '|' + (mirror ? 1 : 0) + '|' + len + '|' + lean + '|' + (foot ? 'f' : 's') + '|' + soft;
+    if (_castCache[key]) return _castCache[key];
     var t = Math.tan(lean * Math.PI / 180) * (SUN.side === 'left' ? 1 : -1);
     var ls = SUN.front ? len : -len;
     var S = [1, 0, -t * ls, ls];                       // [a, b, c, d]
@@ -1596,13 +1627,25 @@ var Overworld = (function () {
     };
     var det = M[0] * M[3] - M[1] * M[2];
     var Mi = [M[3] / det, -M[1] / det, -M[2] / det, M[0] / det];
-    var L = mul(Mi, mul(S, M));
+    var L, T = [0, 0];
+    if (foot) {
+      // Slide back along where a standing caster's top lands: (t·ls, −ls),
+      // normalised, FOOTPRINT_SLIDE of the art's height (scaled by any
+      // per-node length override), turned into the caster's own frame.
+      var n0 = Math.sqrt(t * t * ls * ls + ls * ls) || 1;
+      var dist = SUN.footprint * H * (len / SUN.length);
+      var sx0 = t * ls / n0 * dist, sy0 = -ls / n0 * dist;
+      L = [1, 0, 0, 1];
+      T = [Mi[0] * sx0 + Mi[2] * sy0, Mi[1] * sx0 + Mi[3] * sy0];
+    } else {
+      L = mul(Mi, mul(S, M));
+    }
     // Bounds of the mapped art rect, plus room for the softening.
-    var blur = Math.max(1, W * 0.01), m = Math.ceil(blur * 3);
+    var blur = Math.max(1, W * 0.01) * soft, m = Math.ceil(blur * 3);
     var xs = [], ys = [];
     [[0, 0], [W, 0], [0, H], [W, H]].forEach(function (q) {
       var u = q[0] - fx, v = q[1] - fy;
-      xs.push(fx + L[0] * u + L[2] * v); ys.push(fy + L[1] * u + L[3] * v);
+      xs.push(fx + L[0] * u + L[2] * v + T[0]); ys.push(fy + L[1] * u + L[3] * v + T[1]);
     });
     var x0 = Math.floor(Math.min.apply(null, xs)) - m, y0 = Math.floor(Math.min.apply(null, ys)) - m;
     var x1 = Math.ceil(Math.max.apply(null, xs)) + m,  y1 = Math.ceil(Math.max.apply(null, ys)) + m;
@@ -1611,16 +1654,17 @@ var Overworld = (function () {
     var cx = cv.getContext('2d', CPU2D);
     cx.filter = 'blur(' + blur.toFixed(1) + 'px)';
     cx.setTransform(L[0], L[1], L[2], L[3],
-                    fx - (L[0] * fx + L[2] * fy) - x0, fy - (L[1] * fx + L[3] * fy) - y0);
+                    fx - (L[0] * fx + L[2] * fy) + T[0] - x0, fy - (L[1] * fx + L[3] * fy) + T[1] - y0);
     if (mirror) { cx.translate(W, 0); cx.scale(-1, 1); }
     cx.drawImage(a.silCv, 0, 0);
     cx.setTransform(1, 0, 0, 1, 0, 0);
     cx.filter = 'none';
-    // Cut along the ground line (local columns; mirrored with the art).
+    // Cut along the art's own bottom edge (local columns; mirrored with the
+    // art): only what lies behind the caster survives.
     cx.globalCompositeOperation = 'destination-out';
     for (var X = 0; X < cv.width; X++) {
       var lx = X + x0;
-      var g = a.groundAt(mirror ? W - 1 - lx : lx);
+      var g = a.bottomAt(mirror ? W - 1 - lx : lx);
       cx.fillRect(X, g - y0, 1, cv.height);
     }
     var out = { url: null, waiters: [],                              // natural px
@@ -2279,12 +2323,29 @@ var Overworld = (function () {
      never above `plantMax`. The fan tilt then carries each banner out past the
      side of the art, so the cloth reads above or beside it on narrow steles,
      wide cities and small nodes alike. POLE_LEN is the flag art's foot-to-tip
-     run at --flag-size (74px × 0.77). */
+     run at a --flag-scale of 1 (74px × 0.77); FLAG_SCALE sizes every cluster
+     and FLAG_SCALE_BY_HOOK overrides it per boss (written to --flag-scale, so
+     the CSS sizes and this maths agree). A boss in FLAG_PLANT_BASE stands its
+     poles at plantMin regardless of the roofline. A boss in FLAG_FRONT plants
+     its flags IN FRONT of the node, feet on its base line, and sorts one step
+     in front of it — Akhenaten's altar is too small to hide poles behind. */
   var FLAG_FIT = { inset: 0.18, plantMin: 0.12, plantMax: 0.55, clothShow: 0.6 };
   var POLE_LEN = 57;
+  var FLAG_SCALE = 1.15;
+  var FLAG_SCALE_BY_HOOK = {               // Egypt's flags run 5% bigger
+    narmer: 1.2075, hatshepsut: 1.2075, ramses: 1.26, akhenaten: 1.2075, kush: 1.2075
+  };
+  var FLAG_PLANT_BASE = { akhenaten: true };
+  var FLAG_FRONT = { akhenaten: true };
+  function _flagScale(hook) {
+    return FLAG_SCALE_BY_HOOK[hook] != null ? FLAG_SCALE_BY_HOOK[hook] : FLAG_SCALE;
+  }
   function _fitFlags(cluster, art) {
-    var plant = Math.max(art.h * FLAG_FIT.plantMin,
-                Math.min(art.h * FLAG_FIT.plantMax, art.h - POLE_LEN * FLAG_FIT.clothShow));
+    var hook = cluster.dataset.hook, pole = POLE_LEN * _flagScale(hook);
+    var plant = FLAG_FRONT[hook] ? 0 :
+                FLAG_PLANT_BASE[hook] ? art.h * FLAG_FIT.plantMin :
+                Math.max(art.h * FLAG_FIT.plantMin,
+                Math.min(art.h * FLAG_FIT.plantMax, art.h - pole * FLAG_FIT.clothShow));
     cluster.style.setProperty('--flag-spread', (art.w * FLAG_FIT.inset).toFixed(1) + 'px');
     cluster.style.setProperty('--flag-plant',  plant.toFixed(1) + 'px');
   }
@@ -2303,10 +2364,12 @@ var Overworld = (function () {
     var cluster = document.createElement('div');
     cluster.className = 'node-flags';
     cluster.dataset.hook = hook;
+    cluster.style.setProperty('--flag-scale', _flagScale(hook));
     cluster.style.left = (node.x + lay.dx) + '%';
     cluster.style.top  = (node.y + lay.dy) + '%';
-    // Sorts WITH its node, one step behind it: the node hides the pole feet.
-    cluster.style.zIndex = _depthZ(node.y) - 1;
+    // Sorts WITH its node, one step behind it: the node hides the pole feet
+    // (one step in front for a FLAG_FRONT boss).
+    cluster.style.zIndex = _depthZ(node.y) + (FLAG_FRONT[hook] ? 1 : -1);
     // Poles at the art's edges, feet just up from its base (FLAG_FIT).
     var nodeEl = overlayEl.querySelector('.overworld-node[data-id="' + node.id + '"]');
     if (nodeEl) _whenNodeArt(node, nodeEl, function (a) { if (a) _fitFlags(cluster, a); });

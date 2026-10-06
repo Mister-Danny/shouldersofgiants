@@ -47,7 +47,10 @@ function renderInspector() {
       <div class="f"><label>shadow length</label><input id="i-shlen" type="number" step="0.05" value="${n.shadow && n.shadow.length != null ? n.shadow.length : ''}" placeholder="sun default"></div>
       <div class="f"><label>shadow angle °</label><input id="i-shang" type="number" step="1" value="${n.shadow && n.shadow.angle != null ? n.shadow.angle : ''}" placeholder="sun default"></div>
     </div>
-    <div class="f"><label>shadow opacity</label><input id="i-shop" type="number" step="0.05" min="0" max="1" value="${n.shadow && n.shadow.opacity != null ? n.shadow.opacity : ''}" placeholder="sun default"></div>
+    <div class="f2">
+      <div class="f"><label>shadow opacity</label><input id="i-shop" type="number" step="0.05" min="0" max="1" value="${n.shadow && n.shadow.opacity != null ? n.shadow.opacity : ''}" placeholder="sun default"></div>
+      <div class="f"><label>shadow softness ×</label><input id="i-shsoft" type="number" step="0.5" min="0.5" value="${n.shadow && n.shadow.soft != null ? n.shadow.soft : ''}" placeholder="1"></div>
+    </div>
     <div class="f"><label>faces on arrival</label>
       <select id="i-sface">
         ${[['', 'toward the node (auto)'], ['up', 'up — back to camera'], ['down', 'down — toward camera'], ['left', 'left'], ['right', 'right']]
@@ -87,7 +90,7 @@ function renderInspector() {
   const setShadow = () => {
     const o = {};
     if (!$('#i-shoff').checked) o.off = true;
-    [['#i-shlen', 'length'], ['#i-shang', 'angle'], ['#i-shop', 'opacity']].forEach(([sel, k]) => {
+    [['#i-shlen', 'length'], ['#i-shang', 'angle'], ['#i-shop', 'opacity'], ['#i-shsoft', 'soft']].forEach(([sel, k]) => {
       const v = $(sel).value; if (v !== '') o[k] = Number(v);
     });
     if (Object.keys(o).length) n.shadow = o; else delete n.shadow;
@@ -96,6 +99,7 @@ function renderInspector() {
   bind('#i-shlen', 'input', setShadow);
   bind('#i-shang', 'input', setShadow);
   bind('#i-shop',  'input', setShadow);
+  bind('#i-shsoft', 'input', setShadow);
   bind('#i-sdx', 'input', setStand);
   bind('#i-sdy', 'input', setStand);
   const sreset = $('#i-sreset');
