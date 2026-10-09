@@ -210,7 +210,7 @@ window.SOG_MAP_DATA = {
         zone:    { x: 0, y: 69.7, w: 20, h: 30 },
         walkTo:  { x: 10, y: 85 },
         target:  'eastafrica',
-        entryAt: { x: 41, y: 6 }
+        entryAt: { x: 41, y: 19 }
       },
       {
         id:      'to-mesopotamia',

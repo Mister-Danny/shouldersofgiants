@@ -3000,6 +3000,58 @@ var Overworld = (function () {
     return _walkOffPoint(currentPos, EGYPT_WALKOFF.dx, EGYPT_WALKOFF.dy);
   }
 
+  /* ── ARRIVAL WALK-IN ──────────────────────────────────────────────────────
+     Every map-to-map trip (an exit, a scripted travel) lands the Explorer just
+     OFF the screen and walks her in to her mark (the trip's entryAt), steps
+     and all, instead of popping her onto it. She comes in through the edge
+     that faces where she came from: the edge this map's exit BACK to that map
+     sits on (Egypt → East Africa: the top), level with her mark; a map with no
+     way back uses the edge nearest the mark. The walk goes round water like
+     any other. Her saved position is the mark itself (loadMap saved it), so a
+     reload mid-walk never leaves her off-screen. */
+  function _arrivalStart(fromMapId, to) {
+    var map = MAPS[currentMapId], edge = null;
+    var back = (map && map.exits || []).filter(function (x) { return x.target === fromMapId; })[0];
+    if (back && back.zone) {
+      var z = back.zone;
+      if (z.y <= 1)                edge = 'top';
+      else if (z.x + z.w >= 99)    edge = 'right';
+      else if (z.x <= 1)           edge = 'left';
+      else if (z.y + z.h >= 99)    edge = 'bottom';
+    }
+    if (!edge) {
+      var d = { top: to.y, bottom: 100 - to.y, left: to.x, right: 100 - to.x };
+      edge = Object.keys(d).sort(function (a, b) { return d[a] - d[b]; })[0];
+    }
+    return edge === 'top'    ? { x: to.x, y: WALKOFF_TOP_Y }
+         : edge === 'bottom' ? { x: to.x, y: WALKOFF_BOTTOM_Y }
+         : edge === 'left'   ? { x: 100 - WALKOFF_RIGHT_X, y: to.y }
+         :                     { x: WALKOFF_RIGHT_X, y: to.y };
+  }
+  /* Called the moment the new map is loaded (behind the black): put her off
+     screen. Returns the walk-in to start as the black lifts — fn(done). */
+  function _stageArrival(fromMapId, entryAt) {
+    if (!entryAt || !charEl || fromMapId === currentMapId) return null;
+    var start = _arrivalStart(fromMapId, entryAt);
+    currentPos.x = start.x; currentPos.y = start.y;
+    positionChar(start.x, start.y);
+    return function (done) { walkPath(_pathTo(entryAt), done); };
+  }
+  /* Run `walkIn` (if any) as the black starts to lift, and `then` once BOTH
+     the fade and the walk are over — whichever finishes last. */
+  function _arrivalSequencer(then) {
+    var faded = false, walking = false;
+    var finish = function () { if (faded && !walking) then(); };
+    return {
+      walk: function (walkIn) {
+        if (!walkIn) return;
+        walking = true;
+        walkIn(function () { walking = false; finish(); });
+      },
+      faded: function () { faded = true; finish(); }
+    };
+  }
+
   /* ── Map transition: fade black + 'Traveling...' + swap ───── */
   function transitionToMap(targetMapId, entryAt) {
     if (isTransitioning) return;
@@ -3018,30 +3070,35 @@ var Overworld = (function () {
       return;
     }
 
-    var tl = gsap.timeline({
-      onComplete: function () {
-        isTransitioning = false;
-        // Per-map arrival sequences (each self-guards on currentMapId + its
-        // one-time flag): East Africa post-Otzi dialogue, Egypt arrival, or the
-        // Mesopotamia arrival sequence (which plays through to the Uruk node).
-        if (maybePlayEastAfricaReturnDialogue()) return;
-        if (maybePlayEgyptNodeArrival()) return;   // post-Neb "funny hat" beat — wins over the generic arrival
-        if (maybePlayEgyptArrival()) return;
-        if (maybePlayMesopotamiaArrival()) return;
-        scheduleIdle();
-      }
+    var fromMapId = currentMapId, walkIn = null;
+    // Arrived (black gone AND walked in to her mark):
+    var arrive = _arrivalSequencer(function () {
+      isTransitioning = false;
+      // Per-map arrival sequences (each self-guards on currentMapId + its
+      // one-time flag): East Africa post-Otzi dialogue, Egypt arrival, or the
+      // Mesopotamia arrival sequence (which plays through to the Uruk node).
+      if (maybePlayEastAfricaReturnDialogue()) return;
+      if (maybePlayEgyptNodeArrival()) return;   // post-Neb "funny hat" beat — wins over the generic arrival
+      if (maybePlayEgyptArrival()) return;
+      if (maybePlayMesopotamiaArrival()) return;
+      scheduleIdle();
     });
+    var tl = gsap.timeline({ onComplete: function () { arrive.faded(); } });
 
     // Fade to black (1s)
     tl.set(transitionEl, { visibility: 'visible' })
       .to(transitionEl, { opacity: 1, duration: 1, ease: 'power2.inOut' })
       // Show "Traveling..." text briefly while black
       .to(transitionTextEl, { opacity: 1, duration: 0.3 }, '-=0.2')
-      // Swap map in the middle of the black period
-      .call(function () { loadMap(targetMapId, { entryAt: entryAt }); })
+      // Swap map in the middle of the black period; she waits off screen
+      .call(function () {
+        loadMap(targetMapId, { entryAt: entryAt });
+        walkIn = _stageArrival(fromMapId, entryAt);
+      })
       .to({}, { duration: 0.5 })          // hold on black with text
       .to(transitionTextEl, { opacity: 0, duration: 0.3 })
-      // Fade out black (1s)
+      // Fade out black (1s), walking in as it lifts
+      .call(function () { arrive.walk(walkIn); })
       .to(transitionEl, { opacity: 0, duration: 1, ease: 'power2.inOut' })
       .set(transitionEl, { visibility: 'hidden' });
   }
@@ -3593,20 +3650,25 @@ var Overworld = (function () {
       return;
     }
 
-    var tl = gsap.timeline({
-      onComplete: function () {
-        isTransitioning = false;
-        if (onComplete) onComplete();
-      }
+    var fromMapId = currentMapId, walkIn = null;
+    var arrive = _arrivalSequencer(function () {
+      isTransitioning = false;
+      if (onComplete) onComplete();
     });
+    var tl = gsap.timeline({ onComplete: function () { arrive.faded(); } });
 
-    // Identical timing to transitionToMap: fade-in 1s, hold 0.5s, fade-out 1s
+    // Identical timing to transitionToMap: fade-in 1s, hold 0.5s, fade-out 1s,
+    // and the same walk-in from off screen as the black lifts.
     tl.set(transitionEl, { visibility: 'visible' })
       .to(transitionEl, { opacity: 1, duration: 1, ease: 'power2.inOut' })
       .to(transitionTextEl, { opacity: 1, duration: 0.3 }, '-=0.2')
-      .call(function () { loadMap(targetMapId, { entryAt: entryAt }); })
+      .call(function () {
+        loadMap(targetMapId, { entryAt: entryAt });
+        walkIn = _stageArrival(fromMapId, entryAt);
+      })
       .to({}, { duration: 0.5 })
       .to(transitionTextEl, { opacity: 0, duration: 0.3 })
+      .call(function () { arrive.walk(walkIn); })
       .to(transitionEl, { opacity: 0, duration: 1, ease: 'power2.inOut' })
       .set(transitionEl, { visibility: 'hidden' });
   }

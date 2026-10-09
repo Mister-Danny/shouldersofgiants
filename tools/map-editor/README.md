@@ -213,3 +213,10 @@ zone touches, level with the zone's middle (To Egypt: north, off the top), from
 wherever she stands. They do respect water: with nothing in the way she walks
 the straight line exactly as drawn; otherwise she paths to the nearest
 reachable point on that edge and steps just past it there.
+
+**Arrivals** mirror that: on every map-to-map trip she starts just off screen
+and walks in to the exit's `entryAt` (footsteps and all) as the black lifts.
+She enters through the edge the new map's exit *back* to where she came from
+sits on (back from Egypt into East Africa: the top), level with `entryAt`; a
+map with no way back uses the edge nearest `entryAt`. So keep `entryAt` far
+enough in from the top that her whole 92px sprite shows — about 17% or more.
