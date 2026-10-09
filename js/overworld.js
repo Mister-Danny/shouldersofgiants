@@ -26,6 +26,7 @@ var Overworld = (function () {
   var KEY_EASTAFRICA_POSTOTZI_DIALOGUE = 'sog_eastafrica_postotzi_dialogue_seen'; // one-time East Africa return dialogue (after beating Otzi)
   var KEY_TOEGYPT_GOODBYE              = 'sog_toegypt_goodbye_seen';              // one-time Hunter goodbye on first To Egypt click
   var KEY_EGYPT_ARRIVAL                = 'sog_egypt_arrival_seen';                // one-time Egypt arrival dialogue (manual flow)
+  var KEY_UPPER_EGYPT_RIVER         = 'sog_upper_egypt_river_beat_seen';     // one-time Hunter river beat on the first pass through Upper Egypt (D1)
   var KEY_MESOPOTAMIA_ARRIVAL       = 'sog_mesopotamia_arrival_complete';
   var KEY_BATTLE_GILGAMESH_COMPLETE = 'sog_battle_gilgamesh_complete'; // set on the Gilgamesh win
   var KEY_MARKET_FIRST_VISIT        = 'sog_market_first_visit_done';   // set when the market NODE is first revealed (post-Serf-win return); nothing gates on it
@@ -150,6 +151,13 @@ var Overworld = (function () {
     { who: 'explorer', text: "Right. We'll have to come back later." },
     { who: 'explorer', text: "It's going to be so cool." },
     { who: 'hunter',   text: 'Whatever you say, stranger.' }
+  ];
+
+  /* D1, Upper Egypt leg: the first sight of the Nile on the way north. Plays
+     once (KEY_UPPER_EGYPT_RIVER), then she walks on north into Lower Egypt. */
+  var D1_UPPER_EGYPT_RIVER_DIALOGUE = [
+    { who: 'explorer', text: 'Wow, look at this incredible river.' },
+    { who: 'hunter',   text: 'I wonder where it leads.' }
   ];
 
   var D1_SCENE3_DIALOGUE = [
@@ -602,8 +610,8 @@ var Overworld = (function () {
      What is still function-valued, and so still lives here, is behaviour that
      runs rather than gates: the to-Egypt onBeforeExit hook. It closes over
      runDialogue, cancelIdle and isDialogueLocked, none of which exist outside
-     this closure. Keyed 'mapId/exitId' because both East Africa and
-     Mesopotamia declare an exit called 'to-egypt'.
+     this closure. Keyed 'mapId/exitId' so two maps may name an exit alike
+     (Mesopotamia and Upper Egypt both have a 'to-egypt').
 
      Net effect: the editor owns the world's shape and its unlock sequence;
      this file owns what actually happens. ────── */
@@ -612,7 +620,7 @@ var Overworld = (function () {
 
   /* Pre-exit hooks. Not gates — gates are data now. */
   var EXIT_BEHAVIOUR = {
-    'eastafrica/to-egypt': {
+    'eastafrica/to-upper-egypt': {
       // First click only: Hunter's goodbye, then the walk-off + transition.
       // Subsequent clicks skip straight to the walk-off (flag already set).
       onBeforeExit: function (proceed) {
@@ -2960,7 +2968,10 @@ var Overworld = (function () {
        narmer-beaten, so a save that reached it with the ambush still pending must
        not slip south around it. The exit's own travel becomes the deferred resume,
        so accepting the ambush here still delivers the player where they were going. */
-    if (exit && exit.target === 'upper-egypt' && !_ambushDone(AMBUSH_HYKSOS)) {
+    // Only once Narmer is beaten: East Africa's north exit also leads into
+    // Upper Egypt, and the Hunter's D1 walk north must not meet the Hyksos.
+    if (exit && exit.target === 'upper-egypt' && _milestoneReached('narmer-beaten') &&
+        !_ambushDone(AMBUSH_HYKSOS)) {
       _runConquerorAmbush(AMBUSH_HYKSOS, function () {
         transitionToMap(exit.target, exit.entryAt);
       });
@@ -3078,6 +3089,7 @@ var Overworld = (function () {
       // one-time flag): East Africa post-Otzi dialogue, Egypt arrival, or the
       // Mesopotamia arrival sequence (which plays through to the Uruk node).
       if (maybePlayEastAfricaReturnDialogue()) return;
+      if (maybePlayUpperEgyptRiverBeat()) return; // D1: first sight of the Nile, then on north
       if (maybePlayEgyptNodeArrival()) return;   // post-Neb "funny hat" beat — wins over the generic arrival
       if (maybePlayEgyptArrival()) return;
       if (maybePlayMesopotamiaArrival()) return;
@@ -3247,7 +3259,7 @@ var Overworld = (function () {
       runDialogue(EASTAFRICA_POSTOTZI_DIALOGUE, function () {
         isDialogueLocked = false;
         try { localStorage.setItem(KEY_EASTAFRICA_POSTOTZI_DIALOGUE, 'true'); } catch (e) {}
-        flashExit('to-egypt', 1500);   // point the player at the now-relevant exit
+        flashExit('to-upper-egypt', 1500);   // point the player at the now-relevant exit (north, up the Nile)
         scheduleIdle();
       });
     });
@@ -3371,6 +3383,51 @@ var Overworld = (function () {
     setTimeout(function () {
       if (el) el.classList.remove('overworld-exit--flash');
     }, durationMs || 1500);
+  }
+
+  /* ── D1, Upper Egypt leg (manual flow) ─────────────────────────
+     The Hunter's journey runs East Africa → Upper Egypt → Lower Egypt →
+     Mesopotamia, the way the Nile flows. Arriving in Upper Egypt on that
+     journey — Otzi beaten, the Hunter not yet in Lower Egypt or Mesopotamia —
+     she has walked in from the south edge to a view of the river (the East
+     Africa exit's entryAt); the two lines play, and as the last is dismissed
+     she walks on north, off the top edge, into Lower Egypt, where the
+     existing arrival beat (D1 Scene 2) takes over unchanged.
+
+     The flag is set as she LEAVES, not when the lines end: a reload at any
+     point before Lower Egypt replays the beat from her saved spot on Upper
+     Egypt, so the journey resumes rather than stranding her. Upper Egypt's
+     nodes are all gated on post-Narmer milestones, so nothing there reveals,
+     glows or stamps while she passes through. */
+  function maybePlayUpperEgyptRiverBeat() {
+    if (isDialogueLocked) return false;
+    if (currentMapId !== 'upper-egypt') return false;
+    try {
+      if (localStorage.getItem(KEY_UPPER_EGYPT_RIVER) === 'true') return false;
+      if (localStorage.getItem(KEY_BATTLE_OTZI_COMPLETE) !== 'true') return false;
+      if (localStorage.getItem(KEY_EGYPT_ARRIVAL) === 'true') return false;        // Hunter already in Lower Egypt
+      if (localStorage.getItem(KEY_MESOPOTAMIA_ARRIVAL) === 'true') return false;  // …or the journey is done
+    } catch (e) { return false; }
+
+    var north = (MAPS['upper-egypt'].exits || []).filter(function (x) { return x.target === 'egypt'; })[0];
+    if (!north) return false;
+    isDialogueLocked = true;
+    cancelIdle();
+    _playUpperEgyptRiverBeat(function () {
+      walkPath(_walkOffPath(_exitEdgeAim(north)), function () {
+        try { localStorage.setItem(KEY_UPPER_EGYPT_RIVER, 'true'); } catch (e) {}
+        // Unlock BEFORE the trip, so Lower Egypt's own arrival beat can run.
+        isDialogueLocked = false;
+        transitionToMap(north.target, north.entryAt);
+      });
+    });
+    return true;
+  }
+  /* The beat itself, shared with the scripted chain (startMesopotamiaArrival):
+     face the river, the two lines, then done(). */
+  function _playUpperEgyptRiverBeat(done) {
+    _restPose('left');               // the Nile is to her west
+    runDialogue(D1_UPPER_EGYPT_RIVER_DIALOGUE, done);
   }
 
   /* ── Arrival in Egypt (manual flow) ───────────────────────────
@@ -3524,12 +3581,19 @@ var Overworld = (function () {
      battle and clicks "Back to Map" for the first time (i.e. when
      sog_mesopotamia_arrival_complete is not yet set).
 
-     Three scenes separated by "Traveling…" loading-screen transitions:
-       Scene 1: East Africa  — Hunter + Explorer, 12 lines, then walk-off right
-       Travel 1: East Africa → Egypt   (existing transitionToMap pattern)
-       Scene 2: Egypt        — Hunter + Explorer, 11 lines + ummelqaab decoration, walk-off right
-       Travel 2: Egypt → Mesopotamia
-       Scene 3: Mesopotamia  — Hunter + Explorer, 5 lines, phase complete
+     Scenes separated by "Traveling…" transitions, following the Nile north:
+       Scene 1: East Africa   — Hunter + Explorer, then walk-off north (top)
+       Travel 1: East Africa → Upper Egypt (in from the south edge)
+       River:   Upper Egypt   — two lines at the Nile, then walk-off north (top)
+       Travel 2: Upper Egypt → Lower Egypt (in from the south edge)
+       Scene 2: Lower Egypt   — Hunter + Explorer + ummelqaab decoration, walk-off right
+       Travel 3: Lower Egypt → Mesopotamia
+       Scene 3: Mesopotamia   — Hunter + Explorer, then D2a
+
+     DEV-PANEL ONLY ("Mesopotamia arrival (D1)"). The live game runs the same
+     journey as a MANUAL walk: the Otzi return → the To Upper Egypt exit →
+     maybePlayUpperEgyptRiverBeat → maybePlayEgyptArrival (stops; the player
+     walks to Mesopotamia) → maybePlayMesopotamiaArrival.
 
      Sets sog_mesopotamia_arrival_complete = 'true' on completion.
      TODO (future phase): add re-entry behaviour when the player returns to East
@@ -3556,27 +3620,43 @@ var Overworld = (function () {
     positionChar(currentPos.x, currentPos.y);
     _restPose();
 
+    // The route follows the Nile north: the arrival marks are the exits' own
+    // entryAt points, so this chain and the manual walk land in the same spots.
+    var exitTo = function (mapId, target) {
+      return (MAPS[mapId].exits || []).filter(function (x) { return x.target === target; })[0] || {};
+    };
+    var toUpper = exitTo('eastafrica', 'upper-egypt'), toLower = exitTo('upper-egypt', 'egypt');
+
     // === SCENE 1: East Africa ===
     runDialogue(D1_SCENE1_DIALOGUE, function () {
-      // After "Let's go!" — Explorer walks off the right edge
+      // After "Let's go!" — Explorer walks off north, through the top edge
       walkPath(_walkOffPath(_walkOffPoint(currentPos, EGYPT_WALKOFF.dx, EGYPT_WALKOFF.dy)), function () {
-        // Travel transition 1: East Africa → Egypt
-        _d1TravelTo('egypt', { x: 10, y: 85 }, function () {
-          // === SCENE 2: Egypt ===
-          // Egypt topography props (incl. Umm el-Qaab) are placed by loadMap's
-          // gated group when the Egypt map loaded above — they stay on screen
-          // through the walk-off and are cleared when loadMap swaps to the
-          // Mesopotamia map below.
-          runDialogue(D1_SCENE2_DIALOGUE, function () {
-            // Explorer walks off the right edge — just past it, not beyond.
-            walkPath(_walkOffPath({ x: WALKOFF_RIGHT_X, y: currentPos.y }), function () {
-              // Travel transition 2: Egypt → Mesopotamia
-              _d1TravelTo('mesopotamia', { x: 10, y: 85 }, function () {
-                // === SCENE 3: Mesopotamia ===
-                runDialogue(D1_SCENE3_DIALOGUE, function () {
-                  // D1 Scene 3 done — continue immediately into D2a river walk.
-                  // sog_mesopotamia_arrival_complete is set at the END of D2a.
-                  _d2aSequence();
+        // Travel 1: East Africa → Upper Egypt (in from the south edge)
+        _d1TravelTo('upper-egypt', toUpper.entryAt, function () {
+          // === UPPER EGYPT: first sight of the Nile, then on north ===
+          _playUpperEgyptRiverBeat(function () {
+            walkPath(_walkOffPath(_exitEdgeAim(toLower)), function () {
+              try { localStorage.setItem(KEY_UPPER_EGYPT_RIVER, 'true'); } catch (e) {}
+              // Travel 2: Upper Egypt → Lower Egypt (in from the south edge)
+              _d1TravelTo('egypt', toLower.entryAt, function () {
+                // === SCENE 2: Egypt ===
+                // Egypt topography props (incl. Umm el-Qaab) are placed by loadMap's
+                // gated group when the Egypt map loaded above — they stay on screen
+                // through the walk-off and are cleared when loadMap swaps to the
+                // Mesopotamia map below.
+                runDialogue(D1_SCENE2_DIALOGUE, function () {
+                  // Explorer walks off the right edge — just past it, not beyond.
+                  walkPath(_walkOffPath({ x: WALKOFF_RIGHT_X, y: currentPos.y }), function () {
+                    // Travel 3: Egypt → Mesopotamia
+                    _d1TravelTo('mesopotamia', { x: 10, y: 85 }, function () {
+                      // === SCENE 3: Mesopotamia ===
+                      runDialogue(D1_SCENE3_DIALOGUE, function () {
+                        // D1 Scene 3 done — continue immediately into D2a river walk.
+                        // sog_mesopotamia_arrival_complete is set at the END of D2a.
+                        _d2aSequence();
+                      });
+                    });
+                  });
                 });
               });
             });
@@ -6739,6 +6819,7 @@ var Overworld = (function () {
     // scripted intro dialogue (locks movement until it ends).
     var dialogueStarted = maybePlayAdventureIntro();
     if (!dialogueStarted) dialogueStarted = maybePlayEastAfricaReturnDialogue();
+    if (!dialogueStarted) dialogueStarted = maybePlayUpperEgyptRiverBeat();  // D1 Upper Egypt leg (replays if interrupted)
     if (!dialogueStarted) dialogueStarted = maybePlayEgyptNodeArrival();   // post-Neb "funny hat" beat
     if (!dialogueStarted) dialogueStarted = maybePlayEgyptArrival();
     if (!dialogueStarted) dialogueStarted = maybePlayMesopotamiaArrival();

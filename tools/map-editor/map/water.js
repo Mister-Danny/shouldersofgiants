@@ -24,9 +24,8 @@ import { standPos } from './routes.js';
 const WG = () => window.SOG && window.SOG.WaterGrid;
 
 // Walk stops that are not nodes or exits — scripted in js/overworld.js
-// (the D1 arrivals and the D2a river stop). Kept in step by hand.
+// (the D1 Mesopotamia arrival and the D2a river stop). Kept in step by hand.
 const SCRIPTED = {
-  egypt: [{ x: 10, y: 85 }],
   mesopotamia: [{ x: 10, y: 85 }, { x: 66, y: 65 }]
 };
 

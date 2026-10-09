@@ -126,15 +126,15 @@ window.SOG_MAP_DATA = {
     ],
     exits: [
       {
-        id:      'to-egypt',
-        label:   'To Egypt →',
+        id:      'to-upper-egypt',
+        label:   'To Upper Egypt ↑',
         zone:    { x: 30.02, y: 0.2, w: 22, h: 24 },
         walkTo:  { x: 28, y: 16 },
         walkOff: true,
-        target:  'egypt',
-        entryAt: { x: 10, y: 85 },
+        target:  'upper-egypt',
+        entryAt: { x: 55, y: 89 },
         showFrom: 'otzi-beaten',
-        note: 'Sits at the top of the screen just right of the egypt-signpost node. Gated on beating Otzi. entryAt matches the D1 East Africa->Egypt arrival point (Egypt’s west spawn).'
+        note: 'North edge, just right of the egypt-signpost. Gated on beating Otzi. Leads NORTH up the Nile to Upper Egypt, arriving on its south edge (east bank, a view of the river).'
       },
       {
         id:      'to-sahara',
@@ -151,9 +151,9 @@ window.SOG_MAP_DATA = {
       { from: 'prehistory', to: 'egypt-signpost', waypoints: [{ x: 35.82, y: 45.43 }, { x: 33.44, y: 34.49 }] },
       { from: 'spawn', to: 'prehistory', waypoints: [{ x: 48.76, y: 93.22 }, { x: 39.05, y: 94.16 }, { x: 31.6, y: 88.8 }, { x: 30.06, y: 61.61 }, { x: 32.05, y: 51.21 }, { x: 35.87, y: 44.69 }] },
       { from: 'spawn', to: 'egypt-signpost', waypoints: [{ x: 39.83, y: 90.78 }, { x: 31.18, y: 87.87 }, { x: 28.14, y: 55.11 }] },
-      { from: 'spawn', to: 'to-egypt', waypoints: [{ x: 58.88, y: 60.31 }, { x: 51.89, y: 51.55 }, { x: 39.53, y: 46.62 }, { x: 34.52, y: 32.12 }, { x: 26.54, y: 18.89 }, { x: 27.88, y: 15.78 }] },
+      { from: 'spawn', to: 'to-upper-egypt', waypoints: [{ x: 58.88, y: 60.31 }, { x: 51.89, y: 51.55 }, { x: 39.53, y: 46.62 }, { x: 34.52, y: 32.12 }, { x: 26.54, y: 18.89 }, { x: 27.88, y: 15.78 }] },
       { from: 'spawn', to: 'to-sahara', waypoints: [{ x: 43.47, y: 92.15 }, { x: 33.6, y: 89.96 }, { x: 28.88, y: 78.93 }] },
-      { from: 'prehistory', to: 'to-egypt', waypoints: [{ x: 32.18, y: 28.38 }] }
+      { from: 'prehistory', to: 'to-upper-egypt', waypoints: [{ x: 32.18, y: 28.38 }] }
     ],
     crossings: [],
     water: { cell: 4, rle: '7o.18.7p.17.7r.z.7z.j.3.9.83.d.8l.9.54a.2.8t.4.8s.3.8r.4.8r.4.8r.4.8t.2.cb.3.8s.2.1.1.8p.3.ve.5.8r.5.8r.5.8r.5.8q.7.8p.7.8p.7.8q.6.3w.2.4s.6.3x.a.4k.5.45.1.4m.5.8s.4.8t.4.8s.5.8s.7.6i.1.28.6.6g.3.28.5.6f.4.29.4.6d.6.29.4.6c.7.2a.4.68.9.n.4.7v.9.n.5.7t.b.h.7.5x.5.1u.a.j.5.7.4.5m.b.1p.8.o.3.2.7.5m.3.7.7.1k.7.r.c.5k.3.e.1.1j.7.u.4.2.6.5g.3.20.6.13.4.5e.4.22.5.6i.5.25.2.6b.a.8r.2.8m.3.8s.4.8s.4.8q.6.8p.b.1.2.8g.9.2.5.8f.a.6.3.3.1.3f.2.4r.b.8.6.3d.4.4p.c.d.1.3c.6.2.2.4k.c.d.3.31.2.6.8.1.3.3.1.4d.e.e.2.30.6.2.h.4c.f.f.2.2u.1.1.s.4b.g.f.2.2r.x.4b.g.g.1.1l.3.11.11.48.h.g.1.1k.6.y.13.6.4.3v.j.g.1.1i.9.x.14.2.8.3u.j.f.2.1i.8.z.14.1.8.3u.j.e.2.1i.8.z.19.2.1.3v.k.e.1.1j.7.z.19.3z.k.d.2.1i.7.z.15.43.l.d.1.1j.4.11.15.43.m.d.2.1j.1.13.14.44.m.d.2.2m.16.42.n.e.1.2m.16.40.p.e.2.2m.16.3y.q.e.2.2m.16.3y.q.f.2.2m.14.3z.q.g.1.2m.13.3z.r.g.2.2l.12.3z.s.h.1.2l.12.3y.t.h.2.2k.10.3z.u.h.2.2j.11.3z.u.h.1.1b.3.p.2.f.z.41.u.h.1.1b.3.p.2.f.z.40.v.h.1.1a.5.p.1.e.10.3z.w.g.2.1a.5.o.1.f.z.40.w.g.1.1b.6.n.1.f.x.42.w.g.1.1a.7.n.1.e.y.19.3.2q.w.g.1.1a.6.13.z.18.4.2o.x.f.2.19.6.15.m.3.6.1.1.18.5.2n.y.f.1.1a.5.16.o.2.3.7.2.13.5.2m.z.f.1.1a.3.17.x.3.3.13.5.2m.z.f.1.1a.2.18.14.12.5.2l.10.f.1.2k.b.1.r.13.4.2l.11.f.1.2l.9.3.n.16.4.2j.13.f.1.2m.6.6.a.1.a.16.4.2k.13.g.1.2k.7.7.3.1.4.4.7.16.4.2j.15.g.1.2k.6.e.2.6.3.19.1.11.2.1i.15.h.1.2k.5.e.2.2k.3.1f.17.h.2.2j.2.1.2.e.2.2h.1.3.3.1d.18.i.1.2j.2.h.2.2h.4.2.2.1b.19.i.1.32.3.2g.6.1.2.15.1e.i.1.31.2.2k.8.13.1f.h.1.1d.1.1o.1.2f.2.5.7.12.1g.g.2.1c.3.42.3.5.6.12.1h.g.1.1c.5.41.4.6.2.2.1.11.1h.g.1.1c.5.42.2.8.1.14.1h.g.2.1b.5.44.1.1c.1h.h.1.1b.5.5i.1g.h.2.1a.5.5i.1g.i.1.19.6.2v.1.b.1.29.1h.i.1.19.6.2u.3.9.2.29.1h.i.1.19.7.2q.5.a.3.28.1h.i.1.19.7.2o.7.9.4.27.1i.i.1.19.8.2m.7.a.3.26.1k.i.1.19.9.2i.9.b.3.26.1k.i.2.18.2.1.6.2h.6.f.3.25.1l.j.2.17.2.1.6.2i.2.2q.1l.l.2.15.1.2.8.58.1l.m.2.16.9.58.1l.n.2.15.a.56.1m.o.4.11.b.56.1m.q.3.10.b.56.1m.s.2.y.b.56.1n.t.2.x.b.55.1o.u.2.w.b.55.1o.v.1.w.b.54.1p.v.2.v.c.53.1p.v.2.w.c.51.1q' }
@@ -205,14 +205,6 @@ window.SOG_MAP_DATA = {
     ],
     exits: [
       {
-        id:      'to-eastafrica',
-        label:   '← To East Africa',
-        zone:    { x: 0, y: 69.7, w: 20, h: 30 },
-        walkTo:  { x: 10, y: 85 },
-        target:  'eastafrica',
-        entryAt: { x: 41, y: 19 }
-      },
-      {
         id:      'to-mesopotamia',
         label:   'To Mesopotamia →',
         zone:    { x: 80.62, y: 38.79, w: 20, h: 30 },
@@ -227,8 +219,7 @@ window.SOG_MAP_DATA = {
         walkTo:  { x: 50, y: 88 },
         target:  'upper-egypt',
         entryAt: { x: 50, y: 19 },
-        showFrom: 'narmer-beaten',
-        note: 'Bottom of Lower Egypt — the way upriver.'
+        note: 'Bottom of Lower Egypt — upriver (south) to Upper Egypt, arriving on its north edge. Always open: it is also the way back to East Africa.'
       }
     ],
     routes: [],
@@ -319,7 +310,16 @@ window.SOG_MAP_DATA = {
         walkTo:  { x: 50, y: 10 },
         target:  'egypt',
         entryAt: { x: 50, y: 86 },
-        note: 'Top of Upper Egypt — returns to the bottom of Lower Egypt.'
+        note: 'North edge. Downriver to Lower Egypt, arriving on its south edge where the Nile enters the delta.'
+      },
+      {
+        id:      'to-eastafrica',
+        label:   '↓ To East Africa',
+        zone:    { x: 58, y: 84, w: 20, h: 16 },
+        walkTo:  { x: 68, y: 93 },
+        target:  'eastafrica',
+        entryAt: { x: 41, y: 19 },
+        note: 'South edge, east bank. Upriver to East Africa, arriving on its north edge below the To Upper Egypt exit.'
       }
     ],
     routes: [],

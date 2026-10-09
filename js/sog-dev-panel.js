@@ -745,7 +745,8 @@ SOG.DevPanel = (function () {
     'egypt-signpost': { single: {
       set: ['sog_otzi_opening_seen',
             'sog_eastafrica_postotzi_dialogue_seen',           // East Africa return beat
-            'sog_toegypt_goodbye_seen',                        // Hunter's goodbye on the To Egypt click
+            'sog_toegypt_goodbye_seen',                        // Hunter's goodbye on the To Upper Egypt click
+            'sog_upper_egypt_river_beat_seen',                 // D1 Upper Egypt leg (first sight of the Nile)
             'sog_mesopotamia_arrival_complete'],               // gates walls-of-uruk (mesopotamia-arrival)
       cards: [{ id: 35, flag: 'sog_card_otzi_unlocked' }]
     } },

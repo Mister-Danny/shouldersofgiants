@@ -206,10 +206,10 @@ return, or a transition, and any remembered "last node" would be wrong or
 missing in at least one of those. Standing on a node makes it the nearest
 endpoint, which is the right answer without tracking anything.
 
-Exits with `walkOff: true` (the To Egypt departure) ignore routes — that is a
+Exits with `walkOff: true` (East Africa's To Upper Egypt departure) ignore routes — that is a
 deliberate cinematic walk off the screen edge, and routing it would replace the
 drama with a tidy walk to a box. She leaves through the screen edge the exit's
-zone touches, level with the zone's middle (To Egypt: north, off the top), from
+zone touches, level with the zone's middle (East Africa → Upper Egypt: north, off the top), from
 wherever she stands. They do respect water: with nothing in the way she walks
 the straight line exactly as drawn; otherwise she paths to the nearest
 reachable point on that edge and steps just past it there.
@@ -217,6 +217,6 @@ reachable point on that edge and steps just past it there.
 **Arrivals** mirror that: on every map-to-map trip she starts just off screen
 and walks in to the exit's `entryAt` (footsteps and all) as the black lifts.
 She enters through the edge the new map's exit *back* to where she came from
-sits on (back from Egypt into East Africa: the top), level with `entryAt`; a
+sits on (back from Upper Egypt into East Africa: the top), level with `entryAt`; a
 map with no way back uses the edge nearest `entryAt`. So keep `entryAt` far
 enough in from the top that her whole 92px sprite shows — about 17% or more.
