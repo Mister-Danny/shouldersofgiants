@@ -136,7 +136,7 @@ var Overworld = (function () {
   ];
 
   var D1_SCENE2_DIALOGUE = [
-    { who: 'explorer', text: 'WOW. Look at that huge river!' },
+    { who: 'explorer', text: 'Look, the river splits into all these smaller rivers before it reaches the sea!' },
     { who: 'hunter',   text: 'Ah, Kemet. The black land...' },
     { who: 'explorer', text: 'The black land? It looks pretty green to me.' },
     { who: 'hunter',   text: "Look at the soil. It's so rich, it's black." },
