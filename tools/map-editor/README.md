@@ -208,6 +208,8 @@ endpoint, which is the right answer without tracking anything.
 
 Exits with `walkOff: true` (the To Egypt departure) ignore routes — that is a
 deliberate cinematic walk off the screen edge, and routing it would replace the
-drama with a tidy walk to a box. They do respect water: with nothing in the way
-she walks the straight line exactly as drawn; otherwise she paths to the nearest
+drama with a tidy walk to a box. She leaves through the screen edge the exit's
+zone touches, level with the zone's middle (To Egypt: north, off the top), from
+wherever she stands. They do respect water: with nothing in the way she walks
+the straight line exactly as drawn; otherwise she paths to the nearest
 reachable point on that edge and steps just past it there.

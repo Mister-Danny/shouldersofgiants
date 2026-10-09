@@ -559,6 +559,9 @@ var Overworld = (function () {
   // Top edge: she is anchored at her feet, so once they cross y = 0 the whole
   // sprite is above the (clipped) map. Half a percent more clears her shadow.
   var WALKOFF_TOP_Y = -0.5;
+  // Bottom edge: her feet are her anchor, so the whole 92px sprite clears the
+  // bottom once they are ~92px (15% of 600) below it.
+  var WALKOFF_BOTTOM_Y = 115;
 
   /* A walk-off waypoint along (dx, dy) from `from`, cut short at the first
      screen edge she fully clears (top or right), so the transition fades in as
@@ -2969,11 +2972,11 @@ var Overworld = (function () {
     // The actual departure: walk (off-screen if exit.walkOff, else to walkTo),
     // then fade-transition to the target map.
     var go = function () {
-      // walkOff is a deliberate cinematic (a long diagonal off-screen) and
-      // ignores both walkTo and the route graph — routing it would replace the
-      // drama with a tidy walk to a box edge.
+      // walkOff walks her OFF the screen through the edge the exit sits on
+      // (To Egypt: north, through the top) — not to walkTo, and not along the
+      // route graph; it still goes round water (_walkOffPath).
       var path = exit.walkOff
-        ? _walkOffPath(_walkOffPoint(currentPos, EGYPT_WALKOFF.dx, EGYPT_WALKOFF.dy))
+        ? _walkOffPath(_exitEdgeAim(exit))
         : _routeTo(exit.id);
       walkPath(path, function () {
         transitionToMap(exit.target, exit.entryAt);
@@ -2982,6 +2985,19 @@ var Overworld = (function () {
     // Optional one-time pre-departure dialogue (e.g. the To Egypt goodbye).
     if (typeof exit.onBeforeExit === 'function') exit.onBeforeExit(go);
     else go();
+  }
+
+  /* Where a walk-off exit leaves the map: just past the screen edge its zone
+     touches, level with the zone's middle — so leaving East Africa for Egypt
+     is a walk NORTH off the top, from wherever she starts. An exit zone that
+     touches no edge falls back to the To Egypt heading. */
+  function _exitEdgeAim(exit) {
+    var z = exit.zone || {}, cx = z.x + z.w / 2, cy = z.y + z.h / 2;
+    if (z.y <= 1)            return { x: cx, y: WALKOFF_TOP_Y };
+    if (z.x + z.w >= 99)     return { x: WALKOFF_RIGHT_X, y: cy };
+    if (z.x <= 1)            return { x: 100 - WALKOFF_RIGHT_X, y: cy };
+    if (z.y + z.h >= 99)     return { x: cx, y: WALKOFF_BOTTOM_Y };
+    return _walkOffPoint(currentPos, EGYPT_WALKOFF.dx, EGYPT_WALKOFF.dy);
   }
 
   /* ── Map transition: fade black + 'Traveling...' + swap ───── */
@@ -4162,7 +4178,7 @@ var Overworld = (function () {
       _runLinesKeepOpen(D7_HATSHEPSUT_TRANSITION, function () {
         if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
         // Walk off south, then swap maps behind the "Traveling…" curtain.
-        walkPath(_walkOffPath({ x: currentPos.x, y: 115 }), function () {
+        walkPath(_walkOffPath({ x: currentPos.x, y: WALKOFF_BOTTOM_Y }), function () {
           _d1TravelTo('upper-egypt', MAPS['upper-egypt'] && MAPS['upper-egypt'].spawn, function () {
             hud.enterDialogueMode(null, function () {
               if (typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'merchant' });
