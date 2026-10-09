@@ -8,6 +8,7 @@ import { bind, snapshot, snapshotOnce, deleteSelection } from './commands.js';
 // level/state.js has zero imports of its own, so this can't become a cycle.
 import { State as levelState } from '../level/state.js';
 import { STAND_DEFAULT_DY } from './routes.js';
+import { renderCrossingInspector } from './water.js';
 
 /* ── Inspector ────────────────────────────────────────────────────────────
    Painted BY render.js (render() calls renderInspector as its last step —
@@ -20,6 +21,7 @@ function renderInspector() {
   if (!State.sel) { box.innerHTML = '<p class="note">Nothing selected.</p>'; return; }
   if (State.sel.type === 'exit') return renderExitInspector(box, exit(State.sel.id));
   if (State.sel.type === 'prop') return renderPropInspector(box, prop(State.sel.index), State.sel.index);
+  if (State.sel.type === 'crossing') return renderCrossingInspector(box, State.sel.index);
   const n = node(State.sel.id);
   if (!n) { box.innerHTML = '<p class="note">Nothing selected.</p>'; return; }
 

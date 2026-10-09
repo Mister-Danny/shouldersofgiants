@@ -10,6 +10,7 @@ import {
 } from './commands.js';
 import { render, buildTabs, buildScrubber } from './render.js';
 import { showHelp, showMilestones } from './modals.js';
+import { waterPointerDown } from './water.js';
 
 /* ── Map Editor entry point ──────────────────────────────────────────────
    Owns exactly the map document — its own dirty flag and undo stack live
@@ -79,6 +80,7 @@ function wireGlobalEvents() {
 
   // Bare click on the map: in route mode append a waypoint, otherwise deselect.
   stage.addEventListener('pointerdown', e => {
+    if (State.mode === 'water') return waterPointerDown(e);
     if (State.mode === 'route') {
       if (!State.routeSel) return toast('Click two places to pick a route between them');
       snapshot();

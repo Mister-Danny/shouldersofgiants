@@ -41,6 +41,8 @@
   <section id="stage-wrap">
     <div id="stage">
       <img id="bg" alt="" draggable="false">
+      <!-- Water grid (js/water-grid.js): red = water, cyan = forded by a crossing -->
+      <canvas id="water-cv" hidden></canvas>
       <div id="overlay">
         <svg id="paths" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
         <!-- nodes, exit zones and waypoint handles are injected here -->
@@ -73,8 +75,10 @@
       <div class="seg">
         <button data-mode="select" class="on">Select &amp; Drag</button>
         <button data-mode="route">Routes</button>
+        <button data-mode="water">Water</button>
       </div>
       <p class="note" id="mode-note">Drag nodes to reposition. Arrow keys nudge by 0.1%, Shift+arrows by 1%.</p>
+      <div id="water-panel"></div>
     </div>
 
     <div class="panel">
@@ -159,6 +163,9 @@
 
 <div id="toast" hidden></div>
 
+<!-- The game's own water grid code (classic script → window.SOG.WaterGrid),
+     so the editor and the game can never disagree about what is blocked. -->
+<script src="/js/water-grid.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

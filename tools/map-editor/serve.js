@@ -362,7 +362,23 @@ function serialise(doc) {
              return '{ x: ' + num(w.x) + ', y: ' + num(w.y) + ' }';
            }).join(', ') + '] }' + (i < m.routes.length - 1 ? ',' : '') + '\n';
     });
-    s += (m.routes || []).length ? '    ]\n' : ']\n';
+    s += (m.routes || []).length ? '    ],\n' : '],\n';
+
+    /* ── Water ── where the Explorer may NOT walk (js/water-grid.js).
+       `crossings` are the points where a river may be forded: each clears a
+       disk of radius r stage px out of the water grid. `water` is the grid
+       itself, generated from the art and painted in the editor: cell = stage
+       px per cell, rle = run lengths (base 36, '.'-separated, alternating
+       free/blocked from free, row-major). */
+    s += '    crossings: [' + ((m.crossings || []).length ? '\n' : '');
+    (m.crossings || []).forEach(function (x, i) {
+      s += '      { x: ' + num(x.x) + ', y: ' + num(x.y) + ', r: ' + num(x.r || 14) + ' }' +
+           (i < m.crossings.length - 1 ? ',' : '') + '\n';
+    });
+    s += ((m.crossings || []).length ? '    ]' : ']') + (m.water ? ',' : '') + '\n';
+    if (m.water) {
+      s += '    water: { cell: ' + num(m.water.cell) + ', rle: ' + q(m.water.rle || '') + ' }\n';
+    }
 
     s += '  }' + (mi < mapIds.length - 1 ? ',' : '') + '\n';
   });
@@ -541,6 +557,20 @@ function validate(doc) {
       endpoints[exits[ei].id] = true;
     }
 
+    var crossings = m.crossings || [];
+    if (!Array.isArray(crossings)) return 'map "' + id + '" has crossings that are not a list';
+    for (var ci = 0; ci < crossings.length; ci++) {
+      var cr = crossings[ci];
+      if (!cr || !isNum(cr.x) || !isNum(cr.y) || (cr.r != null && !(isNum(cr.r) && cr.r > 0)))
+        return 'crossing ' + ci + ' in "' + id + '" is not { x, y, r } numbers';
+    }
+    if (m.water != null) {
+      if (!isNum(m.water.cell) || m.water.cell <= 0 || 1280 % m.water.cell || 600 % m.water.cell)
+        return 'map "' + id + '" has a water grid whose cell size does not divide 1280×600';
+      if (typeof m.water.rle !== 'string' || !/^[0-9a-z.]*$/.test(m.water.rle))
+        return 'map "' + id + '" has a water grid that is not run-length text';
+    }
+
     var routes = m.routes || [];
     var seenRoute = {};
     for (var ri = 0; ri < routes.length; ri++) {
@@ -580,7 +610,7 @@ function isNum(v) { return typeof v === 'number' && isFinite(v); }
    map's containers (props/nodes/exits/routes) and imageFit aren't scalar
    fields, so they're listed here directly rather than through fieldsOf(). */
 var KNOWN = {
-  map:  fieldsOf('map').concat(['imageFit', 'props', 'nodes', 'exits', 'routes']),
+  map:  fieldsOf('map').concat(['imageFit', 'props', 'nodes', 'exits', 'routes', 'crossings', 'water']),
   node: fieldsOf('node'),
   exit: fieldsOf('exit'),
   prop: fieldsOf('prop')

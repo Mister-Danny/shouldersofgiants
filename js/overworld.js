@@ -1236,19 +1236,141 @@ var Overworld = (function () {
     return null;
   }
 
-  /* The waypoint list to hand walkPath, ending at the target. */
+  /* The waypoint list to hand walkPath, ending at the target. A route drawn
+     by hand in tools/map-editor wins; otherwise the pathfinder walks her
+     round the water (and the buildings) — see _pathTo. */
   function _routeTo(targetId) {
     var map = MAPS[currentMapId];
     var dest = _endpointPos(map, targetId);
     if (!dest) return [];
     var from = _nearestEndpoint(map, currentPos);
-    if (!from || from === targetId) return [dest];      // already standing there
-    var route = _findRoute(map, from, targetId);
-    if (!route || !route.waypoints || !route.waypoints.length) return [dest];
+    var route = from && from !== targetId ? _findRoute(map, from, targetId) : null;
+    if (!route || !route.waypoints || !route.waypoints.length) return _pathTo(dest, targetId);
     var wps = route.waypoints.slice();
     // Stored the other way round — walk the bends in reverse.
     if (route.to !== targetId) wps.reverse();
     return wps.concat([dest]);
+  }
+
+  /* ── WATER-AWARE WALKING ────────────────────────────────────────────────────
+     Each map's `water` grid (+ its river `crossings`) says where she may walk;
+     js/water-grid.js finds the path and smooths it into a few waypoints, which
+     walkPath then walks exactly as before (speed, facing, gait). Node art is
+     a SOFT obstacle: she walks round a building, not through or behind it,
+     unless a building seals a gap between two rivers — then cutting its
+     corner beats fording twice (SOFT_COST in js/water-grid.js). Nothing here
+     can strand her: no path means the straight line, with a warning. */
+  var _walkGrid = null;            // { map, g } for the current map
+  var _obstacleCells = {};         // node id + geometry → blocked cell indices
+  window.__owPathMs = [];          // recent path timings (ms), for profiling
+  function _gridForMap() {
+    var WG = window.SOG && SOG.WaterGrid, map = MAPS[currentMapId];
+    if (!WG || !map || !map.water) return null;
+    if (!_walkGrid || _walkGrid.map !== map) _walkGrid = { map: map, g: WG.fromMap(map) };
+    return _walkGrid.g;
+  }
+  /* The grid with every visible node's solid art marked soft (2), bar `exceptId`.
+     Footprints come from the art's own alpha (_artInfo mask), placed exactly
+     as the node renders: centred on its point, seated, scaled, turned,
+     mirrored. Cached per node geometry; a node mid-reveal (opacity 0) or not
+     yet laid out is simply not an obstacle yet. */
+  function _nodeObstacles(g, exceptId) {
+    var blocked = new Uint8Array(g.blocked), map = MAPS[currentMapId];
+    if (!overlayEl || !map) return blocked;
+    var k = _pxPerPct();
+    (map.nodes || []).forEach(function (n) {
+      if (n.id === exceptId || !_isVisible(n)) return;
+      var el = overlayEl.querySelector('.overworld-node[data-id="' + n.id + '"]');
+      if (!el || el.style.opacity === '0' || el.style.display === 'none') return;
+      var img = el.querySelector(':scope > img:not(.ow-cast-shadow):not(.ow-ground-rim)');
+      var a = img && _artInfoCache[img.getAttribute('src')];
+      if (!a || !a.ready || !a.mask || !img.offsetWidth) return;
+      var s = n.scale || 1, dw = img.offsetWidth * s, dh = img.offsetHeight * s;
+      var key = n.id + '|' + n.x + '|' + n.y + '|' + dw.toFixed(1) + '|' + (n.rotation || 0) + '|' + !!n.flipX + '|' + k.y;
+      var cells = _obstacleCells[key];
+      if (!cells) {
+        cells = _obstacleCells[key] = [];
+        var bx = n.x * k.x, by = n.y * k.y;                         // base point, stage px
+        var padPx = a.pad * (img.offsetWidth / a.W) * s + SINK_PX;  // image bottom below the base
+        var rot = (n.rotation || 0) * Math.PI / 180, cs = Math.cos(rot), sn = Math.sin(rot);
+        var R = Math.sqrt(dw * dw + dh * dh);
+        var c0 = Math.max(0, Math.floor((bx - R) / (k.x * 100) * g.cols)), c1 = Math.min(g.cols - 1, Math.ceil((bx + R) / (k.x * 100) * g.cols));
+        var r0 = Math.max(0, Math.floor((by - R) / (k.y * 100) * g.rows)), r1 = Math.min(g.rows - 1, Math.ceil((by + R) / (k.y * 100) * g.rows));
+        for (var r = r0; r <= r1; r++) {
+          for (var c = c0; c <= c1; c++) {
+            var px = (c + 0.5) / g.cols * 100 * k.x - bx, py = (r + 0.5) / g.rows * 100 * k.y - by;
+            var lx = px * cs + py * sn, ly = -px * sn + py * cs;      // into the node's own frame
+            var u = (lx + dw / 2) / dw, v = (ly - padPx + dh) / dh;
+            if (u < 0 || u >= 1 || v < 0 || v >= 1) continue;
+            if (n.flipX) u = 1 - u;
+            if (a.mask[Math.floor(v * a.mh) * a.mw + Math.floor(u * a.mw)]) cells.push(r * g.cols + c);
+          }
+        }
+      }
+      for (var i = 0; i < cells.length; i++) if (!blocked[cells[i]]) blocked[cells[i]] = 2;   // soft: see js/water-grid.js
+    });
+    return blocked;
+  }
+  function _notePathMs(t0) {
+    var ms = (window.performance ? performance.now() : Date.now()) - t0;
+    window.__owPathMs.push(Math.round(ms * 10) / 10);
+    if (window.__owPathMs.length > 50) window.__owPathMs.shift();
+  }
+  /* Waypoints from where she stands to `dest` (map-%), round the water and
+     the other nodes' art. */
+  function _pathTo(dest, targetId) {
+    var WG = window.SOG && SOG.WaterGrid, g = _gridForMap();
+    if (!g || !dest) return dest ? [dest] : [];
+    var t0 = window.performance ? performance.now() : Date.now();
+    // Every building is in the way, even the one she is going to — she walks
+    // round to its front rather than through it — unless its stand point sits
+    // inside its own art, when that one footprint is let go.
+    var blocked = _nodeObstacles(g, null), dc = g.cellOf(dest), di = dc.r * g.cols + dc.c;
+    if (blocked[di] && !g.blocked[di]) blocked = _nodeObstacles(g, targetId);
+    var path = WG.findPath(blocked, g, currentPos, dest);
+    _notePathMs(t0);
+    if (!path) {
+      if (window.console) console.warn('[overworld] no dry path on ' + currentMapId + ' to ' +
+        (targetId || JSON.stringify(dest)) + ' — walking straight');
+      return [dest];
+    }
+    return path;
+  }
+  /* A walk-off: leave the map past an edge, aimed at `aim` (a point beyond
+     the edge, e.g. _walkOffPoint). With nothing in the way she walks the
+     straight line exactly as the cinematic draws it; otherwise she paths to
+     the reachable point on that edge that best keeps the heading, and steps
+     just past it there. */
+  function _walkOffPath(aim) {
+    var WG = window.SOG && SOG.WaterGrid, g = _gridForMap();
+    if (!g) return [aim];
+    var edges = [];
+    if (aim.x >= 100) edges.push('right');
+    if (aim.x <= 0)   edges.push('left');
+    if (aim.y >= 100) edges.push('bottom');
+    if (aim.y <= 0)   edges.push('top');
+    if (!edges.length) return _pathTo(aim);
+    // Where the straight walk-off crosses the map's own edge.
+    var p0 = currentPos, t = 1, dx = aim.x - p0.x, dy = aim.y - p0.y, IN = 0.5;
+    if (dx > 0) t = Math.min(t, (100 - IN - p0.x) / dx);
+    if (dx < 0) t = Math.min(t, (IN - p0.x) / dx);
+    if (dy > 0) t = Math.min(t, (100 - IN - p0.y) / dy);
+    if (dy < 0) t = Math.min(t, (IN - p0.y) / dy);
+    var edgePt = { x: p0.x + dx * Math.max(0, t), y: p0.y + dy * Math.max(0, t) };
+    var t0 = window.performance ? performance.now() : Date.now();
+    var blocked = _nodeObstacles(g, null);
+    if (WG.lineClear(blocked, g, p0, edgePt)) { _notePathMs(t0); return [aim]; }
+    var res = WG.findPathToEdge(blocked, g, p0, edgePt, edges);
+    _notePathMs(t0);
+    if (!res) {
+      if (window.console) console.warn('[overworld] no dry way off ' + currentMapId + ' — walking straight');
+      return [aim];
+    }
+    var off = res.edge === 'right'  ? { x: WALKOFF_RIGHT_X, y: res.at.y }
+            : res.edge === 'left'   ? { x: -(WALKOFF_RIGHT_X - 100), y: res.at.y }
+            : res.edge === 'top'    ? { x: res.at.x, y: WALKOFF_TOP_Y }
+            :                         { x: res.at.x, y: aim.y };
+    return res.path.concat([off]);
   }
 
   /* Stage pixels per 1% of the map, from the overlay's LAYOUT size (offsetWidth
@@ -1451,6 +1573,10 @@ var Overworld = (function () {
         var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
         var cx = cv.getContext('2d', CPU2D); cx.drawImage(im, 0, 0, W, H);
         var d = cx.getImageData(0, 0, W, H).data;
+        // Solid-pixel mask (working res) — the footprint the pathfinder
+        // walks around (_nodeObstacles).
+        c.mw = W; c.mh = H; c.mask = new Uint8Array(W * H);
+        for (var mi = 0; mi < W * H; mi++) c.mask[mi] = d[mi * 4 + 3] > 96 ? 1 : 0;
         var bottom = -1;
         for (var y = H - 1; y >= 0 && bottom < 0; y--) {
           for (var x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 8) { bottom = y; break; }
@@ -2847,7 +2973,7 @@ var Overworld = (function () {
       // ignores both walkTo and the route graph — routing it would replace the
       // drama with a tidy walk to a box edge.
       var path = exit.walkOff
-        ? [_walkOffPoint(currentPos, EGYPT_WALKOFF.dx, EGYPT_WALKOFF.dy)]
+        ? _walkOffPath(_walkOffPoint(currentPos, EGYPT_WALKOFF.dx, EGYPT_WALKOFF.dy))
         : _routeTo(exit.id);
       walkPath(path, function () {
         transitionToMap(exit.target, exit.entryAt);
@@ -3360,7 +3486,7 @@ var Overworld = (function () {
     // === SCENE 1: East Africa ===
     runDialogue(D1_SCENE1_DIALOGUE, function () {
       // After "Let's go!" — Explorer walks off the right edge
-      walkPath([_walkOffPoint(currentPos, EGYPT_WALKOFF.dx, EGYPT_WALKOFF.dy)], function () {
+      walkPath(_walkOffPath(_walkOffPoint(currentPos, EGYPT_WALKOFF.dx, EGYPT_WALKOFF.dy)), function () {
         // Travel transition 1: East Africa → Egypt
         _d1TravelTo('egypt', { x: 10, y: 85 }, function () {
           // === SCENE 2: Egypt ===
@@ -3370,7 +3496,7 @@ var Overworld = (function () {
           // Mesopotamia map below.
           runDialogue(D1_SCENE2_DIALOGUE, function () {
             // Explorer walks off the right edge — just past it, not beyond.
-            walkPath([{ x: WALKOFF_RIGHT_X, y: currentPos.y }], function () {
+            walkPath(_walkOffPath({ x: WALKOFF_RIGHT_X, y: currentPos.y }), function () {
               // Travel transition 2: Egypt → Mesopotamia
               _d1TravelTo('mesopotamia', { x: 10, y: 85 }, function () {
                 // === SCENE 3: Mesopotamia ===
@@ -3492,7 +3618,7 @@ var Overworld = (function () {
 
   function _d2aSequence() {
     log('[D2a] River walk beginning');
-    walkPath([D2A_RIVER_STOP], function () {
+    walkPath(_pathTo(D2A_RIVER_STOP), function () {
       log('[D2a] Explorer at river stop — entering dialogue mode for full D2a sequence');
       var hud = window.SOG && window.SOG.HUD;
       if (!hud) { log('[D2a] HUD unavailable — skipping'); isDialogueLocked = false; scheduleIdle(); return; }
@@ -4036,7 +4162,7 @@ var Overworld = (function () {
       _runLinesKeepOpen(D7_HATSHEPSUT_TRANSITION, function () {
         if (typeof hud.exitDialogueMode === 'function') hud.exitDialogueMode(null);
         // Walk off south, then swap maps behind the "Traveling…" curtain.
-        walkPath([{ x: currentPos.x, y: 115 }], function () {
+        walkPath(_walkOffPath({ x: currentPos.x, y: 115 }), function () {
           _d1TravelTo('upper-egypt', MAPS['upper-egypt'] && MAPS['upper-egypt'].spawn, function () {
             hud.enterDialogueMode(null, function () {
               if (typeof hud.swapNpcPortrait === 'function') hud.swapNpcPortrait({ character: 'merchant' });

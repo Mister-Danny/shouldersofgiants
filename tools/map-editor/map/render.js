@@ -5,6 +5,7 @@ import { visibleNow } from './milestones.js';
 import { selectMap, snapshot, snapshotOnce } from './commands.js';
 import { beginDrag } from './drag.js';
 import { renderInspector } from './inspector.js';
+import { renderWater, renderWaterPanel } from './water.js';
 
 /* ── Render ───────────────────────────────────────────────────────────────
    Reads State and paints the DOM. Imports commands.js (to wire a tab click
@@ -80,6 +81,7 @@ function render() {
   // Wipe everything except the persistent <svg> path layer.
   $$('.n, .stand, .exit, .wp, .prop, .spawn', overlay).forEach(el => el.remove());
   document.body.classList.toggle('route-mode', State.mode === 'route');
+  document.body.classList.toggle('water-mode', State.mode === 'water');
 
   // Props first — they are scenery and must paint behind the nodes, same as
   // the game's insertBefore(overlay.firstChild).
@@ -90,6 +92,8 @@ function render() {
 
   overlay.appendChild(spawnEl(m));
   renderPaths();
+  renderWater();
+  renderWaterPanel();
   renderWaypoints();
   renderLists();
   renderFitPanel();
@@ -421,6 +425,11 @@ function renderRouteList() {
 }
 
 function updateHint() {
+  if (State.mode === 'water') {
+    $('#hint').textContent = 'Paint or erase water with the brush (Alt-drag erases). Add crossings where a river may be forded; drag one to move it, Delete to remove it.';
+    $('#mode-note').textContent = 'Red cells are water the Explorer walks around; cyan is river she may ford at a crossing.';
+    return;
+  }
   $('#hint').textContent = State.mode === 'route'
     ? (State.routeSel
         ? `Editing ${State.routeSel.from} → ${State.routeSel.to}. Click the line to add a bend, drag bends to shape it, Delete to remove one.`

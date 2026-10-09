@@ -223,6 +223,31 @@ main { flex: 1; display: flex; min-height: 0; }
 
 #overlay { position: absolute; inset: 0; }
 
+/* Water grid overlay — one canvas pixel per grid cell, scaled up crisp. */
+#water-cv {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+/* A river crossing: the disk it clears out of the water grid. */
+.crossing {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 2px solid #3fe0e8;
+  border-radius: 50%;
+  background: rgba(63,224,232,0.12);
+  cursor: grab;
+  box-sizing: border-box;
+}
+.crossing.sel { border-color: var(--gold-hi); box-shadow: 0 0 0 3px rgba(248,208,0,0.35); }
+body.water-mode #overlay { cursor: crosshair; }
+/* In water mode the brush paints under everything; only crossings take clicks. */
+body.water-mode .n, body.water-mode .prop, body.water-mode .exit,
+body.water-mode .stand, body.water-mode .spawn, body.water-mode .wp { pointer-events: none; }
+
 #paths {
   position: absolute;
   inset: 0;

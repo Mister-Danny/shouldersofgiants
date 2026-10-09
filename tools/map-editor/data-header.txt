@@ -26,6 +26,12 @@
    `standFacing` ('up'|'down'|'left'|'right') overrides which way she then
    faces; omitted = toward the node's art.
 
+   WATER — each map's `water` grid (cell = stage px per cell; rle = run
+   lengths, base 36) marks seas, lakes and rivers the Explorer never walks
+   across; `crossings` ({ x, y, r }: map-%, radius in stage px) are where a
+   river may be forded. Generated from the art, fixed by hand in the editor's
+   Water mode; read by js/water-grid.js, which paths every walk round them.
+
    `kind` is recorded but NOT yet consumed by the game — onNodeClick still
    dispatches on literal node id. Wiring kind-based dispatch is Phase 2; until
    then a newly added node renders and animates but has no click behaviour.

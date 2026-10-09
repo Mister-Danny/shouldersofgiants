@@ -85,6 +85,11 @@ export const KINDS = {
     get: () => ({ x: State.maps[State.mapId].spawn.x, y: State.maps[State.mapId].spawn.y }),
     set: (t, x, y) => { const sp = State.maps[State.mapId].spawn; sp.x = r2(x); sp.y = r2(y); }
   },
+  // A river crossing (water mode), keyed by index like props.
+  crossing: {
+    get: t => { const c = State.maps[State.mapId].crossings[t.index]; return { x: c.x, y: c.y }; },
+    set: (t, x, y) => { const c = State.maps[State.mapId].crossings[t.index]; c.x = r2(x); c.y = r2(y); }
+  },
   wp:    {
     get: t => bend(t.wpIndex),
     set: (t, x, y) => { const p = bend(t.wpIndex); if (p) { p.x = r2(x); p.y = r2(y); } }
@@ -110,6 +115,11 @@ export function deleteSelection() {
     r.waypoints.splice(State.sel.wpIndex, 1);
     // A route with no bends IS a straight line, so stop storing it.
     if (!r.waypoints.length) m.routes.splice(m.routes.indexOf(r), 1);
+    State.sel = null; markDirty(); return requestRender();
+  }
+  if (State.sel.type === 'crossing') {
+    snapshot();
+    m.crossings.splice(State.sel.index, 1);
     State.sel = null; markDirty(); return requestRender();
   }
   if (State.sel.type === 'prop') {

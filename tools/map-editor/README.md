@@ -159,6 +159,32 @@ is converted on save.
   cinematic hard-codes `72%/82%` while the data says `74/85`, so the node jumps
   a few percent on the next map load. Called out in its `note`.
 
+## Water
+
+The Explorer never walks across seas, oceans, lakes or rivers — except at
+**river crossings**. Every map carries a `water` grid (4 stage px cells, run-
+length encoded) and a list of `crossings`; `js/water-grid.js` paths every walk
+round the water (and round the other nodes' art), then smooths it into a few
+waypoints for `walkPath`. A hand-drawn route (below) still wins where one
+exists. No path at all → she walks the straight line and the console warns.
+
+**Water** mode shows the grid: red = water, cyan = forded at a crossing.
+
+| | |
+|---|---|
+| **Paint water / Erase** | Brush the grid; brush size 1–8 cells. Alt-drag erases with any tool. One undo per stroke. |
+| **Add crossing** | Click a river to add a crossing. Drag a crossing to move it, Delete to remove it, set its radius in the inspector. |
+| **Auto-place crossings** | Adds the fewest crossings that connect every node, exit, the spawn and every arrival point, keeping yours. **Re-place all** starts from none. |
+
+The panel reports anything cut off, and anything placed *in* the water (an exit
+out at sea): she stops on the nearest shore for those. Outside water mode,
+"show water + crossings" keeps the overlay on while you work.
+
+The grids were generated from the art by colour (blue/teal water, the Nile's
+teal-green, the dark outline along rivers). Thin rivers drawn only as an
+outline in a land colour (India's, Persia's green ones) are **not** detected —
+paint them in if they should block.
+
 ## Routes
 
 The walking graph. An **endpoint** is a node id, an exit id, or `'spawn'`:
@@ -180,6 +206,8 @@ return, or a transition, and any remembered "last node" would be wrong or
 missing in at least one of those. Standing on a node makes it the nearest
 endpoint, which is the right answer without tracking anything.
 
-Exits with `walkOff: true` (the To Egypt departure) ignore routing — that is a
+Exits with `walkOff: true` (the To Egypt departure) ignore routes — that is a
 deliberate cinematic walk off the screen edge, and routing it would replace the
-drama with a tidy walk to a box.
+drama with a tidy walk to a box. They do respect water: with nothing in the way
+she walks the straight line exactly as drawn; otherwise she paths to the nearest
+reachable point on that edge and steps just past it there.
