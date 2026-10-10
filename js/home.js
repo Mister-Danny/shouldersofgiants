@@ -674,30 +674,32 @@ var HomeFlow = (function () {
   /* ── Sprite frame cycler ───────────────────────────────────── */
   function startWalkAnim(el, dir) {
     stopWalkAnim(el);
-    // Frames play in the character's own order (SOG.Adventurers.walkOrder), so
-    // in-between frames added out of numeric order still play in sequence.
-    var i = 0;
-    var orderOf = function () {
+    // Frames play in the character's own order and timing (SOG.Adventurers
+    // frameAt: walkFrames + walkFrameWeight), one cycle per WALK_FRAME_MS × its
+    // frame count, so in-between frames and re-weighted steps match the map.
+    var base = (dir === 'left') ? 'right' : dir;
+    var TICK = 25, phase = 0, shown = null;
+    var show = function () {
       var ch = SOG.Adventurers.get(el._advId);
-      var o = SOG.Adventurers.walkOrder(ch, (dir === 'left') ? 'right' : dir);
-      return o.length ? o : [1];
+      var f = SOG.Adventurers.frameAt(ch, base, phase);
+      if (f !== shown) { setWalkFrame(el, dir, f); shown = f; }
+      var n = SOG.Adventurers.walkOrder(ch, base).length || 1;
+      phase = (phase + TICK / (n * WALK_FRAME_MS)) % 1;
     };
-    setWalkFrame(el, dir, orderOf()[0]);
-    var iv = setInterval(function () {
-      var order = orderOf();
-      i = (i + 1) % order.length;
-      setWalkFrame(el, dir, order[i]);
-    }, WALK_FRAME_MS);
+    show();
+    var iv = setInterval(show, TICK);
     el._walkInterval = iv;
     walkIntervals.push(iv);
   }
 
   function setWalkFrame(el, dir, frame) {
     var base = (dir === 'left') ? 'right' : dir;
-    el.src = SOG.Adventurers.frameUrl(SOG.Adventurers.get(el._advId), base, frame);
+    var ch = SOG.Adventurers.get(el._advId);
+    el.src = SOG.Adventurers.frameUrl(ch, base, frame);
+    var shift = SOG.Adventurers.shiftCss(ch, base, frame, el.offsetWidth);
     el.style.transform = (dir === 'left')
-      ? 'translate(-50%, 0) scaleX(-1)'
-      : 'translate(-50%, 0)';
+      ? 'translate(-50%, 0) scaleX(-1)' + shift
+      : 'translate(-50%, 0)' + shift;
   }
 
   function stopWalkAnim(el) {

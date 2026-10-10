@@ -46,10 +46,10 @@
            walkFrameDx  source-px shift that pins the head to the frame centre
                         (x = 80 of 160), so the body glides instead of lurching
                         and the mirrored left walk lines up with the right.
-           walkFrameWeight  share of the stride each frame holds (default 1):
-                        the far-leg step (04) gets more, the two arm-forward
-                        transition frames (03, 05) less, so both steps and both
-                        arm swings get about equal time. */
+             walkFrameWeight  share of the stride each frame holds (default 1).
+           walkFrameDy  source-px vertical shift (bob / levelling), like Dx.
+         All four are read through frameAt / frameShift below, by the overworld
+         and the home screen alike. */
       /* 07 and 08 are the passing in-betweens, keyed from generated art (raw
          sources live in reference/sprite-sources/female/, git-ignored):
            07 (between 03 and 04): far leg lifted, near leg planted. A composite —
@@ -58,11 +58,37 @@
          Both had a second arm hanging at the hip that 03-05 don't draw; it is
          painted out with 04's backpack side, and 08's near knee (rendered almost
          white) is toned to the shin colour. Each is scaled to the 159 px figure
-         height, colour-matched to 03-05, and pinned like the others. With both
-         passing poses in, every frame holds an equal share of the stride. */
-      walkFrames:      { right: [1, 2, 3, 7, 4, 8, 5, 6] },
-      walkFrameDx:     { right: { 1: 1.8, 2: -1.2, 3: -4.3, 4: -4.7, 5: -4.4, 6: -3.5, 7: -4.4, 8: -4.0 } },
-      walkFrameWeight: { right: {} },
+         height, colour-matched to 03-05, and pinned like the others.
+         Round 2: every walk, standing, idle and map frame had a light-grey
+         keying rim (and a grey wedge between the legs) that 07/08 and the male
+         don't; it is cleared from the OUTER edge only (enclosed holes such as
+         the compass face are untouched). 07/08 then had their luminance matched
+         to 01-06 (they ran 6-9% darker at display size), and 07's feathered hip
+         seam got a solid hem. */
+      /* WALK SMOOTHING, round 2 (all no-new-art):
+         right  Her five near-leg frames (05 06 01 02 03) are one leg pose with
+                the arm swinging; the far step is 04 alone, between the passing
+                frames 07 and 08. At equal times the legs crossed at 3/8 and 5/8
+                of the cycle — a limp. 04 now holds as long as the five near-leg
+                frames together (3 × 0.6), so each step is exactly half the cycle
+                and the passing frames sit half a cycle apart.
+         down   Was 01 (right foot fwd) → 02 (left fwd) → 03 (right lifted) → 04
+                (feet together): the left step had no passing frame at all. Now
+                01 → 04 → 02 → 03: contact, pass, contact, pass.
+         up     Was R R L N N N L R (two left lifts three frames apart). Now the
+                lift peaks (08 right, 03 left) are four frames apart, each with
+                its smaller lift beside it: 01 06 07 03 04 05 02 08.
+         Dx pins hold the hat still in up/down too (measured, source px).
+         walkFrameDy (source px, negative = up; applied after the mirror like
+         Dx) gives the side walk a 1 px bob on its passing frames 07/08, and
+         levels down-04, which is drawn ~3 source px shorter than its
+         neighbours. The art already bobs on up-03/08, so up gets none. */
+      walkFrames:      { right: [1, 2, 3, 7, 4, 8, 5, 6], up: [1, 6, 7, 3, 4, 5, 2, 8], down: [1, 4, 2, 3] },
+      walkFrameDx:     { right: { 1: 1.8, 2: -1.2, 3: -4.3, 4: -4.7, 5: -4.4, 6: -3.5, 7: -4.4, 8: -4.0 },
+                         up:    { 4: -1, 5: -2, 6: -1, 7: -0.5 },
+                         down:  { 2: 0.5, 3: -1, 4: 1.25 } },
+      walkFrameDy:     { right: { 7: -1, 8: -1 }, down: { 4: -1.74 } },
+      walkFrameWeight: { right: { 1: 0.6, 2: 0.6, 3: 0.6, 5: 0.6, 6: 0.6, 4: 3 } },
       frameSize: 160,                            // source px of every sprite frame
       idleFrames: 6,                             // preloaded only (no player yet)
       mapIdle: { seq: 'map', frames: 9 },        // 1s/frame reading-the-map loop
@@ -132,6 +158,37 @@
     return out;
   }
 
+  /* The frame shown at `phase` (0..1) of one walk cycle, each frame holding its
+     walkFrameWeight share (default 1). */
+  function frameAt(ch, seq, phase) {
+    var order = walkOrder(ch, seq);
+    if (!order.length) return 1;
+    var wts = (ch.walkFrameWeight && ch.walkFrameWeight[seq]) || {};
+    var w = function (n) { return wts[n] != null ? wts[n] : 1; };
+    var total = 0, i;
+    for (i = 0; i < order.length; i++) total += w(order[i]);
+    var at = phase * total, acc = 0;
+    for (i = 0; i < order.length; i++) {
+      acc += w(order[i]);
+      if (at < acc) return order[i];
+    }
+    return order[order.length - 1];
+  }
+
+  /* Per-frame registration of a walk frame, in SOURCE px: { dx, dy }. */
+  function frameShift(ch, seq, frame) {
+    var x = ch.walkFrameDx && ch.walkFrameDx[seq], y = ch.walkFrameDy && ch.walkFrameDy[seq];
+    return { dx: (x && x[frame]) || 0, dy: (y && y[frame]) || 0 };
+  }
+
+  /* That shift as a CSS transform suffix for a sprite drawn `widthPx` wide.
+     Goes AFTER any scaleX(-1), so it mirrors with the frame. */
+  function shiftCss(ch, seq, frame, widthPx) {
+    var s = frameShift(ch, seq, frame), k = (widthPx || 92) / (ch.frameSize || 160);
+    return (s.dx ? ' translateX(' + (s.dx * k).toFixed(2) + 'px)' : '') +
+           (s.dy ? ' translateY(' + (s.dy * k).toFixed(2) + 'px)' : '');
+  }
+
   function allFrameUrls(ch) {
     var out = [], d, i;
     for (d in ch.walk) {
@@ -197,6 +254,9 @@
     active: active,
     frameUrl: frameUrl,
     walkOrder: walkOrder,
+    frameAt: frameAt,
+    frameShift: frameShift,
+    shiftCss: shiftCss,
     standingUrl: standingUrl,
     allFrameUrls: allFrameUrls,
     portrait: portrait,
