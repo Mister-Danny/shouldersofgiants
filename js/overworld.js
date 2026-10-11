@@ -2238,6 +2238,12 @@ var Overworld = (function () {
         label.textContent = e.label;
         exitEl.appendChild(label);
       }
+      // Lower Egypt on the Hunter's journey (arrival lines done, Mesopotamia
+      // not yet reached): the To Mesopotamia box stays lit until she goes,
+      // reloads and re-renders included — see maybePlayEgyptArrival.
+      if (mapId === 'egypt' && e.id === 'to-mesopotamia' && _awaitingMesopotamia()) {
+        exitEl.classList.add('overworld-exit--flash');
+      }
       exitEl.addEventListener('click', function () { onExitClick(e); });
       overlayEl.appendChild(exitEl);
     });
@@ -3365,14 +3371,25 @@ var Overworld = (function () {
 
   /* Briefly reveal an exit box + label (border + label), then fade back to
      hover-only. Used after arrival dialogues to point at the next exit. */
+  // durationMs 'stay': light it and leave it lit (the map's next render decides).
   function flashExit(exitId, durationMs) {
     if (!overlayEl) return;
     var el = overlayEl.querySelector('.overworld-exit[data-exit-id="' + exitId + '"]');
     if (!el) return;
     el.classList.add('overworld-exit--flash');
+    if (durationMs === 'stay') return;
     setTimeout(function () {
       if (el) el.classList.remove('overworld-exit--flash');
     }, durationMs || 1500);
+  }
+
+  // The Hunter's journey has reached Lower Egypt (its arrival lines are done)
+  // but not Mesopotamia yet.
+  function _awaitingMesopotamia() {
+    try {
+      return localStorage.getItem(KEY_EGYPT_ARRIVAL) === 'true' &&
+             localStorage.getItem(KEY_MESOPOTAMIA_ARRIVAL) !== 'true';
+    } catch (e) { return false; }
   }
 
   /* ── D1, Upper Egypt leg (manual flow) ─────────────────────────
@@ -3422,8 +3439,9 @@ var Overworld = (function () {
 
   /* ── Arrival in Egypt (manual flow) ───────────────────────────
      One-time. Places the Umm el-Qaab decoration + plays the Egypt
-     dialogue, then STOPS (no auto walk-off). Flashes the To Mesopotamia
-     box so the player knows where to go, then waits for their click.    */
+     dialogue, then STOPS (no auto walk-off). Lights the To Mesopotamia
+     box so the player knows where to go, and it STAYS lit (loadMap re-lights
+     it on any re-render) until they click it.                            */
   function maybePlayEgyptArrival() {
     if (isDialogueLocked) return false;
     if (currentMapId !== 'egypt') return false;
@@ -3436,7 +3454,7 @@ var Overworld = (function () {
     runDialogue(D1_SCENE2_DIALOGUE, function () {
       isDialogueLocked = false;
       try { localStorage.setItem(KEY_EGYPT_ARRIVAL, 'true'); } catch (e) {}
-      flashExit('to-mesopotamia', 1500);
+      flashExit('to-mesopotamia', 'stay');
       scheduleIdle();
     });
     return true;
