@@ -99,7 +99,7 @@
     var login = /(?:^|[#&])login=/i.test(hash);
     if (join || login) {
       // A class link or a login card: this device is a student's. Skip the
-      // first-visit popups too — two taps to playing.
+      // first-visit popups too: the join flow has its own welcome.
       _set(KEY_STUDENT_DEVICE, '1');
       _set('sog_welcome_seen', 'true');
       _set('sog_guest_notice_seen', 'true');

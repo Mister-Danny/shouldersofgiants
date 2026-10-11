@@ -100,50 +100,152 @@ window.SogAccountUI = (function () {
     });
   }
 
-  /* ── Step: pick a name (student signup steps 2-3) ───────────────────────
-     "Joining Ms Rivera's class" and five generated names: one tap creates the
-     account (js/account.js signUpStudent, upgrading the guest in place) — no
-     separate confirm screen, no reveal animation. The names and passphrase
-     are generated as this step renders, before any click. fromLink: arrived
-     from a class link/code box rather than the account menu, so the escape
-     hatch is "play as a guest" rather than BACK. */
+  /* ── Step: welcome + summon (student signup steps 2-3) ───────────────────
+     A short welcome, then the big SUMMON button: a 4s "conjuring" flourish
+     reveals five generated names, and one tap creates the account
+     (js/account.js signUpStudent, upgrading the guest in place). The names
+     and passphrase are generated as this step renders, before any click, so
+     the animation is pure presentation and can never leave the student
+     without credentials. fromLink: arrived from a class link / the Join a
+     class popup rather than the account menu, so the escape hatch is "play
+     as a guest" rather than BACK. */
   function _joinTitle(info) {
     if (!info || info.ungrouped) return 'CREATE YOUR ACCOUNT';
     return 'JOIN YOUR CLASS';
   }
-  function _joinWho(info) {
-    if (info.teacherName) return _escapeHtml(info.teacherName) + '’s class' +
-      (info.label && info.label !== 'My Class' && info.label !== info.code ? ' <span class="account-flow-sub">(' + _escapeHtml(info.label) + ')</span>' : '');
-    return _escapeHtml(info.label || info.code);
+  function _onHomeScreen() {
+    var home = document.getElementById('screen-home');
+    return !!(home && home.classList.contains('active'));
   }
   function _stepJoinPickName(fromLink) {
     var info = _pendingClassInfo || { ungrouped: true };
     var passphrase = window.SogAccount.generatePassphrase();
     var options    = window.SogAccount.generateUsernameOptions(5);
+    var welcome    = _onHomeScreen();   // mid-game signups (post-Ötzi) skip the welcome copy
     _render(
-      _joinTitle(info),
-      (info.ungrouped ? '' : '<p class="account-join-who">Joining <strong>' + _joinWho(info) + '</strong></p>') +
-      '<p>Pick your game name:</p>' +
+      welcome ? 'Welcome to Shoulders of Giants' : _joinTitle(info),
+      (welcome
+        ? '<p>You’re about to start battling the Giants of Ancient History as you go on a journey through the past.</p>' +
+          '<p>But first, you need a Giant name.</p>'
+        : '<p>First, you need a Giant name.</p>') +
+      '<div class="account-credential-card account-summon-box" id="account-summon-box">' +
+        '<button class="account-summon-btn" id="af-summon">SUMMON YOUR HISTORICAL JOURNEY</button>' +
+      '</div>',
+      fromLink
+        ? '<button class="btn-snes btn-snes-close" id="af-back">PLAY AS A GUEST</button>'
+        : '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
+    );
+    var boxEl = _byId('account-summon-box');
+    var btnEl = _byId('af-summon');
+    var backEl = _byId('af-back');
+    btnEl.addEventListener('click', function () {
+      btnEl.disabled = true;
+      backEl.style.visibility = 'hidden';   // no bailing out mid-conjure
+      _playConjuringAnimation(boxEl, btnEl, function () {
+        _renderUsernameOptions(options, passphrase);
+      });
+    });
+    backEl.addEventListener('click', function () {
+      if (fromLink) _close(); else _stepClassCode();
+    });
+  }
+
+  // 4s GSAP "conjuring" flourish, timed to js/audio.js SFX.magicSwirl()'s 4s
+  // clip: the button's label dissolves into "Conjuring…" while particles
+  // swirl around the box, then particles + label fade out together over the
+  // final 500ms (matching the audio's own tail fade) before onComplete
+  // fires. The audio is fire-and-forget — this visual timeline runs on its
+  // own clock regardless of whether the sound loads or plays.
+  function _playConjuringAnimation(boxEl, btnEl, onComplete) {
+    var DURATION_MS = 4000;
+    var FADE_MS     = 500;
+    var SWIRL_MS    = DURATION_MS - FADE_MS;
+    var PARTICLE_COUNT = 16;
+
+    // White "payoff" flash: fully white at the same instant the particles
+    // finish fading; the name options swap in under it, then it fades away.
+    var flashEl           = _byId('account-flow-flash');
+    var FLASH_IN_START_MS = SWIRL_MS + 200;
+    var FLASH_IN_MS       = DURATION_MS - FLASH_IN_START_MS;
+    var FLASH_OUT_MS      = 300;
+    if (flashEl) gsap.set(flashEl, { opacity: 0 });
+
+    if (window.SFX && typeof SFX.magicSwirl === 'function') {
+      try { SFX.magicSwirl(); } catch (e) {}
+    }
+
+    gsap.to(btnEl, {
+      opacity: 0, duration: 0.2, onComplete: function () {
+        btnEl.textContent = 'Conjuring…';
+        gsap.to(btnEl, { opacity: 1, duration: 0.2 });
+      }
+    });
+
+    var particles = [];
+    for (var i = 0; i < PARTICLE_COUNT; i++) {
+      var p = document.createElement('span');
+      p.className = 'account-summon-particle';
+      boxEl.appendChild(p);
+      particles.push(p);
+    }
+
+    particles.forEach(function (p) {
+      var radius     = 20 + Math.random() * 55;
+      var angleStart = Math.random() * Math.PI * 2;
+      var spin       = (Math.random() < 0.5 ? -1 : 1) * (Math.PI * 2 + Math.random() * Math.PI * 2);
+      var steps      = 10;
+
+      gsap.set(p, { x: 0, y: 0, opacity: 0, scale: 0.5 + Math.random() * 0.6 });
+      var tl = gsap.timeline({ delay: Math.random() * 0.3 });
+      tl.to(p, { opacity: 1, duration: 0.3 });
+      for (var s = 1; s <= steps; s++) {
+        var t = s / steps;
+        var angle = angleStart + spin * t;
+        var r = radius * (1 - t * 0.3);   // gentle inward spiral
+        tl.to(p, {
+          x: Math.cos(angle) * r,
+          y: Math.sin(angle) * r,
+          duration: (SWIRL_MS / 1000 - 0.3) / steps,
+          ease: 'sine.inOut'
+        });
+      }
+    });
+
+    gsap.delayedCall(SWIRL_MS / 1000, function () {
+      gsap.to(particles.concat(btnEl), { opacity: 0, duration: FADE_MS / 1000, ease: 'sine.in' });
+    });
+
+    if (flashEl) {
+      gsap.delayedCall(FLASH_IN_START_MS / 1000, function () {
+        gsap.to(flashEl, { opacity: 1, duration: FLASH_IN_MS / 1000, ease: 'sine.in' });
+      });
+    }
+
+    gsap.delayedCall(DURATION_MS / 1000, function () {
+      particles.forEach(function (p) { p.remove(); });
+      onComplete();   // swaps in the name options while the flash is fully opaque
+      if (flashEl) gsap.to(flashEl, { opacity: 0, duration: FLASH_OUT_MS / 1000, ease: 'sine.out' });
+    });
+  }
+
+  // The five pre-generated names as their own step; picking one creates the
+  // account. opt.display is CamelCase, shown here only — opt.username (the
+  // all-lowercase real credential) is what gets passed on.
+  function _renderUsernameOptions(options, passphrase) {
+    _render(
+      'Choose Your Giant Name',
       '<div class="account-credential-card account-summon-box account-summon-box-options" id="account-summon-box">' +
         options.map(function (opt, idx) {
           return '<button class="btn-snes account-summon-option" data-idx="' + idx + '">' + _escapeHtml(opt.display) + '</button>';
         }).join('') +
-      '</div>' +
-      (info.ungrouped ? '' : '<p class="account-flow-or">' + (fromLink
-        ? 'Not your class? Check the link with your teacher.'
-        : 'Not your class? Go back and check the code with your teacher.') + '</p>'),
-      fromLink
-        ? '<button class="btn-snes btn-snes-close" id="af-back">PLAY AS A GUEST</button>'
-        : '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
+      '</div>',
+      ''
     );
     Array.prototype.forEach.call(document.querySelectorAll('#account-summon-box .account-summon-option'), function (optBtn) {
       optBtn.addEventListener('click', function () {
         var idx = parseInt(optBtn.getAttribute('data-idx'), 10);
         _stepFinalizeSignup(options[idx].username, passphrase);
       });
-    });
-    _byId('af-back').addEventListener('click', function () {
-      if (fromLink) _close(); else _stepClassCode();
     });
   }
 
@@ -185,14 +287,16 @@ window.SogAccountUI = (function () {
       code === 'deadline-exceeded';
   }
 
-  /* ── After student signup: straight into the game ──────────────────────
-     The login card no longer blocks: it floats over the game once with a
-     GOT IT (js/teacher-onboard.js showLoginCard), and "My login" brings it
-     back any time. The passphrase is also on the teacher's roster. No page
-     reload — SogAuth.refresh() (called by signUpStudent) already updated the
-     account button and corner strip. A student signing up from the home
-     screen goes straight into the adventure; one signing up mid-game (the
-     post-Ötzi prompt) just carries on where they were. */
+  /* ── After student signup: the login card ──────────────────────────────
+     Username and password, big, with SAVE PDF (prints just this card, see
+     the @media print rule for #account-credential-card). DONE stays disabled
+     until the student ticks that they saved it. DONE closes the popup:
+     a student who joined from the home screen is left on it ("Are you ready
+     to make history?" → I'M READY); one signing up mid-game (the post-Ötzi
+     prompt) carries on where they were. My login (Options / the account
+     popup) brings the card back any time, and the teacher's roster has it.
+     No page reload — SogAuth.refresh() (called by signUpStudent) already
+     updated the corner links. */
   function _afterStudentSignup(creds) {
     var info = _pendingClassInfo || {};
     if (!info.ungrouped && info.code && window.Analytics && typeof window.Analytics.funnel === 'function') {
@@ -204,19 +308,32 @@ window.SogAccountUI = (function () {
       _render(
         'ACCOUNT ALREADY CREATED',
         '<p>An account named <strong>' + _escapeHtml(creds.username) + '</strong> already exists on ' +
-          'this device from an earlier attempt. Your teacher can look up your passphrase on their roster. ' +
+          'this device from an earlier attempt. Your teacher can look up your password on their roster. ' +
           'Your progress is safe either way.</p>',
         '<button class="btn-snes" id="af-done">OK</button>'
       );
       _byId('af-done').addEventListener('click', _close);
       return;
     }
-    _close();
-    if (window.TeacherOnboard) window.TeacherOnboard.showLoginCard(creds, { firstTime: true });
-    var onHome = document.getElementById('screen-home');
-    if (onHome && onHome.classList.contains('active') && window.HomeFlow && typeof window.HomeFlow.quickStart === 'function') {
-      window.HomeFlow.quickStart({});
-    }
+    _render(
+      'Save Your Information',
+      '<p>Write it down, take a screenshot, or save the PDF. You’ll need it to log in on another computer.</p>' +
+      '<div class="account-credential-card" id="account-credential-card">' +
+        '<div class="account-credential-row"><span>Username</span><strong>' + _escapeHtml(creds.username) + '</strong></div>' +
+        '<div class="account-credential-row"><span>Password</span><strong>' + _escapeHtml(creds.passphrase) + '</strong></div>' +
+      '</div>' +
+      (info.ungrouped ? '' : '<p class="account-flow-or">Your teacher has it too.</p>') +
+      '<label class="account-flow-checkbox-row">' +
+        '<input type="checkbox" id="af-ack"> I have written down or saved my username and password.' +
+      '</label>',
+      '<button class="btn-snes" id="af-print">SAVE PDF</button>' +
+      '<button class="btn-snes" id="af-done" disabled>DONE</button>'
+    );
+    var ack = _byId('af-ack');
+    var doneBtn = _byId('af-done');
+    ack.addEventListener('change', function () { doneBtn.disabled = !ack.checked; });
+    _byId('af-print').addEventListener('click', function () { window.print(); });
+    doneBtn.addEventListener('click', _close);
   }
 
   /* ── Step: login form ─────────────────────────────────────────────────
@@ -232,7 +349,7 @@ window.SogAccountUI = (function () {
   function _stepLoginForm(errorMsg, infoMsg, prefillIdentifier, prefillSecret) {
     _render(
       'LOG IN',
-      '<p>Students: enter your username and passphrase. Teachers: enter your email and password.</p>' +
+      '<p><u>Students</u>: enter your username and password.<br><u>Teachers</u>: enter your email and password.</p>' +
       '<input type="text" id="af-login-username" class="account-flow-input" ' +
         'placeholder="USERNAME OR EMAIL" autocomplete="username" spellcheck="false" value="' +
         _escapeHtml(prefillIdentifier || '') + '">' +
@@ -240,12 +357,10 @@ window.SogAccountUI = (function () {
         'placeholder="PASSWORD" autocomplete="current-password" value="' + _escapeHtml(prefillSecret || '') + '">' +
       (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
       (infoMsg  ? '<div class="account-flow-info">'  + _escapeHtml(infoMsg)  + '</div>' : '') +
-      '<div class="account-flow-forgot"><a href="#" id="af-forgot">Forgot password?</a></div>' +
-      '<p class="account-flow-or">Teachers can also sign in with Google. Already have a password account? ' +
-        'Log in with it here first, then use CONNECT GOOGLE in your dashboard.</p>',
+      '<div class="account-flow-forgot"><a href="#" id="af-forgot">Forgot password?</a></div>',
       '<button class="btn-snes" id="af-login-submit">LOG IN</button>' +
       '<button class="btn-snes" id="af-login-google">CONTINUE WITH GOOGLE</button>' +
-      '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
+      '<button class="btn-snes btn-snes-close" id="af-back">CANCEL</button>'
     );
     _byId('af-login-google').addEventListener('click', _submitTeacherGoogle);
     var userInput = _byId('af-login-username');
@@ -254,7 +369,7 @@ window.SogAccountUI = (function () {
     function submit() { _submitLogin(userInput.value, passInput.value); }
     _byId('af-login-submit').addEventListener('click', submit);
     passInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
-    _byId('af-back').addEventListener('click', _stepChooser);
+    _byId('af-back').addEventListener('click', _close);
     _byId('af-forgot').addEventListener('click', function (e) {
       e.preventDefault();
       _handleForgotPassword(userInput.value);
@@ -281,7 +396,7 @@ window.SogAccountUI = (function () {
     } else {
       window.SogAccount.loginStudent(identifier, secret, function (err) {
         if (err) {
-          _stepLoginForm('Username or passphrase not recognized. Check with your teacher.', null, identifier);
+          _stepLoginForm('Username or password not recognized. Check with your teacher.', null, identifier);
           return;
         }
         if (window.TeacherOnboard) window.TeacherOnboard.markStudentDevice();
@@ -986,11 +1101,13 @@ window.SogAccountUI = (function () {
   else init();
 
   /* ── Home corner links ─────────────────────────────────────────────────
-     "Log in" / <name>: guests get the chooser; a signed-in player gets their
-     name with My login (students) or Dashboard (teachers), and Log out. */
+     "Log in" / <name>: guests go straight to the login form (creating an
+     account and teacher signup have their own corner links, Join a class
+     and Teachers); a signed-in player gets their name with My login
+     (students) or Dashboard (teachers), and Log out. */
   function openAccount() {
     var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
-    if (!user || user.isAnonymous) { openFlow('chooser'); return; }
+    if (!user || user.isAnonymous) { _pendingClassInfo = null; _stepLoginForm(); return; }
     var isTeacher = window.TeacherDashboard && typeof window.TeacherDashboard.isTeacher === 'function' && window.TeacherDashboard.isTeacher();
     var email = user.email || '', name = '';
     if (email.slice(-12) === '@sog.invalid') name = email.slice(0, -12);

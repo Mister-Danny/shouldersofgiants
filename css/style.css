@@ -13631,14 +13631,12 @@ body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract 
   background: none;
   border: none;
   padding: 4px 0;
-  /* Same face and colour as the home byline, dimmed until hovered. Dimmed
-     by colour alpha, not opacity: home.js fades btn-account in with GSAP,
-     which leaves an inline opacity:1 behind. */
+  /* Same face, colour and shadow as the home byline; yellow on hover. */
   font-family: var(--font);
   font-size: 15px;
   letter-spacing: 0.06em;
-  color: rgba(180, 138, 212, 0.62);
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+  color: #b48ad4;
+  text-shadow: 1px 1px 0 #000;
   cursor: pointer;
   transition: color 0.15s ease;
 }
@@ -13701,15 +13699,11 @@ body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract 
 }
 .teacher-banner-close:hover { color: var(--text-white); }
 
-.teacher-card .teacher-card-big { font-size: 20px; color: var(--snes-yellow); margin-bottom: 6px; }
 
 /* Account-flow additions. */
 .account-adult-row { margin: 4px 0 12px; font-size: 14px; }
 .account-google-btn { display: block; width: 100%; margin: 4px 0; }
 .account-flow-steps { margin: 8px 0 10px 20px; padding: 0; line-height: 1.5; }
-.account-join-who { font-size: 17px; margin-bottom: 4px; }
-.account-join-who strong { color: var(--snes-yellow); }
-.account-flow-sub { font-size: 13px; color: var(--text-dim); }
 
 /* Class-link screen (after signup, and LINK & QR in the dashboard). */
 .teacher-classlink { background: rgba(0, 0, 14, 0.6); z-index: 1200; }

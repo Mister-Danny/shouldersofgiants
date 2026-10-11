@@ -168,6 +168,11 @@
       ? window.SogAuth.getUser() : null;
     return !!(user && user.isAnonymous === false);
   }
+  function isStudentAccount() {
+    var user = (window.SogAuth && typeof window.SogAuth.getUser === 'function')
+      ? window.SogAuth.getUser() : null;
+    return !!(user && /@sog\.invalid$/.test(user.email || ''));
+  }
   /* Every caller gets the same answer: the visit state is read from HomeFlow, not
      passed in, so feedback.js's own load-time call (which runs after home.js has
      already laid out the funnel) cannot un-hide the button there. */
@@ -176,7 +181,9 @@
     if (!btn) return;
     var firstVisit = !!(window.HomeFlow && typeof window.HomeFlow.isFirstVisit === 'function'
                         && window.HomeFlow.isFirstVisit());
-    btn.style.display = (!firstVisit || isAccountSignedIn()) ? '' : 'none';
+    // A student who just joined a class sees only I'M READY on their first
+    // visit, like a guest; a signed-in teacher keeps the button.
+    btn.style.display = (!firstVisit || (isAccountSignedIn() && !isStudentAccount())) ? '' : 'none';
   }
   function openForm() {
     window.open(FORM_URL, '_blank', 'noopener,noreferrer');
