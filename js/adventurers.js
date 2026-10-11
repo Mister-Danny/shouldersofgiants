@@ -78,13 +78,14 @@
       standing: 'adventurer-female-standing.png',
       standingBack: 'adventurer-female-standing-backward.png',   // rest pose after walking UP
       /* Rest pose after walking SIDEWAYS (mirrored for left), so she plants her
-         feet instead of turning to face the camera. Keyed from generated art
-         (raw in reference/sprite-sources/female/), scaled to the walk frames'
-         159 px figure and colour-matched to the old 03-05. standingSideDx pins
-         its hat at x = 82, where the side walk frames' hats are. It is still in
-         the OLD (pre-sheet) style. */
+         feet instead of turning to face the camera. Built from side-walk frame
+         02 (same sheet, same 40-colour palette): upper body as drawn, far fist
+         hidden (arms relaxed at her sides), the shorts' front squared off, the
+         near leg straight with its boot flat and the far leg a darker copy 2 px
+         behind it. Rendered with the walk frames' registration, so its hat rows
+         are pixel-identical to right-02's and the stop has no shift. */
       standingSide:   'adventurer-female-standing-right.png',
-      standingSideDx: -0.4,
+      standingSideDx: 0,
       extraFrames: [],
       portrait: 'images/portraits/femaleexplorer portrait.jpeg'
     },
