@@ -24,8 +24,8 @@
   /* ── Scripted draws ───────────────────────────────────────────
      Turn 1 opening hand; Turn 2 additions                       */
   var PLAYER_T1_HAND = [1, 12, 3, 19, 25]; // Citizens, Samurai, Justinian, Cosimo, Columbus
-  // Ordered draw queue for tutorial (one draw per distinct location played at
-  // last turn, minimum 1, max 7 hand size — the engine's rule, via SOG.game)
+  // Ordered draw queue for tutorial (one draw per card played last turn,
+  // max 7 hand size — the engine's rule, via SOG.game)
   var TUT_DRAW_QUEUE = [16, 2, 24, 6, 13, 18, 15, 20]; // Griots, Scholar-Officials, Magellan, Priests, Cortes, Juvenal, William, Voltaire
 
   /* ── Tutorial state ─────────────────────────────────────────── */
@@ -890,24 +890,20 @@
     TS.bonusCapitalNextTurn = 0;
     TS.playerFirst = !TS.playerFirst;   // alternate from previous turn
 
-    /* THE DRAW RULE, through the engine's own function so this can never drift
-       from the real battles again (the tutorial used to carry its own per-card
-       copy): one card per DISTINCT LOCATION played at last turn, minimum 1,
-       capped at 7 and by what the scripted queue has left. TS.playerActionLog is
+    /* THE DRAW RULE, through the engine's own functions so this can never
+       drift from the real battles: one card per card played last turn, capped
+       at 7 and by what the scripted queue has left. TS.playerActionLog is
        cleared just below, so at this point it still holds last turn's plays.
-       Every turn-1 play here is forced to the Rift, so turn 2 draws exactly 1.
-       The Magellan-by-turn-3 safety after this is unchanged and still covers the
-       scripted steps whatever the count works out to. */
+       The Magellan-by-turn-3 safety after this still covers the scripted steps
+       whatever the count works out to. */
     if (n > 1) {
-      var _sg  = window.SOG && SOG.game;
-      var _locs = (_sg && typeof _sg.distinctPlayLocations === 'function')
-        ? _sg.distinctPlayLocations(TS.playerActionLog)
-        : (function () { var seen = {}, k = 0; (TS.playerActionLog || []).forEach(function (e) {
-            if (e && e.type === 'play' && e.locId != null && !seen[e.locId]) { seen[e.locId] = true; k++; } }); return k; })();
-      var canDraw = Math.max(0, 7 - TS.playerHand.length);
+      var _sg     = window.SOG && SOG.game;
+      var _played = (_sg && typeof _sg.cardsPlayed === 'function')
+        ? _sg.cardsPlayed(TS.playerActionLog)
+        : TS.cardsPlayedThisTurn;
       var count   = (_sg && typeof _sg.replenishDrawCount === 'function')
-        ? _sg.replenishDrawCount(_locs, TS.playerHand.length, TUT_DRAW_QUEUE.length - TS.tutDrawQueueIdx, 7)
-        : Math.min(Math.max(1, _locs), canDraw);
+        ? _sg.replenishDrawCount(_played, TS.playerHand.length, TUT_DRAW_QUEUE.length - TS.tutDrawQueueIdx, 7)
+        : Math.min(_played, Math.max(0, 7 - TS.playerHand.length));
       for (var i = 0; i < count && TS.tutDrawQueueIdx < TUT_DRAW_QUEUE.length; i++) {
         var drawId = TUT_DRAW_QUEUE[TS.tutDrawQueueIdx++];
         if (TS.playerHand.indexOf(drawId) === -1) TS.playerHand.push(drawId);

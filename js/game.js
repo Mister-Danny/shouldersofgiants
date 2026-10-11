@@ -163,8 +163,7 @@
       },
       resource: { model: 'capital', capital: CAPITAL, resetEachTurn: true },
       // Draw policy. 'replenish' = at the start of your turn, draw one card per
-      // DISTINCT LOCATION you played at last turn, minimum 1, capped so the hand
-      // never passes maxHandSize (see replenishDrawCount). The 'flat' variant
+      // card you played last turn, wherever it went (see replenishDrawCount). The 'flat' variant
       // (+N/turn, same cap) is what the capital-less battles use — Neanderthal,
       // Otzi and Gilgamesh draw a flat 2.
       draw: { model: 'replenish' },
@@ -420,12 +419,27 @@
     SOG.BattleHooks.runAsyncOr('onBattleStart', [], function () {
       if (_dealsEarly) { _activateTurn1(); return; }
       _openingRulesGate(cfg, function () {
-        _dealIn(cfg, function () {
+        var afterDeal = function () {
           SOG.BattleHooks.fire('onHandDealt', []);
           _activateTurn1();
-        });
+        };
+        // A script may already have dealt mid-dialogue (dealOpeningHand below).
+        if (_openingDealtFor === cfg) afterDeal(); else _dealIn(cfg, afterDeal);
       });
     });
+  }
+
+  /* Mid-opening deal, for a script whose dialogue talks about the hand (Sargon:
+     "My cards look different!"). Runs the same rendered deal-in as the engine
+     tail, once, from inside onBattleStart; the tail then skips its own deal.
+     No-op (onDone at once) for an opt-out battle or a second call. */
+  var _openingDealtFor = null;
+  function dealOpeningHand(onDone) {
+    var cfg = G && G.config;
+    var done = typeof onDone === 'function' ? onDone : function () {};
+    if (!cfg || (cfg.opening && cfg.opening.dealBeforeIntro) || _openingDealtFor === cfg) { done(); return; }
+    _openingDealtFor = cfg;
+    _dealIn(cfg, done);
   }
 
   function _activateTurn1() {
@@ -1971,35 +1985,26 @@
      happen for editor-authored levels (the form keeps the array's length in
      sync with structure.turns) but keeps this safe regardless. */
   /* ── THE DRAW RULE (replenish) ──────────────────────────────────────────────
-     At the start of your turn you draw ONE CARD PER DISTINCT LOCATION you played
-     at last turn, with a floor of 1 — it is the number of LOCATIONS, not the
-     number of cards: four cards at one location still draw 1, nothing played
-     still draws 1. Capped so the hand never passes maxHandSize (at the cap you
-     draw nothing), and by the deck.
-     THE CAP IS LOAD-BEARING HERE where it never was for the old rule. The old
-     replenish drew back exactly what was played, so it could only refill what
-     had left the hand and could never exceed the cap on its own; this rule can
-     (play nothing at 7 -> the floor would draw an 8th), so the draw itself is
-     now capped, consistent with the ability grant sites (Tool, Khufu, Papyrus,
-     Nubian Gold) which already fizzle at the cap.
-     Pure and exported: the tutorial's own turn engine draws through this same
-     function, so the two can never drift the way the old per-card rule had —
-     the tutorial carried its own copy.
-     Replaces: one card per CARD played last turn. */
-  function distinctPlayLocations(actionLog) {
-    var seen = {}, n = 0;
-    (actionLog || []).forEach(function (e) {
-      if (!e || e.type !== 'play') return;
-      var loc = (e.locId != null) ? e.locId : e.toLocId;   // AI log stores locId, player log toLocId
-      if (loc == null || seen[loc]) return;
-      seen[loc] = true; n++;
-    });
+     At the start of your turn you draw ONE CARD PER CARD you played last turn,
+     wherever you played it (deck permitting). Nothing played draws nothing.
+     Not capped at maxHandSize: it only ever refills what left the hand, so it
+     cannot pass the cap on its own, and cards granted by abilities mid-turn
+     (Tool's draw, Jesus' return, Khufu, Papyrus…) are net gains that ride above
+     the cap, which is enforced where cards are GRANTED, not clawed back here.
+     maxHand is for the tutorial, whose scripted queue keeps its own 7 cap.
+     Pure and exported: the tutorial's turn engine draws through these same
+     functions, so the two cannot drift.
+     (Restored 2026-10-11 after a stretch of one card per DISTINCT LOCATION,
+     minimum 1, which proved too limiting.) */
+  function cardsPlayed(actionLog) {
+    var n = 0;
+    (actionLog || []).forEach(function (e) { if (e && e.type === 'play') n++; });
     return n;
   }
-  function replenishDrawCount(distinctLocs, handLen, deckLen, maxHand) {
-    var want = Math.max(1, distinctLocs || 0);
-    var room = Math.max(0, (maxHand || MAX_HAND_SIZE) - handLen);
-    return Math.max(0, Math.min(want, room, deckLen));
+  function replenishDrawCount(played, handLen, deckLen, maxHand) {
+    var want = Math.max(0, played || 0);
+    if (maxHand != null) want = Math.min(want, Math.max(0, maxHand - handLen));
+    return Math.max(0, Math.min(want, deckLen));
   }
 
   function _capitalForTurn(resource, turn) {
@@ -2039,17 +2044,16 @@
     G.bonusCapitalNextTurn = 0;
     SOG.input.resetDragInfo();
 
-    /* Read last turn's plays BEFORE the logs are cleared a few lines down. The
-       action logs carry each play's LOCATION, which is what the draw rule counts.
+    /* Read last turn's plays BEFORE the logs are cleared a few lines down: the
+       draw rule counts each side's 'play' entries.
        Both sides' logs are complete: every writer of a reveal queue (the player's
        commitPlay, ai.js commitPlay / the scripted profile, and applyOpponentActions
        for a remote 2P opponent) pushes a matching 'play' entry, so there is no
        side whose plays are known only by count. Cards placed by abilities (Piye's
        copy, Ezana's convert, Trade Network's swap-in, the Royal Tomb summon) are
-       not plays and are not logged, so they do not count as "where you played a
-       card". */
-    var playerLocs = distinctPlayLocations(G.playerActionLog);
-    var aiLocs     = distinctPlayLocations(G.aiActionLog);
+       not plays and are not logged, so they draw nothing back. */
+    var playerPlayed = cardsPlayed(G.playerActionLog);
+    var aiPlayed     = cardsPlayed(G.aiActionLog);
     G.playerRevealQueue = [];
     G.aiRevealQueue     = [];
     G.aiActionLog       = [];   // bug 16
@@ -2066,20 +2070,16 @@
     G.deferredOppPlays       = {};
 
     /* Draw policy via config.draw. 'flat' draws a fixed +N per side per turn,
-       capped at maxHandSize (the capital-less battles); 'replenish' draws one card per DISTINCT
-       LOCATION each side played at last turn, minimum 1, capped at maxHandSize
-       and by the deck — see replenishDrawCount above for the rule and why the
-       cap now applies at the draw itself. */
+       capped at maxHandSize (the capital-less battles); 'replenish' draws one
+       card per card each side played last turn, deck permitting — see
+       replenishDrawCount above. */
     var _draw    = G.config.draw || { model: 'replenish' };
     if (_draw.model === 'flat') {
       /* Fixed +N per side per turn — the rule for the CAPITAL-LESS battles
-         (Neanderthal, Otzi, Gilgamesh). Replenish under-draws there: it counts
-         DISTINCT LOCATIONS played, so two cards into one location drew a single
-         card back and the hand bled down across the battle. N is each battle's
-         cardsPerTurn, so the hand refills to its cap every turn however the
-         cards were spread.
-         CAPPED at maxHandSize and by the deck, exactly as replenish is — a hand
-         already at the cap draws nothing. The cap is new here and is what makes
+         (Neanderthal, Otzi, Gilgamesh). N is each battle's cardsPerTurn, so
+         the hand refills to its cap every turn.
+         CAPPED at maxHandSize and by the deck — a hand already at the cap
+         draws nothing. The cap is new here and is what makes
          a +2 safe in a 4-card hand. Tool (26) is untouched: its At-Once draw is
          owned by the ability and deliberately bypasses this cap (that is what
          lets the prehistory hand sit at 5); this draw simply adds nothing while
@@ -2091,14 +2091,13 @@
       G.playerDeck.splice(0, _pFlat).forEach(function (id) { G.playerHand.push(id); if (SOG.abilities && SOG.abilities.noteCardEnteredHand) SOG.abilities.noteCardEnteredHand('player', id); });
       G.aiDeck.splice(0,     _aFlat).forEach(function (id) { G.aiHand.push(id);     if (SOG.abilities && SOG.abilities.noteCardEnteredHand) SOG.abilities.noteCardEnteredHand('ai', id); });
     } else {
-      var _maxHand = (G.config.structure && G.config.structure.maxHandSize) || MAX_HAND_SIZE;
-      var playerCanDraw = replenishDrawCount(playerLocs, G.playerHand.length, G.playerDeck.length, _maxHand);
+      var playerCanDraw = replenishDrawCount(playerPlayed, G.playerHand.length, G.playerDeck.length);
       /* The opponent side follows the same rule in every mode. The old "empty
          log beside a non-empty reveal queue" 2P fallback (per-card draw) is gone:
          applyOpponentActions now logs each remote play, so that state can no
          longer occur. In 2P this side's hand/deck are this client's local mirror
          of the remote player; the remote computes its own real draw. */
-      var aiCanDraw = replenishDrawCount(aiLocs, G.aiHand.length, G.aiDeck.length, _maxHand);
+      var aiCanDraw = replenishDrawCount(aiPlayed, G.aiHand.length, G.aiDeck.length);
       G.playerDeck.splice(0, playerCanDraw).forEach(function (id) { G.playerHand.push(id); if (SOG.abilities && SOG.abilities.noteCardEnteredHand) SOG.abilities.noteCardEnteredHand('player', id); });
       G.aiDeck.splice(0, aiCanDraw).forEach(function (id) { G.aiHand.push(id);         if (SOG.abilities && SOG.abilities.noteCardEnteredHand) SOG.abilities.noteCardEnteredHand('ai', id); });
     }
@@ -2631,8 +2630,10 @@
     getSnapshot:           getSnapshot,
     applySnapshot:         applySnapshot,
     // The draw rule, pure — shared with the tutorial's turn engine.
-    distinctPlayLocations: distinctPlayLocations,
-    replenishDrawCount:    replenishDrawCount
+    cardsPlayed:           cardsPlayed,
+    replenishDrawCount:    replenishDrawCount,
+    // Scripts deal mid-opening via BattleHooks services.dealOpeningHand.
+    dealOpeningHand:       dealOpeningHand
   };
 
 })();

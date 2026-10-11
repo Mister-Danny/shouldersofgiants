@@ -76,6 +76,12 @@ SOG.BattleHooks = (function () {
       if (SOG.HUD && typeof SOG.HUD.runDialogue === 'function') return SOG.HUD.runDialogue(lines, done);
       if (typeof done === 'function') done();
     },
+    // Deal + render the opening hands NOW, mid-opening (js/game.js
+    // dealOpeningHand); the engine's own deal after the rules gate is skipped.
+    dealOpeningHand: function (done) {
+      if (SOG.game && typeof SOG.game.dealOpeningHand === 'function') return SOG.game.dealOpeningHand(done);
+      if (typeof done === 'function') done();
+    },
     blockInput:   function () { _inputBlocked = true;  },
     unblockInput: function () { _inputBlocked = false; },
     getSlotEl: function () {

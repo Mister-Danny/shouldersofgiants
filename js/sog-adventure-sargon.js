@@ -68,7 +68,8 @@ SOG.SargonBattle = (function () {
 
   /* ── Opening capital-tutorial dialogue (editable) ───────────────────
      Sargon (the 'sargon' character/portrait) walks the player through the
-     Capital resource the first time they fight him. Plays once per browser
+     Capital resource the first time they fight him. The hand is dealt after
+     the FIRST line (see _runOpeningDialogue). Plays once per browser
      (gated by localStorage KEY_OPENING_SEEN, mirroring Gilgamesh); clear that
      key to replay. who: 'sargon' (opponent bubble) | 'explorer' (player). */
   var KEY_OPENING_SEEN = 'sog_sargon_opening_seen';
@@ -265,9 +266,15 @@ SOG.SargonBattle = (function () {
   function _runOpeningDialogue(onComplete) {
     // Skip once seen OR once Sargon is beaten (entry dialogue never replays after a win).
     if (_has(KEY_OPENING_SEEN) || _has(KEY_SARGON_COMPLETE)) { if (onComplete) onComplete(); return; }
-    runLines(OPENING_DIALOGUE, function () {
-      _set(KEY_OPENING_SEEN);
-      if (onComplete) onComplete();
+    // Sargon's first line plays over an empty hand; then the hand is dealt, so
+    // "My cards look different!" is about cards the player can see.
+    runLines(OPENING_DIALOGUE.slice(0, 1), function () {
+      SOG.BattleHooks.services.dealOpeningHand(function () {
+        runLines(OPENING_DIALOGUE.slice(1), function () {
+          _set(KEY_OPENING_SEEN);
+          if (onComplete) onComplete();
+        });
+      });
     });
   }
 
