@@ -13615,40 +13615,49 @@ body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract 
    Teacher & student onboarding (js/teacher-onboard.js)
    ════════════════════════════════════════════════════════════════════════ */
 
-/* Home-screen onboarding row: under the account button, State 1 only. */
-.home-onboard {
+/* Home corner links (top right): Log in / name, Dashboard, Join a class,
+   Teachers. Small and quiet until hovered — the centre of the home screen
+   stays title + tagline + I'M READY. */
+.home-corner {
+  position: absolute;
+  top: 18px;
+  right: 26px;
+  z-index: 20;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 22px;
 }
-.home-class-code {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
-  font-size: 14px;
-  color: var(--text-white);
-  background: rgba(0, 0, 14, 0.45);
-  padding: 6px 10px;
-  border: 2px solid var(--border-mid);
-}
-.home-class-code input {
-  width: 96px;
-  padding: 6px 8px;
-  font-family: 'Source Sans 3', Arial, Helvetica, sans-serif;
-  font-weight: 700;
+.home-corner-link {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  /* Same face and colour as the home byline, dimmed until hovered. Dimmed
+     by colour alpha, not opacity: home.js fades btn-account in with GSAP,
+     which leaves an inline opacity:1 behind. */
+  font-family: var(--font);
   font-size: 15px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  background: var(--bg-dialog);
+  letter-spacing: 0.06em;
+  color: rgba(180, 138, 212, 0.62);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.home-corner-link:hover,
+.home-corner-link:focus-visible {
   color: var(--snes-yellow);
-  border: 2px solid var(--border-mid);
+  text-shadow: 1px 1px 0 #000;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   outline: none;
 }
-.home-class-code input:focus { border-color: var(--snes-yellow); }
-.home-class-code .btn-snes { font-size: 11px; padding: 6px 12px; }
-.btn-for-teachers { opacity: 0.85; }
+.account-code-input {
+  font-family: 'Source Sans 3', Arial, Helvetica, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.tcl-nolink { margin-top: 6px; font-size: 14px; color: var(--text-dim); line-height: 1.4; }
+.tcl-nolink strong { color: var(--text-white); }
 
 /* Slim teacher banner across the top of the stage. */
 .teacher-banner {

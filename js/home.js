@@ -212,9 +212,9 @@ var HomeFlow = (function () {
     btnFeedback          = document.getElementById('btn-home-feedback');
     btnAccount           = document.getElementById('btn-account');
     btnTeacherDashboard  = document.getElementById('btn-teacher-dashboard');
-    // Onboarding row (js/teacher-onboard.js decides what inside it shows):
-    // For Teachers, "Have a class code?", My login. Lives and fades with the
-    // account button — State 1 only.
+    // Top-right corner links (Log in / name, Dashboard, Join a class,
+    // Teachers — js/teacher-onboard.js decides the last two). State 1 only:
+    // faded/hidden with the rest of it.
     homeOnboardEl        = document.getElementById('home-onboard');
     subtitleIntroEl      = document.getElementById('home-subtitle-intro');
     subtitlePathEl       = document.getElementById('home-subtitle-path');
@@ -303,9 +303,10 @@ var HomeFlow = (function () {
     }
   }
 
-  /* ── Guest/account status button (AUTH_SPEC.md Phase 3) ──────────────────
+  /* ── Account link (top-right corner, AUTH_SPEC.md Phase 3) ────────────────
      Label reflects window.SogAuth's current user: anonymous (or none) →
-     guest, "Create Account / Login"; a real (non-anonymous) user → "Logout".
+     "Log in"; a signed-in student → their game name; a teacher → their
+     display name, or "Account" (never the email — teachers project this).
      Called on init, on every SogAuth.onChange tick (signup/login/logout, even
      mid-session with no reload), and from resetHomeState() on every path back
      to the home screen — so it's never stale regardless of how it got here. */
@@ -314,7 +315,15 @@ var HomeFlow = (function () {
     var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
       ? window.SogAuth.getUser() : null;
     var loggedIn = !!(user && user.isAnonymous === false);
-    btnAccount.textContent = loggedIn ? 'Logout' : 'Create Account / Login';
+    if (!loggedIn) { btnAccount.textContent = 'Log in'; return; }
+    var name = '';
+    var email = user.email || '';
+    if (email.slice(-12) === '@sog.invalid') name = email.slice(0, -12);
+    else if (_isTeacher()) {
+      var doc = window.TeacherDashboard.getTeacherDoc && window.TeacherDashboard.getTeacherDoc();
+      name = (doc && doc.displayName) || '';
+    }
+    btnAccount.textContent = name || 'Account';
   }
 
   /* ── Teacher-dashboard entry button (AUTH_SPEC.md Phase 5) ────────────
@@ -326,25 +335,17 @@ var HomeFlow = (function () {
      show/hide lifecycle instead of needing separate logic. */
   function _updateTeacherDashboardButtonVisibility() {
     applyVisitState();
+    _updateAccountButtonLabel();   // a teacher's name arrives with their teacher doc
   }
 
   function _isTeacher() {
     return !!(window.TeacherDashboard && typeof window.TeacherDashboard.isTeacher === 'function' && window.TeacherDashboard.isTeacher());
   }
 
+  // Guests get the account chooser; a signed-in player gets the account
+  // modal's signed-in step (name, My login / Dashboard, Log out).
   function onAccountClick() {
-    if (!window.SogAccountUI) return;
-    var user = window.SogAuth && typeof window.SogAuth.getUser === 'function'
-      ? window.SogAuth.getUser() : null;
-    var loggedIn = !!(user && user.isAnonymous === false);
-    if (loggedIn) {
-      if (window.confirm('Log out? Your progress has been saved to your account. ' +
-        'This device will return to guest mode.')) {
-        window.SogAccountUI.logout();
-      }
-    } else {
-      window.SogAccountUI.openFlow('chooser');
-    }
+    if (window.SogAccountUI && typeof window.SogAccountUI.openAccount === 'function') window.SogAccountUI.openAccount();
   }
 
   function applyVisitState() {

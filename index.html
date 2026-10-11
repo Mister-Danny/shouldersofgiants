@@ -32,6 +32,20 @@
        HOME SCREEN — Welcome / "Are you ready?" screen
   ════════════════════════════════════════════════════════════════ -->
   <div id="screen-home" class="screen active">
+    <!-- Quiet top-right links (js/home.js + js/teacher-onboard.js). The
+         centre stays title + tagline + I'M READY. id home-onboard: js/home.js
+         hides/fades this row with the rest of State 1.
+           Log in / <name>  account modal (signed in: name, My login or
+                            Dashboard, Log out)
+           Dashboard        signed-in teachers only
+           Join a class     guests: the class-code popup
+           Teachers         never on a student device or when signed in -->
+    <nav class="home-corner" id="home-onboard" aria-label="Account and class">
+      <button class="home-corner-link" id="btn-account">Log in</button>
+      <button class="home-corner-link" id="btn-teacher-dashboard" style="display:none">Dashboard</button>
+      <button class="home-corner-link" id="btn-join-class" style="display:none">Join a class</button>
+      <button class="home-corner-link" id="btn-for-teachers" style="display:none">Teachers</button>
+    </nav>
     <!-- ── STATE 1 & 2: Title + subtitle + button stack ───────── -->
     <div class="home-content" id="home-content">
       <h1 id="home-title" class="home-title">Shoulders of Giants</h1>
@@ -47,31 +61,6 @@
         <button class="btn-snes btn-home-uniform btn-home-ready" id="btn-ready">I'm Ready</button>
         <button class="btn-home-uniform btn-home-learn" id="btn-learn">I'm Ready To Learn</button>
         <button class="btn-home-uniform btn-home-about" id="btn-about">About the Game</button>
-        <!-- Guest/account status (AUTH_SPEC.md Phase 2 placeholder) — label is
-             set by js/home.js based on window.SogAuth's current user. Uses the
-             compact .btn-snes dialog-button look (like the CREATE ACCOUNT
-             modal's YES/NO), not the big wood-plank home-button family. -->
-        <button class="btn-snes btn-home-account" id="btn-account">Create Account / Login</button>
-        <!-- Teacher dashboard entry (AUTH_SPEC.md Phase 5) — see
-             js/teacher-dashboard.js/js/home.js. Hidden by default; shown
-             only once window.TeacherDashboard confirms the signed-in user
-             has a /teachers/{uid} doc. Opens the dashboard as a modal
-             overlay — this screen stays put underneath it. -->
-        <button class="btn-snes btn-home-account" id="btn-teacher-dashboard" style="display:none">Teacher Dashboard</button>
-
-        <!-- Onboarding row (js/teacher-onboard.js): "Have a class code?" for
-             students who can't click a link, My login for signed-in students,
-             For Teachers for teachers who arrive without the teacher link.
-             Never shown on a student device / to signed-in accounts as fits. -->
-        <div class="home-onboard" id="home-onboard">
-          <form class="home-class-code" id="home-class-code" autocomplete="off">
-            <label for="home-class-code-input">Have a class code?</label>
-            <input id="home-class-code-input" maxlength="12" placeholder="ABC123" spellcheck="false" autocapitalize="characters">
-            <button type="submit" class="btn-snes">JOIN</button>
-          </form>
-          <button class="btn-snes btn-home-account" id="btn-my-login" style="display:none">My login</button>
-          <button class="btn-snes btn-home-account btn-for-teachers" id="btn-for-teachers" style="display:none">For Teachers</button>
-        </div>
 
         <!-- State 2 buttons (hidden initially) -->
         <button class="btn-snes btn-home-uniform btn-home-arcadium"     id="btn-arcadium">Arcadium</button>
@@ -1763,6 +1752,7 @@
     <div class="tpj-qr" id="tpj-qr"></div>
     <div class="tpj-side">
       <div class="tpj-line">Go to <strong id="tpj-site"></strong></div>
+      <div class="tpj-line">click <strong>Join a class</strong> (top right)</div>
       <div class="tpj-line">and enter code</div>
       <div class="tpj-code" id="tpj-code"></div>
       <div class="tpj-line tpj-small">or scan the QR code</div>

@@ -5,8 +5,8 @@
  *   ?teacher=1[&src=TAG]  lands straight in the game as a guest (no form, no
  *                         welcome/guest popups) with a slim, dismissible banner:
  *                         "Teacher? Try a few rounds, then get a free class link."
- *   "For Teachers"        a home-screen button for teachers who arrive without
- *                         the link (same teacher mode).
+ *   "Teachers"            a quiet top-right home link for teachers who arrive
+ *                         without the link (same teacher mode; opens the card).
  *   After the FIRST battle win in teacher mode, a one-time card: "Want your
  *   class to play? Get a class link in 30 seconds."  [Yes] [Keep playing].
  *   Signup is one step (js/account-ui.js openTeacherSignup), then the
@@ -17,9 +17,9 @@
  *   A device that has arrived through a class link, typed a class code, used a
  *   login card or logged in as a student is a STUDENT DEVICE from then on
  *   (sog_student_device, kept through logout): it never shows the teacher
- *   banner, the For Teachers button or the teacher card. Students also get the
- *   "Have a class code?" box on the home screen, a one-time login card after
- *   signup (non-blocking, GOT IT) and a "My login" button any time after.
+ *   banner, the Teachers link or the teacher card. Students also get the
+ *   "Join a class" corner link on the home screen, a one-time login card after
+ *   signup (non-blocking, GOT IT) and "My login" in Options any time after.
  *
  * Loads EARLY (right after js/auth.js): the arrival parse below runs at script
  * time so it can quiet the first-visit popups (js/welcome.js, js/guest-status.js)
@@ -129,22 +129,21 @@
   function _refreshBanner() {
     var el = document.getElementById('teacher-banner');
     if (!el) return;
-    // Map only: the home screen has the For Teachers button instead (and its
+    // Map only: the home screen has the Teachers corner link instead (and its
     // title sits where the banner would).
     var show = inTeacherMode() && _teacherPromptsAllowed() && _get(KEY_BANNER_HIDDEN) !== '1' &&
                _screen() === 'overworld';
     el.classList.toggle('visible', show);
   }
 
-  /* ── Home-screen pieces: For Teachers, class code box, My login ────────── */
+  /* ── Home corner links: Teachers, Join a class ─────────────────────────
+     (Log in / name and Dashboard are js/home.js's.) Teachers: never on a
+     student device or for anyone signed in. Join a class: guests only. */
   function _refreshHome() {
     var forTeachers = document.getElementById('btn-for-teachers');
-    var codeBox     = document.getElementById('home-class-code');
-    var myLogin     = document.getElementById('btn-my-login');
-    var u = _user(), student = !!(u && u.isAnonymous === false && !_isTeacher());
+    var joinClass   = document.getElementById('btn-join-class');
     if (forTeachers) forTeachers.style.display = _teacherPromptsAllowed() ? '' : 'none';
-    if (codeBox)     codeBox.style.display = (!_signedIn()) ? '' : 'none';
-    if (myLogin)     myLogin.style.display = student ? '' : 'none';
+    if (joinClass)   joinClass.style.display = _signedIn() ? 'none' : '';
   }
 
   function refresh() { _refreshBanner(); _refreshHome(); }
@@ -183,7 +182,7 @@
   function showTeacherCard(reason) {
     var bd = document.getElementById('teacher-card-backdrop');
     if (!bd) return;
-    // Only the after-first-win showing is once-only; the For Teachers button
+    // Only the after-first-win showing is once-only; the Teachers link
     // can open the same card any time without using it up.
     if (reason === 'first-win') _set(KEY_CARD_SHOWN, '1');
     _funnel('teacher_card_shown', { src: src(), step: reason || '' });
@@ -243,6 +242,8 @@
           '<div class="tcl-linkrow"><input class="tcl-link" id="tcl-link" readonly value="' + _esc(link) + '">' +
             '<button class="btn-snes" id="tcl-copy">COPY</button></div>' +
           '<div class="tcl-code">Class code: <strong>' + _esc(c.code) + '</strong></div>' +
+          '<div class="tcl-nolink">No link? Students go to <strong>' + _esc(siteLabel(location.origin, location.pathname)) +
+            '</strong>, click <strong>Join a class</strong> in the top-right corner and enter the code.</div>' +
           '<ol class="tcl-steps">' +
             '<li>Share the link (or show the QR / code).</li>' +
             '<li>Students pick a name — no emails.</li>' +
@@ -354,17 +355,11 @@
     _on('tcl-close', hideClassLink);
     _on('tpj-close', hideProjector);
     _on('lcf-ok', hideLoginCard);
-    _on('btn-my-login', showMyLogin);
+    _on('btn-join-class', function () {
+      if (root.SogAccountUI && typeof root.SogAccountUI.openJoinClass === 'function') root.SogAccountUI.openJoinClass();
+    });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { hideProjector(); }
-    });
-    var form = document.getElementById('home-class-code');
-    if (form) form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var input = document.getElementById('home-class-code-input');
-      var code = (input && input.value || '').trim().toUpperCase();
-      if (!code) { if (input) input.focus(); return; }
-      if (root.SogAccountUI && typeof root.SogAccountUI.startJoin === 'function') root.SogAccountUI.startJoin(code);
     });
 
     // Keep everything in step with auth, teacher status and screen changes.

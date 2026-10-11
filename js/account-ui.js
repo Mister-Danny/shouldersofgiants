@@ -904,11 +904,13 @@ window.SogAccountUI = (function () {
     _byId('af-logout').addEventListener('click', _startLogout);   // reload keeps ?join= in the URL
   }
 
-  function _startJoinFlow(code) {
+  // onBroken: what to show for a code that isn't a live class (the typed-code
+  // popup re-asks; a link gets the "class not found" screen).
+  function _startJoinFlow(code, onBroken) {
     _pendingClassInfo = null;
-    _render('ONE MOMENT', '<p>Checking your class link…</p>', '');
+    _render('ONE MOMENT', '<p>Checking your class ' + (onBroken ? 'code' : 'link') + '…</p>', '');
     window.SogAccount.lookupClassCode(code, function (err, classInfo) {
-      if (err || !classInfo || classInfo.ungrouped) { _stepJoinBroken(); return; }
+      if (err || !classInfo || classInfo.ungrouped) { (onBroken || _stepJoinBroken)(); return; }
       var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
       if (user && !user.isAnonymous) { _stepJoinAlreadySignedIn(classInfo.label); return; }
       // From here on this device belongs to a student: no teacher banner,
@@ -983,17 +985,68 @@ window.SogAccountUI = (function () {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
-  /* Typed class code (the home screen's "Have a class code?" box): same flow
-     as a class link. */
-  function startJoin(code) {
+  /* ── Home corner links ─────────────────────────────────────────────────
+     "Log in" / <name>: guests get the chooser; a signed-in player gets their
+     name with My login (students) or Dashboard (teachers), and Log out. */
+  function openAccount() {
+    var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
+    if (!user || user.isAnonymous) { openFlow('chooser'); return; }
+    var isTeacher = window.TeacherDashboard && typeof window.TeacherDashboard.isTeacher === 'function' && window.TeacherDashboard.isTeacher();
+    var email = user.email || '', name = '';
+    if (email.slice(-12) === '@sog.invalid') name = email.slice(0, -12);
+    else if (isTeacher) { var d = window.TeacherDashboard.getTeacherDoc(); name = (d && d.displayName) || ''; }
+    _render(
+      'ACCOUNT',
+      '<p>Signed in' + (name ? ' as <strong>' + _escapeHtml(name) + '</strong>' : '') + '. Your progress is saved to your account.</p>',
+      (isTeacher
+        ? '<button class="btn-snes" id="af-acct-dash">DASHBOARD</button>'
+        : '<button class="btn-snes" id="af-acct-login">MY LOGIN</button>') +
+      '<button class="btn-snes btn-snes-remove" id="af-acct-logout">LOG OUT</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-cancel">CLOSE</button>'
+    );
+    var dash = _byId('af-acct-dash'), login = _byId('af-acct-login');
+    if (dash) dash.addEventListener('click', function () { _close(); window.TeacherDashboard.show(); });
+    if (login) login.addEventListener('click', function () { _close(); if (window.TeacherOnboard) window.TeacherOnboard.showMyLogin(); });
+    _byId('af-acct-logout').addEventListener('click', _startLogout);
+    _byId('af-cancel').addEventListener('click', _close);
+  }
+
+  /* "Join a class": the class-code popup for students who can't click their
+     teacher's link. Same join flow as a link from there on. */
+  function openJoinClass(errorMsg) {
+    _render(
+      'JOIN A CLASS',
+      '<p>Type the class code your teacher gave you.</p>' +
+      '<input type="text" id="af-join-code" class="account-flow-input account-code-input" maxlength="12" ' +
+        'placeholder="CLASS CODE" autocomplete="off" spellcheck="false" autocapitalize="characters">' +
+      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : ''),
+      '<button class="btn-snes" id="af-join-go">JOIN</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-cancel">CANCEL</button>'
+    );
+    var input = _byId('af-join-code');
+    input.focus();
+    var go = function () {
+      var code = input.value.trim().toUpperCase();
+      if (!code) { openJoinClass('Enter your class code.'); return; }
+      startJoin(code, function () { openJoinClass('No class found for ' + code + '. Check the code with your teacher.'); });
+    };
+    _byId('af-join-go').addEventListener('click', go);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    _byId('af-cancel').addEventListener('click', _close);
+  }
+
+  /* Typed class code (the "Join a class" popup): same flow as a class link. */
+  function startJoin(code, onBroken) {
     var c = String(code || '').trim().toUpperCase();
-    if (!/^[A-Z0-9]{4,12}$/.test(c)) { _stepJoinBroken(); return; }
-    _startJoinFlow(c);
+    if (!/^[A-Z0-9]{4,12}$/.test(c)) { (onBroken || _stepJoinBroken)(); return; }
+    _startJoinFlow(c, onBroken);
   }
 
   return {
     openFlow: openFlow,
     openTeacherSignup: openTeacherSignup,
+    openAccount: openAccount,
+    openJoinClass: openJoinClass,
     startJoin: startJoin,
     connectGoogle: _connectGoogle,
     init:     init,

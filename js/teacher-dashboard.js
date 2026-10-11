@@ -436,7 +436,7 @@ window.TeacherDashboard = (function () {
           '<div class="login-card-row"><span>Class</span><strong>' + _escapeHtml(p.classCode || '—') +
             (labelByCode[p.classCode] ? ' · ' + _escapeHtml(labelByCode[p.classCode]) : '') + '</strong></div>' +
           '<div class="login-card-qr">' + (qr ? qr.svg(link, { title: 'Scan to log in' }) : '') + '</div>' +
-          '<div class="login-card-hint">Scan to log in, or type your name and passphrase.</div>' +
+          '<div class="login-card-hint">Scan to log in, or click Log in (top right) and type your name and passphrase.</div>' +
         '</div>';
       }).join('');
     var box = document.getElementById('login-cards-print');
