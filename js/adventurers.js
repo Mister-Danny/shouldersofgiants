@@ -35,60 +35,43 @@
       path: 'images/metaworld/character sprites/female/',
       prefix: 'adventurer-female-',
       walk: { down: 4, right: 8, up: 8 },        // 'left' mirrors 'right'; right = highest frame number
-      /* SIDE-WALK TUNING (overworld). Her original six side frames show only ONE
-         leg crossing: the near (lighter) leg leads in 01-03, 05, 06 and the far
-         leg in 04 alone, with no passing pose either side, and the head drifts
-         6 source px forward over 01->04 then snaps back. Three knobs, all keyed
-         by FRAME NUMBER so new in-between frames slot in without renumbering:
-           walkFrames   play order. Add passing frames here (e.g. 07 between 03
-                        and 04, 08 between 04 and 05 → [1,2,3,7,4,8,5,6]) and
-                        raise walk.right to the highest frame number.
-           walkFrameDx  source-px shift that pins the head to the frame centre
-                        (x = 80 of 160), so the body glides instead of lurching
-                        and the mirrored left walk lines up with the right.
-             walkFrameWeight  share of the stride each frame holds (default 1).
-           walkFrameDy  source-px vertical shift (bob / levelling), like Dx.
-         All four are read through frameAt / frameShift below, by the overworld
-         and the home screen alike. */
-      /* 07 and 08 are the passing in-betweens, keyed from generated art (raw
-         sources live in reference/sprite-sources/female/, git-ignored):
-           07 (between 03 and 04): far leg lifted, near leg planted. A composite —
-              legs from the first 07 render, upper body from 08, joined at the hips.
-           08 (between 04 and 05): near leg lifted and passing, far leg planted.
-         Both had a second arm hanging at the hip that 03-05 don't draw; it is
-         painted out with 04's backpack side, and 08's near knee (rendered almost
-         white) is toned to the shin colour. Each is scaled to the 159 px figure
-         height, colour-matched to 03-05, and pinned like the others.
-         Round 2: every walk, standing, idle and map frame had a light-grey
-         keying rim (and a grey wedge between the legs) that 07/08 and the male
-         don't; it is cleared from the OUTER edge only (enclosed holes such as
-         the compass face are untouched). 07/08 then had their luminance matched
-         to 01-06 (they ran 6-9% darker at display size), and 07's feathered hip
-         seam got a solid hem. */
-      /* WALK SMOOTHING, round 2 (all no-new-art):
-         right  Her five near-leg frames (05 06 01 02 03) are one leg pose with
-                the arm swinging; the far step is 04 alone, between the passing
-                frames 07 and 08. At equal times the legs crossed at 3/8 and 5/8
-                of the cycle — a limp. 04 now holds as long as the five near-leg
-                frames together (3 × 0.6), so each step is exactly half the cycle
-                and the passing frames sit half a cycle apart.
-         down   Was 01 (right foot fwd) → 02 (left fwd) → 03 (right lifted) → 04
-                (feet together): the left step had no passing frame at all. Now
-                01 → 04 → 02 → 03: contact, pass, contact, pass.
-         up     Was R R L N N N L R (two left lifts three frames apart). Now the
-                lift peaks (08 right, 03 left) are four frames apart, each with
-                its smaller lift beside it: 01 06 07 03 04 05 02 08.
-         Dx pins hold the hat still in up/down too (measured, source px).
-         walkFrameDy (source px, negative = up; applied after the mirror like
-         Dx) gives the side walk a 1 px bob on its passing frames 07/08, and
-         levels down-04, which is drawn ~3 source px shorter than its
-         neighbours. The art already bobs on up-03/08, so up gets none. */
-      walkFrames:      { right: [1, 2, 3, 7, 4, 8, 5, 6], up: [1, 6, 7, 3, 4, 5, 2, 8], down: [1, 4, 2, 3] },
-      walkFrameDx:     { right: { 1: 1.8, 2: -1.2, 3: -4.3, 4: -4.7, 5: -4.4, 6: -3.5, 7: -4.4, 8: -4.0 },
-                         up:    { 4: -1, 5: -2, 6: -1, 7: -0.5 },
+      /* WALK TUNING (overworld + home screen). Four knobs per sequence, keyed
+         by FRAME NUMBER, read through frameAt / frameShift below:
+           walkFrames       play order (default 1..n; raise walk.<seq> to the
+                            highest frame number when adding frames)
+           walkFrameWeight  share of the cycle each frame holds (default 1)
+           walkFrameDx/Dy   source-px registration shift (head pin / bob),
+                            applied after the mirror so left matches right.
+         SIDE (right-01..08, 'left' mirrors): rebuilt from the 4×2 Gemini sheet
+         reference/sprite-sources/female/female-side-sheet.png (git-ignored).
+         Gemini draws the lighter NEAR leg in front in every pose, so only its
+         top row is used, as one step (contact, down, passing, up); the other
+         step is the same four poses with the legs' shading swapped (skin and
+         boots), the swinging leg redrawn in front where it crosses (the near
+         leg always on top), the far fist hidden and the near arm swung forward.
+         Built at the sheet's native 160×160 pixel grid on one shared 40-colour
+         palette, scaled ×2.04 to the 159 px figure, hat pinned at x = 82.
+         Order in the files = play order:
+           01 contact   02 down   03 passing   04 up (swapped)
+           05 contact (swapped)  06 down (swapped)  07 passing (swapped)  08 up
+         The sheet's 'up' (04/08) has the forward leg drawn light, so the
+         swapped copy plays FIRST (after 03, whose dark leg is swinging forward)
+         and the original closes the cycle — that keeps each leg moving one way.
+         04/08 nearly repeat 01/05, so they hold 0.75 of a share and the down/
+         passing frames 1.25. The previous side frames and their tuning are in
+         reference/sprite-rollback/female-side-ee23c4c/.
+         DOWN  01 → 04 → 02 → 03: contact, pass, contact, pass (the drawn order
+               left the left step with no passing frame); 04, drawn ~3 source
+               px short, is lifted to level it.
+         UP    01 06 07 03 04 05 02 08: lift peaks (08 right, 03 left) four
+               frames apart. The art already bobs on 03/08.
+         Every old-style frame had a light keying rim, cleared from the OUTER
+         edge only (enclosed holes such as the compass face are untouched). */
+      walkFrames:      { up: [1, 6, 7, 3, 4, 5, 2, 8], down: [1, 4, 2, 3] },
+      walkFrameDx:     { up:    { 4: -1, 5: -2, 6: -1, 7: -0.5 },
                          down:  { 2: 0.5, 3: -1, 4: 1.25 } },
-      walkFrameDy:     { right: { 7: -1, 8: -1 }, down: { 4: -1.74 } },
-      walkFrameWeight: { right: { 1: 0.6, 2: 0.6, 3: 0.6, 5: 0.6, 6: 0.6, 4: 3 } },
+      walkFrameDy:     { down: { 4: -1.74 } },
+      walkFrameWeight: { right: { 1: 0.75, 2: 1.25, 3: 1.25, 4: 0.75, 5: 0.75, 6: 1.25, 7: 1.25, 8: 0.75 } },
       frameSize: 160,                            // source px of every sprite frame
       idleFrames: 6,                             // preloaded only (no player yet)
       mapIdle: { seq: 'map', frames: 9 },        // 1s/frame reading-the-map loop
@@ -97,8 +80,9 @@
       /* Rest pose after walking SIDEWAYS (mirrored for left), so she plants her
          feet instead of turning to face the camera. Keyed from generated art
          (raw in reference/sprite-sources/female/), scaled to the walk frames'
-         159 px figure and colour-matched to 03-05. standingSideDx pins its head
-         to the frame centre, where every pinned walk frame's head already is. */
+         159 px figure and colour-matched to the old 03-05. standingSideDx pins
+         its hat at x = 82, where the side walk frames' hats are. It is still in
+         the OLD (pre-sheet) style. */
       standingSide:   'adventurer-female-standing-right.png',
       standingSideDx: -0.4,
       extraFrames: [],
