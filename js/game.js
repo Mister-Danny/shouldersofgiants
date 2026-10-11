@@ -2151,6 +2151,11 @@
         typeof window.SogAccount.checkpointSave === 'function') {
       window.SogAccount.checkpointSave();
     }
+    // Teacher onboarding: the first win in teacher mode queues the one-time
+    // "Want your class to play?" card (shown once the map is calm again).
+    if (result.outcome === 'player' && window.TeacherOnboard && typeof window.TeacherOnboard.onBattleWin === 'function') {
+      try { window.TeacherOnboard.onBattleWin(); } catch (e) {}
+    }
 
     /* AI win-rate instrumentation (Stage A): log every completed ADVENTURE battle
        (scriptHook set) — boss, tier (serf/giant), result, turn count, per-loc +

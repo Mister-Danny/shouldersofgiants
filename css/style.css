@@ -13610,3 +13610,236 @@ body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract 
   max-width: 100%;
   box-sizing: border-box;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Teacher & student onboarding (js/teacher-onboard.js)
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Home-screen onboarding row: under the account button, State 1 only. */
+.home-onboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.home-class-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 14px;
+  color: var(--text-white);
+  background: rgba(0, 0, 14, 0.45);
+  padding: 6px 10px;
+  border: 2px solid var(--border-mid);
+}
+.home-class-code input {
+  width: 96px;
+  padding: 6px 8px;
+  font-family: 'Source Sans 3', Arial, Helvetica, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: var(--bg-dialog);
+  color: var(--snes-yellow);
+  border: 2px solid var(--border-mid);
+  outline: none;
+}
+.home-class-code input:focus { border-color: var(--snes-yellow); }
+.home-class-code .btn-snes { font-size: 11px; padding: 6px 12px; }
+.btn-for-teachers { opacity: 0.85; }
+
+/* Slim teacher banner across the top of the stage. */
+.teacher-banner {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -110%);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 10px 7px 18px;
+  background: rgba(10, 12, 40, 0.92);
+  border: 2px solid var(--snes-yellow);
+  border-top: none;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 15px;
+  color: var(--text-white);
+  white-space: nowrap;
+  transition: transform 0.25s ease;
+  pointer-events: none;
+}
+.teacher-banner.visible { transform: translate(-50%, 0); pointer-events: auto; }
+.teacher-banner-go {
+  background: var(--snes-yellow);
+  color: #10102a;
+  border: none;
+  padding: 5px 12px;
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+}
+.teacher-banner-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.teacher-banner-close:hover { color: var(--text-white); }
+
+.teacher-card .teacher-card-big { font-size: 20px; color: var(--snes-yellow); margin-bottom: 6px; }
+
+/* Account-flow additions. */
+.account-adult-row { margin: 4px 0 12px; font-size: 14px; }
+.account-google-btn { display: block; width: 100%; margin: 4px 0; }
+.account-flow-steps { margin: 8px 0 10px 20px; padding: 0; line-height: 1.5; }
+.account-join-who { font-size: 17px; margin-bottom: 4px; }
+.account-join-who strong { color: var(--snes-yellow); }
+.account-flow-sub { font-size: 13px; color: var(--text-dim); }
+
+/* Class-link screen (after signup, and LINK & QR in the dashboard). */
+.teacher-classlink { background: rgba(0, 0, 14, 0.6); z-index: 1200; }
+.tcl-modal {
+  width: 82%;
+  max-height: 88%;
+  box-sizing: border-box;
+  padding: 20px 28px 22px;
+  background: var(--bg-dialog);
+  border: 3px solid var(--border-bright);
+  box-shadow: 0 0 0 3px var(--border-dark), 0 0 0 6px var(--border-mid), 0 0 0 7px var(--border-dark);
+  color: var(--text-white);
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.tcl-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--border-mid); padding-bottom: 12px; }
+.tcl-title { font-family: var(--font); font-size: 22px; color: var(--snes-yellow); }
+.tcl-header .btn-snes { font-size: 11px; padding: 8px 14px; }
+.tcl-loading { font-size: 16px; padding: 30px 0; text-align: center; }
+.tcl-grid { display: flex; gap: 28px; align-items: flex-start; }
+.tcl-left { flex: 1; min-width: 0; }
+.tcl-right { flex-shrink: 0; }
+.tcl-qr { width: 250px; height: 250px; background: #fff; padding: 6px; box-sizing: border-box; }
+.tcl-qr svg { width: 100%; height: 100%; display: block; }
+.tcl-label { display: block; font-size: 13px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin: 10px 0 4px; }
+.tcl-linkrow { display: flex; gap: 8px; }
+.tcl-link {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  font-size: 16px;
+  background: #0a0c22;
+  color: var(--text-white);
+  border: 2px solid var(--snes-yellow);
+}
+.tcl-linkrow .btn-snes { font-size: 13px; padding: 8px 18px; }
+.tcl-code { margin-top: 10px; font-size: 18px; }
+.tcl-code strong { font-family: 'Source Sans 3', Arial, Helvetica, sans-serif; font-weight: 700; color: var(--snes-yellow); letter-spacing: 0.14em; font-size: 24px; }
+.tcl-steps { margin: 12px 0 4px 22px; padding: 0; font-size: 16px; line-height: 1.6; }
+.tcl-fields { display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; }
+.tcl-fields .tcl-label { grid-row: 1; }
+.tcl-input { margin: 0; }
+.tcl-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.tcl-actions .btn-snes { font-size: 13px; padding: 10px 18px; }
+
+/* Projector view: fills the stage (and the screen, when the browser allows). */
+.teacher-projector {
+  position: absolute;
+  inset: 0;
+  z-index: 2000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6%;
+  background: #ffffff;
+  color: #111;
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+}
+.teacher-projector.visible { display: flex; }
+.teacher-projector:fullscreen { width: 100vw; height: 100vh; }
+.tpj-qr { height: 78%; aspect-ratio: 1 / 1; }
+.tpj-qr svg { width: 100%; height: 100%; display: block; }
+.tpj-side { display: flex; flex-direction: column; gap: 10px; }
+.tpj-line { font-size: 30px; }
+.tpj-line strong { font-weight: 700; }
+.tpj-small { font-size: 22px; color: #555; }
+/* Plain, unambiguous glyphs for a code read off a projector (the pixel font's
+   4 reads as a Y). */
+.tpj-code { font-family: 'Source Sans 3', Arial, Helvetica, sans-serif; font-weight: 700; font-size: 110px; letter-spacing: 0.1em; color: #111; }
+.teacher-projector-close {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  background: none;
+  border: 2px solid #999;
+  color: #555;
+  font-size: 26px;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+}
+
+/* Student login card: floats over the game, never blocks it. */
+.login-card-float {
+  position: absolute;
+  right: 20px;
+  bottom: 140px;
+  z-index: 1100;
+  width: 330px;
+  box-sizing: border-box;
+  padding: 14px 18px 16px;
+  background: var(--bg-dialog);
+  border: 3px solid var(--snes-yellow);
+  box-shadow: 0 0 0 3px var(--border-dark), 0 8px 24px rgba(0, 0, 0, 0.5);
+  color: var(--text-white);
+  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
+  display: none;
+}
+.login-card-float.visible { display: block; }
+.lcf-title { font-family: var(--font); color: var(--snes-yellow); font-size: 15px; margin-bottom: 10px; }
+.lcf-row { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; margin: 4px 0; }
+.lcf-row span { color: var(--text-dim); }
+.lcf-row strong { font-size: 16px; letter-spacing: 0.02em; word-break: break-all; text-align: right; }
+.lcf-hint { font-size: 12px; color: var(--text-dim); margin: 10px 0; line-height: 1.4; }
+.login-card-float .btn-snes { font-size: 12px; padding: 7px 16px; }
+
+/* Printable login cards (dashboard → PRINT LOGIN CARDS). The container lives
+   outside the stage; only it prints while body.printing-login-cards is set. */
+#login-cards-print { display: none; }
+@media print {
+  body.printing-login-cards * { visibility: hidden !important; }
+  body.printing-login-cards #login-cards-print,
+  body.printing-login-cards #login-cards-print * { visibility: visible !important; }
+  body.printing-login-cards #login-cards-print {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 10mm;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 8mm;
+    box-sizing: border-box;
+    background: #fff;
+  }
+  .login-card {
+    border: 1.5px dashed #444;
+    padding: 6mm;
+    break-inside: avoid;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #000;
+  }
+  .login-card-title { font-weight: 700; font-size: 13pt; margin-bottom: 3mm; }
+  .login-card-row { display: flex; justify-content: space-between; font-size: 11pt; margin: 1.5mm 0; }
+  .login-card-row strong { font-family: 'Courier New', monospace; font-size: 12pt; }
+  .login-card-qr { width: 34mm; height: 34mm; margin: 3mm auto 1mm; }
+  .login-card-qr svg { width: 100%; height: 100%; }
+  .login-card-hint { font-size: 8.5pt; text-align: center; color: #333; }
+}

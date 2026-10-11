@@ -228,6 +228,21 @@ window.SogAccount = (function () {
     return /^[A-Z0-9]{4,12}$/.test(code) ? code : '';
   }
 
+  /* ── Login-card QR (#login=username.passphrase) ─────────────────────────
+     The printable login cards carry a QR that pre-fills the student's login.
+     It lives in the URL FRAGMENT, which browsers never send to a server (so it
+     can't land in GitHub Pages' logs), and the boot code wipes it from the
+     address bar and history as soon as it's read. Usernames and passphrases
+     are both [a-z0-9] only (see _formatUsername / generatePassphrase), so '.'
+     is an unambiguous separator. */
+  function parseLoginFragment(hash) {
+    var m = /(?:^|[#&])login=([a-z0-9]{3,60})\.([a-z0-9]{4,40})(?:&|$)/i.exec(String(hash || ''));
+    return m ? { username: m[1].toLowerCase(), passphrase: m[2].toLowerCase() } : null;
+  }
+  function loginFragmentFor(username, passphrase) {
+    return '#login=' + String(username || '').toLowerCase() + '.' + String(passphrase || '').toLowerCase();
+  }
+
   /* ── Class code lookup (student signup step 1-2) ─────────────────────────
      Trims + uppercases before lookup. Blank => ungrouped play. This is the
      pre-validation step AUTH_SPEC.md §4 calls out explicitly: it runs BEFORE
@@ -245,7 +260,10 @@ window.SogAccount = (function () {
         return;
       }
       var data = snap.data();
-      cb(null, { ungrouped: false, code: code, label: data.label || code, ownerUid: data.ownerUid });
+      // teacherName: written on classes made since open signup ("Joining
+      // Ms Rivera's class"); older classes have only their label.
+      cb(null, { ungrouped: false, code: code, label: data.label || code, ownerUid: data.ownerUid,
+                 teacherName: data.teacherName || '' });
     }).catch(function (err) {
       console.error('[Account] Class code lookup failed', err);
       cb(err, null);
@@ -357,6 +375,24 @@ window.SogAccount = (function () {
         console.error('[Account] /players/{uid} write failed', writeErr);
         cb(writeErr, creds);
       });
+    });
+  }
+
+  /* ── "My login" (students) ──────────────────────────────────────────────
+     The passphrase card no longer blocks signup, so a student can call their
+     login back up any time: it's read from their own /players doc, the same
+     copy their teacher's roster shows. cb(err, { username, passphrase }) —
+     passphrase is '' for accounts that predate passphrase storage. */
+  function getMyLogin(cb) {
+    var user = firebase.auth().currentUser;
+    if (!user || user.isAnonymous) { var e = new Error('Not signed in.'); e.code = 'not-signed-in'; cb(e, null); return; }
+    var fromEmail = _usernameFromEmail(user.email);
+    _withTimeout(_db().collection('players').doc(user.uid).get(), WRITE_TIMEOUT_MS).then(function (snap) {
+      var d = snap.exists ? snap.data() : {};
+      cb(null, { username: d.username || fromEmail || '', passphrase: d.passphrase || '', classCode: d.classCode || '' });
+    }).catch(function (err) {
+      if (fromEmail) { cb(null, { username: fromEmail, passphrase: '', classCode: '' }); return; }
+      cb(err, null);
     });
   }
 
@@ -629,7 +665,9 @@ window.SogAccount = (function () {
   }
 
   function _teacherGoogleResult(user, existing) {
-    return { uid: user.uid, email: user.email || '', displayName: user.displayName || user.email || 'Teacher', existing: !!existing };
+    // displayName stays '' when there's no real name (an email signup): the
+    // UI shows a generic greeting and asks for a name on the class screen.
+    return { uid: user.uid, email: user.email || '', displayName: user.displayName || '', existing: !!existing };
   }
 
   // Signed in as a Google user; decide returning-vs-new and finish the job.
@@ -663,7 +701,7 @@ window.SogAccount = (function () {
       // first screen: create the teacher account straight away. A code the
       // create rule still rejects comes back as invite-invalid with the
       // session kept, and the UI drops to the invite step.
-      if (inviteCode) { _createTeacherDocFor(user, isNew, inviteCode, cb); return; }
+      if (inviteCode) { _signup.provider = 'google'; _createTeacherDocFor(user, isNew, inviteCode, cb); return; }
 
       // Came through Log In (no code yet): stop and ask for it. This step
       // also offers "I already have an account" (startLinkToExistingAccount)
@@ -683,30 +721,57 @@ window.SogAccount = (function () {
   // /players/{uid} doc, for a user already signed in via Google: straight
   // through from Teacher Sign Up, or from the invite step
   // (finishTeacherGoogleSignup).
+  // Signup context for open teacher signup: the ?teacher link's src tag, and
+  // the guest progress captured before an in-place upgrade (see
+  // signUpTeacherOpen / signUpTeacherGoogleOpen). Carried into every teacher
+  // doc written from here on in this page session.
+  var _signup = { src: '', progress: null, provider: '' };
+  function setSignupSource(src) { _signup.src = String(src || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40); }
+
+  function _bestName(user) {
+    if (user.displayName) return user.displayName;
+    var p = (user.providerData || []).filter(function (d) { return d && d.displayName; })[0];
+    return p ? p.displayName : '';
+  }
+
   function _createTeacherDocFor(user, isNew, inviteCode, cb) {
+    var name = _bestName(user);
     var teacherData = {
-      email:        user.email || '',
-      inviteCode:   inviteCode,
-      displayName:  user.displayName || user.email || 'Teacher',
-      authProvider: 'google',   // see passwordLost in _finishTeacherGoogle
-      createdAt:    firebase.firestore.FieldValue.serverTimestamp()
+      email:          user.email || '',
+      inviteCode:     inviteCode || '',
+      // Real name only (Google profile, or typed later on the class screen) —
+      // never the email, which must not appear in game UI on a projector.
+      displayName:    name,
+      authProvider:   _signup.provider || 'google',   // see passwordLost in _finishTeacherGoogle
+      adultConfirmed: true,                            // the signup checkbox ("I'm a teacher or an adult (18+)")
+      createdAt:      firebase.firestore.FieldValue.serverTimestamp()
     };
+    if (_signup.src) teacherData.src = _signup.src;
     _withTimeout(_db().collection('teachers').doc(user.uid).set(teacherData), WRITE_TIMEOUT_MS).then(function () {
       _pendingGoogleSignup = null;
       // Same ungrouped /players doc the email signup bootstraps, so a
-      // teacher's own adventure progress round-trips across devices.
+      // teacher's own adventure progress round-trips across devices. An
+      // in-place upgrade carries the guest's progress (captured before the
+      // link); otherwise the doc starts clean as before. An existing doc's
+      // progress is never overwritten with an empty one.
+      var carried = _signup.progress;
       var playerData = {
-        username:   teacherData.displayName,
+        username:   name || 'Teacher',
         classCode:  '',
         teacherUid: '',
-        progress:   {},
         createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
         lastActive: firebase.firestore.FieldValue.serverTimestamp()
       };
-      _withTimeout(_db().collection('players').doc(user.uid).set(playerData, { merge: true }), WRITE_TIMEOUT_MS)
-        .then(function () { cb(null, _teacherGoogleResult(user, false)); })
+      if (carried && Object.keys(carried).length) playerData.progress = carried;
+      var ref = _db().collection('players').doc(user.uid);
+      _withTimeout(ref.get().then(function (snap) {
+        if (!snap.exists && !playerData.progress) playerData.progress = {};
+        if (snap.exists) { delete playerData.createdAt; delete playerData.username; delete playerData.classCode; delete playerData.teacherUid; }
+        return ref.set(playerData, { merge: true });
+      }), WRITE_TIMEOUT_MS)
+        .then(function () { _signup.progress = null; cb(null, _teacherGoogleResult(user, false)); })
         .catch(function (playerWriteErr) {
-          console.warn('[Account] /players/{uid} bootstrap failed for Google teacher — will self-heal on next checkpoint', playerWriteErr);
+          console.warn('[Account] /players/{uid} bootstrap failed for teacher — will self-heal on next checkpoint', playerWriteErr);
           cb(null, _teacherGoogleResult(user, false));
         });
     }).catch(function (writeErr) {
@@ -714,6 +779,154 @@ window.SogAccount = (function () {
       // A bad invite code is the likely cause and it is worth retrying, so keep
       // the session (and _pendingGoogleSignup) alive and let the UI ask again.
       cb(_friendlyTeacherSignupError(writeErr), _teacherGoogleResult(user, false));
+    });
+  }
+
+  /* ── Open teacher signup (no invite code) ───────────────────────────────
+     One step: Google, or email + password, plus the "teacher or adult (18+)"
+     checkbox the UI requires. The guest account is UPGRADED IN PLACE (same
+     uid), exactly like student signup, so whatever the teacher played before
+     signing up carries straight over:
+       email   linkWithCredential(EmailAuthProvider) on the anonymous user
+       Google  linkWithPopup on the anonymous user
+     then /teachers/{uid} (inviteCode '') and the ungrouped /players/{uid}
+     with the captured progress. Edge cases:
+       - The Google account is already a user here (a returning teacher):
+         Firebase refuses the link (credential-already-in-use), so sign in to
+         that account instead — their own progress is restored and the guest's
+         is left behind, as with any login.
+       - Google's email already has a password account: the existing "enter
+         your password once to connect Google" flow.
+       - The deployed rules still demand an invite code (site deployed before
+         the rules): the teacher write comes back 'invite-required' with the
+         account signed in, and the UI asks for a code to finish
+         (finishTeacherSetup). Nothing is lost or orphaned either way. */
+  function _captureGuestProgress(user) {
+    if (!window.SaveState) return null;
+    if (user && !_localProgressBelongsToCurrentSession(user.uid)) {
+      console.warn('[Account] localStorage progress belongs to a different account (uid mismatch) — new teacher starts clean.');
+      return null;
+    }
+    try { return window.SaveState.getSnapshot() || null; } catch (e) { return null; }
+  }
+
+  function _alreadySignedInError() {
+    var e = new Error('Already signed in to an account on this device.');
+    e.code = 'already-signed-in';
+    return e;
+  }
+
+  // After the auth step of an open signup: write the teacher docs. The token
+  // is refreshed first so the rules see the linked provider, not the
+  // 'anonymous' sign-in the session started with.
+  function _afterTeacherAuth(user, cb) {
+    if (window.SogAuth && typeof window.SogAuth.refresh === 'function') window.SogAuth.refresh();
+    _stampProgressOwner(user.uid);
+    var go = function () {
+      _createTeacherDocFor(user, true, '', function (err, result) {
+        if (err && err.code === 'invite-invalid') {
+          var need = new Error('This site still needs an invite code to finish teacher sign-up.');
+          need.code = 'invite-required';
+          cb(need, result);
+          return;
+        }
+        if (!err && result) result.created = true;
+        cb(err, result);
+      });
+    };
+    user.getIdToken(true).then(go, go);
+  }
+
+  /**
+   * @param {object} opts  { email, password, src }
+   * @param {function(err, result)} cb  result = { uid, email, displayName, created:true }
+   */
+  function signUpTeacherOpen(opts, cb) {
+    var email = (opts.email || '').trim(), password = opts.password || '';
+    if (opts.src != null) setSignupSource(opts.src);
+    var user = firebase.auth().currentUser;
+    if (user && !user.isAnonymous) { cb(_alreadySignedInError(), null); return; }
+    _signup.provider = 'password';
+    _signup.progress = _captureGuestProgress(user);
+    var step = user
+      ? user.linkWithCredential(firebase.auth.EmailAuthProvider.credential(email, password)).then(function () { return user; })
+      // Local-only boot (the anonymous sign-in never happened): a fresh account.
+      : firebase.auth().createUserWithEmailAndPassword(email, password).then(function (c) { return c.user; });
+    _withTimeout(step, LINK_TIMEOUT_MS).then(function (u) {
+      _afterTeacherAuth(u, cb);
+    }).catch(function (err) {
+      console.error('[Account] Open teacher signup (email) failed', err);
+      cb(err, null);
+    });
+  }
+
+  /**
+   * Must run straight from a click (popup).
+   * @param {object} opts  { src }
+   * @param {function(err, result)} cb  result = { uid, email, displayName, created } | returning teacher { existing:true }
+   */
+  function signUpTeacherGoogleOpen(opts, cb) {
+    if (opts && opts.src != null) setSignupSource(opts.src);
+    var user = firebase.auth().currentUser;
+    if (user && !user.isAnonymous) { cb(_alreadySignedInError(), null); return; }
+    _signup.provider = 'google';
+    _signup.progress = _captureGuestProgress(user);
+
+    var viaExisting = function (userCred) {
+      // A Google account that's already a user here: returning teacher, or a
+      // Google user that never finished teacher setup (create it now).
+      _finishTeacherGoogle(userCred, '', function (err, result) {
+        if (err && err.code === 'invite-required') { _afterTeacherAuth(userCred.user, cb); return; }
+        cb(err, result);
+      });
+    };
+    var cancelled = function () { var c = new Error('Sign-in cancelled.'); c.code = 'popup-cancelled'; return c; };
+
+    if (!user) {
+      firebase.auth().signInWithPopup(_googleProvider()).then(viaExisting).catch(function (err) {
+        if (_popupBlocked(err)) { cb(_popupBlockedError(err), null); return; }
+        if (err && err.code === 'auth/popup-closed-by-user') { cb(cancelled(), null); return; }
+        if (err && err.code === 'auth/account-exists-with-different-credential') { _needsPasswordToLink(err, cb); return; }
+        cb(err, null);
+      });
+      return;
+    }
+
+    user.linkWithPopup(_googleProvider()).then(function (userCred) {
+      _afterTeacherAuth((userCred && userCred.user) || user, cb);
+    }).catch(function (err) {
+      var code = err && err.code;
+      if (_popupBlocked(err)) { cb(_popupBlockedError(err), null); return; }
+      if (code === 'auth/popup-closed-by-user') { cb(cancelled(), null); return; }
+      if (code === 'auth/credential-already-in-use' && err.credential) {
+        firebase.auth().signInWithCredential(err.credential).then(viaExisting).catch(function (e2) {
+          if (e2 && e2.code === 'auth/account-exists-with-different-credential') { _needsPasswordToLink(e2, cb); return; }
+          cb(e2, null);
+        });
+        return;
+      }
+      if (code === 'auth/email-already-in-use' || code === 'auth/account-exists-with-different-credential') {
+        if (!err.email && err.customData && err.customData.email) err.email = err.customData.email;
+        _needsPasswordToLink(err, cb);
+        return;
+      }
+      console.error('[Account] Open teacher signup (Google) failed', err);
+      cb(err, null);
+    });
+  }
+
+  /**
+   * Finishes an open signup that stopped at 'invite-required' (older rules
+   * still deployed): the account is signed in, this writes the teacher doc
+   * with the code the teacher typed.
+   */
+  function finishTeacherSetup(inviteCode, cb) {
+    var user = firebase.auth().currentUser;
+    if (!user || user.isAnonymous) { cb(new Error('Signed out — start teacher sign-up again.'), null); return; }
+    _signup.provider = _hasProvider(user, 'password') && !_hasProvider(user, 'google.com') ? 'password' : 'google';
+    _createTeacherDocFor(user, false, (inviteCode || '').trim().toUpperCase(), function (err, result) {
+      if (!err && result) result.created = true;
+      cb(err, result);
     });
   }
 
@@ -725,13 +938,10 @@ window.SogAccount = (function () {
     var pending = _pendingGoogleSignup;
     var user = (pending && pending.user) || firebase.auth().currentUser;
     if (!user) { cb(new Error('Signed out — start the Google sign-in again.'), null); return; }
+    // Open signup: an empty code is fine. If the deployed rules still demand
+    // one, the write comes back invite-invalid and the UI asks for it.
     var code = (inviteCode || '').trim().toUpperCase();
-    if (!code) {
-      var err = new Error('An invite code is required.');
-      err.code = 'invite-required';
-      cb(err, _teacherGoogleResult(user, false));
-      return;
-    }
+    _signup.provider = 'google';
     _createTeacherDocFor(user, !!(pending && pending.isNew), code, cb);
   }
 
@@ -762,22 +972,32 @@ window.SogAccount = (function () {
    *   never signed in here before; ignored for returning teachers.
    * @param {function(err, result)} cb  result = { uid, email, displayName, existing }
    */
+  /* Google popup, never redirect. On github.io the redirect round trip goes
+     through <project>.firebaseapp.com in a third-party iframe, which Chrome
+     115+, Firefox 109+ and Safari 16.1+ partition — the result is lost and the
+     teacher comes back silently signed out (Firebase: "Best practices for using
+     signInWithRedirect on browsers that block third-party storage access").
+     A blocked popup is reported as 'popup-blocked' so the UI can say exactly
+     what to do (allow popups and retry, or use email + password) instead. */
+  function _popupBlocked(err) {
+    return !!(err && (err.code === 'auth/popup-blocked' ||
+      err.code === 'auth/operation-not-supported-in-this-environment' ||
+      err.code === 'auth/cancelled-popup-request' ||
+      err.code === 'auth/web-storage-unsupported'));
+  }
+  function _popupBlockedError(err) {
+    var e = new Error('The Google sign-in window was blocked.');
+    e.code = 'popup-blocked';
+    e.cause = err && err.code;
+    return e;
+  }
+
   function signInTeacherWithGoogle(inviteCode, cb) {
     var code = (inviteCode || '').trim().toUpperCase();
     firebase.auth().signInWithPopup(_googleProvider()).then(function (userCred) {
       _finishTeacherGoogle(userCred, code, cb);
     }).catch(function (err) {
-      var popupFailed = err && (err.code === 'auth/popup-blocked' ||
-        err.code === 'auth/operation-not-supported-in-this-environment' ||
-        err.code === 'auth/cancelled-popup-request');
-      if (popupFailed) {
-        try { sessionStorage.setItem(PENDING_INVITE_KEY, code); } catch (e) {}
-        firebase.auth().signInWithRedirect(_googleProvider()).catch(function (redirectErr) {
-          console.error('[Account] Google redirect sign-in failed', redirectErr);
-          cb(redirectErr, null);
-        });
-        return;   // page navigates away; completeTeacherGoogleRedirect picks it up
-      }
+      if (_popupBlocked(err)) { cb(_popupBlockedError(err), null); return; }
       if (err && err.code === 'auth/account-exists-with-different-credential') { _needsPasswordToLink(err, cb); return; }
       if (err && err.code === 'auth/popup-closed-by-user') {
         var cancelled = new Error('Sign-in cancelled.');
@@ -971,10 +1191,7 @@ window.SogAccount = (function () {
       cb(null, { email: passwordEmail, googleEmail: (g && g.email) || '', linked: true });
     }).catch(function (err) {
       var code = err && err.code;
-      if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment' || code === 'auth/cancelled-popup-request') {
-        user.linkWithRedirect(_googleProvider()).catch(function (redirectErr) { cb(redirectErr, null); });
-        return;   // completeTeacherGoogleRedirect() finishes it after the round trip
-      }
+      if (_popupBlocked(err)) { cb(_popupBlockedError(err), null); return; }   // no redirect — see _popupBlocked
       if (code === 'auth/popup-closed-by-user') {
         var cancelled = new Error('Cancelled.');
         cancelled.code = 'popup-cancelled';
@@ -1060,9 +1277,13 @@ window.SogAccount = (function () {
      dev panel's "Clear adventure progress" keep-list), signs out, and
      reloads so the page's normal boot sequence signs back in anonymously —
      the same guest bootstrap every fresh visitor gets. */
+  // The keep-list also holds the onboarding device markers: a shared
+  // Chromebook that's a student's stays a student's (no teacher banner/
+  // button/card for the next student either), and a teacher's stays in
+  // teacher mode, through logout.
   function _clearLocalProgressForNextStudent() {
     try {
-      var keep = /^(sog_dev_menu_visible|sog_music|sog_sfx|sog_volume|sog_muted|sog_master|sog_welcome_seen|sog_guest_notice_seen|sog_card_hover_info)/i;
+      var keep = /^(sog_dev_menu_visible|sog_music|sog_sfx|sog_volume|sog_muted|sog_master|sog_welcome_seen|sog_guest_notice_seen|sog_card_hover_info|sog_student_device|sog_teacher_mode|sog_teacher_src|sog_teacher_card_shown|sog_teacher_banner_dismissed)/i;
       var rm = [];
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
@@ -1087,7 +1308,14 @@ window.SogAccount = (function () {
     generateUsernameOptions: generateUsernameOptions,
     generatePassphrase: generatePassphrase,
     parseJoinCode:     parseJoinCode,
+    parseLoginFragment: parseLoginFragment,
+    loginFragmentFor:  loginFragmentFor,
     lookupClassCode:   lookupClassCode,
+    getMyLogin:        getMyLogin,
+    setSignupSource:   setSignupSource,
+    signUpTeacherOpen: signUpTeacherOpen,
+    signUpTeacherGoogleOpen: signUpTeacherGoogleOpen,
+    finishTeacherSetup: finishTeacherSetup,
     checkInviteCode:   checkInviteCode,
     signUpStudent:     signUpStudent,
     loginStudent:      loginStudent,

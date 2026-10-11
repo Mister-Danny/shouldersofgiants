@@ -33,6 +33,8 @@ var HomeFlow = (function () {
   /* ── Elements ──────────────────────────────────────────────── */
   var screenHomeEl, homeContentEl, adventureStageEl;
   var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback, btnAccount, btnTeacherDashboard;
+  var homeOnboardEl = null;
+  var _skipIntroOnce = false;   // teacher link: straight to the map, no intro video
   var advDevWarningEl, advDevProceedBtn, advDevGoBackBtn;
   var arcadiumLockedEl, arcadiumLockedClose;
 
@@ -210,6 +212,10 @@ var HomeFlow = (function () {
     btnFeedback          = document.getElementById('btn-home-feedback');
     btnAccount           = document.getElementById('btn-account');
     btnTeacherDashboard  = document.getElementById('btn-teacher-dashboard');
+    // Onboarding row (js/teacher-onboard.js decides what inside it shows):
+    // For Teachers, "Have a class code?", My login. Lives and fades with the
+    // account button — State 1 only.
+    homeOnboardEl        = document.getElementById('home-onboard');
     subtitleIntroEl      = document.getElementById('home-subtitle-intro');
     subtitlePathEl       = document.getElementById('home-subtitle-path');
     subtitleAdventurerEl = document.getElementById('home-subtitle-adventurer');
@@ -371,6 +377,8 @@ var HomeFlow = (function () {
       if (btnTeacherDashboard) btnTeacherDashboard.style.display = teacherDisplay;
       _refreshFeedbackButton();
     }
+    if (homeOnboardEl) homeOnboardEl.style.display = '';
+    if (window.TeacherOnboard && typeof window.TeacherOnboard.refresh === 'function') window.TeacherOnboard.refresh();
   }
 
   /* Feedback button: its rule (everyone on the home menu, except a guest on the
@@ -408,9 +416,10 @@ var HomeFlow = (function () {
     // Fade out intro subtitle + Ready + Learn buttons
     if (typeof gsap === 'undefined') { showPathChoice(); return; }
 
-    gsap.to([subtitleIntroEl, btnReady, btnLearn, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard], {
+    gsap.to([subtitleIntroEl, btnReady, btnLearn, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard, homeOnboardEl].filter(Boolean), {
       opacity: 0, duration: 0.3, ease: 'power2.out',
       onComplete: function () {
+        if (homeOnboardEl) { homeOnboardEl.style.display = 'none'; gsap.set(homeOnboardEl, { opacity: 1 }); }
         btnReady.style.display = 'none';
         btnLearn.style.display = 'none';
         btnAbout.style.display = 'none';
@@ -429,9 +438,10 @@ var HomeFlow = (function () {
      normal Adventure button uses, minus the State-2 menu hop. */
   function launchReadyFunnel() {
     if (typeof gsap === 'undefined') { enterAdventureStage(); return; }
-    gsap.to([subtitleIntroEl, btnReady, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard], {
+    gsap.to([subtitleIntroEl, btnReady, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard, homeOnboardEl].filter(Boolean), {
       opacity: 0, duration: 0.3, ease: 'power2.out',
       onComplete: function () {
+        if (homeOnboardEl) { homeOnboardEl.style.display = 'none'; gsap.set(homeOnboardEl, { opacity: 1 }); }
         btnReady.style.display = 'none';
         btnAbout.style.display = 'none';
         if (btnFeedback) btnFeedback.style.display = 'none';
@@ -743,7 +753,9 @@ var HomeFlow = (function () {
           if (btnAccount) btnAccount.style.display = '';
           if (btnTeacherDashboard) btnTeacherDashboard.style.display = _isTeacher() ? '' : 'none';
           subtitleIntroEl.classList.add('is-visible');
-          gsap.fromTo([btnReady, btnAccount, btnTeacherDashboard], { opacity: 0 }, { opacity: 1, duration: 0.4 });
+          if (homeOnboardEl) homeOnboardEl.style.display = '';
+          if (window.TeacherOnboard && typeof window.TeacherOnboard.refresh === 'function') window.TeacherOnboard.refresh();
+          gsap.fromTo([btnReady, btnAccount, btnTeacherDashboard, homeOnboardEl].filter(Boolean), { opacity: 0 }, { opacity: 1, duration: 0.4 });
           return;
         }
         // Returning visitor: restore the State-2 path-choice menu.
@@ -800,8 +812,9 @@ var HomeFlow = (function () {
     gsap.timeline()
       .to(doorEl, { width: DOOR_W, height: 6, duration: 0.25, ease: 'power2.out' })
       .to(doorEl, { width: DOOR_W, height: DOOR_H, duration: 0.25, ease: 'power2.out' })
-      // Phase B (1.5s): door just sits there
-      .to({}, { duration: 1.5 })
+      // Phase B (1.5s): door just sits there — a beat, not a wait, for a
+      // teacher arriving by link (quickStart skipIntro).
+      .to({}, { duration: _skipIntroOnce ? 0.2 : 1.5 })
       // Phase C: selected character walks toward door
       .call(function () { walkSelectedIntoDoor(selected, doorCenterX, doorCenterY); });
   }
@@ -909,12 +922,13 @@ var HomeFlow = (function () {
         // Fully black now. FIRST-EVER entry → play the Title Intro video once,
         // marking it seen. RETURNING entry → the sprite-through-door (this iris)
         // IS the transition; skip the video and go straight to the map.
-        if (!introSeen()) {
+        if (!introSeen() && !_skipIntroOnce) {
           try { localStorage.setItem(KEY_INTRO_SEEN, 'true'); } catch (e) {}
           playTitleIntro(function () {
             openIrisAndEnterOverworld(cxPct, cyPct, maxRadius);
           });
         } else {
+          if (_skipIntroOnce) { _skipIntroOnce = false; try { localStorage.setItem(KEY_INTRO_SEEN, 'true'); } catch (e) {} }
           openIrisAndEnterOverworld(cxPct, cyPct, maxRadius);
         }
       }
@@ -1033,6 +1047,28 @@ var HomeFlow = (function () {
     gsap.set(backBtn, { opacity: 0.8 });
   }
 
+  /* ── Quick start (onboarding) ──────────────────────────────────────────
+     Straight from the home screen to "Choose your adventurer", skipping "I'm
+     Ready" and the path menu: a teacher arriving by ?teacher=1 (who also skips
+     the intro video — opts.skipIntro), and a student who just picked their
+     name from a class link. No-op unless the home screen is showing. */
+  function quickStart(opts) {
+    opts = opts || {};
+    if (!screenHomeEl || !screenHomeEl.classList.contains('active')) return false;
+    if (adventureStageEl.classList.contains('active')) return true;
+    if (opts.skipIntro) _skipIntroOnce = true;
+    markVisited();
+    try { localStorage.setItem(KEY_ADV_WARNING, 'true'); } catch (e) {}
+    [btnReady, btnLearn, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard, homeOnboardEl, btnState2Back].forEach(function (b) {
+      if (b) b.style.display = 'none';
+    });
+    [btnArcadium, btnAdventureNew, btnVersus].forEach(function (b) { if (b) b.classList.remove('btn-visible'); });
+    subtitleIntroEl.classList.remove('is-visible');
+    subtitlePathEl.classList.remove('is-visible');
+    enterAdventureStage();
+    return true;
+  }
+
   /* ── Bootstrap ─────────────────────────────────────────────── */
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -1086,6 +1122,7 @@ var HomeFlow = (function () {
     setMusicVolume: setHomeMusicVolume, // bug 14: global widget volume slider
     getSnapshot:    getSnapshot,
     applySnapshot:  applySnapshot,
+    quickStart:     quickStart,
     // First-ever visit (the "I'm Ready" funnel)? Read by js/feedback.js's button rule.
     isFirstVisit:   function () { return !introSeen(); }
   };

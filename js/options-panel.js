@@ -281,6 +281,12 @@ SOG.OptionsPanel = (function () {
           _toggleRow('Card info on hover', 'opt-hover-info',
                      'Off: click a card in your hand to read it') +
         '</div>' +
+        // Signed-in students only (open() decides): their name + passphrase,
+        // any time — the signup card no longer blocks, so this is the way back to it.
+        '<div class="options-section" id="opt-account-section" style="display:none">' +
+          '<div class="options-section-title">Account</div>' +
+          '<button class="btn-snes" id="opt-my-login">My login</button>' +
+        '</div>' +
       '</div>' +
       // ── MUSIC BAR (Settings tab only) ──────────────────────────────────
       '<div class="options-music-bar" id="opt-music-bar">' +
@@ -333,6 +339,11 @@ SOG.OptionsPanel = (function () {
 
     // Back to Map (forfeit) — battle-context only (shown/hidden by open()).
     panel.querySelector('#opt-map-btn').addEventListener('click', function () { _openForfeitConfirm(); });
+
+    panel.querySelector('#opt-my-login').addEventListener('click', function () {
+      close();
+      if (window.TeacherOnboard && typeof window.TeacherOnboard.showMyLogin === 'function') window.TeacherOnboard.showMyLogin();
+    });
 
     // Sliders (Part C). Master scales BOTH music and SFX (SOG.sfx.setMaster
     // re-applies music via SOG.music.refresh); Music/SFX are independent axes.
@@ -390,6 +401,12 @@ SOG.OptionsPanel = (function () {
     if (closeX) closeX.style.display = inBattle ? 'none' : '';
     _syncFromStorage();
     _updateMusicUI();
+    var acct = document.getElementById('opt-account-section');
+    if (acct) {
+      var u = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
+      var teacher = window.TeacherDashboard && typeof window.TeacherDashboard.isTeacher === 'function' && window.TeacherDashboard.isTeacher();
+      acct.style.display = (u && u.isAnonymous === false && !teacher) ? '' : 'none';
+    }
     var backdrop = document.getElementById(BACKDROP_ID);
     if (!backdrop) return;
     void backdrop.offsetHeight;          // commit start state so the fade/scale runs

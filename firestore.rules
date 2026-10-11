@@ -45,15 +45,25 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Teachers: open signup. Any real (non-guest) account may create its own
+    // teacher doc with an empty inviteCode; a non-empty code must still be a
+    // live invite (that's how the original invite-code teachers keep their
+    // marker, and the game's dev tools are gated on it client-side). devTools
+    // is console-only: never set at create, never changed by the owner.
     match /teachers/{uid} {
       allow get:    if signedIn() && request.auth.uid == uid;
       allow list:   if false;
       allow create: if signedIn()
                     && request.auth.uid == uid
-                    && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.active == true;
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
+                    && request.resource.data.inviteCode is string
+                    && (request.resource.data.inviteCode == ''
+                        || get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.active == true)
+                    && !('devTools' in request.resource.data);
       allow update: if signedIn()
                     && request.auth.uid == uid
-                    && request.resource.data.inviteCode == resource.data.inviteCode;
+                    && request.resource.data.inviteCode == resource.data.inviteCode
+                    && request.resource.data.get('devTools', false) == resource.data.get('devTools', false);
       allow delete: if false;
     }
 

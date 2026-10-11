@@ -150,8 +150,36 @@
     try {
       firebase.initializeApp(firebaseConfig);
       db = firebase.firestore();
+      _maybeUseEmulators();
     } catch (e) {
       console.warn('[Analytics] Firebase init error:', e);
+    }
+  }
+
+  /* Local testing against the Firebase emulators (never production accounts):
+     on localhost only, opening the game with ?emulator=1 points Auth and
+     Firestore at `firebase emulators:start --only auth,firestore` for the rest
+     of the tab's session (sessionStorage, so reloads and join links keep it).
+     Runs here because this file creates the default app and its Firestore
+     before js/auth.js touches Auth. Never active on a real host. */
+  function _maybeUseEmulators() {
+    var host = (location && location.hostname) || '';
+    // localhost, 127.0.0.1 and *.localhost (which browsers always resolve to
+    // this machine — handy as a second, separately-stored "device" in tests).
+    if (host !== 'localhost' && host !== '127.0.0.1' && !/\.localhost$/.test(host)) return;
+    var on = false;
+    try {
+      if (/(?:^|[?&])emulator=1(?:&|$)/.test(location.search)) sessionStorage.setItem('sog_use_emulator', '1');
+      on = sessionStorage.getItem('sog_use_emulator') === '1';
+    } catch (e) {}
+    if (!on) return;
+    try {
+      db.useEmulator('127.0.0.1', 8080);
+      if (typeof firebase.auth === 'function') firebase.auth().useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
+      window.SOG_EMULATOR = true;
+      console.info('[Analytics] Using the local Firebase emulators (Auth :9099, Firestore :8080).');
+    } catch (e) {
+      console.warn('[Analytics] Could not attach the emulators', e);
     }
   }
 
@@ -350,7 +378,30 @@
   /* ══════════════════════════════════════════════════════════════
      Public API  (window.Analytics)
   ══════════════════════════════════════════════════════════════ */
+  /* ── Onboarding funnel (teacher activation) ─────────────────────────────
+     One small write-only doc per event in the same `sessions` collection
+     (its rules already allow any signed-in create and deny every read, so no
+     rules change and no deploy-order dependency). type:'funnel' tells them
+     apart from game sessions. Never carries student PII: event names, the
+     teacher-link src tag, a class code / teacher uid at most. */
+  var FUNNEL_EVENTS = {
+    teacher_link_landed: 1, teacher_card_shown: 1, teacher_card_accepted: 1, teacher_signup_started: 1,
+    teacher_signup_completed: 1, class_link_copied: 1, class_link_projected: 1, student_joined_class: 1,
+    first_student_joined: 1, login_cards_printed: 1
+  };
+  function funnel(event, props) {
+    if (!FUNNEL_EVENTS[event] || !db) return;
+    var data = { type: 'funnel', event: event, isTestSession: isTestSession, tz: _timeZone(),
+                 createdAt: firebase.firestore.FieldValue.serverTimestamp() };
+    var p = props || {};
+    ['src', 'method', 'classCode', 'teacherUid', 'step'].forEach(function (k) {
+      if (typeof p[k] === 'string' && p[k].length <= 64) data[k] = p[k];
+    });
+    try { writeDoc(getDocRef('funnel-' + generateSessionId()), data, false); } catch (e) {}
+  }
+
   window.Analytics = {
+    funnel: funnel,
 
     /**
      * Called when turn 1 activates (end of initGame's onBattleStart).

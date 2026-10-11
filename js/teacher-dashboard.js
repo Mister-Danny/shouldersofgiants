@@ -69,6 +69,7 @@ window.TeacherDashboard = (function () {
   ];
 
   var _teacherDoc = null;
+  var _lastRoster = { players: [], classes: [] };
 
   function _db() { return firebase.firestore(); }
   function _byId(id) { return document.getElementById(id); }
@@ -99,10 +100,13 @@ window.TeacherDashboard = (function () {
     var uid = firebase.auth().currentUser.uid;
 
     _db().collection('classes').doc(code).set({
-      ownerUid:  uid,
-      label:     (label || '').trim(),
-      active:    true,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      ownerUid:    uid,
+      label:       (label || '').trim(),
+      // Shown to students on the join screen ("Joining Ms Rivera's class") —
+      // the teacher doc itself is readable by its owner only.
+      teacherName: (_teacherDoc && _teacherDoc.displayName) || '',
+      active:      true,
+      createdAt:   firebase.firestore.FieldValue.serverTimestamp()
     }).then(function () {
       _db().collection('teachers').doc(uid).update({
         classCodes: firebase.firestore.FieldValue.arrayUnion(code)
@@ -153,6 +157,57 @@ window.TeacherDashboard = (function () {
         cb(err);
       });
   }
+
+  /* ── First class (open signup) ──────────────────────────────────────────
+     Right after signup the teacher lands on a class-link screen, so their
+     first class is made for them ("My Class", renamable). Idempotent: an
+     existing active class is reused rather than a second one created.
+     cb(err, { code, label, teacherName }) */
+  function ensureFirstClass(cb) {
+    var user = firebase.auth().currentUser;
+    if (!user) { cb(new Error('Signed out.'), null); return; }
+    _db().collection('teachers').doc(user.uid).get().then(function (snap) {
+      _teacherDoc = snap.exists ? snap.data() : _teacherDoc;
+      _notifyStatus();
+      var codes = (_teacherDoc && _teacherDoc.classCodes) || [];
+      _loadClasses(codes, function (classes) {
+        var active = classes.filter(function (c) { return c.active; });
+        if (active.length) { cb(null, active[0]); return; }
+        _generateClassCode('My Class', function (err, code) {
+          if (err) { cb(err, null); return; }
+          _refreshTeacherDocQuiet();
+          cb(null, { code: code, label: 'My Class', teacherName: (_teacherDoc && _teacherDoc.displayName) || '' });
+        });
+      });
+    }).catch(function (err) { cb(err, null); });
+  }
+
+  function _refreshTeacherDocQuiet() {
+    var user = firebase.auth().currentUser;
+    if (!user) return;
+    _db().collection('teachers').doc(user.uid).get().then(function (snap) {
+      if (snap.exists) { _teacherDoc = snap.data(); _notifyStatus(); }
+    }).catch(function () {});
+  }
+
+  /* The name students see on the join screen. Saved on the teacher doc and
+     copied onto every class this teacher owns (classes are what students can
+     read). Never derived from the email. */
+  function setTeacherName(name, cb) {
+    var user = firebase.auth().currentUser;
+    name = String(name || '').trim().slice(0, 40);
+    if (!user || !name) { if (cb) cb(new Error('No name.')); return; }
+    var codes = (_teacherDoc && _teacherDoc.classCodes) || [];
+    var writes = [_db().collection('teachers').doc(user.uid).set({ displayName: name }, { merge: true })]
+      .concat(codes.map(function (c) { return _db().collection('classes').doc(c).update({ teacherName: name }).catch(function () {}); }));
+    Promise.all(writes).then(function () {
+      if (_teacherDoc) _teacherDoc.displayName = name;
+      _notifyStatus();
+      if (cb) cb(null);
+    }).catch(function (err) { console.error('[TeacherDashboard] Saving the teacher name failed', err); if (cb) cb(err); });
+  }
+
+  function renameClass(code, label, cb) { _updateClassLabel(code, label, cb || function () {}); }
 
   /* ── Data loading ────────────────────────────────────────────────────── */
   function _loadClasses(codes, cb) {
@@ -266,7 +321,8 @@ window.TeacherDashboard = (function () {
         (isInactive ? ' disabled' : '') + '>' +
       (isInactive
         ? '<span class="td-class-badge">INACTIVE</span>'
-        : '<button class="btn-snes td-copy-link-btn" data-code="' + _escapeHtml(c.code) + '">COPY JOIN LINK</button>' +
+        : '<button class="btn-snes td-share-btn" data-code="' + _escapeHtml(c.code) + '">LINK &amp; QR</button>' +
+          '<button class="btn-snes td-copy-link-btn" data-code="' + _escapeHtml(c.code) + '">COPY JOIN LINK</button>' +
           '<button class="btn-snes td-regenerate-btn" data-code="' + _escapeHtml(c.code) + '">REGENERATE</button>' +
           '<button class="btn-snes btn-snes-remove td-deactivate-btn" data-code="' + _escapeHtml(c.code) + '">DEACTIVATE</button>') +
       (isInactive ? '' :
@@ -311,9 +367,12 @@ window.TeacherDashboard = (function () {
     });
 
     var codes = Object.keys(byClass);
-    if (!codes.length) return '<p class="td-empty">No students yet.</p>';
+    if (!codes.length) return '<p class="td-empty">No students yet. Share a class link — students pick a name and appear here.</p>';
 
-    var html = '';
+    // Shared Chromebooks: one card per student with name, passphrase, class
+    // code and a QR that fills in their login.
+    var printable = players.some(function (p) { return p.passphrase; });
+    var html = printable ? '<button class="btn-snes" id="td-print-cards">PRINT LOGIN CARDS</button>' : '';
     codes.forEach(function (code) {
       var label = code === '' ? 'Ungrouped' : (labelByCode[code] || code);
       html += '<div class="td-roster-group">';
@@ -341,6 +400,54 @@ window.TeacherDashboard = (function () {
       html += '</tbody></table></div>';
     });
     return html;
+  }
+
+  // Funnel: the first time this teacher's roster shows a student. Recorded on
+  // the teacher doc (owner-writable) so it fires once per teacher, not once
+  // per device. Counts only — no student details are logged.
+  function _noteFirstStudent(uid, players) {
+    if (!players.length || !_teacherDoc || _teacherDoc.firstStudentAt) return;
+    _teacherDoc.firstStudentAt = true;
+    _db().collection('teachers').doc(uid).set({ firstStudentAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+      .catch(function () {});
+    if (window.Analytics && typeof window.Analytics.funnel === 'function') window.Analytics.funnel('first_student_joined', { teacherUid: uid });
+  }
+
+  /* ── Printable login cards ─────────────────────────────────────────────
+     One card per student who has a stored passphrase: username, passphrase,
+     class code, and a QR whose link carries the login in the URL fragment
+     (#login=…, never sent to a server; the game wipes it from the address
+     bar on arrival and pre-fills the login form). Printed from an in-page
+     container that print CSS isolates (body.printing-login-cards). */
+  function printLoginCards() {
+    var players = (_lastRoster.players || []).filter(function (p) { return p.passphrase; });
+    if (!players.length) { alert('No students with a stored passphrase yet.'); return; }
+    var labelByCode = {};
+    (_lastRoster.classes || []).forEach(function (c) { labelByCode[c.code] = c.label || c.code; });
+    var base = location.origin + location.pathname;
+    var qr = window.SOG && window.SOG.QR;
+    var html = players.sort(function (a, b) { return (a.classCode + a.username).localeCompare(b.classCode + b.username); })
+      .map(function (p) {
+        var link = base + window.SogAccount.loginFragmentFor(p.username, p.passphrase);
+        return '<div class="login-card">' +
+          '<div class="login-card-title">Shoulders of Giants</div>' +
+          '<div class="login-card-row"><span>Name</span><strong>' + _escapeHtml(p.username) + '</strong></div>' +
+          '<div class="login-card-row"><span>Passphrase</span><strong>' + _escapeHtml(p.passphrase) + '</strong></div>' +
+          '<div class="login-card-row"><span>Class</span><strong>' + _escapeHtml(p.classCode || '—') +
+            (labelByCode[p.classCode] ? ' · ' + _escapeHtml(labelByCode[p.classCode]) : '') + '</strong></div>' +
+          '<div class="login-card-qr">' + (qr ? qr.svg(link, { title: 'Scan to log in' }) : '') + '</div>' +
+          '<div class="login-card-hint">Scan to log in, or type your name and passphrase.</div>' +
+        '</div>';
+      }).join('');
+    var box = document.getElementById('login-cards-print');
+    if (!box) { box = document.createElement('div'); box.id = 'login-cards-print'; document.body.appendChild(box); }
+    box.innerHTML = html;
+    document.body.classList.add('printing-login-cards');
+    var done = function () { document.body.classList.remove('printing-login-cards'); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    if (window.Analytics && typeof window.Analytics.funnel === 'function') window.Analytics.funnel('login_cards_printed', {});
+    window.print();
+    setTimeout(done, 60000);   // afterprint isn't fired everywhere
   }
 
   function _copyFallback(text, done) {
@@ -395,10 +502,20 @@ window.TeacherDashboard = (function () {
     // Delegated: _wireEvents runs while the roster is still "Loading…", so the
     // reveal buttons don't exist yet — and the roster re-renders on its own
     // afterwards. Binding to the container covers every render.
+    Array.prototype.forEach.call(document.querySelectorAll('.td-share-btn'), function (btn) {
+      btn.addEventListener('click', function () {
+        if (window.TeacherOnboard && typeof window.TeacherOnboard.showClassLink === 'function') {
+          hide();
+          window.TeacherOnboard.showClassLink(btn.getAttribute('data-code'));
+        }
+      });
+    });
+
     var rosterEl = _byId('td-roster');
     if (rosterEl && !rosterEl._revealWired) {
       rosterEl._revealWired = true;
       rosterEl.addEventListener('click', function (e) {
+        if (e.target && e.target.id === 'td-print-cards') { printLoginCards(); return; }
         var btn = e.target && e.target.closest ? e.target.closest('.td-reveal-btn') : null;
         if (!btn || !rosterEl.contains(btn)) return;
         btn.parentNode.textContent = btn.getAttribute('data-pass');
@@ -474,7 +591,9 @@ window.TeacherDashboard = (function () {
     _wireEvents(classes);
 
     _loadRoster(uid, function (err, players) {
+      _lastRoster = { players: players || [], classes: classes };
       _byId('td-roster').innerHTML = _renderRoster(players, classes);
+      _noteFirstStudent(uid, players || []);
     });
   }
 
@@ -574,7 +693,14 @@ window.TeacherDashboard = (function () {
       return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '';
     } catch (e) { return false; }
   }
-  function devToolsAllowed() { return _isTrustedHost() || isTeacher(); }
+  // Open signup made "has a teacher doc" too easy a bar for the cheat tools:
+  // only the original invite-code teachers (inviteCode set) or a teacher the
+  // owner flags devTools:true in the console qualify. Open-signup teachers get
+  // the dashboard, not the dev panel.
+  function devToolsAllowed() {
+    if (_isTrustedHost()) return true;
+    return !!(_teacherDoc && ((_teacherDoc.inviteCode && _teacherDoc.inviteCode !== '') || _teacherDoc.devTools === true));
+  }
   function getTeacherDoc() { return _teacherDoc; }
 
   /**
@@ -648,6 +774,11 @@ window.TeacherDashboard = (function () {
     hide:           hide,
     isTeacher:      isTeacher,
     devToolsAllowed: devToolsAllowed,
+    ensureFirstClass: ensureFirstClass,
+    setTeacherName: setTeacherName,
+    renameClass:    renameClass,
+    joinLinkFor:    joinLinkFor,
+    printLoginCards: printLoginCards,
     getTeacherDoc:  getTeacherDoc,
     onStatusChange: onStatusChange
   };

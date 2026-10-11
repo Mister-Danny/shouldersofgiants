@@ -26,7 +26,6 @@ window.SogAccountUI = (function () {
 
   var backdrop, titleEl, bodyEl, actionsEl;
   var _pendingClassInfo = null;   // set once class-code lookup succeeds, used by the confirm step
-  var _teacherInviteCode = '';    // checked on Teacher Sign Up's first screen, carried into both signup paths
 
   function _els() {
     if (!backdrop) {
@@ -59,12 +58,12 @@ window.SogAccountUI = (function () {
       '<p>Create an account to save your progress permanently, or log back in if you already have one.</p>',
       '<button class="btn-snes" id="af-create">CREATE ACCOUNT</button>' +
       '<button class="btn-snes" id="af-login">LOG IN</button>' +
-      '<button class="btn-snes" id="af-teacher">TEACHER SIGN UP</button>' +
+      '<button class="btn-snes" id="af-teacher">TEACHER: GET A CLASS LINK</button>' +
       '<button class="btn-snes btn-snes-close" id="af-cancel">CANCEL</button>'
     );
     _byId('af-create').addEventListener('click', function () { _stepClassCode(); });
     _byId('af-login').addEventListener('click', function () { _stepLoginForm(); });
-    _byId('af-teacher').addEventListener('click', function () { _stepTeacherInvite(); });
+    _byId('af-teacher').addEventListener('click', function () { openTeacherSignup(); });
     _byId('af-cancel').addEventListener('click', _close);
   }
 
@@ -96,173 +95,55 @@ window.SogAccountUI = (function () {
         return;
       }
       _pendingClassInfo = classInfo;
-      if (classInfo.ungrouped) {
-        _stepSummon();   // no class to confirm — straight to account creation
-      } else {
-        _stepConfirmClass();
-      }
+      if (!classInfo.ungrouped && window.TeacherOnboard) window.TeacherOnboard.markStudentDevice();
+      _stepJoinPickName(false);
     });
   }
 
-  /* ── Step: confirm class (student signup step 2-3) ─────────────────────
-     fromLink: arrived via a teacher's join link (?join=CODE) rather than by
-     typing a code, so there is no code step to go BACK to — that button
-     closes instead, leaving the student on the home screen as a guest. */
-  function _stepConfirmClass(fromLink) {
-    _render(
-      'CONFIRM',
-      '<p>Joining: <strong>' + _escapeHtml(_pendingClassInfo.label) + '</strong></p>' +
-      (fromLink
-        ? '<p>Not your class? Check the link with your teacher — you can keep playing as a guest for now.</p>'
-        : '<p>Not your class? Go back and check the code with your teacher.</p>'),
-      '<button class="btn-snes" id="af-confirm">CONFIRM</button>' +
-      '<button class="btn-snes btn-snes-close" id="af-back">' + (fromLink ? 'NOT NOW' : 'BACK') + '</button>'
-    );
-    _byId('af-confirm').addEventListener('click', _stepSummon);
-    _byId('af-back').addEventListener('click', function () {
-      if (fromLink) _close(); else _stepClassCode();
-    });
+  /* ── Step: pick a name (student signup steps 2-3) ───────────────────────
+     "Joining Ms Rivera's class" and five generated names: one tap creates the
+     account (js/account.js signUpStudent, upgrading the guest in place) — no
+     separate confirm screen, no reveal animation. The names and passphrase
+     are generated as this step renders, before any click. fromLink: arrived
+     from a class link/code box rather than the account menu, so the escape
+     hatch is "play as a guest" rather than BACK. */
+  function _joinTitle(info) {
+    if (!info || info.ungrouped) return 'CREATE YOUR ACCOUNT';
+    return 'JOIN YOUR CLASS';
   }
-
-  /* ── Step: summon (student signup steps 3-6) ───────────────────────────
-     Replaces the old immediate "Creating your account…" spinner with an
-     interactive reveal: a big button that "conjures" 5 username options,
-     the student picks one, then the account is actually created. Per spec,
-     ALL 5 options and the passphrase are generated up front — the moment
-     this step renders, well before the click — so the animation is pure
-     presentation and can never leave the student without credentials, even
-     if something interrupts it. */
-  function _stepSummon() {
-    _render(
-      'CREATE ACCOUNT',
-      '<p>You are about to receive your official Shoulders of Giants name and passcode. ' +
-        'It belongs to you and only you. Cherish it.</p>' +
-      '<div class="account-credential-card account-summon-box" id="account-summon-box">' +
-        '<button class="account-summon-btn" id="af-summon">SUMMON YOUR HISTORICAL JOURNEY</button>' +
-      '</div>',
-      ''
-    );
-
-    // Generated NOW, before any click — see doc comment above.
+  function _joinWho(info) {
+    if (info.teacherName) return _escapeHtml(info.teacherName) + '’s class' +
+      (info.label && info.label !== 'My Class' && info.label !== info.code ? ' <span class="account-flow-sub">(' + _escapeHtml(info.label) + ')</span>' : '');
+    return _escapeHtml(info.label || info.code);
+  }
+  function _stepJoinPickName(fromLink) {
+    var info = _pendingClassInfo || { ungrouped: true };
     var passphrase = window.SogAccount.generatePassphrase();
     var options    = window.SogAccount.generateUsernameOptions(5);
-
-    var boxEl = _byId('account-summon-box');
-    var btnEl = _byId('af-summon');
-    btnEl.addEventListener('click', function () {
-      btnEl.disabled = true;
-      _playConjuringAnimation(boxEl, btnEl, function () {
-        _renderUsernameOptions(options, passphrase);
-      });
-    });
-  }
-
-  // 4s GSAP "conjuring" flourish, timed to js/audio.js SFX.magicSwirl()'s 4s
-  // clip: the button's label dissolves into "Conjuring…" while particles
-  // swirl around the box, then particles + label fade out together over the
-  // final 500ms (matching the audio's own tail fade) before onComplete
-  // fires. The audio is fire-and-forget — this visual timeline runs on its
-  // own clock regardless of whether the sound loads or plays, so a missing/
-  // failed asset never affects timing.
-  function _playConjuringAnimation(boxEl, btnEl, onComplete) {
-    var DURATION_MS = 4000;
-    var FADE_MS     = 500;
-    var SWIRL_MS    = DURATION_MS - FADE_MS;
-    var PARTICLE_COUNT = 16;
-
-    // White "payoff" flash: overlaps the last part of the content fade-out
-    // below so it reads as the conjuring's climax, not a separate beat —
-    // by the time the particles/button fully fade at DURATION_MS, the
-    // screen is ALSO fully white at that same instant. The name-options DOM
-    // swap happens while the flash is opaque, then the flash fades back down
-    // to reveal it.
-    var flashEl          = _byId('account-flow-flash');
-    var FLASH_IN_START_MS = SWIRL_MS + 200;
-    var FLASH_IN_MS       = DURATION_MS - FLASH_IN_START_MS;
-    var FLASH_OUT_MS      = 300;
-    if (flashEl) gsap.set(flashEl, { opacity: 0 });
-
-    if (window.SFX && typeof SFX.magicSwirl === 'function') {
-      try { SFX.magicSwirl(); } catch (e) {}
-    }
-
-    gsap.to(btnEl, {
-      opacity: 0, duration: 0.2, onComplete: function () {
-        btnEl.textContent = 'Conjuring…';
-        gsap.to(btnEl, { opacity: 1, duration: 0.2 });
-      }
-    });
-
-    var particles = [];
-    for (var i = 0; i < PARTICLE_COUNT; i++) {
-      var p = document.createElement('span');
-      p.className = 'account-summon-particle';
-      boxEl.appendChild(p);
-      particles.push(p);
-    }
-
-    particles.forEach(function (p) {
-      var radius     = 20 + Math.random() * 55;
-      var angleStart = Math.random() * Math.PI * 2;
-      var spin       = (Math.random() < 0.5 ? -1 : 1) * (Math.PI * 2 + Math.random() * Math.PI * 2);
-      var steps      = 10;
-
-      gsap.set(p, { x: 0, y: 0, opacity: 0, scale: 0.5 + Math.random() * 0.6 });
-      var tl = gsap.timeline({ delay: Math.random() * 0.3 });
-      tl.to(p, { opacity: 1, duration: 0.3 });
-      for (var s = 1; s <= steps; s++) {
-        var t = s / steps;
-        var angle = angleStart + spin * t;
-        var r = radius * (1 - t * 0.3);   // gentle inward spiral
-        tl.to(p, {
-          x: Math.cos(angle) * r,
-          y: Math.sin(angle) * r,
-          duration: (SWIRL_MS / 1000 - 0.3) / steps,
-          ease: 'sine.inOut'
-        });
-      }
-      // No per-particle fade here — the synced group fade below (matching
-      // the audio's own tail fade) handles it for every particle at once.
-    });
-
-    gsap.delayedCall(SWIRL_MS / 1000, function () {
-      gsap.to(particles.concat(btnEl), { opacity: 0, duration: FADE_MS / 1000, ease: 'sine.in' });
-    });
-
-    if (flashEl) {
-      gsap.delayedCall(FLASH_IN_START_MS / 1000, function () {
-        gsap.to(flashEl, { opacity: 1, duration: FLASH_IN_MS / 1000, ease: 'sine.in' });
-      });
-    }
-
-    gsap.delayedCall(DURATION_MS / 1000, function () {
-      particles.forEach(function (p) { p.remove(); });
-      onComplete();   // swaps in the name-options DOM while the flash is fully opaque
-      if (flashEl) gsap.to(flashEl, { opacity: 0, duration: FLASH_OUT_MS / 1000, ease: 'sine.out' });
-    });
-  }
-
-  // Reveals the 5 pre-generated username options as their own step (fresh
-  // heading, no body copy) — picking one moves straight to actually
-  // creating the account.
-  function _renderUsernameOptions(options, passphrase) {
     _render(
-      'Choose Your History Giant Name:',
-      '<div class="account-credential-card account-summon-box account-summon-box-options" id="account-summon-box"></div>',
-      ''
+      _joinTitle(info),
+      (info.ungrouped ? '' : '<p class="account-join-who">Joining <strong>' + _joinWho(info) + '</strong></p>') +
+      '<p>Pick your game name:</p>' +
+      '<div class="account-credential-card account-summon-box account-summon-box-options" id="account-summon-box">' +
+        options.map(function (opt, idx) {
+          return '<button class="btn-snes account-summon-option" data-idx="' + idx + '">' + _escapeHtml(opt.display) + '</button>';
+        }).join('') +
+      '</div>' +
+      (info.ungrouped ? '' : '<p class="account-flow-or">' + (fromLink
+        ? 'Not your class? Check the link with your teacher.'
+        : 'Not your class? Go back and check the code with your teacher.') + '</p>'),
+      fromLink
+        ? '<button class="btn-snes btn-snes-close" id="af-back">PLAY AS A GUEST</button>'
+        : '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
     );
-    var boxEl = _byId('account-summon-box');
-    // opt.display is CamelCase, shown here ONLY — opt.username (the
-    // all-lowercase real credential) is what actually gets passed on.
-    boxEl.innerHTML = options.map(function (opt, idx) {
-      return '<button class="btn-snes account-summon-option" data-idx="' + idx + '">' +
-        _escapeHtml(opt.display) + '</button>';
-    }).join('');
-    Array.prototype.forEach.call(boxEl.querySelectorAll('.account-summon-option'), function (optBtn) {
+    Array.prototype.forEach.call(document.querySelectorAll('#account-summon-box .account-summon-option'), function (optBtn) {
       optBtn.addEventListener('click', function () {
         var idx = parseInt(optBtn.getAttribute('data-idx'), 10);
         _stepFinalizeSignup(options[idx].username, passphrase);
       });
+    });
+    _byId('af-back').addEventListener('click', function () {
+      if (fromLink) _close(); else _stepClassCode();
     });
   }
 
@@ -278,7 +159,7 @@ window.SogAccountUI = (function () {
           // Auth account is real (link succeeded, or an already-linked retry)
           // even though something else failed — never discard the student's
           // only way back in by falling through to the generic fallback.
-          _stepCredentialCard(creds);
+          _afterStudentSignup(creds);
           return;
         }
         if (_isRetryableSignupError(err)) {
@@ -288,7 +169,7 @@ window.SogAccountUI = (function () {
         }
         return;
       }
-      _stepCredentialCard(creds);
+      _afterStudentSignup(creds);
     });
   }
 
@@ -304,53 +185,38 @@ window.SogAccountUI = (function () {
       code === 'deadline-exceeded';
   }
 
-  /* ── Step: credential card (student signup step 7) ───────────────────
-     Big, printable, no-recovery warning. DONE stays disabled until the
-     checkbox is checked — the required confirmation before it can be
-     dismissed. */
-  function _stepCredentialCard(creds) {
-    // No passphrase means this is the alreadyLinked retry case (js/account.js
-    // _tryLink): the account already existed from an earlier attempt whose
-    // passphrase was never persisted anywhere and can't be shown again.
+  /* ── After student signup: straight into the game ──────────────────────
+     The login card no longer blocks: it floats over the game once with a
+     GOT IT (js/teacher-onboard.js showLoginCard), and "My login" brings it
+     back any time. The passphrase is also on the teacher's roster. No page
+     reload — SogAuth.refresh() (called by signUpStudent) already updated the
+     account button and corner strip. A student signing up from the home
+     screen goes straight into the adventure; one signing up mid-game (the
+     post-Ötzi prompt) just carries on where they were. */
+  function _afterStudentSignup(creds) {
+    var info = _pendingClassInfo || {};
+    if (!info.ungrouped && info.code && window.Analytics && typeof window.Analytics.funnel === 'function') {
+      window.Analytics.funnel('student_joined_class', { classCode: info.code, teacherUid: info.ownerUid || '' });
+    }
     if (!creds.passphrase) {
+      // The alreadyLinked retry (js/account.js _tryLink): the account existed
+      // from an earlier attempt whose passphrase was never captured.
       _render(
         'ACCOUNT ALREADY CREATED',
         '<p>An account named <strong>' + _escapeHtml(creds.username) + '</strong> already exists on ' +
-          'this device from an earlier attempt. Your passphrase can\'t be shown again — if you never ' +
-          'wrote it down, ask your teacher for help logging in later. Your progress is safe either way.</p>',
+          'this device from an earlier attempt. Your teacher can look up your passphrase on their roster. ' +
+          'Your progress is safe either way.</p>',
         '<button class="btn-snes" id="af-done">OK</button>'
       );
-      _byId('af-done').addEventListener('click', function () {
-        _close();
-        location.reload();
-      });
+      _byId('af-done').addEventListener('click', _close);
       return;
     }
-
-    _render(
-      'Save Your Information',
-      '<p>You will only see this once! Write it down, take a screenshot, or save the PDF. ' +
-        'This is the only way to get back into your account.</p>' +
-      '<div class="account-credential-card" id="account-credential-card">' +
-        '<div class="account-credential-row"><span>Username</span><strong>' + _escapeHtml(creds.username) + '</strong></div>' +
-        '<div class="account-credential-row"><span>Passphrase</span><strong>' + _escapeHtml(creds.passphrase) + '</strong></div>' +
-      '</div>' +
-      '<p class="account-flow-warning">Seriously, there is no password reset and no recovery email. ' +
-        'If this is lost, your progress cannot be recovered.</p>' +
-      '<label class="account-flow-checkbox-row">' +
-        '<input type="checkbox" id="af-ack"> I have written down or saved my username and passphrase.' +
-      '</label>',
-      '<button class="btn-snes" id="af-print">SAVE PDF</button>' +
-      '<button class="btn-snes" id="af-done" disabled>DONE</button>'
-    );
-    var ack = _byId('af-ack');
-    var doneBtn = _byId('af-done');
-    ack.addEventListener('change', function () { doneBtn.disabled = !ack.checked; });
-    _byId('af-print').addEventListener('click', function () { window.print(); });
-    doneBtn.addEventListener('click', function () {
-      _close();
-      location.reload();   // refresh home button label / corner strip against the new auth state
-    });
+    _close();
+    if (window.TeacherOnboard) window.TeacherOnboard.showLoginCard(creds, { firstTime: true });
+    var onHome = document.getElementById('screen-home');
+    if (onHome && onHome.classList.contains('active') && window.HomeFlow && typeof window.HomeFlow.quickStart === 'function') {
+      window.HomeFlow.quickStart({});
+    }
   }
 
   /* ── Step: login form ─────────────────────────────────────────────────
@@ -363,7 +229,7 @@ window.SogAccountUI = (function () {
      (reset sent / student-has-no-recovery) so it doesn't get mistaken for
      a login failure. prefillIdentifier keeps whatever was typed across a
      re-render (wrong password, forgot-password click, etc.). */
-  function _stepLoginForm(errorMsg, infoMsg, prefillIdentifier) {
+  function _stepLoginForm(errorMsg, infoMsg, prefillIdentifier, prefillSecret) {
     _render(
       'LOG IN',
       '<p>Students: enter your username and passphrase. Teachers: enter your email and password.</p>' +
@@ -371,7 +237,7 @@ window.SogAccountUI = (function () {
         'placeholder="USERNAME OR EMAIL" autocomplete="username" spellcheck="false" value="' +
         _escapeHtml(prefillIdentifier || '') + '">' +
       '<input type="password" id="af-login-passphrase" class="account-flow-input" ' +
-        'placeholder="PASSWORD" autocomplete="current-password">' +
+        'placeholder="PASSWORD" autocomplete="current-password" value="' + _escapeHtml(prefillSecret || '') + '">' +
       (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
       (infoMsg  ? '<div class="account-flow-info">'  + _escapeHtml(infoMsg)  + '</div>' : '') +
       '<div class="account-flow-forgot"><a href="#" id="af-forgot">Forgot password?</a></div>' +
@@ -381,10 +247,10 @@ window.SogAccountUI = (function () {
       '<button class="btn-snes" id="af-login-google">CONTINUE WITH GOOGLE</button>' +
       '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
     );
-    _byId('af-login-google').addEventListener('click', function () { _submitTeacherGoogle('', {}); });
+    _byId('af-login-google').addEventListener('click', _submitTeacherGoogle);
     var userInput = _byId('af-login-username');
     var passInput = _byId('af-login-passphrase');
-    userInput.focus();
+    (prefillSecret ? _byId('af-login-submit') : userInput).focus();
     function submit() { _submitLogin(userInput.value, passInput.value); }
     _byId('af-login-submit').addEventListener('click', submit);
     passInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
@@ -418,6 +284,7 @@ window.SogAccountUI = (function () {
           _stepLoginForm('Username or passphrase not recognized. Check with your teacher.', null, identifier);
           return;
         }
+        if (window.TeacherOnboard) window.TeacherOnboard.markStudentDevice();
         _stepWelcomeBack(false);
       });
     }
@@ -484,147 +351,191 @@ window.SogAccountUI = (function () {
     });
   }
 
-  /* ── Teacher signup (AUTH_SPEC.md §4 "Teacher signup", Phase 4) ────────
-     Real email + password + display name + invite code — no generated
-     credentials, no printable card, and (deliberately, per spec) no
-     dashboard yet: that's Phase 5. Errors re-render this same form with an
-     inline message rather than falling through to the student-oriented
-     "saved locally"/"account creation failed" steps below, since a teacher
-     account has no local-only fallback concept — it either exists or it
-     doesn't. */
-  /* ── Step: invite code (Teacher Sign Up, first screen) ─────────────────
-     Checked here (js/account.js checkInviteCode reads /invites/{code} by
-     exact id), so a wrong code never gets as far as creating an account.
-     The code then rides along into both the email form and Google. */
-  function _stepTeacherInvite(errorMsg, prefillCode) {
-    _render(
-      'TEACHER SIGN UP',
-      '<p>Enter the invite code you were given.</p>' +
-      '<input type="text" id="af-invite-code" class="account-flow-input" maxlength="12" ' +
-        'placeholder="INVITE CODE" autocomplete="off" spellcheck="false" value="' +
-        _escapeHtml(prefillCode != null ? prefillCode : _teacherInviteCode) + '">' +
-      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : ''),
-      '<button class="btn-snes" id="af-invite-continue">CONTINUE</button>' +
-      '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
-    );
-    var input = _byId('af-invite-code');
-    input.focus();
-    function submit() {
-      var typed = input.value.trim();
-      if (!typed) { _stepTeacherInvite('Enter your invite code.', ''); return; }
-      _render('ONE MOMENT', '<p>Checking your code…</p>', '');
-      window.SogAccount.checkInviteCode(typed, function (err, res) {
-        if (err) {
-          console.error('[AccountUI] Invite check failed', err);
-          _stepTeacherInvite('Couldn’t check that code — network issue. Please try again.', typed);
-          return;
-        }
-        if (!res.valid) {
-          _stepTeacherInvite("That code isn't valid. Check it with whoever gave it to you.", typed);
-          return;
-        }
-        _teacherInviteCode = res.code;
-        _stepTeacherSignup();
-      });
+  /* ── Teacher signup: one step, no invite code ──────────────────────────
+     CONTINUE WITH GOOGLE, or email + password, plus "I'm a teacher or an
+     adult (18+)". The guest account is upgraded in place (js/account.js
+     signUpTeacherOpen / signUpTeacherGoogleOpen), so whatever they played
+     carries over; the class-link screen (js/teacher-onboard.js) follows. The
+     Google button calls the popup straight from its click, so it isn't
+     blocked; if it is anyway, _stepPopupBlocked says exactly what to do. */
+  var _teacherPrefill = { email: '', adult: false };
+
+  function openTeacherSignup() {
+    if (window.Analytics && typeof window.Analytics.funnel === 'function') {
+      window.Analytics.funnel('teacher_signup_started', { src: _teacherSrc() });
     }
-    _byId('af-invite-continue').addEventListener('click', submit);
-    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
-    _byId('af-back').addEventListener('click', function () { _teacherInviteCode = ''; _stepChooser(); });
+    var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
+    if (user && !user.isAnonymous) { _teacherAlreadySignedIn(); return; }
+    _stepTeacherOpen();
   }
 
-  function _stepTeacherSignup(errorMsg, prefill) {
-    if (!_teacherInviteCode) { _stepTeacherInvite(errorMsg); return; }
-    prefill = prefill || {};
+  function _teacherSrc() {
+    return (window.TeacherOnboard && typeof window.TeacherOnboard.src === 'function') ? window.TeacherOnboard.src() : '';
+  }
+
+  function _stepTeacherOpen(errorMsg) {
     _render(
-      'TEACHER SIGN UP',
-      '<p>Real email and password — Firebase’s standard password reset works for this account.</p>' +
-      '<input type="text" id="af-teacher-name" class="account-flow-input" ' +
-        'placeholder="DISPLAY NAME" autocomplete="name" value="' + _escapeHtml(prefill.displayName || '') + '">' +
-      '<input type="email" id="af-teacher-email" class="account-flow-input" ' +
-        'placeholder="EMAIL" autocomplete="email" value="' + _escapeHtml(prefill.email || '') + '">' +
-      '<input type="password" id="af-teacher-password" class="account-flow-input" ' +
-        'placeholder="PASSWORD" autocomplete="new-password">' +
-      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
-      '<p class="account-flow-or">Invite code ' + _escapeHtml(_teacherInviteCode) + ' accepted. Or skip the password:</p>',
-      '<button class="btn-snes" id="af-teacher-submit">CREATE TEACHER ACCOUNT</button>' +
-      '<button class="btn-snes" id="af-teacher-google">CONTINUE WITH GOOGLE</button>' +
-      '<button class="btn-snes btn-snes-close" id="af-back">BACK</button>'
+      'GET A FREE CLASS LINK',
+      '<p>One step. Students join with a link and pick a game name — no student emails.</p>' +
+      '<label class="account-flow-checkbox-row account-adult-row">' +
+        '<input type="checkbox" id="af-adult"' + (_teacherPrefill.adult ? ' checked' : '') + '> I’m a teacher or an adult (18+)' +
+      '</label>' +
+      '<button class="btn-snes account-google-btn" id="af-open-google">CONTINUE WITH GOOGLE</button>' +
+      '<p class="account-flow-or">or with email</p>' +
+      '<input type="email" id="af-open-email" class="account-flow-input" placeholder="EMAIL" autocomplete="email" value="' +
+        _escapeHtml(_teacherPrefill.email) + '">' +
+      '<input type="password" id="af-open-password" class="account-flow-input" placeholder="PASSWORD (6+ CHARACTERS)" autocomplete="new-password">' +
+      (errorMsg ? '<div class="account-flow-error">' + errorMsg + '</div>' : '') +
+      '<div class="account-flow-forgot"><a href="#" id="af-open-login">Already have a teacher account? Log in</a></div>',
+      '<button class="btn-snes" id="af-open-submit">CREATE ACCOUNT</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-cancel">CANCEL</button>'
     );
-    _byId('af-teacher-google').addEventListener('click', function () {
-      _submitTeacherGoogle(_teacherInviteCode, {
-        displayName: _byId('af-teacher-name').value,
-        email:       _byId('af-teacher-email').value
-      });
+    var adult = _byId('af-adult'), email = _byId('af-open-email'), pass = _byId('af-open-password');
+    var needAdult = function () {
+      _teacherPrefill.adult = adult.checked;
+      _teacherPrefill.email = email.value.trim();
+      if (adult.checked) return false;
+      _stepTeacherOpen('Please tick “I’m a teacher or an adult (18+)” first.');
+      return true;
+    };
+    _byId('af-open-google').addEventListener('click', function () {
+      if (needAdult()) return;
+      _submitTeacherOpenGoogle();
     });
-    var nameInput = _byId('af-teacher-name');
-    nameInput.focus();
     function submit() {
-      _submitTeacherSignup({
-        displayName: nameInput.value,
-        email:       _byId('af-teacher-email').value,
-        password:    _byId('af-teacher-password').value,
-        inviteCode:  _teacherInviteCode
+      if (needAdult()) return;
+      if (!email.value.trim() || !pass.value) { _stepTeacherOpen('Enter your email and a password.'); return; }
+      _render('ONE MOMENT', '<p>Creating your teacher account…</p>', '');
+      window.SogAccount.signUpTeacherOpen({ email: email.value.trim(), password: pass.value, src: _teacherSrc() }, function (err, result) {
+        _afterTeacherOpen(err, result, 'password');
       });
     }
-    _byId('af-teacher-submit').addEventListener('click', submit);
-    _byId('af-teacher-password').addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
-    _byId('af-back').addEventListener('click', function () { _stepTeacherInvite(); });
+    _byId('af-open-submit').addEventListener('click', submit);
+    pass.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    _byId('af-open-login').addEventListener('click', function (e) { e.preventDefault(); _stepLoginForm(); });
+    _byId('af-cancel').addEventListener('click', _close);
   }
 
-  function _submitTeacherSignup(fields) {
-    if (!fields.inviteCode) { _stepTeacherInvite(); return; }
-    if (!fields.displayName || !fields.email || !fields.password) {
-      _stepTeacherSignup('Fill in every field.', fields);
+  // Straight from a click: the popup opens synchronously inside it.
+  function _submitTeacherOpenGoogle() {
+    _render('ONE MOMENT', '<p>Opening Google sign-in…</p>', '');
+    window.SogAccount.signUpTeacherGoogleOpen({ src: _teacherSrc() }, function (err, result) {
+      _afterTeacherOpen(err, result, 'google');
+    });
+  }
+
+  function _afterTeacherOpen(err, result, method) {
+    if (err) {
+      var code = err.code;
+      if (code === 'popup-blocked')        { _stepPopupBlocked(); return; }
+      if (code === 'popup-cancelled')      { _stepTeacherOpen(); return; }
+      if (code === 'invite-required')      { _stepTeacherFinishInvite(); return; }
+      if (code === 'google-needs-password') { _stepGoogleLinkPassword(result); return; }
+      if (code === 'already-signed-in')    { _teacherAlreadySignedIn(); return; }
+      if (code === 'auth/email-already-in-use' || code === 'auth/credential-already-in-use') {
+        _stepTeacherOpen('That email already has an account here. <a href="#" id="af-open-login2">Log in instead</a>.');
+        var l = _byId('af-open-login2');
+        if (l) l.addEventListener('click', function (e) { e.preventDefault(); _stepLoginForm(null, null, _teacherPrefill.email); });
+        return;
+      }
+      console.error('[AccountUI] Teacher sign-up failed', err);
+      _stepTeacherOpen(_escapeHtml(_teacherErrorMessage(err)));
       return;
     }
-    _render('ONE MOMENT', '<p>Creating your teacher account…</p>', '');
-    window.SogAccount.signUpTeacher(fields, function (err, result) {
-      if (err) {
-        console.error('[AccountUI] Teacher signup failed', err);
-        // Only reachable if the first-screen check couldn't read invites
-        // (older deployed rules): send them back to re-enter the code.
-        if (err.code === 'invite-invalid') { _stepTeacherInvite(_teacherErrorMessage(err), fields.inviteCode); return; }
-        _stepTeacherSignup(_teacherErrorMessage(err), fields);
-        return;
-      }
-      _stepTeacherSignupSuccess(result);
-    });
+    if (result && result.passwordLost) { _stepRestorePassword(result); return; }
+    _teacherPrefill = { email: '', adult: false };
+    _close();
+    if (window.TeacherOnboard) window.TeacherOnboard.afterTeacherSignup(result, method);
+    else location.reload();
   }
 
-  /* Google sign-in, shared by the teacher signup form (invite code typed in)
-     and the login form (returning teacher, no code needed). The popup path
-     resolves here; the redirect fallback resolves in init() instead, so both
-     land on the same screens. */
-  function _submitTeacherGoogle(inviteCode, prefill) {
+  /* Popup blocked: never fall back to a redirect (it loses the sign-in on
+     github.io — see js/account.js _popupBlocked). Say what to do, keep their
+     place, and offer email instead. */
+  function _stepPopupBlocked() {
+    _render(
+      'GOOGLE WINDOW BLOCKED',
+      '<p>Your browser blocked the Google sign-in window, so you’re not signed in yet.</p>' +
+      '<ol class="account-flow-steps">' +
+        '<li>Look for the blocked-window icon at the right end of the address bar.</li>' +
+        '<li>Choose <strong>Always allow pop-ups</strong> for this site.</li>' +
+        '<li>Press <strong>TRY AGAIN</strong>.</li>' +
+      '</ol>' +
+      '<p>Or sign up with your email and a password instead — it works the same.</p>',
+      '<button class="btn-snes" id="af-popup-retry">TRY AGAIN</button>' +
+      '<button class="btn-snes" id="af-popup-email">USE EMAIL</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-cancel">CANCEL</button>'
+    );
+    _byId('af-popup-retry').addEventListener('click', _submitTeacherOpenGoogle);
+    _byId('af-popup-email').addEventListener('click', function () { _stepTeacherOpen(); var e = _byId('af-open-email'); if (e) e.focus(); });
+    _byId('af-cancel').addEventListener('click', _close);
+  }
+
+  /* The site went live before the new Firestore rules: the account exists and
+     is signed in, but the teacher doc still needs an invite code. Nothing is
+     lost — a code finishes it now, or TRY AGAIN once the rules are deployed. */
+  function _stepTeacherFinishInvite(errorMsg) {
+    _render(
+      'ALMOST DONE',
+      '<p>Your account is created and you’re signed in. Teacher sign-up on this site is still being switched on, ' +
+        'so for now it needs an invite code. Enter one if you have it, or try again in a few minutes.</p>' +
+      '<input type="text" id="af-finish-code" class="account-flow-input" maxlength="12" placeholder="INVITE CODE (IF YOU HAVE ONE)" autocomplete="off" spellcheck="false">' +
+      (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : ''),
+      '<button class="btn-snes" id="af-finish-submit">FINISH</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-finish-later">LATER</button>'
+    );
+    _byId('af-finish-submit').addEventListener('click', function () {
+      var code = _byId('af-finish-code').value;
+      _render('ONE MOMENT', '<p>Finishing your teacher account…</p>', '');
+      window.SogAccount.finishTeacherSetup(code, function (err, result) {
+        if (err) {
+          if (err.code === 'invite-invalid' || err.code === 'permission-denied') {
+            _stepTeacherFinishInvite(code ? "That code isn't valid." : 'Still needs a code — try again in a few minutes, or enter one.');
+            return;
+          }
+          _stepTeacherFinishInvite(_teacherErrorMessage(err));
+          return;
+        }
+        _close();
+        if (window.TeacherOnboard) window.TeacherOnboard.afterTeacherSignup(result, 'finish');
+      });
+    });
+    _byId('af-finish-later').addEventListener('click', _close);
+  }
+
+  function _teacherAlreadySignedIn() {
+    var isTeacher = window.TeacherDashboard && typeof window.TeacherDashboard.isTeacher === 'function' && window.TeacherDashboard.isTeacher();
+    if (isTeacher) { _close(); if (window.TeacherOnboard) window.TeacherOnboard.showClassLink(); return; }
+    _render(
+      'ALREADY SIGNED IN',
+      '<p>This device is signed in to a student account. To make a teacher account, log out first, then come back here.</p>',
+      '<button class="btn-snes" id="af-ok">OK</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-logout">LOG OUT</button>'
+    );
+    _byId('af-ok').addEventListener('click', _close);
+    _byId('af-logout').addEventListener('click', _startLogout);
+  }
+
+  /* Google sign-in from LOG IN (returning teachers). A Google account that
+     isn't a teacher here yet stops at 'invite-required' signed in, and
+     _stepGoogleInvite finishes it with the adult checkbox (no code needed now
+     — the code field only appears if the deployed rules still demand one). */
+  function _submitTeacherGoogle() {
     _render('ONE MOMENT', '<p>Opening Google sign-in…</p>', '');
-    window.SogAccount.signInTeacherWithGoogle(inviteCode, function (err, result) {
+    window.SogAccount.signInTeacherWithGoogle('', function (err, result) {
       if (err) {
-        if (err.code === 'popup-cancelled') { if (inviteCode) _stepTeacherSignup(null, prefill); else _stepLoginForm(); return; }
-        // Signed in fine, but this Google account is new here and still owes an
-        // invite code. They stay signed in while we ask — bouncing back to the
-        // empty signup form throws away the sign-in they just completed.
+        if (err.code === 'popup-cancelled') { _stepLoginForm(); return; }
+        if (err.code === 'popup-blocked') { _stepLoginForm(null, 'Your browser blocked the Google window. Allow pop-ups for this site ' +
+          '(the blocked-window icon at the right end of the address bar), then press CONTINUE WITH GOOGLE again — or log in with your email and password.'); return; }
         if (err.code === 'invite-required') { _stepGoogleInvite(result); return; }
         if (err.code === 'google-needs-password') { _stepGoogleLinkPassword(result); return; }
-        // Signed in, but the carried code was refused on the write (only if the
-        // first-screen check couldn't read invites): the session is kept, so
-        // ask for the code right here instead of starting over.
-        if (err.code === 'invite-invalid' && result) { _stepGoogleInvite(result, _teacherErrorMessage(err)); return; }
+        if (err.code === 'invite-invalid' && result) { _stepGoogleInvite(Object.assign({}, result, { needInvite: true }), _teacherErrorMessage(err)); return; }
         console.error('[AccountUI] Teacher Google sign-in failed', err);
-        if (inviteCode) _stepTeacherSignup(_teacherErrorMessage(err), prefill);
-        else _stepLoginForm(_teacherErrorMessage(err));
+        _stepLoginForm(_teacherErrorMessage(err));
         return;
       }
-      // First-time Google signup through Teacher Sign Up: the code was already
-      // checked, so the account is made — go straight to the dashboard.
-      if (!result.existing && !result.linked) { _teacherInviteCode = ''; _openDashboard(); return; }
       _afterGoogleSignIn(result);
     });
-  }
-
-  function _openDashboard() {
-    _close();
-    if (window.TeacherDashboard && typeof window.TeacherDashboard.showAfterSignup === 'function') window.TeacherDashboard.showAfterSignup();
-    else location.reload();
   }
 
   // Where a successful Google sign-in lands: the normal welcome, the "Google
@@ -636,29 +547,36 @@ window.SogAccountUI = (function () {
     _stepTeacherSignupSuccess(result, result.existing);
   }
 
-  /* ── Step: invite code, after a Google sign-in ──────────────────────────
-     The second half of first-time Google signup. CANCEL backs the whole thing
-     out (js/account.js cancelTeacherGoogleSignup deletes the just-created Auth
-     user rather than leaving it stranded with no teacher doc). */
+  /* ── Step: finish a first-time Google sign-in from LOG IN ───────────────
+     Signed in with a Google account that has no teacher account here yet.
+     FINISH SETUP makes it one (adult checkbox, no invite code); "I already
+     have an account" links it to an existing password teacher instead; CANCEL
+     backs out (js/account.js cancelTeacherGoogleSignup deletes the
+     just-created Auth user rather than leaving it stranded). info.needInvite:
+     the deployed rules still demand a code, so the field is shown. */
   function _stepGoogleInvite(info, errorMsg) {
-    var who = (info && (info.email || info.displayName)) || 'your Google account';
+    info = info || {};
+    var who = info.email || info.displayName || 'your Google account';
     _render(
       'ONE MORE STEP',
-      '<p>Signed in as <strong>' + _escapeHtml(who) + '</strong>.</p>' +
-      '<p>Enter your invite code to finish setting up your teacher account.</p>' +
-      '<input type="text" id="af-google-invite" class="account-flow-input" maxlength="8" ' +
-        'placeholder="INVITE CODE" autocomplete="off" spellcheck="false" value="' +
-        _escapeHtml((info && info.inviteCode) || '') + '">' +
+      '<p>Signed in as <strong>' + _escapeHtml(who) + '</strong>. There’s no teacher account for it here yet.</p>' +
+      '<label class="account-flow-checkbox-row account-adult-row">' +
+        '<input type="checkbox" id="af-google-adult"' + (info.adult ? ' checked' : '') + '> I’m a teacher or an adult (18+)' +
+      '</label>' +
+      (info.needInvite
+        ? '<input type="text" id="af-google-invite" class="account-flow-input" maxlength="12" ' +
+            'placeholder="INVITE CODE" autocomplete="off" spellcheck="false">'
+        : '') +
       (errorMsg ? '<div class="account-flow-error">' + _escapeHtml(errorMsg) + '</div>' : '') +
       '<p class="account-flow-or">Already have a teacher account with a different email? ' +
         'Connect this Google account to it instead, so your classes stay in one place.</p>',
-      '<button class="btn-snes" id="af-google-invite-submit">FINISH SETUP</button>' +
+      '<button class="btn-snes" id="af-google-invite-submit">CREATE TEACHER ACCOUNT</button>' +
       '<button class="btn-snes" id="af-google-existing">I ALREADY HAVE AN ACCOUNT</button>' +
       '<button class="btn-snes btn-snes-close" id="af-google-invite-cancel">CANCEL</button>'
     );
     _byId('af-google-existing').addEventListener('click', function () {
       if (window.SogAccount.startLinkToExistingAccount()) {
-        _stepGoogleLinkPassword({ email: '', googleEmail: (info && info.email) || '', differentEmail: true });
+        _stepGoogleLinkPassword({ email: '', googleEmail: info.email || '', differentEmail: true });
         return;
       }
       // No reusable Google credential from this sign-in (rare): back out
@@ -668,22 +586,28 @@ window.SogAccountUI = (function () {
         _stepLoginForm(null, 'Log in with your email and password, then use CONNECT GOOGLE in your dashboard.');
       });
     });
-    var input = _byId('af-google-invite');
-    input.focus();
     function submit() {
-      var code = input.value;
+      var adult = _byId('af-google-adult');
+      if (!adult.checked) { _stepGoogleInvite(info, 'Please tick “I’m a teacher or an adult (18+)” first.'); return; }
+      var codeEl = _byId('af-google-invite');
+      var code = codeEl ? codeEl.value : '';
+      var next = Object.assign({}, info, { adult: true });
       _render('ONE MOMENT', '<p>Setting up your teacher account…</p>', '');
+      window.SogAccount.setSignupSource(_teacherSrc());
       window.SogAccount.finishTeacherGoogleSignup(code, function (err, result) {
         if (err) {
           console.error('[AccountUI] Google teacher signup failed', err);
-          _stepGoogleInvite(result || info, _teacherErrorMessage(err));
+          if (err.code === 'invite-invalid') next.needInvite = true;
+          _stepGoogleInvite(Object.assign({}, result || info, { needInvite: next.needInvite, adult: true }),
+            err.code === 'invite-invalid' && !code ? 'Teacher sign-up on this site still needs an invite code for now.' : _teacherErrorMessage(err));
           return;
         }
-        _openDashboard();
+        _close();
+        if (window.TeacherOnboard) window.TeacherOnboard.afterTeacherSignup(result, 'google');
+        else location.reload();
       });
     }
     _byId('af-google-invite-submit').addEventListener('click', submit);
-    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
     _byId('af-google-invite-cancel').addEventListener('click', function () {
       _render('ONE MOMENT', '<p>Cancelling…</p>', '');
       window.SogAccount.cancelTeacherGoogleSignup(function () { _stepChooser(); });
@@ -855,10 +779,9 @@ window.SogAccountUI = (function () {
   function _stepTeacherSignupSuccess(result, existing) {
     _render(
       existing ? 'WELCOME BACK' : 'TEACHER ACCOUNT CREATED',
-      '<p>Welcome' + (existing ? ' back' : '') + ', ' + _escapeHtml(result.displayName) + '! ' +
+      '<p>Welcome' + (existing ? ' back' : '') + (result.displayName ? ', ' + _escapeHtml(result.displayName) : '') + '! ' +
         (existing ? 'You’re signed in to your teacher account.' : 'Your teacher account is ready.') + '</p>' +
-      '<p>Open your dashboard to create a class and share its join link with students — they click the link ' +
-        'and the game sets them up, no codes to read out.</p>',
+      '<p>Your class link and dashboard are on the home screen: students click the link, pick a name and play.</p>',
       '<button class="btn-snes" id="af-done">OK</button>'
     );
     _byId('af-done').addEventListener('click', function () {
@@ -893,7 +816,7 @@ window.SogAccountUI = (function () {
       '<button class="btn-snes" id="af-retry">TRY AGAIN</button>' +
       '<button class="btn-snes btn-snes-close" id="af-ok">OK</button>'
     );
-    _byId('af-retry').addEventListener('click', _stepSummon);
+    _byId('af-retry').addEventListener('click', function () { _stepJoinPickName(false); });
     _byId('af-ok').addEventListener('click', _close);
   }
 
@@ -918,8 +841,8 @@ window.SogAccountUI = (function () {
      been playing as a guest on this device keeps that progress. */
   function _stepJoinBroken() {
     _render(
-      'CLASS LINK NOT WORKING',
-      '<p>That class link didn’t work. It may be out of date, or the class may have been closed. ' +
+      'CLASS NOT FOUND',
+      '<p>That class link or code didn’t work. It may be mistyped or out of date, or the class may have been closed. ' +
         'Check with your teacher — you can keep playing as a guest in the meantime.</p>',
       '<button class="btn-snes" id="af-ok">OK</button>'
     );
@@ -949,8 +872,11 @@ window.SogAccountUI = (function () {
       if (err || !classInfo || classInfo.ungrouped) { _stepJoinBroken(); return; }
       var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
       if (user && !user.isAnonymous) { _stepJoinAlreadySignedIn(classInfo.label); return; }
+      // From here on this device belongs to a student: no teacher banner,
+      // "For Teachers" button or teacher card (js/teacher-onboard.js).
+      if (window.TeacherOnboard) window.TeacherOnboard.markStudentDevice();
       _pendingClassInfo = classInfo;
-      _stepConfirmClass(true);
+      _stepJoinPickName(true);
     });
   }
 
@@ -972,9 +898,25 @@ window.SogAccountUI = (function () {
         return;
       }
       if (!result) return;
-      if (!result.existing && !result.linked) { _openDashboard(); return; }   // new signup via Teacher Sign Up
+      if (!result.existing && !result.linked) { _close(); if (window.TeacherOnboard) window.TeacherOnboard.afterTeacherSignup(result, 'google'); return; }
       _afterGoogleSignIn(result);
     });
+
+    // Login-card QR (#login=name.passphrase): wipe it from the address bar
+    // and this tab's history entry at once, then pre-fill the login form —
+    // the student just taps LOG IN.
+    var login = window.SogAccount.parseLoginFragment(location.hash);
+    if (login) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+      if (window.TeacherOnboard) window.TeacherOnboard.markStudentDevice();
+      var openLogin = function () {
+        var u = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
+        if (u && !u.isAnonymous) { _stepJoinAlreadySignedIn('your account'); return; }
+        _stepLoginForm(null, 'Check that this is your name, then press LOG IN.', login.username, login.passphrase);
+      };
+      if (window.SogAuth && typeof window.SogAuth.ready === 'function') window.SogAuth.ready(openLogin); else openLogin();
+      return;
+    }
 
     var code = window.SogAccount.parseJoinCode(location.search, location.hash);
     if (!code) return;
@@ -994,7 +936,6 @@ window.SogAccountUI = (function () {
    */
   function openFlow(startStep) {
     _pendingClassInfo = null;
-    _teacherInviteCode = '';
     if (startStep === 'classcode') _stepClassCode();
     else _stepChooser();
   }
@@ -1002,8 +943,18 @@ window.SogAccountUI = (function () {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
+  /* Typed class code (the home screen's "Have a class code?" box): same flow
+     as a class link. */
+  function startJoin(code) {
+    var c = String(code || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,12}$/.test(c)) { _stepJoinBroken(); return; }
+    _startJoinFlow(c);
+  }
+
   return {
     openFlow: openFlow,
+    openTeacherSignup: openTeacherSignup,
+    startJoin: startJoin,
     connectGoogle: _connectGoogle,
     init:     init,
     logout:   _startLogout

@@ -59,6 +59,20 @@
              overlay — this screen stays put underneath it. -->
         <button class="btn-snes btn-home-account" id="btn-teacher-dashboard" style="display:none">Teacher Dashboard</button>
 
+        <!-- Onboarding row (js/teacher-onboard.js): "Have a class code?" for
+             students who can't click a link, My login for signed-in students,
+             For Teachers for teachers who arrive without the teacher link.
+             Never shown on a student device / to signed-in accounts as fits. -->
+        <div class="home-onboard" id="home-onboard">
+          <form class="home-class-code" id="home-class-code" autocomplete="off">
+            <label for="home-class-code-input">Have a class code?</label>
+            <input id="home-class-code-input" maxlength="12" placeholder="ABC123" spellcheck="false" autocapitalize="characters">
+            <button type="submit" class="btn-snes">JOIN</button>
+          </form>
+          <button class="btn-snes btn-home-account" id="btn-my-login" style="display:none">My login</button>
+          <button class="btn-snes btn-home-account btn-for-teachers" id="btn-for-teachers" style="display:none">For Teachers</button>
+        </div>
+
         <!-- State 2 buttons (hidden initially) -->
         <button class="btn-snes btn-home-uniform btn-home-arcadium"     id="btn-arcadium">Arcadium</button>
         <button class="btn-snes btn-home-uniform btn-home-adventure-new adventure-mode-in-development" id="btn-adventure-new">Adventure</button>
@@ -1694,6 +1708,66 @@
     </div>
   </div><!-- /#teacher-dashboard-backdrop -->
 
+  <!-- ═══ Teacher & student onboarding (js/teacher-onboard.js) ═════════════ -->
+  <!-- Slim teacher banner: teacher mode only, never on a student device. -->
+  <div id="teacher-banner" class="teacher-banner" role="region" aria-label="For teachers">
+    <span class="teacher-banner-text">Teacher? Try a few rounds, then get a free class link.</span>
+    <button class="teacher-banner-go" id="teacher-banner-go">Get class link now &rarr;</button>
+    <button class="teacher-banner-close" id="teacher-banner-close" aria-label="Dismiss">&times;</button>
+  </div>
+
+  <!-- One-time card after the first battle win (also opened by For Teachers). -->
+  <div id="teacher-card-backdrop" class="guest-modal-backdrop">
+    <div class="card-popup guest-modal teacher-card">
+      <div class="popup-card-name">FOR TEACHERS</div>
+      <div class="popup-divider"></div>
+      <div class="welcome-body">
+        <p class="teacher-card-big">Want your class to play?</p>
+        <p>Get a class link in 30 seconds. Free — students join with the link and pick a game name, no emails.</p>
+      </div>
+      <div class="popup-actions">
+        <button class="btn-snes" id="teacher-card-yes">YES</button>
+        <button class="btn-snes btn-snes-close" id="teacher-card-no">KEEP PLAYING</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right after teacher signup: the class link, QR, code, projector. -->
+  <div id="teacher-classlink" class="guest-modal-backdrop teacher-classlink">
+    <div class="tcl-modal">
+      <div class="tcl-header">
+        <div class="tcl-title">Your class link is ready</div>
+        <button class="btn-snes btn-snes-close" id="tcl-close">KEEP PLAYING</button>
+      </div>
+      <div class="tcl-body" id="tcl-body"></div>
+      <div class="tcl-actions">
+        <button class="btn-snes" id="tcl-projector">SHOW ON PROJECTOR</button>
+        <button class="btn-snes" id="tcl-dashboard">OPEN DASHBOARD</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Projector view: full-screen QR + short code. -->
+  <div id="teacher-projector" class="teacher-projector">
+    <button class="teacher-projector-close" id="tpj-close" aria-label="Close projector view">&times;</button>
+    <div class="tpj-qr" id="tpj-qr"></div>
+    <div class="tpj-side">
+      <div class="tpj-line">Go to <strong id="tpj-site"></strong></div>
+      <div class="tpj-line">and enter code</div>
+      <div class="tpj-code" id="tpj-code"></div>
+      <div class="tpj-line tpj-small">or scan the QR code</div>
+    </div>
+  </div>
+
+  <!-- Student login card: shown once after signup (non-blocking), and by "My login". -->
+  <div id="login-card-float" class="login-card-float" role="dialog" aria-labelledby="lcf-title">
+    <div class="lcf-title" id="lcf-title">Your login</div>
+    <div class="lcf-row"><span>Name</span><strong id="lcf-name"></strong></div>
+    <div class="lcf-row"><span>Passphrase</span><strong id="lcf-pass"></strong></div>
+    <div class="lcf-hint">Write it down — you’ll need it on another computer. Your teacher has it too.</div>
+    <button class="btn-snes" id="lcf-ok">GOT IT</button>
+  </div>
+
   </div><!-- /#sog-stage -->
 
   <!-- Stage scaling — must be first so SOG.Stage exists before any module -->
@@ -1712,6 +1786,8 @@
   <!-- Anonymous auth (AUTH_SPEC.md Phase 2) — must load after analytics.js,
        which initializes the default Firebase app this file reuses. -->
   <script src="js/auth.js?v=23"></script>
+  <script src="js/qr.js?v=23"></script>  <!-- SOG.QR: QR codes for class links and login cards -->
+  <script src="js/teacher-onboard.js?v=23"></script>  <!-- arrivals (?teacher=1, ?join=), teacher banner/card, class-link screen; must precede welcome.js/guest-status.js -->
   <!-- Teacher dashboard (AUTH_SPEC.md Phase 5) — needs SogAuth (just above)
        at init() time. Deliberately loaded here rather than grouped with
        account.js/account-ui.js below: js/home.js's own init() runs

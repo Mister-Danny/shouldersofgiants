@@ -280,3 +280,21 @@ The roster's "Learning Checks" column shows two running totals — questions ans
 - Auto-approve teachers, or gate the dashboard on `approved: true`? Recommend auto-approve; add friction only if abuse appears.
 - Teacher-triggered student password reset via a Cloud Function with admin credentials — build only when teachers actually ask.
 - Invite code rotation cadence. Seasonal is a reasonable default.
+
+---
+
+## 8. Open teacher signup and one-tap student join (2026-10)
+
+Supersedes the invite-code gate in §1/§3/§4 for NEW teachers; everything else stands.
+
+**Teachers.** `?teacher=1[&src=TAG]` lands a guest straight in the game (js/teacher-onboard.js) with a dismissible map banner; a home-screen **For Teachers** button does the same for teachers without the link. After the first battle win in teacher mode a one-time card offers a class link. Signup is one step — Google or email + password, plus "I'm a teacher or an adult (18+)" — and **upgrades the guest account in place** (`linkWithPopup` / `linkWithCredential`, same uid), so guest progress carries over exactly as it does for students. A Google account that is already a user here signs in to that account instead (a returning teacher; the guest's progress is left behind, as with any login). The first class ("My Class", renamable) is created automatically and the class-link screen shows the link, QR, short code, Copy and a full-screen projector view.
+
+- `/teachers/{uid}`: `inviteCode: ''` for open signups (the field stays, so the update rule's pin still holds), plus `adultConfirmed: true`, optional `src`, and `firstStudentAt` once a student shows up. `displayName` is a real name only (Google profile, or typed on the class screen) — never derived from the email.
+- `/classes/{CODE}` gains `teacherName` so the join screen can say "Joining Ms Rivera's class" (the teacher doc is owner-only).
+- Rules: create requires a real (non-anonymous) sign-in and a string `inviteCode` that is either `''` or a live invite; `devTools` can never be set by the client and never changed by the owner. The dev panel / teacher menu / battle lobby are client-gated to teachers WITH an invite code or `devTools: true` (console-set), so open signup doesn't hand out the cheat tools.
+- Deploy order: rules first → the old site keeps working (its invite codes still validate). Site first → an open signup authenticates, then the teacher write is denied by the old rules; the account stays signed in and the UI asks for an invite code (`finishTeacherSetup`), so nothing is orphaned.
+- Google sign-in is popup-only. `signInWithRedirect` loses its result on a github.io site in browsers that partition third-party storage (Chrome 115+, Firefox 109+, Safari 16.1+); a blocked popup gets a clear "allow pop-ups / TRY AGAIN / use email" screen instead.
+
+**Students.** A class link (or the home screen's "Have a class code?" box) goes straight to "Joining <teacher>'s class" and five generated names: one tap creates the account and drops them into the game. The passphrase card no longer blocks (shown once, GOT IT); **My login** on the home screen and in Options shows name + passphrase any time, from the student's own player doc. A device that joined a class, used a login card or logged in as a student is marked `sog_student_device` (kept through logout) and never shows teacher UI. The dashboard prints one login card per student: name, passphrase, class code and a QR whose link carries `#login=name.passphrase` — a URL fragment, never sent to a server, wiped from the address bar on arrival, pre-filling the login form.
+
+**Funnel.** Write-only `sessions` docs with `type: 'funnel'` (no rules change): teacher_link_landed {src}, teacher_card_shown/accepted, teacher_signup_started/completed {method, src}, class_link_copied/projected, student_joined_class {classCode, teacherUid}, first_student_joined, login_cards_printed. No student names or credentials.

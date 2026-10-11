@@ -425,3 +425,57 @@ test('notices: a player can read only their own, cannot list, and nobody can wri
   await assertFails(asStudentA.doc('notices/studentA').update({ active: false }));
   await assertFails(asStudentB.doc('notices/studentB').set({ id: 'x', active: true, body: 'hi' }));
 });
+
+// ── Open teacher signup (no invite code) ────────────────────────────────────
+const asProvider = (uid, provider) =>
+  testEnv.authenticatedContext(uid, { firebase: { sign_in_provider: provider } }).firestore();
+
+test('open signup: a real (non-guest) account creates its teacher doc with an empty invite code; a guest cannot', async () => {
+  const doc = { email: 'a@school.org', inviteCode: '', displayName: '', authProvider: 'password', adultConfirmed: true, createdAt: new Date() };
+  await assertSucceeds(asProvider('tPass', 'password').doc('teachers/tPass').set(doc));
+  await assertSucceeds(asProvider('tGoog', 'google.com').doc('teachers/tGoog').set({ ...doc, authProvider: 'google' }));
+  await assertFails(asProvider('tAnon', 'anonymous').doc('teachers/tAnon').set(doc));
+  await assertFails(asProvider('tOther', 'password').doc('teachers/someoneElse').set(doc));
+  // inviteCode must be present and a string
+  const { inviteCode, ...noCode } = doc;
+  await assertFails(asProvider('tNoCode', 'password').doc('teachers/tNoCode').set(noCode));
+});
+
+test('open signup: a non-empty invite code must still be a live invite', async () => {
+  await seed(async (db) => {
+    await db.doc('invites/HISTROCK').set({ active: true });
+    await db.doc('invites/OLDCODE1').set({ active: false });
+  });
+  const base = { email: 'b@school.org', displayName: 'B', createdAt: new Date() };
+  await assertSucceeds(asProvider('t1', 'password').doc('teachers/t1').set({ ...base, inviteCode: 'HISTROCK' }));
+  await assertFails(asProvider('t2', 'password').doc('teachers/t2').set({ ...base, inviteCode: 'OLDCODE1' }));
+  await assertFails(asProvider('t3', 'password').doc('teachers/t3').set({ ...base, inviteCode: 'NOSUCH12' }));
+});
+
+test('devTools is console-only: never set at create, never changed by the teacher', async () => {
+  const doc = { email: 'c@school.org', inviteCode: '', displayName: 'C', createdAt: new Date() };
+  await assertFails(asProvider('tc', 'password').doc('teachers/tc').set({ ...doc, devTools: true }));
+  await assertFails(asProvider('tc', 'password').doc('teachers/tc').set({ ...doc, devTools: false }));
+  await assertSucceeds(asProvider('tc', 'password').doc('teachers/tc').set(doc));
+  const tc = asProvider('tc', 'password');
+  await assertSucceeds(tc.doc('teachers/tc').set({ displayName: 'Ms C', classCodes: ['AB12CD'] }, { merge: true }));
+  await assertFails(tc.doc('teachers/tc').set({ devTools: true }, { merge: true }));
+  await assertFails(tc.doc('teachers/tc').set({ inviteCode: 'HISTROCK' }, { merge: true }), 'invite code stays pinned');
+  // A console-granted flag survives the teacher's own edits but can't be removed by them.
+  await seed(async (db) => { await db.doc('teachers/tc').set({ devTools: true }, { merge: true }); });
+  await assertSucceeds(tc.doc('teachers/tc').set({ displayName: 'Ms C2' }, { merge: true }));
+  await assertFails(tc.doc('teachers/tc').set({ devTools: false }, { merge: true }));
+});
+
+test('open-signup teacher can create a class carrying teacherName; students read it by exact id only', async () => {
+  await assertSucceeds(asProvider('tn', 'password').doc('teachers/tn').set({ email: 'n@x.org', inviteCode: '', displayName: '', createdAt: new Date() }));
+  const tn = asProvider('tn', 'password');
+  await assertSucceeds(tn.doc('classes/MYCL55').set({ ownerUid: 'tn', label: 'My Class', teacherName: 'Ms N', active: true, createdAt: new Date() }));
+  await assertSucceeds(tn.doc('classes/MYCL55').update({ teacherName: 'Ms Nguyen', label: 'Period 3' }));
+  const student = asProvider('kid', 'anonymous');
+  const snap = await assertSucceeds(student.doc('classes/MYCL55').get());
+  assert.equal(snap.data().teacherName, 'Ms Nguyen');
+  await assertFails(student.collection('classes').get());
+  // A guest (no teacher doc) still can't make classes.
+  await assertFails(student.doc('classes/KIDCL1').set({ ownerUid: 'kid', label: 'x', active: true }));
+});

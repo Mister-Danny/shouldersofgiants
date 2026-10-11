@@ -6830,6 +6830,10 @@ var Overworld = (function () {
   /* ── Expose ────────────────────────────────────────────────── */
   return {
     init: init,
+    // True while a dialogue, scripted sequence or walk owns the map — lets
+    // overlays from other modules (js/teacher-onboard.js's teacher card) wait
+    // for the story beats to finish instead of landing on top of them.
+    isBusy: function () { return !!(isDialogueLocked || isMoving); },
     // Resume the current map's context soundtrack. Called from the showScreen hook
     // whenever the overworld is shown (covers every battle-return path) + market exit.
     playMapMusic: _playMapMusic,
