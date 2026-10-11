@@ -360,6 +360,45 @@ window.SogAccountUI = (function () {
      blocked; if it is anyway, _stepPopupBlocked says exactly what to do. */
   var _teacherPrefill = { email: '', adult: false };
 
+  /* Under the 18+ checkbox on both teacher sign-up forms. The link opens the
+     About screen's Privacy section (#about-privacy, the single copy of that
+     text) in an overlay ABOVE the sign-up modal, so nothing typed is lost and
+     closing it lands back on the form. Delegated (_privacyLinkWired) because
+     the modal body is re-rendered on every step. */
+  var _PRIVACY_LINE = '<div class="account-privacy-line">Teacher accounts are for adults. ' +
+    '<a href="#" class="account-privacy-link">Privacy &amp; account deletion</a></div>';
+
+  function _showPrivacy() {
+    var src = document.getElementById('about-privacy');
+    var bd = document.getElementById('privacy-peek-backdrop');
+    if (!bd) {
+      bd = document.createElement('div');
+      bd.id = 'privacy-peek-backdrop';
+      bd.className = 'guest-modal-backdrop';
+      bd.innerHTML = '<div class="card-popup guest-modal privacy-peek" role="dialog" aria-label="Privacy">' +
+        '<div class="privacy-peek-body" id="privacy-peek-body"></div>' +
+        '<div class="popup-actions"><button class="btn-snes btn-snes-close" id="privacy-peek-close">CLOSE</button></div></div>';
+      (document.getElementById('sog-stage') || document.body).appendChild(bd);
+      var close = function () { bd.classList.remove('visible'); };
+      bd.querySelector('#privacy-peek-close').addEventListener('click', close);
+      bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
+    }
+    bd.querySelector('#privacy-peek-body').innerHTML = src ? src.innerHTML
+      : '<p>Teacher accounts are for adults (18+). Students never give personal information.</p>';
+    bd.classList.add('visible');
+  }
+
+  function _wirePrivacyLink() {
+    if (!_els() || bodyEl._privacyLinkWired) return;
+    bodyEl._privacyLinkWired = true;
+    bodyEl.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('.account-privacy-link') : null;
+      if (!a) return;
+      e.preventDefault();
+      _showPrivacy();
+    });
+  }
+
   function openTeacherSignup() {
     if (window.Analytics && typeof window.Analytics.funnel === 'function') {
       window.Analytics.funnel('teacher_signup_started', { src: _teacherSrc() });
@@ -379,7 +418,7 @@ window.SogAccountUI = (function () {
       '<p>One step. Students join with a link and pick a game name — no student emails.</p>' +
       '<label class="account-flow-checkbox-row account-adult-row">' +
         '<input type="checkbox" id="af-adult"' + (_teacherPrefill.adult ? ' checked' : '') + '> I’m a teacher or an adult (18+)' +
-      '</label>' +
+      '</label>' + _PRIVACY_LINE +
       '<button class="btn-snes account-google-btn" id="af-open-google">CONTINUE WITH GOOGLE</button>' +
       '<p class="account-flow-or">or with email</p>' +
       '<input type="email" id="af-open-email" class="account-flow-input" placeholder="EMAIL" autocomplete="email" value="' +
@@ -562,7 +601,7 @@ window.SogAccountUI = (function () {
       '<p>Signed in as <strong>' + _escapeHtml(who) + '</strong>. There’s no teacher account for it here yet.</p>' +
       '<label class="account-flow-checkbox-row account-adult-row">' +
         '<input type="checkbox" id="af-google-adult"' + (info.adult ? ' checked' : '') + '> I’m a teacher or an adult (18+)' +
-      '</label>' +
+      '</label>' + _PRIVACY_LINE +
       (info.needInvite
         ? '<input type="text" id="af-google-invite" class="account-flow-input" maxlength="12" ' +
             'placeholder="INVITE CODE" autocomplete="off" spellcheck="false">'
@@ -887,6 +926,7 @@ window.SogAccountUI = (function () {
    */
   function init() {
     if (!window.SogAccount) return;
+    _wirePrivacyLink();
 
     window.SogAccount.completeTeacherGoogleRedirect(function (err, result) {
       if (err) {

@@ -13843,3 +13843,14 @@ body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract 
   .login-card-qr svg { width: 100%; height: 100%; }
   .login-card-hint { font-size: 8.5pt; text-align: center; color: #333; }
 }
+
+/* Sign-up: "Teacher accounts are for adults. Privacy & account deletion" and
+   the Privacy overlay it opens above the sign-up modal (js/account-ui.js). */
+.account-privacy-line { margin: -6px 0 12px 22px; font-size: 14px; color: var(--text-dim); font-family: var(--font-ui, 'Source Sans 3', sans-serif); }
+.account-privacy-line a { color: var(--snes-yellow); }
+#privacy-peek-backdrop { z-index: 9500; }
+.privacy-peek { max-width: 720px; }
+.privacy-peek-body { max-height: 460px; overflow-y: auto; font-family: var(--font-ui, 'Source Sans 3', sans-serif); font-size: 17px; line-height: 1.5; text-align: left; }
+.privacy-peek-body h2 { font-family: var(--font); color: var(--snes-yellow); font-size: 18px; margin: 0 0 10px; }
+.privacy-peek-body p { margin: 0 0 10px; }
+.privacy-peek-body a { color: var(--snes-yellow); }
