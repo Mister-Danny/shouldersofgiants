@@ -5174,6 +5174,23 @@ button,
     0 4px 20px rgba(0, 0, 0, 0.85);
   background: #1a1206;
 }
+/* Side colours: each portrait's ring matches its side's location score
+   (.battle-loc-score-player cyan, .battle-loc-score-opp red), so players can
+   tell at a glance which score is theirs. */
+.battle-avatar-ally .battle-avatar-frame {
+  border-color: var(--snes-cyan);
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 0 5px #1d6f72,
+    0 4px 20px rgba(0, 0, 0, 0.85);
+}
+.battle-avatar-opponent .battle-avatar-frame {
+  border-color: var(--snes-red);
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 0 5px #7a1e16,
+    0 4px 20px rgba(0, 0, 0, 0.85);
+}
 
 .battle-avatar-frame img {
   width: 100%;
@@ -5191,13 +5208,21 @@ button,
   clip-path: circle(50%);
 }
 
-/* Turn-first highlight — pulses gold on the avatar that plays first this turn (selection phase only) */
-@keyframes turn-first-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px var(--snes-yellow), 0 0 14px 4px rgba(248,208,0,0.5); }
-  50%       { box-shadow: 0 0 0 4px var(--snes-yellow), 0 0 26px 10px rgba(248,208,0,0.8); }
+/* Turn-first highlight — the avatar that reveals first this turn pulses in its
+   OWN side colour (cyan for the player, red for the opponent) during selection. */
+@keyframes turn-first-pulse-player {
+  0%, 100% { box-shadow: 0 0 0 2px #000, 0 0 0 5px #1d6f72, 0 0 14px 5px rgba(64, 224, 224, 0.50); }
+  50%      { box-shadow: 0 0 0 2px #000, 0 0 0 5px #2fa8ab, 0 0 28px 12px rgba(64, 224, 224, 0.85); }
 }
-.battle-avatar.turn-first .battle-avatar-frame {
-  animation: turn-first-pulse 0.7s ease-in-out infinite;
+@keyframes turn-first-pulse-opp {
+  0%, 100% { box-shadow: 0 0 0 2px #000, 0 0 0 5px #7a1e16, 0 0 14px 5px rgba(240, 64, 48, 0.50); }
+  50%      { box-shadow: 0 0 0 2px #000, 0 0 0 5px #b8321f, 0 0 28px 12px rgba(240, 64, 48, 0.85); }
+}
+.battle-avatar-ally.turn-first .battle-avatar-frame {
+  animation: turn-first-pulse-player 0.9s ease-in-out infinite;
+}
+.battle-avatar-opponent.turn-first .battle-avatar-frame {
+  animation: turn-first-pulse-opp 0.9s ease-in-out infinite;
 }
 
 /* Lucy speaking glow — added/removed by tutorial.js during typeText */
@@ -5209,13 +5234,13 @@ button,
   0%, 100% {
     box-shadow:
       0 0 0 2px #000,
-      0 0 0 5px #7a5a0a,
+      0 0 0 5px #1d6f72,
       0 4px 20px rgba(0, 0, 0, 0.85);
   }
   50% {
     box-shadow:
       0 0 0 2px #000,
-      0 0 16px 6px rgba(200, 160, 32, 0.68),
+      0 0 16px 6px rgba(64, 224, 224, 0.60),
       0 4px 20px rgba(0, 0, 0, 0.85);
   }
 }
