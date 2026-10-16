@@ -387,14 +387,17 @@
   var FUNNEL_EVENTS = {
     teacher_link_landed: 1, teacher_card_shown: 1, teacher_card_accepted: 1, teacher_signup_started: 1,
     teacher_signup_completed: 1, class_link_copied: 1, class_link_projected: 1, student_joined_class: 1,
-    first_student_joined: 1, login_cards_printed: 1
+    first_student_joined: 1, login_cards_printed: 1,
+    // Scripted first Neanderthal battle: the turn-3 / turn-4 card choice
+    // (turn, choice = card name, attempt = 1-based try count). No PII.
+    neanderthal_choice: 1
   };
   function funnel(event, props) {
     if (!FUNNEL_EVENTS[event] || !db) return;
     var data = { type: 'funnel', event: event, isTestSession: isTestSession, tz: _timeZone(),
                  createdAt: firebase.firestore.FieldValue.serverTimestamp() };
     var p = props || {};
-    ['src', 'method', 'classCode', 'teacherUid', 'step'].forEach(function (k) {
+    ['src', 'method', 'classCode', 'teacherUid', 'step', 'turn', 'choice', 'attempt'].forEach(function (k) {
       if (typeof p[k] === 'string' && p[k].length <= 64) data[k] = p[k];
     });
     try { writeDoc(getDocRef('funnel-' + generateSessionId()), data, false); } catch (e) {}

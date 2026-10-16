@@ -2074,7 +2074,10 @@
        card per card each side played last turn, deck permitting — see
        replenishDrawCount above. */
     var _draw    = G.config.draw || { model: 'replenish' };
-    if (_draw.model === 'flat') {
+    if (_draw.model === 'none') {
+      /* No engine draw: the battle's script sets the hand itself each turn (the
+         scripted first Neanderthal battle deals one lesson's cards per turn). */
+    } else if (_draw.model === 'flat') {
       /* Fixed +N per side per turn — the rule for the CAPITAL-LESS battles
          (Neanderthal, Otzi, Gilgamesh). N is each battle's cardsPerTurn, so
          the hand refills to its cap every turn.
