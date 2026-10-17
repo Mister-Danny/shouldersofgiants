@@ -14124,36 +14124,49 @@ body.snap-guiding #battle-hover-popup { visibility: hidden !important; }
   user-select: none;
 }
 #otzi-layer { z-index: 9000; }
-#order-badge-layer { z-index: 8990; }
-#otzi-layer .snap-callout,
-#otzi-layer .snap-svg,
+#order-badge-layer { z-index: auto; }   /* inside #screen-battle: above the board, below the hand (DOM order) */
+/* Shared callout layers (js/game/callouts.js): fades. */
+.callout-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  z-index: 9000;
+}
+.callout-layer .snap-callout,
+.callout-layer .snap-svg,
 .otzi-final-banner { transition: opacity 0.35s ease; }
-#otzi-layer .otzi-fading { opacity: 0; }
+.callout-fading { opacity: 0 !important; }
 
-/* Order badges: the action's number at its card's top-left corner. */
+/* Order badges: the action's number, centred in the strip just below the card
+   (between the player's row and the hand), so it never covers a card. */
 .order-badge {
   position: absolute;
-  min-width: 27px;
-  height: 27px;
-  padding: 0 7px;
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
   border-radius: 999px;
   background: rgba(10, 22, 36, 0.95);
-  border: 2px solid #f8d000;
+  border: 1.5px solid #f8d000;
   color: #f8d000;
   font-family: 'Source Sans 3', Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 800;
-  line-height: 23px;
+  line-height: 14px;
   text-align: center;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
-  animation: snap-callout-in 0.2s ease-out;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  animation: order-badge-in 0.2s ease-out;
 }
+@keyframes order-badge-in { from { opacity: 0; } to { opacity: 1; } }
 .order-badge--move { border-style: dashed; }
 .order-badge--waiting { opacity: 0.45; }
 @keyframes order-badge-lit {
-  0%   { transform: scale(1); }
-  40%  { transform: scale(1.5); box-shadow: 0 0 14px 5px rgba(248, 208, 0, 0.85); }
-  100% { transform: scale(1); }
+  0%   { box-shadow: 0 0 0 0 rgba(248, 208, 0, 0); }
+  40%  { box-shadow: 0 0 12px 4px rgba(248, 208, 0, 0.9); }
+  100% { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
 }
 .order-badge--lit {
   opacity: 1;
@@ -14180,7 +14193,6 @@ body.snap-guiding #battle-hover-popup { visibility: hidden !important; }
   from { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
   to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
-.otzi-final-banner.otzi-fading { opacity: 0; }
 .otzi-final-title {
   font-family: var(--font);
   font-size: 40px;

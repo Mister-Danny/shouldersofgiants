@@ -29,10 +29,9 @@ window.SOG_FEATURES = {
   CONTENT_PAST_KUSH_ENABLED: false,
 
   // Order badges (1, 2, 3 on each staged card / queued move, lit in turn during
-  // the reveal — js/game/order-badges.js). Ötzi's battle always shows them (its
-  // config sets orderBadges); true here turns them on in every multi-location
-  // battle.
-  ORDER_BADGES_EVERYWHERE: false,
+  // the reveal — js/game/order-badges.js) in every multi-location battle. Ötzi's
+  // config sets orderBadges too, so false here would leave them in Ötzi only.
+  ORDER_BADGES_EVERYWHERE: true,
 
   // The maps a player can reach up to and including Kush.
   RELEASED_MAPS: ['eastafrica', 'egypt', 'upper-egypt', 'mesopotamia'],

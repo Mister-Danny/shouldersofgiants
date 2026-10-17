@@ -1573,15 +1573,10 @@ window.SOG.Adventure.Prehistory = (function () {
     return (typeof CARDS !== 'undefined') ? CARDS.find(function (c) { return c.id === id; }) : null;
   }
   function _cardName(id) { var c = _cardById(id); return c ? c.name : ''; }
-  function _stageEl() { return document.getElementById('sog-stage'); }
+  // Callouts, arcs and taps come from the shared toolkit (js/game/callouts.js).
+  var CO = SOG.Callouts;
   // An element's box in stage coordinates (1280×720, unscaled).
-  function _rectIn(el) {
-    if (!el) return null;
-    if (typeof el.x === 'number' && typeof el.getBoundingClientRect !== 'function') return el;   // already a rect
-    var st = _stageEl(); if (!st) return null;
-    var r = el.getBoundingClientRect(), s = st.getBoundingClientRect(), k = (s.width / 1280) || 1;
-    return { x: (r.left - s.left) / k, y: (r.top - s.top) / k, w: r.width / k, h: r.height / k };
-  }
+  function _rectIn(el) { return CO.rectIn(el); }
   function _handCardEl(id) { return document.querySelector('#battle-player-hand .battle-hand-card[data-id="' + id + '"]'); }
   function _slotEl(owner, si) { return SOG.board.getSlotEl(owner, SNAP_LOC, si); }
   function _playerSlots() { return _G().playerSlots[SNAP_LOC] || []; }
@@ -1599,12 +1594,8 @@ window.SOG.Adventure.Prehistory = (function () {
     for (var i = 0; i < sl.length; i++) if (sl[i] && sl[i].cardId === cardId) return i;
     return -1;
   }
-  function _layer() {
-    var el = document.getElementById('snap-layer');
-    if (!el) { var st = _stageEl(); if (!st) return null; el = document.createElement('div'); el.id = 'snap-layer'; st.appendChild(el); }
-    return el;
-  }
-  function _remove(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
+  function _layer() { return CO.layer('snap-layer'); }
+  function _remove(el) { CO.remove(el); }
   function _track(el) { if (_snap && el) _snap.els.push(el); return el; }
   // The location column's right edge, at a slot's height — where explanations sit.
   function _besideColumn(slotEl) {
@@ -1613,32 +1604,8 @@ window.SOG.Adventure.Prehistory = (function () {
   }
 
   /* ── Callouts ─────────────────────────────────────────────── */
-  function _placeCallout(el, anchor, place) {
-    var a = _rectIn(anchor), w = el.offsetWidth, h = el.offsetHeight, gap = 16, x, y;
-    if (!a)                     { x = 640 - w / 2;          y = 320 - h / 2; }
-    else if (place === 'bottom') { x = a.x + a.w / 2 - w / 2; y = a.y + a.h + gap; }
-    else if (place === 'left')   { x = a.x - w - gap;         y = a.y + a.h / 2 - h / 2; }
-    else if (place === 'right')  { x = a.x + a.w + gap;       y = a.y + a.h / 2 - h / 2; }
-    else                         { x = a.x + a.w / 2 - w / 2; y = a.y - h - gap; }
-    var cx = Math.max(8, Math.min(1280 - w - 8, x)), cy = Math.max(8, Math.min(720 - h - 8, y));
-    el.style.left = cx + 'px';
-    el.style.top  = cy + 'px';
-    if (!a) { el.classList.add('snap-callout--free'); return; }
-    // Keep the arrow on the anchor after clamping.
-    if (place === 'left' || place === 'right') el.style.setProperty('--arrow-y', Math.max(14, Math.min(h - 14, a.y + a.h / 2 - cy)) + 'px');
-    else el.style.setProperty('--arrow-x', Math.max(18, Math.min(w - 18, a.x + a.w / 2 - cx)) + 'px');
-  }
   function _callout(text, anchor, place, opts) {
-    opts = opts || {};
-    var layer = _layer(); if (!layer) return null;
-    var el = document.createElement('div');
-    el.className = 'snap-callout snap-callout--' + (place || 'top') + (opts.tap ? ' snap-callout--tap' : '') + (opts.cls ? ' ' + opts.cls : '');
-    var t = document.createElement('div'); t.className = 'snap-callout-text'; t.textContent = text; el.appendChild(t);
-    if (opts.sub) { var sb = document.createElement('div'); sb.className = 'snap-callout-sub'; sb.textContent = opts.sub; el.appendChild(sb); }
-    if (opts.tap) { var tp = document.createElement('div'); tp.className = 'snap-callout-tap'; tp.textContent = 'Tap to continue ▸'; el.appendChild(tp); }
-    layer.appendChild(el);
-    _placeCallout(el, anchor, place);
-    return _track(el);
+    return _track(CO.callout(_layer(), text, anchor, place, opts));
   }
   // The turn's instruction: stays up (input NOT blocked) while the play is
   // still to be made; once a card is down it becomes "press End Turn" on T1
@@ -1654,28 +1621,12 @@ window.SOG.Adventure.Prehistory = (function () {
     _snap.instrKind = null;
   }
 
-  // Wait for a tap/click/Enter anywhere. Capture phase, so the tap never also
-  // lands on a card or button underneath.
+  // Wait for a tap/click/Enter anywhere (capture phase — the tap never also
+  // lands on a card or button underneath). Teardown cancels it via offTap.
   function _waitTap(done) {
-    var fired = false;
-    var h = function (e) {
-      if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
-      e.preventDefault(); e.stopPropagation();
-      if (fired) return; fired = true;
-      off(); done();
-    };
-    var off = function () {
-      document.removeEventListener('click', h, true);
-      document.removeEventListener('keydown', h, true);
-      if (_snap && _snap.offTap === off) _snap.offTap = null;
-    };
-    if (_snap) _snap.offTap = off;
-    // Deferred so the tap that ended the previous beat doesn't skip this one.
-    setTimeout(function () {
-      if (fired || !_snap || _snap.dead) return;
-      document.addEventListener('click', h, true);
-      document.addEventListener('keydown', h, true);
-    }, 300);
+    var s = _snap;
+    CO.waitTap(function () { if (s && s.offTap) s.offTap = null; if (!s || !s.dead) done(); },
+               function (off) { if (s) s.offTap = off; });
   }
   // Run steps (each function(next)) with input blocked; then done().
   function _lesson(steps, done) {
@@ -1850,33 +1801,14 @@ window.SOG.Adventure.Prehistory = (function () {
   }
 
   // An SVG overlay in stage coordinates (the Domesticated Animal arc).
-  function _svg() {
-    var layer = _layer(); if (!layer) return null;
-    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', 'snap-svg');
-    svg.setAttribute('viewBox', '0 0 1280 720');
-    layer.appendChild(svg);
-    return _track(svg);
-  }
+  function _svg(markerId) { return _track(CO.svg(_layer(), markerId)); }
   // Domesticated Animal → the card it boosts: an arc over the two cards, "+1".
   function _connector(fromSi, toSi) {
     var a = _rectIn(_slotEl('player', fromSi)), b = _rectIn(_slotEl('player', toSi));
-    var svg = _svg(); if (!svg || !a || !b) return [];
-    var ns = 'http://www.w3.org/2000/svg';
+    if (!a || !b) return [];
+    var svg = _svg('snap-arrow'); if (!svg) return [];
     var x1 = a.x + a.w / 2, x2 = b.x + b.w / 2, y = a.y + 64, peak = y - 46;   // over the card art, clear of the IP badges
-    var defs = document.createElementNS(ns, 'defs');
-    defs.innerHTML = '<marker id="snap-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f8d000"/></marker>';
-    svg.appendChild(defs);
-    var p = document.createElementNS(ns, 'path');
-    p.setAttribute('d', 'M' + x1 + ',' + y + ' Q' + ((x1 + x2) / 2) + ',' + peak + ' ' + x2 + ',' + y);
-    p.setAttribute('class', 'snap-arc');
-    p.setAttribute('marker-end', 'url(#snap-arrow)');
-    svg.appendChild(p);
-    var t = document.createElementNS(ns, 'text');
-    t.setAttribute('x', (x1 + x2) / 2); t.setAttribute('y', (y + peak) / 2 - 4);
-    t.setAttribute('class', 'snap-arc-label');
-    t.textContent = '+1';
-    svg.appendChild(t);
+    CO.arc(svg, x1, y, x2, y, { peakY: peak, markerId: 'snap-arrow', label: '+1', labelAt: { x: (x1 + x2) / 2, y: (y + peak) / 2 - 4 } });
     return [svg];
   }
   function _spotlight(el) {

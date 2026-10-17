@@ -31,10 +31,27 @@ window.SOG.orderBadges = (function () {
     return !!(window.SOG_FEATURES && window.SOG_FEATURES.ORDER_BADGES_EVERYWHERE && G.config.structure && G.config.structure.locationsCount > 1);
   }
   function _stage() { return document.getElementById('sog-stage'); }
+  // The layer sits INSIDE #screen-battle, after the board and before the hand,
+  // so badges paint over the board but UNDER the hand: a hand card lifted by
+  // hover (or dragged) covers a badge rather than the other way round.
   function _layer() {
     var el = document.getElementById('order-badge-layer');
-    if (!el) { var st = _stage(); if (!st) return null; el = document.createElement('div'); el.id = 'order-badge-layer'; st.appendChild(el); }
+    if (el) return el;
+    var screen = document.getElementById('screen-battle'), hand = document.getElementById('battle-player-hand');
+    if (!screen) return null;
+    el = document.createElement('div');
+    el.id = 'order-badge-layer';
+    var before = hand;
+    while (before && before.parentElement !== screen) before = before.parentElement;
+    if (before) screen.insertBefore(el, before); else screen.appendChild(el);
     return el;
+  }
+  // Positions are taken relative to the layer's own box (the battle screen).
+  function _origin() {
+    var l = document.getElementById('order-badge-layer'), st = _stage();
+    if (!l || !st) return { x: 0, y: 0 };
+    var r = l.getBoundingClientRect(), s = st.getBoundingClientRect(), k = (s.width / 1280) || 1;
+    return { x: (r.left - s.left) / k, y: (r.top - s.top) / k };
   }
   function _rectIn(el) {
     var st = _stage(); if (!st || !el) return null;
@@ -71,14 +88,18 @@ window.SOG.orderBadges = (function () {
     if (G.phase !== 'select') return;
     layer.innerHTML = '';
     if (!enabled()) return;
+    var o = _origin();
     (G.playerActionLog || []).forEach(function (a, k) {
       var r = _rectIn(_anchorFor(a));
       if (!r) return;
       var b = document.createElement('div');
       b.className = 'order-badge' + (a.type === 'move' ? ' order-badge--move' : '');
       b.textContent = String(k + 1);
-      b.style.left = (r.x - 10) + 'px';
-      b.style.top  = (r.y - 10) + 'px';
+      // Centred in the strip BELOW the card (between the player's row and the
+      // hand): every corner of a card carries information (Capital, type, IP),
+      // so the badge never sits on the card itself.
+      b.style.left = (r.x + r.w / 2 - o.x) + 'px';
+      b.style.top  = (r.y + r.h + 1 - o.y) + 'px';
       layer.appendChild(b);
     });
   }

@@ -28,25 +28,12 @@ window.SOG.OtziLessons = (function () {
 
   /* ── Small helpers ─────────────────────────────────────────── */
   function _G() { return SOG.state.G; }
-  function _stage() { return document.getElementById('sog-stage'); }
-  function _layer() {
-    var el = document.getElementById('otzi-layer');
-    if (!el) { var st = _stage(); if (!st) return null; el = document.createElement('div'); el.id = 'otzi-layer'; st.appendChild(el); }
-    return el;
-  }
-  function _rectIn(el) {
-    if (!el) return null;
-    if (typeof el.getBoundingClientRect !== 'function') return el;
-    var st = _stage(); if (!st) return null;
-    var r = el.getBoundingClientRect(), s = st.getBoundingClientRect(), k = (s.width / 1280) || 1;
-    return { x: (r.left - s.left) / k, y: (r.top - s.top) / k, w: r.width / k, h: r.height / k };
-  }
-  function _remove(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
-  function _fade(el) {
-    if (!el || !el.parentNode) return;
-    el.classList.add('otzi-fading');
-    setTimeout(function () { _remove(el); }, 350);
-  }
+  // Callouts, arcs and fades come from the shared toolkit (js/game/callouts.js).
+  var CO = SOG.Callouts;
+  function _layer() { return CO.layer('otzi-layer'); }
+  function _rectIn(el) { return CO.rectIn(el); }
+  function _remove(el) { CO.remove(el); }
+  function _fade(el) { CO.fade(el); }
   function _later(fn, ms) { var t = setTimeout(function () { if (S) fn(); }, ms); if (S) S.timers.push(t); return t; }
   function _once(key) { if (!S || S.once[key]) return false; S.once[key] = true; return true; }
   function _cardName(id) { var c = (typeof CARDS !== 'undefined') && CARDS.find(function (x) { return x.id === id; }); return c ? c.name : ''; }
@@ -87,31 +74,13 @@ window.SOG.OtziLessons = (function () {
     return null;
   }
 
-  /* ── Callouts (the Neanderthal battle's style: .snap-callout) ── */
-  function _place(el, anchor, place) {
-    var a = _rectIn(anchor), w = el.offsetWidth, h = el.offsetHeight, gap = 16, x, y;
-    if (!a)                      { x = 640 - w / 2; y = 300 - h / 2; }
-    else if (place === 'bottom') { x = a.x + a.w / 2 - w / 2; y = a.y + a.h + gap; }
-    else if (place === 'left')   { x = a.x - w - gap;         y = a.y + a.h / 2 - h / 2; }
-    else if (place === 'right')  { x = a.x + a.w + gap;       y = a.y + a.h / 2 - h / 2; }
-    else                         { x = a.x + a.w / 2 - w / 2; y = a.y - h - gap; }
-    var cx = Math.max(8, Math.min(1280 - w - 8, x)), cy = Math.max(8, Math.min(720 - h - 8, y));
-    el.style.left = cx + 'px'; el.style.top = cy + 'px';
-    if (!a) { el.classList.add('snap-callout--free'); return; }
-    if (place === 'left' || place === 'right') el.style.setProperty('--arrow-y', Math.max(14, Math.min(h - 14, a.y + a.h / 2 - cy)) + 'px');
-    else el.style.setProperty('--arrow-x', Math.max(18, Math.min(w - 18, a.x + a.w / 2 - cx)) + 'px');
-  }
+  /* ── Callouts (the shared .snap-callout style) ─────────────── */
   // A transient callout: fades after `ms` (default 4 s) or at the next action.
   function _callout(text, anchor, place, opts) {
     opts = opts || {};
-    var layer = _layer(); if (!layer || !S) return null;
-    var el = document.createElement('div');
-    el.className = 'snap-callout snap-callout--' + (place || 'top') + (opts.cls ? ' ' + opts.cls : '');
-    var t = document.createElement('div'); t.className = 'snap-callout-text'; t.textContent = text; el.appendChild(t);
-    if (opts.sub) { var sb = document.createElement('div'); sb.className = 'snap-callout-sub'; sb.textContent = opts.sub; el.appendChild(sb); }
-    layer.appendChild(el);
-    _place(el, anchor, place);
-    if (!opts.sticky) { S.transient.push(el); _later(function () { _fade(el); }, opts.ms || FADE_MS); }
+    if (!S) return null;
+    var el = CO.callout(_layer(), text, anchor, place, { sub: opts.sub, cls: opts.cls });
+    if (el && !opts.sticky) { S.transient.push(el); _later(function () { _fade(el); }, opts.ms || FADE_MS); }
     return el;
   }
   // The player acted (a play, a move, End Turn): transient callouts make way.
@@ -128,31 +97,9 @@ window.SOG.OtziLessons = (function () {
   }
 
   /* ── Arcs (Cave Art's +1s, Lucy's move) ──────────────────────── */
-  function _svg() {
-    var layer = _layer(); if (!layer) return null;
-    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', 'snap-svg');
-    svg.setAttribute('viewBox', '0 0 1280 720');
-    svg.innerHTML = '<defs><marker id="otzi-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f8d000"/></marker></defs>';
-    layer.appendChild(svg);
-    return svg;
-  }
-  function _arc(svg, x1, y1, x2, y2, lift, label, labelAt) {
-    var ns = 'http://www.w3.org/2000/svg';
-    var p = document.createElementNS(ns, 'path');
-    var mx = (x1 + x2) / 2, my = Math.min(y1, y2) - lift;
-    p.setAttribute('d', 'M' + x1 + ',' + y1 + ' Q' + mx + ',' + my + ' ' + x2 + ',' + y2);
-    p.setAttribute('class', 'snap-arc');
-    p.setAttribute('marker-end', 'url(#otzi-arrow)');
-    svg.appendChild(p);
-    if (label) {
-      var t = document.createElementNS(ns, 'text');
-      var at = labelAt || { x: mx, y: (Math.min(y1, y2) + my) / 2 };
-      t.setAttribute('x', at.x); t.setAttribute('y', at.y);
-      t.setAttribute('class', 'snap-arc-label');
-      t.textContent = label;
-      svg.appendChild(t);
-    }
+  function _svg() { return CO.svg(_layer(), 'otzi-arrow'); }
+  function _arc(svg, x1, y1, x2, y2, lift, label) {
+    CO.arc(svg, x1, y1, x2, y2, { lift: lift, label: label, markerId: 'otzi-arrow' });
   }
   function _transientEl(el, ms) { if (!el || !S) return; S.transient.push(el); _later(function () { _fade(el); }, ms || FADE_MS); }
 
@@ -282,11 +229,7 @@ window.SOG.OtziLessons = (function () {
     var svg = _svg();
     if (svg && a && b) {
       _arc(svg, a.x + a.w / 2, a.y + 4, b.x + b.w / 2, b.y + 4, 70, null);
-      var lab = function (r, txt) {
-        var t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        t.setAttribute('x', r.x + r.w / 2); t.setAttribute('y', r.y - 14);
-        t.setAttribute('class', 'snap-arc-label'); t.textContent = txt; svg.appendChild(t);
-      };
+      var lab = function (r, txt) { CO.label(svg, r.x + r.w / 2, r.y - 14, txt); };
       lab(a, fmt(dFrom)); lab(b, fmt(dTo));
       _transientEl(svg, 6000);
     }

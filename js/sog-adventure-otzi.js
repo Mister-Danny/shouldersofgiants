@@ -46,10 +46,9 @@ SOG.OtziBattle = (function () {
   ];
 
   var POST_SHAKE_LINES = [
-    { who: 'explorer', text: 'Oh' },
-    { who: 'explorer', text: 'Bigger world, more cards.' },
-    { who: 'explorer', text: 'Makes sense...' },
-    { who: 'explorer', text: 'How do I win?' },
+    { who: 'explorer', text: 'Whoa. The world just got bigger.' },
+    { who: 'otzi',     text: 'Bigger world, more cards.' },
+    { who: 'explorer', text: 'Makes sense... so how do I win?' },
     { who: 'otzi',     text: "You won't." }
   ];
   // (Ötzi's rule lines — 2 cards a turn, win 2 of 3 — are system callouts now:
