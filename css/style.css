@@ -5246,10 +5246,23 @@ button,
 }
 
 
-/* Draggable battle elements — JS owns all touch events */
+/* Draggable battle elements — JS owns all touch events (play, take-back, move) */
 .battle-hand-card,
-.battle-card-slot.face-down[data-owner="player"],
+.battle-card-slot.unplayed[data-owner="player"],
 .battle-card-slot.moveable[data-owner="player"] { touch-action: none; }
+
+/* Touch-screen gestures that fight the game (touch laptops, Chromebooks in tablet
+   mode). The battle board never scrolls or zooms: no pinch / double-tap zoom or
+   page pan on it. A scrolling popup inside is its own scroll container, so its
+   touch-action (auto) still lets it scroll. No pull-to-refresh / overscroll
+   bounce anywhere; no long-press callout menu or text-selection highlight on game
+   art; no grey tap flash. Text fields keep selection (class codes, logins). */
+html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+#screen-battle, #screen-overworld { touch-action: none; }
+#sog-stage { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#sog-stage input, #sog-stage textarea, #sog-stage [contenteditable="true"] {
+  -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+}
 
 
 /* ══════════════════════════════════════════════════════════════════
@@ -14065,4 +14078,34 @@ body.snap-guiding #battle-hover-popup { visibility: hidden !important; }
   border-radius: 6px;
   position: relative;
   z-index: 30;
+}
+
+/* Finger-sized tap areas (~44 px) on small controls students meet, without
+   changing how they look: an invisible hit area extends past the edges. */
+/* (.popup-close-x is already position:absolute, which anchors its hit area.) */
+.home-corner-link,
+.music-ctrl-btn,
+.teacher-banner-close,
+.teacher-banner-go { position: relative; }
+.home-corner-link::before,
+.popup-close-x::before,
+.music-ctrl-btn::before,
+.teacher-banner-close::before,
+.teacher-banner-go::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+
+/* Touch-only devices (no hover at all): the map's hover-only labels — place
+   names and exit boxes ("To Mesopotamia →") — show all the time, since a tap
+   there already walks or travels. (Hidden Sahara exits have no label: still
+   hidden.) Touch laptops keep hover: they have a trackpad. */
+@media (hover: none) {
+  .overworld-node .overworld-node-label { opacity: 1; }
+  .overworld-exit { border-color: rgba(255, 215, 0, 0.35); }
+  .overworld-exit .overworld-exit-label { opacity: 1; }
 }

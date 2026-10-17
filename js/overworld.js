@@ -6498,6 +6498,9 @@ var Overworld = (function () {
   /* Purchase confirmation — Yes runs onYes (caller closes the buy popup + runs
      the transaction); No just dismisses back to the buy popup. */
   function _openBuyConfirm(card, onYes) {
+    // One confirm at a time: a double tap on Buy must not stack two (two Yes =
+    // two charges).
+    if (document.getElementById('adv-market-confirm')) return;
     var ov = document.createElement('div');
     ov.id = 'adv-market-confirm';
     ov.style.cssText = 'position:fixed;inset:0;z-index:5100;display:flex;align-items:center;justify-content:center;background:rgba(8,4,0,0.5);';
@@ -6515,8 +6518,9 @@ var Overworld = (function () {
     var no = document.createElement('button'); no.className = 'btn-primary'; no.textContent = 'No';
     no.style.cssText = 'padding:9px 28px;font-size:17px;cursor:pointer;';
     function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
-    no.addEventListener('click', close);
-    yes.addEventListener('click', function () { close(); if (onYes) onYes(); });
+    var answered = false;   // once only — a double tap on Yes buys once
+    no.addEventListener('click', function () { if (answered) return; answered = true; close(); });
+    yes.addEventListener('click', function () { if (answered) return; answered = true; close(); if (onYes) onYes(); });
     row.appendChild(yes); row.appendChild(no);
     panel.appendChild(q); panel.appendChild(row);
     ov.appendChild(panel);
@@ -6530,6 +6534,8 @@ var Overworld = (function () {
     // (0) lock — the gate is re-read LIVE from the open market's own stock, never
     //     taken from the caller, so a locked card cannot be bought by any path.
     if (!card || !_marketGateOpen(_marketGateFor(card.id))) return;
+    // already owned (a second confirm, a stale shelf) — never charge twice
+    if (window.SOG && SOG.collection && typeof SOG.collection.isUnlocked === 'function' && SOG.collection.isUnlocked(card.id)) return;
     // (a) spend — guard (button was active, but never trust it)
     if (!(window.SOG && SOG.gold && SOG.gold.spend(price))) return;
     // (b) grant to the collection (owned + persisted — same as battle-win grants)

@@ -1061,6 +1061,12 @@
   });
 
   function onEndTurn() {
+    // Once per turn, and no more plays/moves/take-backs from this instant: the AI
+    // has already chosen by the time the reveal starts 600 ms later, so a card
+    // dragged in during that window must be refused (commitPlay checks the phase).
+    if (G.phase !== 'select') return;
+    G.phase = 'ending';
+    if (SOG.input && SOG.input.clearSelection) SOG.input.clearSelection();
     _stopSelectionTimer();
     if (typeof Analytics !== 'undefined') Analytics.turnEnded(G.turn);
     endTurnBtn.disabled   = true;

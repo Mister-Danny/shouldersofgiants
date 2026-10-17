@@ -126,11 +126,22 @@
     });
   }
 
+  /* ── Tap = inspect, drag = play ──────────────────────────────────────────
+     A finger tap on a card opens its info (the click-to-open popup); hovering is
+     a MOUSE feature. On a touch screen — including a touch laptop whose trackpad
+     makes it "hover-capable" — the browser also fakes mouseenter/click for a
+     tap, so the last pointer type decides: touch → the popup path, mouse → the
+     hover panel. Board cards and locations already open on click (= tap). */
+  var lastPointerType = 'mouse';
+  document.addEventListener('pointerdown', function (e) { lastPointerType = e.pointerType || 'mouse'; }, true);
+  function _touchInput() { return lastPointerType === 'touch' || lastPointerType === 'pen'; }
+
   /* ── Hover info handlers ─────────────────────────────────────────────────
      These only ever SHOW/HIDE the panel; SOG.cardHover owns the enable check,
      the touch-device check and the suppression state. */
   function onHandCardMouseEnter() {
     if (!SOG.cardHover) return;
+    if (_touchInput()) return;   // a tap's emulated mouseenter — the tap opens the popup instead
     var cardId = parseInt(this.dataset.id, 10);
     if (isNaN(cardId)) return;
     var card = CARDS.find(function (c) { return c.id === cardId; });
@@ -181,7 +192,7 @@
      the 350ms wait. Switching the setting off restores this path exactly. */
   function onHandCardClick(e) {
     if (e.detail > 1) return;  // dblclick path handled separately
-    if (SOG.cardHover && SOG.cardHover.isEnabled()) return;
+    if (SOG.cardHover && SOG.cardHover.isEnabled() && !_touchInput()) return;   // mouse: the hover panel already shows it
     var cardId = parseInt(this.dataset.id, 10);
     if (isNaN(cardId)) return;
     if (pendingPopupTimer) { clearTimeout(pendingPopupTimer); pendingPopupTimer = null; }
@@ -223,7 +234,8 @@
 
   function onHandCardDragStart(e) {
     if (SOG.cardHover) SOG.cardHover.suppress();   // dragging to play — panel out of the way
-    if (G.phase !== 'select' || _dialogueActive()) { e.preventDefault(); return; }
+    // One dragging card at a time: not during a touch drag or another drag.
+    if (G.phase !== 'select' || _dialogueActive() || touchDragActive || dragInfo) { e.preventDefault(); return; }
     var id   = parseInt(this.dataset.id, 10);
     var card = CARDS.find(function (c) { return c.id === id; });
     if (!card) return;
@@ -253,6 +265,7 @@
   ═══════════════════════════════════════════════════════════════ */
 
   boardEl.addEventListener('dragstart', function (e) {
+    if (touchDragActive || dragInfo || _dialogueActive()) { e.preventDefault(); return; }   // one drag at a time
     // Unplayed (face-up but not yet revealed) slot → undo-play drag
     var fdSlot = e.target.closest('.battle-card-slot.unplayed[data-owner="player"]');
     if (fdSlot) {
@@ -777,21 +790,28 @@
      PLAY / UNDO / RESET
   ═══════════════════════════════════════════════════════════════ */
 
+  /* THE play. Every player play — mouse drop, touch drop, click-to-place,
+     keyboard — lands here, and THIS is the rules check that cannot be bypassed:
+     the card must still be in the hand (a second finger / repeated drop of the
+     same card does nothing), no dialogue may be blocking input, and the target
+     must pass isLegalPlayTarget (phase, open slot, flood / gate / type block,
+     Capital, the cards-per-turn cap, the turn-1 Rift rule). Input handlers may
+     pre-check for feedback, but they are not the gate. Returns true if played.
+     (The touch drop used to call this with no legality check, and this function
+     did not test the per-turn cap, so a touch screen could play past it.) */
   function commitPlay(cardId, locId) {
     var card = CARDS.find(function (c) { return c.id === cardId; });
-    if (!card) return;
-    // Flooded / gated / type-blocked location → reject the play defensively (mirrors isLegalPlayTarget).
-    if (!isLocationPlayable(locId, 'player', cardId)) { var df = getSlotEl('player', locId, 0); if (df) SOG.ui.flashDeny(df); return; }
+    if (!card) return false;
+    if (!G.playerHand || G.playerHand.indexOf(cardId) === -1) return false;
+    if (_dialogueActive() || !isLegalPlayTarget(cardId, locId)) {
+      var slots = G.playerSlots[locId];
+      var deny  = slots ? getSlotEl('player', locId, Math.max(0, slots.indexOf(null))) : null;
+      if (deny) SOG.ui.flashDeny(deny);
+      return false;
+    }
     // Cost-zero via config (resource.model 'none').
     var cost = _resourceFree() ? 0 : effectiveCost(card, locId);
-    if (cost > G.capital) { var d = getSlotEl('player', locId, 0); if (d) SOG.ui.flashDeny(d); return; }
     var si = G.playerSlots[locId].indexOf(null);
-    if (si === -1) { var d2 = getSlotEl('player', locId, 0); if (d2) SOG.ui.flashDeny(d2); return; }
-    // FIRST_CARD_HERE: first play on Turn 1 must go to the Great Rift Valley
-    var riftLoc = G.locations.find(function (l) { return l.abilityKey === 'FIRST_CARD_HERE'; });
-    if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
-      var d2 = getSlotEl('player', locId, 0); if (d2) SOG.ui.flashDeny(d2); return;
-    }
     clearSelection();  // any click/keyboard selection becomes stale after commit
 
     // Capture hand position so undoPlay can restore the card to the slot it
@@ -838,9 +858,11 @@
     if (window.SOG && SOG.BattleHooks) {
       SOG.BattleHooks.fire('onPlayerPlayed', [{ cardId: cardId, locId: locId, turn: G.turn }]);
     }
+    return true;
   }
 
   function undoPlay(locId, slotIndex) {
+    if (G.phase !== 'select' || !G.playerSlots[locId]) return;   // take-backs only while choosing
     var sd = G.playerSlots[locId][slotIndex];
     if (!sd || sd.revealed) return;
     clearSelection();  // any click/keyboard selection becomes stale after undo
@@ -1242,8 +1264,15 @@
    * executeMoveAnimated slides it in queue order.
    */
   function queueMove(fromLocId, fromSlotIndex, toLocId) {
-    var sd = G.playerSlots[fromLocId][fromSlotIndex];
+    var sd = G.playerSlots[fromLocId] && G.playerSlots[fromLocId][fromSlotIndex];
     if (!sd) return;
+    // Same gate as commitPlay: whatever the input, a move must be legal now
+    // (select phase, no dialogue, a legal destination) and the card must still be
+    // offered as moveable (a second drop of an already-moved card does nothing).
+    if (G.phase !== 'select' || _dialogueActive()) return;
+    if (!isLegalMoveTarget(sd.cardId, fromLocId, toLocId)) return;
+    var fromEl = getSlotEl('player', fromLocId, fromSlotIndex);
+    if (fromEl && !fromEl.classList.contains('moveable')) return;
     // NO_MOVE_HERE — the same rule at the commit point as at the gate above; the
     // two must agree or a drag would preview a move it then refuses.
     if (SOG.board && SOG.board.isMoveBlockedInto && SOG.board.isMoveBlockedInto(toLocId)) return;
@@ -1329,17 +1358,26 @@
   /* ═══════════════════════════════════════════════════════════════
      TOUCH DRAG SUPPORT
      Mirrors the mouse drag-and-drop system using touch events.
-     Works alongside existing dragstart/dragover/drop without conflict.
+     ONE finger at a time: the first touch on a draggable card is followed by
+     its identifier; any other touch point is ignored until it lifts. A touch
+     drag never starts while a mouse drag is in progress (and the HTML5 drag
+     refuses to start during a touch drag — see touchDragActive), so only one
+     card is ever "dragging". Tap (under THRESHOLD px) = the browser's normal
+     click → inspect; drag = play. The drop goes through commitPlay /
+     queueMove / undoPlay, which are the rules gates.
   ═══════════════════════════════════════════════════════════════ */
 
+  var touchDragActive = false;   // read by the HTML5 dragstart handlers
+
   function initTouchDrag() {
-    var THRESHOLD = 8;       // px — tap vs drag discrimination
+    var THRESHOLD = 10;      // px — tap vs drag discrimination
     var clone     = null;    // floating visual clone during drag
     var cloneW    = 0;
     var cloneH    = 0;
     var active    = false;   // true once threshold crossed
     var srcEl     = null;    // the element the touch started on
     var srcType   = null;    // 'hand' | 'slot' | 'move'
+    var touchId   = null;    // identifier of the ONE finger being followed
     var startX    = 0;
     var startY    = 0;
 
@@ -1348,12 +1386,17 @@
       if (window.tutorialActive) return null;  // tutorial handles its own touch drag
       if (_dialogueActive())     return null;  // HUD dialogue in progress — no placement
       if (G.phase !== 'select') return null;
+      if (!el || !el.closest) return null;
       var hc = el.closest('.battle-hand-card');
       if (hc) return { type: 'hand', el: hc };
-      var fd = el.closest('.battle-card-slot.face-down[data-owner="player"]');
+      var fd = el.closest('.battle-card-slot.unplayed[data-owner="player"]');   // take-back
       if (fd) return { type: 'slot', el: fd };
       var mv = el.closest('.battle-card-slot.moveable[data-owner="player"]');
       if (mv) return { type: 'move', el: mv };
+      return null;
+    }
+    function ours(list) {
+      for (var i = 0; i < list.length; i++) if (list[i].identifier === touchId) return list[i];
       return null;
     }
 
@@ -1363,6 +1406,7 @@
       cloneW = r.width;
       cloneH = r.height;
       var c = el.cloneNode(true);
+      c.classList.remove('snap-choice-gone');
       c.style.cssText =
         'position:fixed;' +
         'width:'  + cloneW + 'px;' +
@@ -1371,24 +1415,25 @@
         'left:'   + r.left + 'px;' +
         'pointer-events:none;' +
         'z-index:9999;' +
-        'opacity:0.85;' +
+        'opacity:0.9;' +
         'transform:scale(1.06);' +
         'transition:none;';
       document.body.appendChild(c);
       return c;
     }
 
-    /* Move clone so it's centred under the finger */
+    /* Keep the card ABOVE the finger (the finger sits near its bottom edge), so
+       the hand doesn't hide the card being placed. */
     function positionClone(cx, cy) {
       clone.style.left = (cx - cloneW / 2) + 'px';
-      clone.style.top  = (cy - cloneH / 2) + 'px';
+      clone.style.top  = (cy - cloneH * 0.85) + 'px';
     }
 
     /* Return the element under (cx, cy), hiding clone first so it doesn't block */
     function elUnder(cx, cy) {
-      clone.style.visibility = 'hidden';
+      if (clone) clone.style.visibility = 'hidden';
       var el = document.elementFromPoint(cx, cy);
-      clone.style.visibility = '';
+      if (clone) clone.style.visibility = '';
       return el;
     }
 
@@ -1416,38 +1461,59 @@
       if (t) t.classList.add('drag-over');
     }
 
-    /* Reset all touch drag state */
-    function reset() {
-      if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
-      clone  = null;
-      active = false;
-      srcEl  = null;
+    /* Reset all touch drag state. returnHome: glide the clone back to where the
+       card came from (a drop that didn't play), so it doesn't just vanish. */
+    function reset(returnHome) {
+      var c = clone, from = srcEl;
+      if (c && returnHome && from && from.isConnected) {
+        var r = from.getBoundingClientRect();
+        c.style.transition = 'left 0.18s ease-out, top 0.18s ease-out, opacity 0.18s';
+        c.style.left = r.left + 'px'; c.style.top = r.top + 'px'; c.style.opacity = '0.4';
+        setTimeout(function () { if (c.parentNode) c.parentNode.removeChild(c); }, 200);
+      } else if (c && c.parentNode) {
+        c.parentNode.removeChild(c);
+      }
+      if (from) from.classList.remove('dragging');
+      clone   = null;
+      active  = false;
+      srcEl   = null;
       srcType = null;
+      touchId = null;
+      touchDragActive = false;
     }
 
     /* ── touchstart ───────────────────────────────────────────── */
     document.addEventListener('touchstart', function (e) {
-      var src = findSource(e.touches[0].target);
-      if (!src) { srcEl = null; return; }
+      if (touchId !== null) return;   // already following a finger — ignore extra touch points
+      if (dragInfo) return;           // a mouse drag is in progress
+      var t   = e.changedTouches[0];
+      var src = findSource(t.target);
+      if (!src) return;
+      touchId = t.identifier;
       srcEl   = src.el;
       srcType = src.type;
       active  = false;
       clone   = null;
-      startX  = e.touches[0].clientX;
-      startY  = e.touches[0].clientY;
+      startX  = t.clientX;
+      startY  = t.clientY;
     }, { passive: true });
 
     /* ── touchmove ────────────────────────────────────────────── */
     document.addEventListener('touchmove', function (e) {
-      if (!srcEl) return;
-      var t  = e.touches[0];
+      if (touchId === null) return;
+      var t = ours(e.touches);
+      if (!t) return;
       var dx = t.clientX - startX;
       var dy = t.clientY - startY;
 
       if (!active) {
         if (Math.sqrt(dx * dx + dy * dy) < THRESHOLD) return;
-        // Threshold crossed — begin drag
+        // Threshold crossed — begin drag, if still allowed (a dialogue or the
+        // reveal may have started since the finger went down).
+        if (G.phase !== 'select' || _dialogueActive() || dragInfo || !srcEl.isConnected) { reset(false); return; }
         active = true;
+        touchDragActive = true;
+        if (SOG.cardHover) SOG.cardHover.suppress();
         clone  = createClone(srcEl);
         srcEl.classList.add('dragging');
 
@@ -1470,57 +1536,74 @@
         }
       }
 
-      e.preventDefault();  // suppress scroll / zoom during active drag
+      if (e.cancelable) e.preventDefault();  // suppress scroll / zoom during active drag
       positionClone(t.clientX, t.clientY);
       highlightDropTarget(t.clientX, t.clientY);
     }, { passive: false });
 
     /* ── touchend ─────────────────────────────────────────────── */
     document.addEventListener('touchend', function (e) {
-      if (!srcEl) return;
+      if (touchId === null) return;
+      var t = ours(e.changedTouches);
+      if (!t) return;                 // another finger lifted — not ours
 
       if (!active) {
-        // Tap (no drag): let the browser fire the natural click event
-        srcEl = null;
+        // Tap (no drag): let the browser fire the natural click event (= inspect)
+        reset(false);
         return;
       }
 
-      var t = e.changedTouches[0];
+      // The finger is lifted: suppress the click the browser may synthesize.
+      if (e.cancelable) e.preventDefault();
       clearDragOver();
 
       // Identify what is under the lifted finger
       var dropEl     = elUnder(t.clientX, t.clientY);
       var slotTarget = dropEl ? dropEl.closest('.battle-card-slot[data-owner="player"]') : null;
       var handTarget = dropEl ? dropEl.closest('#battle-player-hand') : null;
+      var info       = dragInfo;
+      var landed     = false;
+      dragInfo = null;
 
-      if (slotTarget && dragInfo) {
-        if (dragInfo.source === 'hand') {
-          commitPlay(dragInfo.cardId, parseInt(slotTarget.dataset.locId, 10));
-        } else if (dragInfo.source === 'move') {
+      if (slotTarget && info) {
+        if (info.source === 'hand') {
+          landed = commitPlay(info.cardId, parseInt(slotTarget.dataset.locId, 10));   // the rules gate
+        } else if (info.source === 'move') {
           var toLocId = parseInt(slotTarget.dataset.locId, 10);
-          if (toLocId === dragInfo.fromLocId) {
+          if (toLocId === info.fromLocId) {
             // Dropped back on the source location — silently no-op.
-          } else if (!isLegalMoveTarget(dragInfo.cardId, dragInfo.fromLocId, toLocId)) {
+          } else if (!isLegalMoveTarget(info.cardId, info.fromLocId, toLocId)) {
             // Illegal move target on touch — flash the slot under the finger.
             SOG.ui.flashDeny(slotTarget);
           } else {
-            queueMove(dragInfo.fromLocId, dragInfo.fromSlotIndex, toLocId);
+            queueMove(info.fromLocId, info.fromSlotIndex, toLocId);
+            landed = true;
           }
         }
-      } else if (handTarget && dragInfo && dragInfo.source === 'slot') {
-        undoPlay(dragInfo.locId, dragInfo.slotIndex);
+      } else if (handTarget && info && info.source === 'slot') {
+        undoPlay(info.locId, info.slotIndex);
+        landed = true;
       }
 
-      srcEl.classList.remove('dragging');
-      dragInfo = null;
-      reset();
-    }, { passive: true });
+      if (SOG.cardHover) SOG.cardHover.unsuppress();
+      reset(!landed);
+    }, { passive: false });
+
+    /* A resize / rotation mid-drag re-scales the stage under the finger: drop
+       the drag cleanly (card back home) rather than land it somewhere odd. */
+    window.addEventListener('resize', function () {
+      if (touchId === null) return;
+      if (active) dragInfo = null;
+      clearDragOver();
+      reset(true);
+    });
 
     /* ── touchcancel ──────────────────────────────────────────── */
-    document.addEventListener('touchcancel', function () {
-      if (srcEl) srcEl.classList.remove('dragging');
-      dragInfo = null;
-      reset();
+    document.addEventListener('touchcancel', function (e) {
+      if (touchId === null || !ours(e.changedTouches)) return;
+      if (active) dragInfo = null;
+      clearDragOver();
+      reset(true);
     }, { passive: true });
   }
 

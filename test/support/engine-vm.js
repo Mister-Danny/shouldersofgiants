@@ -46,6 +46,13 @@ function engine(opts) {
   load('js/game/abilities.js');
   ctx.SOG.game.effectiveIP = ctx.SOG.board.effectiveIP;
   if (opts.ai) load('js/game/ai.js');
+  // The player's input module (commitPlay / undoPlay / queueMove — the rules
+  // gate every play passes through). Its DOM hooks bind to the inert stubs.
+  if (opts.input) {
+    ctx.SOG.board.updateHeader = () => {};   // DOM-only header repaint (input.js binds it at load)
+    window.setPlayerHand = () => {};          // the hand's DOM rebuild (js/ui.js)
+    load('js/game/input.js');
+  }
   const G = ctx.SOG.state.G;
   G.locations = [101, 102, 103].map((id) => ({ id, name: 'L' + id, abilityKey: null }));
   G.playerSlots = {}; G.aiSlots = {};
@@ -59,7 +66,7 @@ function engine(opts) {
      fn; resetRandom() restores it. Overriding the host's Math.random does nothing. */
   const setRandom = (fn) => { ctx.__rnd = fn; vm.runInContext('Math.random = function () { return __rnd(); };', ctx); };
   const resetRandom = () => { vm.runInContext('delete Math.random;', ctx); delete ctx.__rnd; };
-  return { G, board: ctx.SOG.board, abilities: ctx.SOG.abilities, ai: ctx.SOG.ai, CARDS: ctx.CARDS, ctx, setRandom, resetRandom };
+  return { G, board: ctx.SOG.board, abilities: ctx.SOG.abilities, ai: ctx.SOG.ai, input: ctx.SOG.input, CARDS: ctx.CARDS, ctx, setRandom, resetRandom };
 }
 
 /* A revealed slot record for card `id` in the first free slot on `owner`'s side. */
