@@ -2081,7 +2081,15 @@ window.SOG.Adventure.Prehistory = (function () {
       if (ids[last] === 29 && _handCardEl(30)) steps.push(function (next) { _caveArtWhatIf(ids, result, next); });
     }
     _lesson(steps, function () {
-      _remove(document.getElementById('snap-goal'));
+      // The explanation is over: fade out its "+1"s, the Cave Art copy and the
+      // goal before the outro dialogue / card reveal, so nothing lingers on top.
+      var leftovers = Array.prototype.slice.call(document.querySelectorAll(
+        '#snap-layer .snap-plus, #snap-layer .snap-guide-ghost--landed, #snap-goal'));
+      if (leftovers.length && typeof gsap !== 'undefined') {
+        gsap.to(leftovers, { opacity: 0, duration: 0.4, onComplete: function () { leftovers.forEach(_remove); } });
+      } else {
+        leftovers.forEach(_remove);
+      }
       then();
     });
   }
