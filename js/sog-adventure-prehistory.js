@@ -1990,7 +1990,7 @@ window.SOG.Adventure.Prehistory = (function () {
     ], function () {
       if (!_first()) { drag(); return; }
       // First time: read Domesticated Animal's ability, then watch it work.
-      _turnInstr('Move your cursor over Domesticated Animal to read its ability.', 32);
+      _turnInstr('Hover over or tap Domesticated Animal to read its ability.', 32);
       _onHandChanged();
       _awaitRead(32, function () {
         if (_pendingPlay()) return;            // already played it — carry on
@@ -2009,7 +2009,7 @@ window.SOG.Adventure.Prehistory = (function () {
         extras: function () { return _connector(di, gi).concat([_spotlight(_slotEl('player', gi))]); }
       })
     ], function () {
-      _turnInstr('Highlight the cards, to read their abilities. Then, choose the one that will gain the most Influence Points.', 36);
+      _turnInstr('Hover over or tap each card to read its ability. Then pick the one that will earn the most Influence Points.', 36);
       _snap.slotGlow = true;
       _onHandChanged();
     });
