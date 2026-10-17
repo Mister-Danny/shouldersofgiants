@@ -2038,7 +2038,7 @@ window.SOG.Adventure.Prehistory = (function () {
       var ids = _playerIds(); ids[hi] = 36;
       var tribeIP  = _campIPOf(ids, hi);
       var hunterIP = SOG.board.displayedIP(_playerSlots()[hi]);
-      steps.push(_tapStep("Hunter's card number is higher, but Tribe would have given you more IP here.", function () { return _besideColumn(_slotEl('player', hi)); }, 'right', {
+      steps.push(_tapStep("Hunter's card number is higher, but Tribe would have given you more IP here …and Tribe keeps growing with every card you add.", function () { return _besideColumn(_slotEl('player', hi)); }, 'right', {
         sub: 'Hunter ' + hunterIP + ' IP · Tribe ' + tribeIP + ' IP',
         extras: function () { return _chip('player', hi, 2).concat(_ghost(36, hi, tribeIP)); }
       }));
