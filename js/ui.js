@@ -287,9 +287,10 @@
     scorePlayer.textContent = '0';
     scorePlayer.id          = 'loc-score-player-' + loc.id;
 
-    tile.appendChild(scoreOpp);
-    tile.appendChild(info);
+    // Player's score on the LEFT (the player's avatar side), opponent's on the right.
     tile.appendChild(scorePlayer);
+    tile.appendChild(info);
+    tile.appendChild(scoreOpp);
 
     return tile;
   }

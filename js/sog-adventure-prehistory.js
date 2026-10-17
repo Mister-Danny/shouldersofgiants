@@ -527,8 +527,7 @@ window.SOG.Adventure.Prehistory = (function () {
   // The scripted first battle keeps Lucy's story lines only: the system
   // callouts teach the cards, so her instruction lines would compete with them.
   var COACHING_PHASE_2_SCRIPTED = [
-    { who: 'lucy', text: "Alright, lets try and avoid an early extinction event." },
-    { who: 'lucy', text: "When you're ready, send this guy back to whatever came before the Stone Age..." }
+    { who: 'lucy', text: "Alright, lets try and avoid an early extinction event." }
   ];
 
   /* ── Coaching dialogue runner ──────────────────────────────── */
@@ -1549,17 +1548,18 @@ window.SOG.Adventure.Prehistory = (function () {
      SCRIPTED FIRST BATTLE — the game taught one card at a time
      ════════════════════════════════════════════════════════════
      Until the first win (SCRIPTED_CONFIG): one card a turn, dealt by
-     script, a looping drag guide for the first two plays, and short SYSTEM
-     CALLOUTS (one style, visibly not a character's speech bubble) that
-     explain each card as it lands. Breakdowns read the engine's own IP
-     attribution (sd.bonuses), so each one sums to the badge on the board.
+     script, a drag guide (two loops) for the first two plays, and short
+     SYSTEM CALLOUTS (one style, visibly not a character's speech bubble)
+     that explain each card as it lands.
 
-       T1 Gatherer → T2 Domesticated Animal (next to Gatherer)
-       T3 Tribe or Hunter → T4 Fire or Cave Art (the other fades away)
+       T1 Gatherer → T2 Domesticated Animal (read its ability first, then
+       "Let's see it work.") → T3 Tribe or Hunter (the other fades away) →
+       T4 Fire or Cave Art. Cave Art never fades: if Fire is played, the
+       end asks "What if you played Cave Art instead?" and replays the drag.
 
      Lessons that need reading block input until tapped (_lesson); the
-     instruction for the turn's play stays up without blocking (_instruct).
-     A retry skips the first-time basics (IP, "each card adds IP",
+     instruction for the turn's play stays up without blocking (_turnInstr).
+     A retry skips the first-time basics (IP, "Influence Points", reading
      Domesticated Animal) but keeps the guides and every decision beat.
      Overlays live in #snap-layer inside the stage (pointer-events: none). */
   var KEY_ATTEMPTS = 'sog_neanderthal_attempts';
@@ -1722,13 +1722,20 @@ window.SOG.Adventure.Prehistory = (function () {
 
   /* ── Drag guide (T1, T2) and valid-slot glow (T3, T4) ─────── */
   function _nextSlotEl() { var i = _playerSlots().indexOf(null); return i >= 0 ? _slotEl('player', i) : null; }
-  function _startGuide(cardId) {
+  // Two loops, then it stops (a take-back doesn't replay it). opts.target: a
+  // slot other than the next empty one; opts.loops; opts.land: leave the copy
+  // in the slot afterwards (the Cave Art "what if"); opts.onDone.
+  function _startGuide(cardId, opts) {
+    opts = opts || {};
     _stopGuide();
-    var layer = _layer(), cardEl = _handCardEl(cardId), slotEl = _nextSlotEl(), card = _cardById(cardId);
-    if (!layer || !cardEl || !slotEl || typeof gsap === 'undefined') return;
+    var layer = _layer(), cardEl = _handCardEl(cardId), slotEl = opts.target || _nextSlotEl(), card = _cardById(cardId);
+    var fail = function () { if (opts.onDone) opts.onDone(); };
+    if (!layer || !cardEl || !slotEl || typeof gsap === 'undefined') { fail(); return; }
     var a = _rectIn(cardEl), b = _rectIn(slotEl);
-    if (!a || !b || !a.w) return;
-    slotEl.classList.add('snap-target');
+    if (!a || !b || !a.w) { fail(); return; }
+    if (_snap.guideShown) _snap.guideShown[cardId] = true;
+    if (!opts.land) slotEl.classList.add('snap-target');
+    document.body.classList.add('snap-guiding');   // keep the hover panel off the animation
     var ghost = document.createElement('div');
     ghost.className = 'snap-guide-ghost';
     ghost.style.width = a.w + 'px'; ghost.style.height = a.h + 'px';
@@ -1739,7 +1746,16 @@ window.SOG.Adventure.Prehistory = (function () {
     layer.appendChild(ghost); layer.appendChild(hand);
     var k  = Math.min(b.w / a.w, b.h / a.h);
     var tx = b.x + (b.w - a.w * k) / 2, ty = b.y + (b.h - a.h * k) / 2;
-    var tl = gsap.timeline({ repeat: -1, repeatDelay: 0.5 });
+    var loops = opts.loops || 2;
+    var g = { tl: null, els: [ghost, hand], slotEl: slotEl };
+    var tl = gsap.timeline({ repeat: loops - 1, repeatDelay: 0.5, onComplete: function () {
+      if (_snap && _snap.guide === g) _snap.guide = null;
+      document.body.classList.remove('snap-guiding');
+      _remove(hand);
+      if (opts.land) { gsap.set(ghost, { opacity: 0.8 }); ghost.classList.add('snap-guide-ghost--landed'); _track(ghost); }
+      else { _remove(ghost); slotEl.classList.remove('snap-target'); }
+      if (opts.onDone) opts.onDone();
+    } });
     tl.set(ghost, { x: a.x, y: a.y, scale: 1, opacity: 0, transformOrigin: '0 0' })
       .set(hand,  { x: a.x + a.w * 0.5, y: a.y + a.h * 0.55, opacity: 0, scale: 1 })
       .to(hand,   { opacity: 1, duration: 0.3 })
@@ -1748,15 +1764,17 @@ window.SOG.Adventure.Prehistory = (function () {
       .addLabel('drag')
       .to(ghost,  { x: tx, y: ty, scale: k, duration: 1.1, ease: 'power1.inOut' }, 'drag')
       .to(hand,   { x: tx + a.w * k * 0.5, y: ty + a.h * k * 0.55, duration: 1.1, ease: 'power1.inOut' }, 'drag')
-      .to(hand,   { scale: 1, duration: 0.15 })
-      .to([ghost, hand], { opacity: 0, duration: 0.35, delay: 0.3 });
-    _snap.guide = { tl: tl, els: [ghost, hand], slotEl: slotEl };
+      .to(hand,   { scale: 1, duration: 0.15 });
+    if (!opts.land) tl.to([ghost, hand], { opacity: 0, duration: 0.35, delay: 0.3 });
+    g.tl = tl;
+    _snap.guide = g;
   }
   function _stopGuide() {
     var g = _snap && _snap.guide; if (!g) return;
     g.tl.kill();
     g.els.forEach(_remove);
     if (g.slotEl) g.slotEl.classList.remove('snap-target');
+    document.body.classList.remove('snap-guiding');
     _snap.guide = null;
   }
   function _glowNextSlot(on) {
@@ -1770,12 +1788,15 @@ window.SOG.Adventure.Prehistory = (function () {
   function _onHandChanged() {
     if (!_snap || _snap.dead) return;
     var G = _G(), pend = _pendingPlay(), pair = SNAP_HANDS[G.turn] || [];
+    // The card not chosen fades — except Cave Art, which stays for the
+    // end-of-battle "what if you played Cave Art instead?".
     if (pair.length > 1) pair.forEach(function (id) {
       var el = _handCardEl(id);
-      if (el) el.classList.toggle('snap-choice-gone', !!pend && pend.sd.cardId !== id);
+      if (el) el.classList.toggle('snap-choice-gone', !!pend && pend.sd.cardId !== id && id !== 30);
     });
     if (_snap.guideFor && !_snap.blocking) {
-      if (pend) _stopGuide(); else if (!_snap.guide) _startGuide(_snap.guideFor);
+      if (pend) _stopGuide();
+      else if (!_snap.guide && !_snap.guideShown[_snap.guideFor]) _startGuide(_snap.guideFor, { onDone: _snap.guideOnDone });
     }
     if (_snap.slotGlow) _glowNextSlot(!pend && !_snap.blocking);
     if (_snap.turnInstr && !_snap.blocking) {
@@ -1828,47 +1849,7 @@ window.SOG.Adventure.Prehistory = (function () {
     }, 160);
   }
 
-  /* ── IP breakdowns (from the engine's attribution) ─────────── */
-  // "Tribe 1 · ability +2 · Domesticated Animal +1 = 4": the card's printed IP,
-  // each source's total from sd.bonuses, and the badge's own number.
-  function _breakdownText(sd) {
-    var parts = [_cardName(sd.cardId) + ' ' + sd.ip], sums = {}, order = [];
-    (sd.bonuses || []).forEach(function (b) {
-      if (b.reset || !b.amount) return;
-      var key = b.sourceType + ':' + b.sourceId;
-      if (!(key in sums)) { sums[key] = 0; order.push(b); }
-      sums[key] += b.amount;
-    });
-    // The card's own ability first, then whatever boosts it, in the order they landed.
-    order.sort(function (x, y) {
-      var sx = (x.sourceType === 'card' && x.sourceId === sd.cardId) ? 0 : 1;
-      var sy = (y.sourceType === 'card' && y.sourceId === sd.cardId) ? 0 : 1;
-      return sx - sy;
-    });
-    order.forEach(function (b) {
-      var n = sums[b.sourceType + ':' + b.sourceId];
-      var label = (b.sourceType === 'card' && b.sourceId === sd.cardId) ? 'ability'
-                : (b.sourceType === 'card' ? _cardName(b.sourceId) : 'The Camp');
-      parts.push(label + ' ' + (n >= 0 ? '+' : '−') + Math.abs(n));
-    });
-    return parts.join(' · ') + ' = ' + SOG.board.displayedIP(sd);
-  }
-  // A breakdown chip LEFT of the column (explanations sit on the right), joined
-  // to its card by a line. `row` stacks several chips (the Cave Art finale).
-  function _chip(owner, si, row, text) {
-    var layer = _layer(), slotEl = _slotEl(owner, si), sd = (owner === 'player' ? _playerSlots() : _aiSlots())[si];
-    if (!layer || !slotEl || !sd) return [];
-    var r = _rectIn(slotEl), first = _rectIn(_slotEl(owner, 0)) || r;
-    var el = document.createElement('div');
-    el.className = 'snap-chip';
-    el.textContent = text || _breakdownText(sd);
-    layer.appendChild(el);
-    var x = Math.max(8, first.x - 30 - el.offsetWidth), y = r.y + 8 + (row || 0) * (el.offsetHeight + 12);
-    el.style.left = x + 'px'; el.style.top = y + 'px';
-    var line = _line(x + el.offsetWidth, y + el.offsetHeight / 2, r.x + r.w / 2, r.y + r.h * 0.45, 'snap-line--chip');
-    return [_track(el), line];
-  }
-  // A thin line (or a raised arc with an arrowhead) in stage coordinates.
+  // An SVG overlay in stage coordinates (the Domesticated Animal arc).
   function _svg() {
     var layer = _layer(); if (!layer) return null;
     var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1876,14 +1857,6 @@ window.SOG.Adventure.Prehistory = (function () {
     svg.setAttribute('viewBox', '0 0 1280 720');
     layer.appendChild(svg);
     return _track(svg);
-  }
-  function _line(x1, y1, x2, y2, cls) {
-    var svg = _svg(); if (!svg) return null;
-    var l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2);
-    l.setAttribute('class', 'snap-line ' + (cls || ''));
-    svg.appendChild(l);
-    return svg;
   }
   // Domesticated Animal → the card it boosts: an arc over the two cards, "+1".
   function _connector(fromSi, toSi) {
@@ -1905,26 +1878,6 @@ window.SOG.Adventure.Prehistory = (function () {
     t.textContent = '+1';
     svg.appendChild(t);
     return [svg];
-  }
-  // A translucent "what if" card over a player slot, with its would-be IP.
-  function _ghost(cardId, si, ip) {
-    var layer = _layer(), r = _rectIn(_slotEl('player', si)), card = _cardById(cardId);
-    if (!layer || !r || !card) return [];
-    var el = document.createElement('div');
-    el.className = 'snap-whatif';
-    el.style.left = r.x + 'px'; el.style.top = r.y + 'px';
-    el.style.width = r.w + 'px'; el.style.height = r.h + 'px';
-    el.style.backgroundImage = 'url("' + card.image + '")';
-    var badge = document.createElement('div');
-    badge.className = 'snap-whatif-ip';
-    badge.textContent = ip;
-    el.appendChild(badge);
-    var tag = document.createElement('div');
-    tag.className = 'snap-whatif-tag';
-    tag.textContent = 'What if?';
-    el.appendChild(tag);
-    layer.appendChild(el);
-    return [_track(el)];
   }
   function _spotlight(el) {
     if (!el) return function () {};
@@ -1988,8 +1941,10 @@ window.SOG.Adventure.Prehistory = (function () {
     if (!_snap) return;
     _setEndTurnLabel(turn);
     _snap.guideFor = null;
+    _snap.guideOnDone = null;
     _snap.slotGlow = false;
     _snap.turnInstr = null;
+    if (_snap.offRead) _snap.offRead();
     _glowNextSlot(false);
     _clearInstruct();
     // Let the hand deal land before the lesson's callouts measure anything.
@@ -1999,15 +1954,51 @@ window.SOG.Adventure.Prehistory = (function () {
     }, 700);
   }
 
+  // Wait until the player points at (hovers, or taps) a hand card, give them
+  // READ_MS to read its ability, then done(). Cancelled by a turn change.
+  var READ_MS = 1500;
+  function _awaitRead(cardId, done) {
+    var timer = null;
+    var h = function (e) {
+      var t = e.target && e.target.closest && e.target.closest('#battle-player-hand .battle-hand-card[data-id="' + cardId + '"]');
+      if (!t || timer) return;
+      timer = setTimeout(function () { off(); if (_snap && !_snap.dead) done(); }, READ_MS);
+    };
+    var off = function () {
+      document.removeEventListener('mouseover', h, true);
+      document.removeEventListener('click', h, true);
+      document.removeEventListener('touchstart', h, true);
+      if (_snap && _snap.offRead === off) _snap.offRead = null;
+    };
+    _snap.offRead = function () { if (timer) clearTimeout(timer); off(); };
+    document.addEventListener('mouseover', h, true);
+    document.addEventListener('click', h, true);
+    document.addEventListener('touchstart', h, true);
+  }
+
   function _snapTurn2() {
     var note = _snap.scoreNote; _snap.scoreNote = null;
-    _lesson([
-      _first() ? _tapStep('Each card adds IP.', _scoreEl, 'right', { extras: function () { _remove(note); return []; } })
-               : function (next) { _remove(note); next(); }
-    ], function () {
+    var drag = function () {
       _turnInstr('Drag Domesticated Animal next to Gatherer.', 32);
       _snap.guideFor = 32;
       _onHandChanged();
+    };
+    _lesson([
+      _first() ? _tapStep('Each card adds Influence Points or IP for short.', _scoreEl, 'left', { extras: function () { _remove(note); return []; } })
+               : function (next) { _remove(note); next(); },
+      _first() && _tapStep('The light blue one is yours.', _scoreEl, 'left')
+    ], function () {
+      if (!_first()) { drag(); return; }
+      // First time: read Domesticated Animal's ability, then watch it work.
+      _turnInstr('Move your cursor over Domesticated Animal to read its ability.', 32);
+      _onHandChanged();
+      _awaitRead(32, function () {
+        if (_pendingPlay()) return;            // already played it — carry on
+        _turnInstr("Let's see it work.", 32);
+        _snap.guideOnDone = function () { if (_snap && !_pendingPlay()) drag(); };
+        _snap.guideFor = 32;
+        _onHandChanged();
+      });
     });
   }
 
@@ -2015,32 +2006,23 @@ window.SOG.Adventure.Prehistory = (function () {
     var gi = _slotIndexOf('player', 28), di = _slotIndexOf('player', 32);
     _lesson([
       _first() && gi >= 0 && di >= 0 && _tapStep('Domesticated Animal boosts cards next to it.', function () { return _besideColumn(_slotEl('player', di)); }, 'right', {
-        extras: function () { return _connector(di, gi).concat(_chip('player', gi, 1)); }
+        extras: function () { return _connector(di, gi).concat([_spotlight(_slotEl('player', gi))]); }
       })
     ], function () {
-      _turnInstr('Choose one. Tap a card to read it.', 36);
+      _turnInstr('Highlight the cards, to read their abilities. Then, choose the one that will gain the most Influence Points.', 36);
       _snap.slotGlow = true;
       _onHandChanged();
     });
   }
 
   function _snapTurn4() {
-    var steps = [], di = _slotIndexOf('player', 32);
-    var ti = _slotIndexOf('player', 36), hi = _slotIndexOf('player', 27);
+    var steps = [], di = _slotIndexOf('player', 32), ti = _slotIndexOf('player', 36);
     if (ti >= 0) {
       steps.push(_tapStep('Tribe gets +1 for each other card here.', function () { return _besideColumn(_slotEl('player', ti)); }, 'right', {
-        extras: function () { return _chip('player', ti, 1).concat([_spotlight(_slotEl('player', ti))]); }
+        extras: function () { return [_spotlight(_slotEl('player', ti))]; }
       }));
       if (di >= 0) steps.push(_tapStep('Domesticated Animal adds +1 beside it.', function () { return _besideColumn(_slotEl('player', di)); }, 'right', {
-        extras: function () { return _connector(di, ti).concat(_chip('player', ti, 1)); }
-      }));
-    } else if (hi >= 0) {
-      var ids = _playerIds(); ids[hi] = 36;
-      var tribeIP  = _campIPOf(ids, hi);
-      var hunterIP = SOG.board.displayedIP(_playerSlots()[hi]);
-      steps.push(_tapStep("Hunter's card number is higher, but Tribe would have given you more IP here …and Tribe keeps growing with every card you add.", function () { return _besideColumn(_slotEl('player', hi)); }, 'right', {
-        sub: 'Hunter ' + hunterIP + ' IP · Tribe ' + tribeIP + ' IP',
-        extras: function () { return _chip('player', hi, 2).concat(_ghost(36, hi, tribeIP)); }
+        extras: function () { return _connector(di, ti); }
       }));
     }
     // Megalith: it has grown at the end of T2 and T3 by now.
@@ -2063,43 +2045,78 @@ window.SOG.Adventure.Prehistory = (function () {
     });
   }
 
+  // "+1" popping over a player card (Cave Art's boost, real or imagined).
+  function _plusOne(si) {
+    var layer = _layer(), r = _rectIn(_slotEl('player', si));
+    if (!layer || !r) return null;
+    var el = document.createElement('div');
+    el.className = 'snap-plus';
+    el.textContent = '+1';
+    el.style.left = (r.x + r.w / 2) + 'px';
+    el.style.top  = (r.y + r.h * 0.42) + 'px';
+    layer.appendChild(el);
+    return _track(el);
+  }
+
   // The end of the scripted battle, before the normal outcome flow.
   function _snapEnd(outcome, result, then) {
     if (!_snap) { then(); return; }
     _snap.guideFor = null; _snap.slotGlow = false; _snap.turnInstr = null;
     _stopGuide(); _glowNextSlot(false); _clearInstruct();
-    var ids = _playerIds(), last = ids.length - 1, steps = [];
+    var ids = _playerIds(), last = ids.length - 1, steps = [], score = _scoreEl();
     if (outcome === 'win' && ids[last] === 30) {
-      var score = _scoreEl();
+      // Cave Art: a "+1" over every card before it, the score surges.
       steps.push(function (next) {
+        for (var i = 0; i < last; i++) _plusOne(i);
         if (score) { score.classList.add('snap-score-surge'); setTimeout(function () { score.classList.remove('snap-score-surge'); }, 1600); }
         setTimeout(next, 900);
       });
-      steps.push(_tapStep('Cave Art boosted every card before it!', _scoreEl, 'right', {
-        sub: 'You ' + result.playerTotal + ' · Neanderthal ' + result.aiTotal,
-        extras: function () {
-          var out = [];
-          for (var i = 0; i < last; i++) out = out.concat(_chip('player', i, i));
-          return out;
-        }
-      }));
-    } else if (outcome !== 'win') {
-      if (outcome === 'tie') steps.push(_tapStep("A tie isn't a win — the Neanderthal keeps the camp!", _scoreEl, 'right', {
+      steps.push(_tapStep('Cave Art boosted every card before it!', _scoreEl, 'left', {
         sub: 'You ' + result.playerTotal + ' · Neanderthal ' + result.aiTotal
       }));
-      if (ids[last] === 29) {
-        var alt = ids.slice(); alt[last] = 30;
-        var n = _campTotal(alt);
-        steps.push(_tapStep('Cave Art would have scored ' + n + ' — enough to win.', function () { return _besideColumn(_slotEl('player', last)); }, 'right', {
-          sub: 'The Neanderthal had ' + result.aiTotal + '.',
-          extras: function () { return _ghost(30, last, _campIPOf(alt, last)); }
-        }));
-      }
+    } else if (outcome !== 'win') {
+      if (outcome === 'tie') steps.push(_tapStep("A tie isn't a win — the Neanderthal keeps the camp!", _scoreEl, 'left', {
+        sub: 'You ' + result.playerTotal + ' · Neanderthal ' + result.aiTotal
+      }));
+      if (ids[last] === 29 && _handCardEl(30)) steps.push(function (next) { _caveArtWhatIf(ids, result, next); });
     }
     _lesson(steps, function () {
-      var goal = document.getElementById('snap-goal'); _remove(goal);
+      _remove(document.getElementById('snap-goal'));
       then();
     });
+  }
+
+  // Fire was played: ask "what if you played Cave Art instead?", drag Cave Art
+  // from the hand over Fire, pop "+1" on each card before it while the score
+  // counts up to what Cave Art would have scored, then put the real score back.
+  function _caveArtWhatIf(ids, result, next) {
+    var last = ids.length - 1, alt = ids.slice(); alt[last] = 30;
+    var n = _campTotal(alt), score = _scoreEl(), real = score ? score.textContent : '';
+    var q = _callout('What if you played Cave Art instead?', _handCardEl(30), 'left');
+    setTimeout(function () {
+      if (!_snap || _snap.dead) return;
+      _startGuide(30, { target: _slotEl('player', last), loops: 1, land: true, onDone: function () {
+        if (!_snap || _snap.dead) return;
+        var cur = parseInt(real, 10) || 0, i = 0;
+        if (score) score.classList.add('snap-score-whatif');
+        var tick = setInterval(function () {
+          if (!_snap || _snap.dead) { clearInterval(tick); return; }
+          if (i < last) _plusOne(i);
+          i++;
+          if (cur < n) { cur++; _snap.scoreWrote = cur; if (score) score.textContent = cur; }
+          if (i >= last && cur >= n) {
+            clearInterval(tick);
+            _remove(q);
+            _tapStep('Cave Art would have scored ' + n + ' — enough to win.', _scoreEl, 'left', {
+              sub: 'The Neanderthal had ' + result.aiTotal + '.'
+            })(function () {
+              if (score) { score.classList.remove('snap-score-whatif'); _snap.scoreWrote = parseInt(real, 10); score.textContent = real; }
+              next();
+            });
+          }
+        }, 420);
+      } });
+    }, 1300);
   }
 
   // Analytics: the turn-3 / turn-4 choice as the turn ends (after any take-back).
@@ -2118,7 +2135,8 @@ window.SOG.Adventure.Prehistory = (function () {
     var n = 1;
     try { n = (parseInt(localStorage.getItem(KEY_ATTEMPTS), 10) || 0) + 1; localStorage.setItem(KEY_ATTEMPTS, String(n)); } catch (e) {}
     _snap = { attempt: n, els: [], observers: [], choices: {}, guide: null, guideFor: null, slotGlow: false,
-              blocking: false, instr: null, instrKind: null, turnInstr: null, scoreNote: null, dead: false };
+              blocking: false, instr: null, instrKind: null, turnInstr: null, scoreNote: null, dead: false,
+              guideShown: {}, guideOnDone: null, offRead: null };
     document.body.classList.add('snap-scripted');
     log('scripted battle — attempt ' + n);
   }
@@ -2146,7 +2164,7 @@ window.SOG.Adventure.Prehistory = (function () {
     document.querySelectorAll('.snap-target, .snap-target-soft, .snap-spotlight, .snap-score-pulse, .snap-score-surge').forEach(function (el) {
       el.classList.remove('snap-target', 'snap-target-soft', 'snap-spotlight', 'snap-score-pulse', 'snap-score-surge');
     });
-    document.body.classList.remove('snap-scripted');
+    document.body.classList.remove('snap-scripted', 'snap-guiding');
     _snap = null;
   }
 
@@ -2223,7 +2241,7 @@ window.SOG.Adventure.Prehistory = (function () {
     // onAfterReveal (scripted, first attempt): the first card's IP has just
     // counted up on the score — say so, right at the number.
     onAfterReveal: function (ctx, p) {
-      if (_snap && p && p.turn === 1 && _first()) _snap.scoreNote = _callout('Each card adds IP.', _scoreEl(), 'right');
+      if (_snap && p && p.turn === 1 && _first()) _snap.scoreNote = _callout('Each card adds Influence Points or IP for short.', _scoreEl(), 'left');
     },
 
     // onPlayerPlayed: enable End Turn now that a card is committed; turn 1 also
