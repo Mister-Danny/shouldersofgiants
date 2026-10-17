@@ -390,14 +390,18 @@
     first_student_joined: 1, login_cards_printed: 1,
     // Scripted first Neanderthal battle: the turn-3 / turn-4 card choice
     // (turn, choice = card name, attempt = 1-based try count). No PII.
-    neanderthal_choice: 1
+    neanderthal_choice: 1,
+    // Ötzi battle outcome: outcome, attempt, and Lucy (moved?, on which turn,
+    // did the move change a location's winner?). No PII.
+    otzi_result: 1
   };
   function funnel(event, props) {
     if (!FUNNEL_EVENTS[event] || !db) return;
     var data = { type: 'funnel', event: event, isTestSession: isTestSession, tz: _timeZone(),
                  createdAt: firebase.firestore.FieldValue.serverTimestamp() };
     var p = props || {};
-    ['src', 'method', 'classCode', 'teacherUid', 'step', 'turn', 'choice', 'attempt'].forEach(function (k) {
+    ['src', 'method', 'classCode', 'teacherUid', 'step', 'turn', 'choice', 'attempt',
+     'outcome', 'lucyMoved', 'lucyTurn', 'lucyFlipped'].forEach(function (k) {
       if (typeof p[k] === 'string' && p[k].length <= 64) data[k] = p[k];
     });
     try { writeDoc(getDocRef('funnel-' + generateSessionId()), data, false); } catch (e) {}

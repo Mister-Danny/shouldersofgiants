@@ -47,13 +47,13 @@ SOG.OtziBattle = (function () {
 
   var POST_SHAKE_LINES = [
     { who: 'explorer', text: 'Oh' },
-    { who: 'otzi',     text: 'You can now play 2 cards each turn.' },
     { who: 'explorer', text: 'Bigger world, more cards.' },
     { who: 'explorer', text: 'Makes sense...' },
     { who: 'explorer', text: 'How do I win?' },
-    { who: 'otzi',     text: "You won't." },
-    { who: 'otzi',     text: 'But try to gain the most IP at 2 of the 3 locations.' }
+    { who: 'otzi',     text: "You won't." }
   ];
+  // (Ötzi's rule lines — 2 cards a turn, win 2 of 3 — are system callouts now:
+  //  js/otzi-lessons.js. Story from the characters, rules from the callouts.)
 
   /* ── Post-battle dialogue scripts ───────────────────────────────── */
   // Win dialogue plays in two halves around the Otzi-token card-acquisition
@@ -278,8 +278,91 @@ SOG.OtziBattle = (function () {
     // the hands are dealt during the build, before onBattleStart, exactly as
     // before — this module owns its own deal (dealCards) inside its opening.
     opening: { dealBeforeIntro: true },
+    orderBadges: true,   // 1, 2, 3 on staged cards / moves, lit in reveal order (js/game/order-badges.js)
     scriptHook: 'otzi'
   };
+
+  /* ── First attempt (until an Ötzi game has finished) ─────────────
+     Fixed early hands so the lessons come up (js/otzi-lessons.js), then the
+     player decides. Decks are dealt in this order (unshuffled):
+       You:  Neanderthal, Hunter, Gatherer, Cave Art │ T2: Tribe, Dom. Animal │
+             T3: Lucy (forced to the top), Megalith │ then Fire, Tool
+       Ötzi: Gatherer, Hunter, Tribe, Neanderthal │ T2: Fire, Megalith │
+             T3: Dom. Animal, Cave Art │ T4: Tool, Ötzi (never played by the plan)
+     Ötzi's plays: T1 Gatherer→Desert, Hunter→Rift Valley · T2 Tribe→Rift
+     Valley, Neanderthal→Desert · T3 Fire and Megalith, each to wherever he is
+     weakest · T4 planned at the start of the turn by SOG.OtziDirector so that
+     moving Lucy (4 IP) to a close location is a winning play. Any plan that no
+     longer fits the board falls back to his normal logic. Later attempts:
+     OTZI_CONFIG (shuffled decks, otziSelectPlays). */
+  var KEY_OTZI_ATTEMPTS = 'sog_otzi_attempts';
+  var FIRST_PLAYER_DECK = [34, 27, 28, 30, 36, 32, 33, 31, 29, 26];
+  var FIRST_OTZI_DECK   = [28, 27, 36, 34, 29, 31, 32, 30, 26, 35];
+  var FIRST_OTZI_PLAYS  = { 1: [{ id: 28, loc: 8 }, { id: 27, loc: 2 }],
+                            2: [{ id: 36, loc: 2 }, { id: 34, loc: 8 }] };
+  var _firstAttempt = false;
+  var _attempt = 0;
+  var _t4Plan = null;
+
+  // The live board in SOG.OtziDirector's shape (revealed cards only). Megalith's
+  // turn played is read off its growth so far (ipMod) at the start of a turn.
+  function _directorBoard(G) {
+    var b = { locIds: G.locations.map(function (l) { return l.id; }), player: {}, ai: {} };
+    var row = function (arr) {
+      return (arr || []).filter(function (s) { return s && s.revealed; }).map(function (s) {
+        return { id: s.cardId, turn: s.cardId === 31 ? (G.turn - (s.ipMod || 0)) : (s.turnPlayed || 1) };
+      });
+    };
+    G.locations.forEach(function (l) { b.player[l.id] = row(G.playerSlots[l.id]); b.ai[l.id] = row(G.aiSlots[l.id]); });
+    return b;
+  }
+  function _t3Plays(G) {
+    var D = SOG.OtziDirector; if (!D) return null;
+    var b = _directorBoard(G), out = [];
+    [29, 31].forEach(function (id) {
+      if (G.aiHand.indexOf(id) === -1) return;
+      var sc = D.score(b, 3).per;
+      var open = b.locIds.filter(function (l) { return b.ai[l].length < 4; });
+      if (!open.length) return;
+      var loc = open.sort(function (x, y) { return sc[x].a - sc[y].a; })[0];
+      D.place(b, 'ai', loc, id, 3);
+      out.push({ id: id, loc: loc });
+    });
+    return out;
+  }
+  function _planT4(G) {
+    var D = SOG.OtziDirector; if (!D) return null;
+    var lucyAt = null;
+    G.locations.forEach(function (l) {
+      (G.playerSlots[l.id] || []).forEach(function (s) { if (s && s.revealed && s.cardId === 33 && !s._advLucyMoved) lucyAt = l.id; });
+    });
+    var r = D.chooseT4({ board: _directorBoard(G), playerHand: G.playerHand.slice(), aiHand: G.aiHand.slice(), lucyAt: lucyAt });
+    log('T4 plan: ' + r.kind + ' (lucy lines win ' + r.lucyWins + ', other lines win ' + r.otherWins + ') ' + JSON.stringify(r.plays));
+    return r.plays;
+  }
+  function firstAttemptSelectPlays(ctx) {
+    var G = ctx.G, t = G.turn;
+    var plan = t <= 2 ? FIRST_OTZI_PLAYS[t] : t === 3 ? _t3Plays(G) : _t4Plan;
+    var free = {};
+    G.locations.forEach(function (l) { free[l.id] = (G.aiSlots[l.id] || []).filter(function (x) { return x === null; }).length; });
+    var hand = G.aiHand.slice();
+    var ok = !!plan && plan.every(function (p) {
+      var hi = hand.indexOf(p.id);
+      if (hi === -1 || !(free[p.loc] > 0)) return false;
+      hand.splice(hi, 1); free[p.loc]--;
+      return true;
+    });
+    if (!ok) return otziSelectPlays(ctx);
+    return plan.map(function (p) { return { cardId: p.id, locId: p.loc }; });
+  }
+  var OTZI_FIRST_CONFIG = (function () {
+    var c = {};
+    Object.keys(OTZI_CONFIG).forEach(function (k) { c[k] = OTZI_CONFIG[k]; });
+    c.decks = { player: { source: 'explicit', ids: FIRST_PLAYER_DECK.slice(), shuffle: false },
+                ai:     { source: 'explicit', ids: FIRST_OTZI_DECK.slice(),   shuffle: false } };
+    c.ai = { profile: 'heuristic', settings: { selectPlays: firstAttemptSelectPlays, cardsPerTurn: 2 } };
+    return c;
+  })();
 
   /* ── Logging ─────────────────────────────────────────────────── */
   function log(msg) { if (window.SOG_DEBUG) console.log('[Adventure/Otzi] ' + msg); }
@@ -1064,6 +1147,7 @@ SOG.OtziBattle = (function () {
   /* ── Teardown ─────────────────────────────────────────────────── */
   function teardown() {
     _hintsStop();
+    if (SOG.OtziLessons) SOG.OtziLessons.teardown();
     // A teardown while the hints prompt is up closes it without dealing.
     if (document.querySelector('#battle-rules-backdrop .otzi-hints-prompt') && SOG.BattleRulesPopup) SOG.BattleRulesPopup.hide();
     document.body.classList.remove('otzi-battle');
@@ -1108,7 +1192,14 @@ SOG.OtziBattle = (function () {
     // → post-shake dialogue → deal), onTurnStart, onPlayerPlayed, onBeforeReveal,
     // and onWin/onLoss/onTie. (Ötzi's flee is now card 35's onCardLandedHere
     // ability, fired by the shared reveal pipeline.)
-    if (typeof window.initGame === 'function') window.initGame(OTZI_CONFIG);
+    // First attempt = no Ötzi game has finished yet (the same flag that arms the
+    // strategy hints), and Ötzi unbeaten.
+    _firstAttempt = !_hintFlag(KEY_OTZI_GAME_FINISHED) && !isBattleComplete();
+    _t4Plan = null;
+    if (!isBattleComplete()) {
+      try { _attempt = (parseInt(localStorage.getItem(KEY_OTZI_ATTEMPTS), 10) || 0) + 1; localStorage.setItem(KEY_OTZI_ATTEMPTS, String(_attempt)); } catch (e) { _attempt = 1; }
+    }
+    if (typeof window.initGame === 'function') window.initGame(_firstAttempt ? OTZI_FIRST_CONFIG : OTZI_CONFIG);
   }
 
   /* ── Public surface ──────────────────────────────────────────── */
@@ -1181,9 +1272,22 @@ SOG.OtziBattle = (function () {
       if (won && SFX.gameWon)  SFX.gameWon();
       else if (SFX.gameLost)   SFX.gameLost();
     }
-    setTimeout(function () {
-      _routePostBattle(won, isTie, result.locResults, result.tiebreaker, result.playerTotal, result.aiTotal);
-    }, 600);
+    var outcome = won ? 'win' : isTie ? 'tie' : 'loss';
+    var go = function () {
+      setTimeout(function () {
+        _routePostBattle(won, isTie, result.locResults, result.tiebreaker, result.playerTotal, result.aiTotal);
+      }, 600);
+    };
+    var lucy = SOG.OtziLessons ? SOG.OtziLessons.end(outcome, result, go) : (go(), null);
+    // Analytics (no PII): outcome, attempt, and what Lucy did.
+    if (window.Analytics && typeof window.Analytics.funnel === 'function') {
+      window.Analytics.funnel('otzi_result', {
+        outcome: outcome, attempt: String(_attempt || 0),
+        lucyMoved: lucy && lucy.moved ? 'yes' : 'no',
+        lucyTurn: lucy && lucy.moved ? String(lucy.turn) : '',
+        lucyFlipped: lucy && lucy.moved ? (lucy.flipped ? 'yes' : 'no') : ''
+      });
+    }
   }
 
   var OTZI_SCRIPT = {
@@ -1201,6 +1305,11 @@ SOG.OtziBattle = (function () {
     // pauses on clicks); done() begins turn 1.
     onBattleStart: function (ctx, done) {
       if (SOG.HUD && SOG.HUD.applyBattleAvatars) SOG.HUD.applyBattleAvatars(OTZI_CONFIG.presentation);
+      var L = SOG.OtziLessons;
+      if (L) {
+        if (isBattleComplete()) L.teardown();
+        else L.begin({ first: _firstAttempt, attempt: _attempt, hintsBusy: _hintsHoldInput });
+      }
       _otziApplyTurnPresentation(1);
       _otziParkSideLocations();
       // Skip the entry dialogue once it has been WATCHED once (any retry — Play
@@ -1226,7 +1335,11 @@ SOG.OtziBattle = (function () {
                 try { localStorage.setItem(KEY_OTZI_OPENING_SEEN, 'true'); } catch (e) {}
                 // Hints prompt (when eligible) → deal → turn 1 → opening-hand hints.
                 _offerHints(function () {
-                  dealCards(function () { done(); _startOpeningHints(); });
+                  dealCards(function () {
+                    done();
+                    _startOpeningHints();
+                    if (SOG.OtziLessons) SOG.OtziLessons.afterDeal();
+                  });
                 });
               });
             });
@@ -1239,18 +1352,35 @@ SOG.OtziBattle = (function () {
     onTurnStart: function (ctx, turn) {
       _otziApplyTurnPresentation(turn);
       _hintsOnTurnStart();
+      // First attempt: Ötzi's turn-4 plays are planned NOW, before the player
+      // acts, from the board and the player's turn-4 hand (see _planT4).
+      if (_firstAttempt && turn === OTZI_CONFIG.structure.turns) _t4Plan = _planT4(SOG.state.G);
+      if (SOG.OtziLessons) SOG.OtziLessons.onTurnStart(turn);
     },
 
     // Player ended the turn — keep buttons disabled through the reveal.
     onBeforeReveal: function (ctx, turn) {
       _hintsEndTurnSafety();
       _otziDisableButtons();
+      if (SOG.OtziLessons) SOG.OtziLessons.onBeforeReveal(turn);
+    },
+    onRevealStep: function (ctx, p) {
+      if (SOG.OtziLessons) SOG.OtziLessons.onRevealStep(p);
+    },
+    onAfterReveal: function (ctx, p) {
+      // First attempt: Lucy is drawn on turn 3 whatever was played before.
+      if (_firstAttempt && p && p.turn === 2) {
+        var deck = SOG.state.G.playerDeck, li = deck.indexOf(33);
+        if (li > 0) { deck.splice(li, 1); deck.unshift(33); }
+      }
+      if (SOG.OtziLessons) SOG.OtziLessons.onAfterReveal(p);
     },
 
     // A card was committed — enable End Turn + Reset (Ötzi is not a coaching
     // battle; no prompt). Player may end after 1 or 2 cards.
     onPlayerPlayed: function (ctx, p) {
       _otziEnableButtons();
+      if (SOG.OtziLessons) SOG.OtziLessons.onPlayerPlayed(p);
     },
 
     // (Ötzi's flee is now card 35's onCardLandedHere ability, fired by the shared
@@ -1298,6 +1428,9 @@ SOG.OtziBattle = (function () {
 
   return {
     start:                start,
+    // Dev/test: the first attempt's planned Ötzi turn-4 plays (null otherwise).
+    debugT4Plan:          function () { return _t4Plan; },
+    isFirstAttempt:       function () { return _firstAttempt; },
     isBattleComplete:     isBattleComplete,
     teardown:             teardown,
     getSnapshot:          getSnapshot,

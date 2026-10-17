@@ -270,7 +270,8 @@
        branch is unreached by Arcadium. */
     var aiDeckCfg = cfg.decks.ai;
     if (aiDeckCfg.source === 'explicit' && aiDeckCfg.ids && aiDeckCfg.ids.length) {
-      G.aiDeck = shuffle(aiDeckCfg.ids.slice());
+      // shuffle: false keeps the listed order (Ötzi's first attempt); unset = shuffled, as always.
+      G.aiDeck = aiDeckCfg.shuffle === false ? aiDeckCfg.ids.slice() : shuffle(aiDeckCfg.ids.slice());
     } else if (aiDeckCfg.source === 'scripted') {
       var aiSettings = (cfg.ai && cfg.ai.settings) || {};
       G.aiDeck = (aiSettings.handPadding || []).slice();   // deck = cosmetic padding (hand = playOrder, at the deal)
@@ -1520,6 +1521,9 @@
     /* onBeforeReveal (script hook): before the flip animation. Sync,
        fire-and-forget. No script → no-op. */
     SOG.BattleHooks.fire('onBeforeReveal', [G.turn]);
+    // Order badges (Ötzi, or everywhere by flag): fix them in place before the
+    // queued moves snap back, then light them as the sequence plays.
+    if (SOG.orderBadges) SOG.orderBadges.freeze();
     clearSelection();      // tear down any click/keyboard selection state
     hideRevealFirstHighlight();  // glow shown during selection — clear it now
     snapBack();            // Restore all queued cards to true origin slots
@@ -1788,8 +1792,15 @@
       refreshHandIPDisplays();
       refreshHandCostDisplays();
       updateScores();
+      /* onRevealStep (script hook, sync): this item has resolved. */
+      SOG.BattleHooks.fire('onRevealStep', [{ item: item, done: true }]);
       setTimeout(function () { revealNext(seq, i + 1); }, REVEAL_DELAY);
     };
+
+    /* One sequence item is about to happen: light its order badge, and tell the
+       script (onRevealStep, sync — e.g. measure the board before a move). */
+    if (SOG.orderBadges) SOG.orderBadges.step(item);
+    SOG.BattleHooks.fire('onRevealStep', [{ item: item, done: false }]);
 
     if (item.type === 'move') {
       // fromSlotIndex (recorded at queue time) pins the exact source slot —
@@ -2024,6 +2035,7 @@
   ═══════════════════════════════════════════════════════════════ */
 
   function nextTurn() {
+    if (SOG.orderBadges) SOG.orderBadges.clear();
     G.turn    += 1;
     G.phase    = 'select';
     if (window.SOG_DEBUG && SOG.hand) SOG.hand.assertShape('nextTurn');  // hand-of-objects migration net (dev-only no-op today)
@@ -2135,6 +2147,7 @@
   }
 
   function endGame() {
+    if (SOG.orderBadges) SOG.orderBadges.clear();
     _stopSelectionTimer();
     _cancelUndoEndTurn();
     G.phase = 'over';

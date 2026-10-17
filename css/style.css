@@ -14109,3 +14109,96 @@ body.snap-guiding #battle-hover-popup { visibility: hidden !important; }
   .overworld-exit { border-color: rgba(255, 215, 0, 0.35); }
   .overworld-exit .overworld-exit-label { opacity: 1; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   ÖTZI BATTLE — interjections (js/otzi-lessons.js) and order badges
+   (js/game/order-badges.js). Callouts reuse the Neanderthal battle's
+   .snap-callout / .snap-goal / .snap-arc styles.
+   ════════════════════════════════════════════════════════════ */
+#otzi-layer,
+#order-badge-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#otzi-layer { z-index: 9000; }
+#order-badge-layer { z-index: 8990; }
+#otzi-layer .snap-callout,
+#otzi-layer .snap-svg,
+.otzi-final-banner { transition: opacity 0.35s ease; }
+#otzi-layer .otzi-fading { opacity: 0; }
+
+/* Order badges: the action's number at its card's top-left corner. */
+.order-badge {
+  position: absolute;
+  min-width: 27px;
+  height: 27px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(10, 22, 36, 0.95);
+  border: 2px solid #f8d000;
+  color: #f8d000;
+  font-family: 'Source Sans 3', Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 23px;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  animation: snap-callout-in 0.2s ease-out;
+}
+.order-badge--move { border-style: dashed; }
+.order-badge--waiting { opacity: 0.45; }
+@keyframes order-badge-lit {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.5); box-shadow: 0 0 14px 5px rgba(248, 208, 0, 0.85); }
+  100% { transform: scale(1); }
+}
+.order-badge--lit {
+  opacity: 1;
+  background: #f8d000;
+  color: #1a0a04;
+  animation: order-badge-lit 0.6s ease-out;
+}
+
+/* FINAL TURN banner (every attempt until Ötzi is beaten). */
+.otzi-final-banner {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  transform: translate(-50%, -50%);
+  padding: 14px 36px 16px;
+  background: rgba(10, 22, 36, 0.94);
+  border: 3px solid #f8d000;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  animation: otzi-banner-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes otzi-banner-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.otzi-final-banner.otzi-fading { opacity: 0; }
+.otzi-final-title {
+  font-family: var(--font);
+  font-size: 40px;
+  color: #f8d000;
+  letter-spacing: 0.08em;
+  text-shadow: 2px 2px 0 #000;
+}
+.otzi-final-line {
+  margin-top: 4px;
+  font-family: 'Source Sans 3', Arial, Helvetica, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Score glow: the player's score at a location glows light blue while ahead,
+   dims while behind (updated on every score change). */
+.battle-loc-score-player.otzi-ahead {
+  text-shadow: 0 0 8px rgba(64, 224, 224, 0.95), 0 0 18px rgba(64, 224, 224, 0.75), 1px 1px 3px #000;
+}
+.battle-loc-score-player.otzi-behind { opacity: 0.5; }
