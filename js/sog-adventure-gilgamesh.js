@@ -1055,7 +1055,7 @@ SOG.GilgameshBattle = (function () {
       // to settings.selectPlays.) A dev-menu launcher can still force a tier via
       // window.__forceTier (which initGame applies over this).
       ai:        { profile: 'heuristic', tier: _aiTier, movement: 'adventure',
-                   settings: { scriptedPlays: _typesScriptedPlays } },   // the card-types lesson's turn-1 Ziggurat
+                   settings: { scriptedPlays: _typesScriptedPlays, holdCards: _typesHoldCards } },   // card-types lesson: Ziggurat T1, Priest beside it T2
       presentation: {
         bodyClass:        'gilgamesh-battle',                  // Mesopotamia location art
         bodyClassExtra:   'adv-shared-battle',                 // styling shared with Ötzi (Ötzi-only CSS stays on .otzi-battle)
@@ -1099,12 +1099,17 @@ SOG.GilgameshBattle = (function () {
   }
 
   /* ════════════════════════════════════════════════════════════════
-     CARD-TYPES LESSON — the Ötzi pattern: runs on the first attempt and on
-     every retry until the first win (sog_battle_gilgamesh_complete), then
-     never again. On those attempts:
-       · Ziggurat (45) is stacked into Gilgamesh's opening hand and he plays it
-         at Uruk on turn 1 (cfg.ai.settings.scriptedPlays; the Serf brain plays
-         the rest of his turn);
+     CARD-TYPES LESSON — the Ötzi pattern. The scripted plays run on the first
+     attempt and on every retry until the first win (sog_battle_gilgamesh_
+     complete); the dialogue + callouts run only until the lesson has been
+     COMPLETED once (Ziggurat tapped and the popup closed — sog_gilgamesh_
+     types_seen), so later retries keep the plays but skip the teaching. On
+     those attempts:
+       · Ziggurat (45) and Priest (38, Religious) are stacked into Gilgamesh's
+         opening hand. Turn 1: Ziggurat at Uruk, Priest held back
+         (cfg.ai.settings.scriptedPlays / holdCards; the Serf brain plays the
+         rest of his turn). Turn 2: Priest at Ziggurat's location, so the
+         player sees Ziggurat's +1 to other Religious cards there take effect;
        · after the turn-1 reveal, before turn 2 starts (engine hook
          onBetweenTurns): the Explorer/Gilgamesh exchange, then three shared
          callouts (js/game/callouts.js) — the type symbol, "tap it" (Ziggurat
@@ -1112,11 +1117,13 @@ SOG.GilgameshBattle = (function () {
          the card popup. Closing the popup ends the lesson and starts turn 2.
      Flags: sog_gilgamesh_types_seen (lesson completed at least once) and
      sog_gilgamesh_types_attempts (battles started with the lesson on).
-     Analytics: 'gilgamesh_types' at each lesson battle's outcome.
+     Analytics: 'gilgamesh_types' at each lesson battle's outcome (incl.
+     whether the lesson was shown on that attempt).
   ════════════════════════════════════════════════════════════════ */
   var KEY_TYPES_SEEN     = 'sog_gilgamesh_types_seen';
   var KEY_TYPES_ATTEMPTS = 'sog_gilgamesh_types_attempts';
   var ZIGGURAT_ID  = 45;
+  var PRIEST_ID    = 38;     // Religious: gets Ziggurat's +1 when played beside it
   var ZIGGURAT_LOC = 7;      // Uruk, the centre location
   var TYPES_DIALOGUE = [
     { who: 'explorer', text: 'Hey, why do your cards look so colorful?' },
@@ -1128,34 +1135,60 @@ SOG.GilgameshBattle = (function () {
     { who: 'explorer', text: "That's not fair." },
     { who: 'otzi',     text: "That's history." }
   ];
-  var _types = { on: false, attempt: 0, done: false, tapMs: null, reported: false, off: [] };
+  // on: scripted plays this attempt · teach: dialogue + callouts this attempt ·
+  // shown: they actually ran · done: completed (popup closed).
+  var _types = { on: false, teach: false, shown: false, attempt: 0, done: false, tapMs: null, reported: false, off: [] };
 
   // start(): decide for this attempt (before the config is built).
   function _typesDecide() {
     _typesCleanup();
     _types.on = !_has(KEY_BATTLE_GILGAMESH_COMPLETE);
-    _types.done = false; _types.tapMs = null; _types.reported = false;
+    _types.teach = _types.on && !_has(KEY_TYPES_SEEN);
+    _types.shown = false; _types.done = false; _types.tapMs = null; _types.reported = false;
     if (!_types.on) return;
     var n = 0;
     try { n = (parseInt(localStorage.getItem(KEY_TYPES_ATTEMPTS), 10) || 0) + 1; localStorage.setItem(KEY_TYPES_ATTEMPTS, String(n)); } catch (e) { n = 1; }
     _types.attempt = n;
   }
-  // Before the deal: Ziggurat to the top of Gilgamesh's deck (his 4-card opening hand).
+  // Before the deal: Ziggurat then Priest to the top of Gilgamesh's deck (his
+  // 4-card opening hand).
   function _typesStackDeck(G) {
     if (!_types.on || !G || !G.aiDeck) return;
-    var i = G.aiDeck.indexOf(ZIGGURAT_ID);
-    if (i > 0) { G.aiDeck.splice(i, 1); G.aiDeck.unshift(ZIGGURAT_ID); }
+    [PRIEST_ID, ZIGGURAT_ID].forEach(function (id) {
+      var i = G.aiDeck.indexOf(id);
+      if (i > 0) { G.aiDeck.splice(i, 1); G.aiDeck.unshift(id); }
+    });
+  }
+  // The location Ziggurat stands on (or null).
+  function _typesZigLoc(G) {
+    for (var l = 0; l < G.locations.length; l++) {
+      if ((G.aiSlots[G.locations[l].id] || []).some(function (s) { return s && s.cardId === ZIGGURAT_ID; })) return G.locations[l].id;
+    }
+    return null;
   }
   // cfg.ai.settings.scriptedPlays: turn 1 → Ziggurat at Uruk (any open location
-  // if Uruk were full). The Serf brain then plays the rest of his turn.
+  // if Uruk were full); turn 2 → Priest beside it. The Serf brain plays the
+  // rest of each turn.
   function _typesScriptedPlays(ctx) {
-    if (!_types.on || ctx.turn !== 1) return null;
+    if (!_types.on) return null;
     var G = ctx.G;
-    if (!G || G.aiHand.indexOf(ZIGGURAT_ID) === -1) return null;
-    var open = function (id) { return (G.aiSlots[id] || []).indexOf(null) !== -1; };
-    var loc = open(ZIGGURAT_LOC) ? ZIGGURAT_LOC : null;
-    if (loc == null) G.locations.some(function (l) { if (open(l.id)) { loc = l.id; return true; } return false; });
-    return loc == null ? null : [{ cardId: ZIGGURAT_ID, locId: loc }];
+    if (!G) return null;
+    var open = function (id) { return id != null && (G.aiSlots[id] || []).indexOf(null) !== -1; };
+    if (ctx.turn === 1 && G.aiHand.indexOf(ZIGGURAT_ID) !== -1) {
+      var loc = open(ZIGGURAT_LOC) ? ZIGGURAT_LOC : null;
+      if (loc == null) G.locations.some(function (l) { if (open(l.id)) { loc = l.id; return true; } return false; });
+      return loc == null ? null : [{ cardId: ZIGGURAT_ID, locId: loc }];
+    }
+    if (ctx.turn === 2 && G.aiHand.indexOf(PRIEST_ID) !== -1) {
+      var zl = _typesZigLoc(G);
+      return open(zl) ? [{ cardId: PRIEST_ID, locId: zl }] : null;
+    }
+    return null;
+  }
+  // cfg.ai.settings.holdCards: Priest is kept back on turn 1 (the brain would
+  // otherwise play it the same turn as Ziggurat, elsewhere).
+  function _typesHoldCards(ctx) {
+    return (_types.on && ctx.turn === 1) ? [PRIEST_ID] : null;
   }
   // Where Ziggurat landed: { sd, slotEl } (revealed only).
   function _typesFindZiggurat() {
@@ -1187,6 +1220,7 @@ SOG.GilgameshBattle = (function () {
     var zig = _typesFindZiggurat();
     var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === ZIGGURAT_ID; });
     if (!CO || !zig || !card) { done(); return; }
+    _types.shown = true;
     _gScriptDialogueActive = true;
     _gDisableButtons();
     var layer = CO.layer('gilgamesh-types-layer');
@@ -1279,6 +1313,7 @@ SOG.GilgameshBattle = (function () {
     if (window.Analytics && typeof window.Analytics.funnel === 'function') {
       window.Analytics.funnel('gilgamesh_types', {
         outcome: outcome, attempt: String(_types.attempt || 0),
+        lessonShown: _types.shown ? 'yes' : 'no',
         lessonDone: _types.done ? 'yes' : 'no',
         tapMs: _types.tapMs != null ? String(_types.tapMs) : ''
       });
@@ -1343,7 +1378,7 @@ SOG.GilgameshBattle = (function () {
     // After the turn-1 reveal, before turn 2: the card-types lesson (lesson
     // attempts only, and only if Ziggurat is on the board).
     onBetweenTurns: function (ctx, turn, done) {
-      if (_types.on && turn === 1 && _typesFindZiggurat()) { _typesRun(done); return; }
+      if (_types.teach && turn === 1 && _typesFindZiggurat()) { _typesRun(done); return; }
       done();
     },
 
@@ -1411,7 +1446,7 @@ SOG.GilgameshBattle = (function () {
   return {
     start:                start,
     // Dev/test: this attempt's card-types lesson state.
-    debugTypes:           function () { return { on: _types.on, attempt: _types.attempt, done: _types.done, tapMs: _types.tapMs }; },
+    debugTypes:           function () { return { on: _types.on, teach: _types.teach, shown: _types.shown, attempt: _types.attempt, done: _types.done, tapMs: _types.tapMs }; },
     isBattleComplete:     isBattleComplete,
     teardown:             teardown,
     getSnapshot:          getSnapshot,

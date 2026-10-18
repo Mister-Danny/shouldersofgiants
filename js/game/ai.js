@@ -200,7 +200,14 @@
         // a capital-aware heuristic selector can SPEND bonus capital it earned (e.g.
         // Hammurabi's Fertile-Crescent CAPITAL_WHEN_FULL). Additive — selectors that
         // ignore ctx.capital (Sargon) are unaffected.
-        var _hCtx   = { G: G, turn: G.turn, hand: G.aiHand.slice(), locations: G.locations, capital: budget };
+        // Held cards (cfg.ai.settings.holdCards(ctx) → [cardId]): kept out of the
+        // tier brain's hand THIS turn — a lesson saving a card for a later,
+        // scripted play (Gilgamesh holds Priest on turn 1 for turn 2).
+        var _held = (typeof _hSettings.holdCards === 'function')
+          ? (_hSettings.holdCards({ G: G, turn: G.turn, hand: G.aiHand.slice(), locations: G.locations }) || []) : [];
+        var _hHand = G.aiHand.slice();
+        _held.forEach(function (id) { var i = _hHand.indexOf(id); if (i !== -1) _hHand.splice(i, 1); });
+        var _hCtx   = { G: G, turn: G.turn, hand: _hHand, locations: G.locations, capital: budget };
         var _hPlays = _hSelectPlays(_hCtx) || [];
         if (_scripted) {
           var _cap = (G.config.structure && G.config.structure.cardsPerTurn != null) ? G.config.structure.cardsPerTurn : Infinity;

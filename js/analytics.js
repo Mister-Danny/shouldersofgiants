@@ -395,7 +395,7 @@
     // did the move change a location's winner?). No PII.
     otzi_result: 1,
     // Gilgamesh card-types lesson battles: outcome, attempt, whether the lesson
-    // was completed, and ms from "Tap it" to tapping Ziggurat. No PII.
+    // was shown / completed, and ms from "Tap it" to tapping Ziggurat. No PII.
     gilgamesh_types: 1
   };
   function funnel(event, props) {
@@ -404,7 +404,7 @@
                  createdAt: firebase.firestore.FieldValue.serverTimestamp() };
     var p = props || {};
     ['src', 'method', 'classCode', 'teacherUid', 'step', 'turn', 'choice', 'attempt',
-     'outcome', 'lucyMoved', 'lucyTurn', 'lucyFlipped', 'lessonDone', 'tapMs'].forEach(function (k) {
+     'outcome', 'lucyMoved', 'lucyTurn', 'lucyFlipped', 'lessonShown', 'lessonDone', 'tapMs'].forEach(function (k) {
       if (typeof p[k] === 'string' && p[k].length <= 64) data[k] = p[k];
     });
     try { writeDoc(getDocRef('funnel-' + generateSessionId()), data, false); } catch (e) {}
