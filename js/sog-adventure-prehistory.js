@@ -2278,6 +2278,9 @@ window.SOG.Adventure.Prehistory = (function () {
     showCardAcquisition:    showCardAcquisition,
     // Devtools escape
     exitToOverworld:        exitToOverworld,
+    // Battle cleanup without the return-to-map (Overworld.teardown: Options →
+    // Back to Map / Back to Home): scripted-battle observers, timers, classes.
+    teardownBattle:         teardownBattle,
     // Input guard: true while coaching or post-battle dialogue is running.
     isCoachingActive:       isCoachingActive,
     getSnapshot:            getSnapshot,

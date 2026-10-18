@@ -1419,9 +1419,29 @@ var Overworld = (function () {
   }
 
   /* ── Idle routine ──────────────────────────────────────────── */
+  // The idle loop (map-reading + standing frames) only runs while the map is
+  // the screen on show. Leaving it (deck builder, battle, home …) pauses the
+  // loop; coming back resumes it. A scheduleIdle() made while the map is hidden
+  // is held until the return. Driven by body[data-screen] (set by showScreen).
+  var _idlePendingOffMap = false;
+  function _mapOnScreen() { return !document.body || document.body.dataset.screen === 'overworld'; }
   function scheduleIdle() {
     cancelIdle();
+    if (!_mapOnScreen()) { _idlePendingOffMap = true; return; }
     idleTimer = setTimeout(startIdleRoutine, IDLE_DELAY_MS);
+  }
+  var _idleScreenWatch = null;
+  function _watchScreenForIdle() {
+    if (_idleScreenWatch || typeof MutationObserver === 'undefined' || !document.body) return;
+    _idleScreenWatch = new MutationObserver(function () {
+      if (!_mapOnScreen()) {
+        if (idleTimer || idleRoutineTimer) { cancelIdle(); _idlePendingOffMap = true; }
+      } else if (_idlePendingOffMap) {
+        _idlePendingOffMap = false;
+        if (!isMoving && !isTransitioning && !isDialogueLocked) scheduleIdle();
+      }
+    });
+    _idleScreenWatch.observe(document.body, { attributes: true, attributeFilter: ['data-screen'] });
   }
   function cancelIdle() {
     if (idleTimer)        { clearTimeout(idleTimer);        idleTimer = null; }
@@ -1429,6 +1449,7 @@ var Overworld = (function () {
   }
   function startIdleRoutine() {
     if (isMoving || isTransitioning) return;
+    if (!_mapOnScreen()) { _idlePendingOffMap = true; return; }
     // Looking at a landmark: stay turned to it rather than swing round to the
     // camera for the map-reading idle.
     var _at = _nodeAtStand(currentPos);
@@ -6777,6 +6798,7 @@ var Overworld = (function () {
   function teardown() {
     // --- Overworld subsystem: stop timers + clear locks/guards ---
     cancelIdle();
+    _idlePendingOffMap = false;
     clearUrgentPulse();
     if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
     stopFootsteps();
@@ -6803,10 +6825,34 @@ var Overworld = (function () {
       if (b) b.classList.remove('is-visible', 'is-ready');
     });
 
+    // --- Per-boss battle cleanup: the same teardown each module runs at its own
+    //     battle end (Narmer's 250 ms advance-lock poll, Prehistory's hand
+    //     observer, lesson layers, portrait wiring …). Options → Back to Map /
+    //     Back to Home leave mid-battle, so the modules never ran theirs. Each is
+    //     safe to call when its battle isn't the one running. ---
+    ['GilgameshBattle', 'OtziBattle', 'NarmerBattle', 'HammurabiBattle', 'SargonBattle',
+     'HangingGardensBattle', 'HatshepsutBattle', 'HyksosBattle'].forEach(function (name) {
+      try { if (window.SOG && SOG[name] && typeof SOG[name].teardown === 'function') SOG[name].teardown(); }
+      catch (e) { log('teardown failed for ' + name + ': ' + e); }
+    });
+    try {
+      var _preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
+      if (_preh && typeof _preh.teardownBattle === 'function') _preh.teardownBattle();
+    } catch (e) { log('teardown failed for Prehistory: ' + e); }
+    // The board's endless glow tweens and the order badges.
+    var _board = document.getElementById('battle-board');
+    if (_board && typeof Anim !== 'undefined' && Anim.stopBoardGlows) Anim.stopBoardGlows(_board);
+    if (window.SOG && SOG.orderBadges && typeof SOG.orderBadges.clear === 'function') SOG.orderBadges.clear();
+
     // --- Strip stale battle/mode body classes (FORWARD-PLAY corruption: a new
-    //     battle inheriting a leftover class → wrong location art). ---
-    ['gilgamesh-battle', 'hammurabi-battle', 'hanging-gardens-battle', 'sargon-battle',
-     'otzi-battle', 'adv-shared-battle', 'otzi-pre-deal', 'prehistory-battle', 'prehistory-pre-coaching',
+    //     battle inheriting a leftover class → wrong location art). Every
+    //     '<anything>-battle' class (bosses AND data-defined levels — the old
+    //     hand-kept list missed narmer / hatshepsut / hyksos / the levels), plus
+    //     the mode classes. ---
+    Array.prototype.slice.call(document.body.classList).forEach(function (c) {
+      if (/-battle$/.test(c)) document.body.classList.remove(c);
+    });
+    ['otzi-pre-deal', 'otzi-lessons', 'prehistory-pre-coaching', 'snap-guiding', 'snap-scripted',
      'overworld-away-from-home', 'tut-locked'].forEach(function (c) {
       document.body.classList.remove(c);
     });
@@ -6837,6 +6883,7 @@ var Overworld = (function () {
 
   /* ── Public init ───────────────────────────────────────────── */
   function init() {
+    _watchScreenForIdle();   // pause / resume the idle loop with the map screen (once)
     mapImgEl         = document.getElementById('overworld-map');
     overlayEl        = document.getElementById('overworld-overlay');
     charEl           = document.getElementById('overworld-character');

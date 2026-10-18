@@ -46,6 +46,16 @@ var Anim = (function () {
     return ghost;
   }
 
+  /* Kill an element's persistent glow — the tween / timeline objects setGlow
+     and setKenteGlow keep on it, plus any other boxShadow tween. */
+  function _killGlow(el) {
+    if (!el) return;
+    if (el._sogGlowTween) { el._sogGlowTween.kill(); el._sogGlowTween = null; }
+    if (el._sogKenteTl)   { el._sogKenteTl.kill();   el._sogKenteTl   = null; }
+    if (hasGSAP()) gsap.killTweensOf(el, 'boxShadow');   // scope kill — do NOT touch opacity/scale/transform
+  }
+
+
   /** Remove an element from the DOM if still attached. */
   function removeEl(el) {
     if (el && el.parentNode) el.parentNode.removeChild(el);
@@ -282,9 +292,16 @@ var Anim = (function () {
         el.classList.toggle('anim-cont-glow', !!on);
         return;
       }
-      gsap.killTweensOf(el, 'boxShadow');  // scope kill — do NOT touch opacity/scale/transform
+      // The glow tween is KEPT on the element and killed as a whole object.
+      // (A property-scoped killTweensOf(el,'boxShadow') on a tween that hasn't
+      // rendered yet — two continuous passes in one frame — only strips the
+      // property, leaving an EMPTY repeat:-1 tween that never ends and keeps
+      // GSAP's frame loop awake for good.) Already glowing → leave it running
+      // rather than restart it on every continuous pass.
+      if (on && el._sogGlowTween && el._sogGlowTween.isActive()) return;
+      _killGlow(el);
       if (on) {
-        gsap.to(el, {
+        el._sogGlowTween = gsap.to(el, {
           boxShadow: '0 0 0 2px rgba(64,224,224,0.45), 0 0 14px 4px rgba(64,224,224,0.33)',
           duration:  0.75,
           repeat:    -1,
@@ -501,16 +518,39 @@ var Anim = (function () {
       scoreEl.classList.toggle('anim-narmer-score-glow', !!on);
     },
 
+    /* Stop every persistent board glow (setGlow's cyan ring, setKenteGlow's
+       amber loop) under `root` and clear the inline box-shadows. Their GSAP
+       tweens repeat forever, and GSAP keeps a tween — and the element it holds —
+       alive even after the element leaves the page, so without this every
+       battle that ended with a boosted card or Kente left endless tweens on a
+       discarded board, keeping GSAP's frame loop running on every screen.
+       Called at battle end (game.js endGame), before a board rebuild
+       (ui.js buildBoard) and on teardown (Overworld.teardown). */
+    stopBoardGlows: function (root) {
+      if (!root || !root.querySelectorAll) return;
+      var els = root.querySelectorAll('.battle-card-slot, .battle-col');
+      if (!els.length) return;
+      if (hasGSAP()) {
+        Array.prototype.forEach.call(els, _killGlow);
+        gsap.set(els, { clearProps: 'boxShadow' });
+      }
+      Array.prototype.forEach.call(els, function (el) { el.classList.remove('anim-cont-glow', 'anim-kente-glow'); });
+    },
+
     setKenteGlow: function (locTileEl, on) {
       if (!locTileEl) return;
       if (!hasGSAP()) {
         locTileEl.classList.toggle('anim-kente-glow', !!on);
         return;
       }
-      gsap.killTweensOf(locTileEl, 'boxShadow');
+      // Already glowing (intro pulse or settled loop) → keep it; otherwise kill
+      // the element's own glow objects whole (see setGlow) and start fresh.
+      if (on && ((locTileEl._sogKenteTl && locTileEl._sogKenteTl.isActive()) ||
+                 (locTileEl._sogGlowTween && locTileEl._sogGlowTween.isActive()))) return;
+      _killGlow(locTileEl);
       if (on) {
         // Phase 1: strong initial pulse, then settle into a gentle yoyo loop
-        gsap.timeline()
+        locTileEl._sogKenteTl = gsap.timeline()
           .to(locTileEl, {
             boxShadow: '0 0 0 4px rgba(255,140,0,0.9), 0 0 32px 12px rgba(255,120,0,0.75)',
             duration: 0.35, ease: 'power2.out'
@@ -519,7 +559,8 @@ var Anim = (function () {
             boxShadow: '0 0 0 2px rgba(255,140,0,0.55), 0 0 14px 5px rgba(255,100,0,0.35)',
             duration: 0.55, ease: 'power2.inOut',
             onComplete: function () {
-              gsap.to(locTileEl, {
+              locTileEl._sogKenteTl = null;
+              locTileEl._sogGlowTween = gsap.to(locTileEl, {
                 boxShadow: '0 0 0 3px rgba(255,150,0,0.70), 0 0 20px 8px rgba(255,110,0,0.50)',
                 duration: 1.4, repeat: -1, yoyo: true, ease: 'sine.inOut'
               });

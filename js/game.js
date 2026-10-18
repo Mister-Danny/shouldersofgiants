@@ -2170,6 +2170,9 @@
       SOG.abilities.applyRoyalTombSummon();
     }
     var result = tallyResult();
+    // The board is final: stop the endless continuous / Kente glows (they would
+    // otherwise run on every screen until the next battle's board rebuild).
+    if (typeof Anim !== 'undefined' && Anim.stopBoardGlows) Anim.stopBoardGlows(boardEl);
     if (typeof Analytics !== 'undefined') Analytics.gameCompleted(result);   // reads the final board via setBoardProvider
 
     // Checkpoint save (AUTH_SPEC.md Phase 3) — one of exactly three call

@@ -1365,8 +1365,13 @@
         ['player', 'opp'].forEach(function (own) {
           var sl = own === 'player' ? G.playerSlots : G.aiSlots;
           sl[loc.id].forEach(function (s, si) {
-            if (!s || !s.revealed) return;
             var slotEl = getSlotEl(own, loc.id, si);
+            if (!s || !s.revealed) {
+              // A slot emptied (destroyed / moved / discarded) or face-down keeps
+              // no glow — otherwise its endless tween ran on for the battle.
+              if (slotEl && slotEl.style.boxShadow) Anim.setGlow(slotEl, false);
+              return;
+            }
             Anim.setGlow(slotEl, (s.contMod || 0) !== 0);
           });
         });

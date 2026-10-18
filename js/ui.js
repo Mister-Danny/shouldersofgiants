@@ -218,6 +218,9 @@
   /* ── Play board ──────────────────────────────────────────────── */
 
   function buildBoard(locations) {
+    // Kill the old board's endless glow tweens first: GSAP would otherwise
+    // keep animating (and holding) the discarded slots forever.
+    if (typeof Anim !== 'undefined' && Anim.stopBoardGlows) Anim.stopBoardGlows(boardEl);
     boardEl.innerHTML = '';
     locations.forEach(function (loc) {
       boardEl.appendChild(buildLocationCol(loc));
