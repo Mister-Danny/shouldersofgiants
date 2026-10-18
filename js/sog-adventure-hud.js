@@ -172,7 +172,7 @@ SOG.HUD = (function () {
      TYPEWRITER STATE
   ══════════════════════════════════════════════════════════════ */
 
-  var TYPE_SPEED_MS = 28;
+  var TYPE_SPEED_MS = 21;   // ms per character (was 28)
 
   var _tyFullText   = '';
   var _tyShownLen   = 0;
@@ -799,13 +799,23 @@ SOG.HUD = (function () {
   }
 
   /* ══════════════════════════════════════════════════════════════
-     ADVANCE HANDLER  (click on HUD bar OR spacebar / Enter)
+     ADVANCE HANDLER  (a tap / click anywhere, OR spacebar / Enter)
+     A tap on another control (a button, link, form field) outside the bar
+     is left to that control. "▶ Tap to continue" shows once a line has
+     finished typing (#adv-hud.is-ready).
   ══════════════════════════════════════════════════════════════ */
+
+  var _advArmedAt = 0;   // clicks before this time are ignored (see _attachAdvanceListener)
 
   function _onAdvance(e) {
     if (e.type === 'keydown') {
       if (e.key !== ' ' && e.key !== 'Spacebar' && e.key !== 'Enter') return;
       e.preventDefault();
+    } else {
+      if (Date.now() < _advArmedAt) return;
+      var t = e.target;
+      var inBar = _hudEl && t && _hudEl.contains(t);
+      if (!inBar && t && t.closest && t.closest('button, a, input, select, textarea, label, [role="button"]')) return;
     }
 
     if (_tyTyping) {
@@ -831,17 +841,19 @@ SOG.HUD = (function () {
   function _attachAdvanceListener() {
     if (_advHandler) return;
     _advHandler = function (e) { _onAdvance(e); };
-    // Defer by one tick so the click that triggered enterDialogueMode
-    // doesn't also immediately advance the first line.
+    // Clicks are taken anywhere on the page. Armed 300 ms after the dialogue
+    // opens, so the tap that started it (and a touch screen's late synthetic
+    // click from that tap) doesn't also skip the first line's typing.
+    _advArmedAt = Date.now() + 300;
     setTimeout(function () {
-      if (_hudEl) _hudEl.addEventListener('click', _advHandler);
+      document.addEventListener('click', _advHandler);
       document.addEventListener('keydown', _advHandler);
     }, 0);
   }
 
   function _removeAdvanceListener() {
     if (!_advHandler) return;
-    if (_hudEl) _hudEl.removeEventListener('click', _advHandler);
+    document.removeEventListener('click', _advHandler);
     document.removeEventListener('keydown', _advHandler);
     _advHandler = null;
   }

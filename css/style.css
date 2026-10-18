@@ -10097,6 +10097,27 @@ body.tut-locked #battle-reset-turn {
   text-align: right;
 }
 
+/* "▶ Tap to continue" — the battle bubbles' cue, on the bar: under the active
+   speaker's text, shown once the line has finished typing. */
+#adv-hud-dlg-cue {
+  position: absolute;
+  bottom: 7px;
+  left: 130px;
+  font-family: var(--font);
+  font-size: 13px;
+  color: #f5e8c0;
+  letter-spacing: 0.05em;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.85);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+#adv-hud-dlg-npc.active ~ #adv-hud-dlg-cue { left: auto; right: 142px; }
+#adv-hud.is-ready #adv-hud-dlg-cue {
+  opacity: 0.85;
+  animation: tut-hint-blink 1.4s ease-in-out infinite;
+}
+
 /* ── NPC portrait slot (State B right zone) ──────────────────── */
 
 #adv-hud-npc-slot {

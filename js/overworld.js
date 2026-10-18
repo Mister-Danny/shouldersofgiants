@@ -2014,7 +2014,15 @@ var Overworld = (function () {
     lab.classList.add('is-visible');
   }
   function _hideNodeLabel() {
+    if (_pinnedLabelNode && overlayEl && overlayEl.contains(_pinnedLabelNode)) { _showNodeLabel(_pinnedLabelNode); return; }
     if (_nodeLabelEl) _nodeLabelEl.classList.remove('is-visible');
+  }
+  // A pinned label stays up (on touch screens too, which never hover) until
+  // unpinned; hovering another node shows that one, and leaving it comes back.
+  var _pinnedLabelNode = null;
+  function _pinNodeLabel(nodeEl) {
+    _pinnedLabelNode = nodeEl || null;
+    if (nodeEl) _showNodeLabel(nodeEl); else _hideNodeLabel();
   }
   function _wireNodeLabels() {
     if (!overlayEl || overlayEl._owLabelsWired) return;
@@ -2940,6 +2948,7 @@ var Overworld = (function () {
 
     if (needPhase2) {
       log('Prehistory clicked for the first time — triggering Phase 2 before walk');
+      _hideCampPrompt();
       playPhase2Then(doWalk);
     } else {
       doWalk();
@@ -3053,6 +3062,7 @@ var Overworld = (function () {
   function transitionToMap(targetMapId, entryAt) {
     if (isTransitioning) return;
     isTransitioning = true;
+    _hideCampPrompt();
     cancelIdle();
     stopFootsteps();
 
@@ -3220,7 +3230,45 @@ var Overworld = (function () {
     isDialogueLocked = false;
     // Flag is NOT set yet — Phase 2 still has to play on node click.
     // The Prehistory node's base CSS pulse is already active by default.
+    _showCampPrompt();
     scheduleIdle();
+  }
+
+  /* ── "Tap the camp to begin!" ────────────────────────────────
+     After Phase 1, a system callout (SOG.Callouts, the battles' style) points
+     at the Neanderthal Camp and the camp's name label is pinned — on touch
+     screens too. Both go when the camp is tapped (Phase 2) or the player
+     leaves the map. The layer lives inside the overworld screen, so menus and
+     the deck builder cover it. */
+  var _campPrompt = null;
+  function _campNodeEl() {
+    return overlayEl ? overlayEl.querySelector('.overworld-node[data-id="prehistory"]') : null;
+  }
+  function _showCampPrompt() {
+    _hideCampPrompt();
+    var CO = window.SOG && SOG.Callouts, node = _campNodeEl();
+    var screen = document.getElementById('screen-overworld');
+    if (!CO || !node || !screen) return;
+    var layer = document.getElementById('ow-callout-layer');
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.id = 'ow-callout-layer';
+      layer.className = 'callout-layer';
+      screen.appendChild(layer);
+    }
+    var art = node.querySelector(':scope > img') || node;
+    var el = CO.callout(layer, 'Tap the camp to begin!', art, 'top', { cls: 'ow-camp-callout' });
+    var onResize = function () { if (el.parentNode) CO.place(el, art, 'top'); if (_pinnedLabelNode) _showNodeLabel(_pinnedLabelNode); };
+    window.addEventListener('resize', onResize);
+    _campPrompt = { el: el, onResize: onResize };
+    _pinNodeLabel(node);
+  }
+  function _hideCampPrompt() {
+    if (!_campPrompt) return;
+    window.removeEventListener('resize', _campPrompt.onResize);
+    if (window.SOG && SOG.Callouts) SOG.Callouts.fade(_campPrompt.el);
+    _campPrompt = null;
+    _pinNodeLabel(null);
   }
 
   /* ── First return to East Africa after beating Otzi ───────────
