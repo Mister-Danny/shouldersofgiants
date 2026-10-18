@@ -2,7 +2,7 @@
 
 **Scope:** every line of text a brand-new player reads, in order, from pressing **I'm Ready** on the home screen to dragging their first card (Gatherer) in the scripted Neanderthal battle.
 **Branch:** `editor-suite`. Updated 2026-10-17 for these changes:
-- the trimmed opening (commit `decd748`);
+- the trimmed opening (commit `decd748`), then a second trim of six lines;
 - the camp callout, the map dialogue's "▶ Tap to continue" cue and tap-anywhere advance;
 - map typing at 21 ms/char (was 28).
 
@@ -58,9 +58,9 @@ M1–M4 start on their own **3 s after arrival**, and movement is locked.
 | M15 | Explorer | That doesn't help my nerves. | map | Yes |
 | M16 | Explorer | I have to get home for soccer practice. | map | Yes |
 | M17 | Lucy | Right... | map | Yes |
-| M18 | Lucy | All I know is that by standing on my own two feet, I always get where I want to go. | map | Yes |
-| M19 | Explorer | Maybe I will find my way home. | map | Yes |
-| M20 | Lucy | You do that. Now, I'm going to use my bipedal powers to get myself a drink. | map | Yes |
+| M18 | Lucy | Standing on my own two feet, I always get where I want to go. | map | Yes |
+| M19 | Explorer | Maybe I'll find my way home. | map | Yes |
+| M20 | Lucy | You do that. I'm off to use my bipedal powers to get a drink. | map | Yes |
 
 After M20 the explorer walks to the camp on her own. There is no text during the walk.
 
@@ -70,7 +70,7 @@ These use the same HUD bar, cue and advance rule as section 2. They start on the
 
 | ID | Speaker | Text | Where | Tap? |
 |---|---|---|---|---|
-| C1 | Explorer | This fire seems promising. Maybe someone here knows something. | map | Yes |
+| C1 | Explorer | Maybe someone at this fire can help. | map | Yes |
 | C2 | Neanderthal | Ughh... | map | Yes |
 | C3 | Explorer | Jugglin' jaguars... is that a caveman? | map | Yes |
 | C4 | Neanderthal | AARRGH! | map | Yes |
@@ -89,11 +89,11 @@ These are speech bubbles with portraits, typed at 32 ms/char (unchanged).
 | ID | Speaker | Text | Where | Tap? |
 |---|---|---|---|---|
 | B1 | Neanderthal | This my fire. | battle | Yes |
-| B2 | Lucy | He thinks he invented fire and doesn't have to share it. | battle | Yes |
+| B2 | Lucy | He thinks he invented fire. | battle | Yes |
 | B3 | Neanderthal | Me no think. Me know. | battle | Yes |
 | B4 | Lucy | You no think, alright. | battle | Yes |
 | B5 | Neanderthal | AARRGH!!! | battle | Yes |
-| B6 | Lucy | Alright, let's try and avoid an early extinction event. | battle | Yes |
+| B6 | Lucy | Let's avoid an early extinction event. | battle | Yes |
 
 In the scripted first battle, B6 is Lucy's **only** remaining story line. Her old 9-line instruction block ("See those cards?" … "Click and drag your first card into play.") is not shown.
 
@@ -126,16 +126,16 @@ Just past the end of this scope, the next text is "Now press End Turn." It appea
 
 ## Totals
 
-| Measure | Before trim | After trim (`decd748`) | **Now** |
-|---|---|---|---|
-| Lines | 47 | 36 | **37** (A 2 · M 20 · C 5 · B 6 · K 4; 36 if K2 and K3 count as one callout) |
-| Taps to advance (minimum) | 45 | 34 | **34** |
-| Words | 252 | 230 | **235** (A 6 · M 158 · C 18 · B 33 · K 20). Split on spaces; "=" is not counted as a word. |
-| Read time at 150 wpm | 1:41 | 1:32 | **1:34** (235 / 150 = 1.57 min) |
-| Map typewriter (HUD) | 28.2 s (1,006 chars × 28 ms) | 25.3 s (905 × 28 ms) | **19.0 s** (905 × 21 ms) |
-| Battle typewriter (bubbles) | 5.6 s (175 × 32 ms) | 5.6 s (176 × 32 ms) | **5.6 s** |
-| Fixed waits | 11.8 s | 11.8 s | **11.8 s** (8.8 s video + 3 s arrival pause) |
-| **Total to first card** | **≈ 2:26** | **≈ 2:15** | **≈ 2:10** |
+| Measure | Before trim | First trim (`decd748`) | + callout, 21 ms (`7adb853`) | **Now (second trim)** |
+|---|---|---|---|---|
+| Lines | 47 | 36 | 37 | **37** (A 2 · M 20 · C 5 · B 6 · K 4; 36 if K2 and K3 count as one callout) |
+| Taps to advance (minimum) | 45 | 34 | 34 | **34** |
+| Words | 252 | 230 | 235 | **215** (A 6 · M 149 · C 16 · B 24 · K 20). Split on spaces; "=" is not counted as a word. |
+| Read time at 150 wpm | 1:41 | 1:32 | 1:34 | **1:26** (215 / 150 = 1.43 min) |
+| Map typewriter (HUD) | 28.2 s (1,006 chars × 28 ms) | 25.3 s (905 × 28 ms) | 19.0 s (905 × 21 ms) | **17.7 s** (841 × 21 ms) |
+| Battle typewriter (bubbles) | 5.6 s (175 × 32 ms) | 5.6 s (176 × 32 ms) | 5.6 s | **4.2 s** (130 × 32 ms) |
+| Fixed waits | 11.8 s | 11.8 s | 11.8 s | **11.8 s** (8.8 s video + 3 s arrival pause) |
+| **Total to first card** | **≈ 2:26** | **≈ 2:15** | **≈ 2:10** | **≈ 2:00** |
 
 The total is reading time + typewriter + fixed waits. It does not count:
 - the walk to the camp;
@@ -184,7 +184,7 @@ This is the **minimum**: it assumes the player waits for every typewriter line t
 7. **Pre-battle (C):** `playPreBattleDialogue`, `js/sog-adventure-prehistory.js:220`. It is run on the map through `Overworld.runPreBattleLines`.
 8. **No rules popup:** the Neanderthal config sets `opening: { dealBeforeIntro: true }`, so the engine skips `_openingRulesGate`.
 9. **Battle bubbles (B):** B1–B5 are `COACHING_PHASE_1` (`js/sog-adventure-prehistory.js:504`); B6 is `COACHING_PHASE_2_SCRIPTED` (`:528`).
-   - The first line of the unscripted `COACHING_PHASE_2` (used after the first win) carries the same "let's" fix.
+   - The first line of the unscripted `COACHING_PHASE_2` (used after the first win) is the same line and reads the same as B6.
 10. **Callouts (K):** `_snapTurn1` at `js/sog-adventure-prehistory.js:1856`. K2/K3 appear only on attempt 1; a retry skips them.
 11. **Not on this path:**
     - The account/save prompt is post-Ötzi only.

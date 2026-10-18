@@ -500,9 +500,9 @@ var Overworld = (function () {
     { who: 'explorer', text: "That doesn't help my nerves." },
     { who: 'explorer', text: 'I have to get home for soccer practice.' },
     { who: 'lucy',     text: 'Right...' },
-    { who: 'lucy',     text: 'All I know is that by standing on my own two feet, I always get where I want to go.' },
-    { who: 'explorer', text: 'Maybe I will find my way home.' },
-    { who: 'lucy',     text: "You do that. Now, I'm going to use my bipedal powers to get myself a drink." }
+    { who: 'lucy',     text: 'Standing on my own two feet, I always get where I want to go.' },
+    { who: 'explorer', text: "Maybe I'll find my way home." },
+    { who: 'lucy',     text: "You do that. I'm off to use my bipedal powers to get a drink." }
   ];
 
   var PHASE1_WAIT_MS = 3000;    // 3s arrival pause before Phase 1 fires
