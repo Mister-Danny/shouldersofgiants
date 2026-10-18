@@ -484,6 +484,7 @@ var Overworld = (function () {
   ];
   var D2C_AUTO_DISMISS_MS    = 1500;
   var KEY_GILGAMESH_PHASE1   = 'sog_gilgamesh_phase1_complete';
+  var KEY_CUNEIFORM_GRANTED  = 'sog_cuneiform_granted';
 
   var PHASE2_DIALOGUE = [
     { who: 'lucy',     text: "Mmmhm... I'm standing right here." },
