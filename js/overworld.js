@@ -3391,8 +3391,8 @@ var Overworld = (function () {
 
     function showFollowUp() {
       body.innerHTML = '<p>' +
-        'No problem. Your progress is still being saved on your browser data. ' +
-        'You can make one anytime with Log in on the home screen.' +
+        'No problem. Your progress is saved in this browser. ' +
+        'To save it to an account, ask your teacher for a class link.' +
         '</p>';
       actions.innerHTML = '<span class="popup-hint"></span>' +
         '<button class="btn-snes btn-snes-close" id="account-prompt-ok">OK</button>';
