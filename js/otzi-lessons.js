@@ -7,7 +7,7 @@
  * blocks play, and fades after ~4 s or at the player's next action.
  *
  * FIRST ATTEMPT ONLY (the one-time lessons):
- *   "You can play 2 cards each turn." (at the CARDS TO PLAY counter) ·
+ *   "You can play 2 cards each turn." (hung from the turn box, arrow up at the number) ·
  *   "Play 2 cards. Try two locations." · "Cave Art pays more later. Save it." ·
  *   stacking · way behind · reveal order · Cave Art order / its +1 arcs ·
  *   Lucy drawn / Lucy can move / "Moves happen in order too." / Lucy's move
@@ -46,6 +46,33 @@ window.SOG.OtziLessons = (function () {
   function _tile(locId) { var s = document.getElementById('loc-score-player-' + locId); return s && s.parentNode; }
   function _scoreEl(locId) { return document.getElementById('loc-score-player-' + locId); }
   function _counter() { return document.getElementById('battle-capital-num'); }
+  // The ink box of an element's text (stage px), from the font's own metrics:
+  // where the letters are, not the line box around them.
+  function _ink(el) {
+    var r = CO.rectIn(el); if (!r) return null;
+    var cs = getComputedStyle(el);
+    var cv = _ink.cv || (_ink.cv = document.createElement('canvas').getContext('2d'));
+    cv.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+    var t = cv.measureText(el.textContent), fa = t.fontBoundingBoxAscent, fd = t.fontBoundingBoxDescent;
+    var lh = parseFloat(cs.lineHeight); if (isNaN(lh)) lh = fa + fd;
+    var base = r.y + (parseFloat(cs.paddingTop) || 0) + (lh - (fa + fd)) / 2 + fa;   // baseline
+    return { x: r.x - t.actualBoundingBoxLeft, r: r.x + t.actualBoundingBoxRight,
+             y: base - t.actualBoundingBoxAscent, b: base + t.actualBoundingBoxDescent };
+  }
+  // "You can play 2 cards each turn." hangs from the turn box: its left edge on
+  // the "C" of CARDS TO PLAY, its arrow straight under the number, the tip 4.5px
+  // short of the digit — so the callout overlaps the box's lower edge.
+  function _cardsHint() {
+    var num = _counter(), lab = document.querySelector('.battle-capital-label');
+    var el = _callout('You can play 2 cards each turn.', num, 'bottom', { ms: 4200, cls: 'snap-callout--oneline' });
+    var n = el && _ink(num), l = el && _ink(lab);
+    if (!n || !l) return;
+    var cs = getComputedStyle(el);
+    var tip = 9 - (parseFloat(cs.borderTopWidth) || 0);   // the 9px arrow's tip stands this far above the edge
+    el.style.left = l.x + 'px';
+    el.style.top  = (n.b + 4.5 + tip) + 'px';
+    el.style.setProperty('--arrow-x', ((n.x + n.r) / 2 - l.x - (parseFloat(cs.borderLeftWidth) || 0)) + 'px');
+  }
 
   function _totals() {
     var G = _G(), out = {};
@@ -153,7 +180,7 @@ window.SOG.OtziLessons = (function () {
     _watchScores();
     if (!S.first) return;
     _ifLive(function () {
-      _callout('You can play 2 cards each turn.', _counter(), 'right', { ms: 4200 });
+      _cardsHint();
       _later(function () {
         if (_G().turn !== 1 || _staged().length) return;
         var firstCard = document.querySelector('#battle-player-hand .battle-hand-card');

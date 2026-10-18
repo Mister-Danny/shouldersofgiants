@@ -5563,12 +5563,17 @@ body.tut-locked #battle-reset-turn {
    Large and prominent; also the triple-click target for the bypass menu. */
 .home-title {
   font-family: var(--font);
-  font-size: 72px;
+  font-size: 97.2px;   /* 72px + 35% */
   font-weight: normal;
   color: var(--snes-yellow);
   letter-spacing: 0.06em;
   text-align: center;
-  margin: 0;
+  /* Evenly spaced: the title's letters sit as far below the top-right links'
+     letters as above the tagline's (82px each on the 1280×720 stage).
+     #home-content centres its stack, so pulling the tagline up by d moves the
+     title down d/2: −22.8px balances the 70.6 / 104.8 gaps a plain 40px
+     gap leaves at this size. */
+  margin: 0 0 -22.8px;
   line-height: 1.1;
   cursor: default;
   user-select: none;
@@ -13941,6 +13946,7 @@ body.hyksos-battle .battle-col[data-loc-id="133"]::before {   /* Aswan Cataract 
   to   { opacity: 1; transform: none; }
 }
 .snap-callout--instr { max-width: 330px; }   /* clears Lucy's portrait at the left */
+.snap-callout--oneline { max-width: none; white-space: nowrap; }   /* a short hint kept on one line */
 body.snap-guiding #battle-hover-popup { visibility: hidden !important; }
 .snap-callout-sub {
   margin-top: 4px;

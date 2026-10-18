@@ -85,7 +85,6 @@ var Overworld = (function () {
     { who: 'explorer', text: 'But it sounds really smart.' },
     { who: 'lucy',     text: "You'll learn." },
     { who: 'explorer', text: "With your help, I'll be home in no time." },
-    { who: 'explorer', text: 'Where to next?' },
     { who: 'lucy',     text: 'About that.' },
     { who: 'lucy',     text: "I can walk, but these old bones don't migrate." },
     { who: 'explorer', text: "Wait. You're not coming?" },
