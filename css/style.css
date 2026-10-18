@@ -1518,24 +1518,30 @@ img    { display: block; }
   width: 24px;
   height: 24px;
   box-sizing: border-box;
-  border: 2px solid #fff5d8;
-  border-radius: 50%;
-  background: rgba(10, 5, 1, 0.72);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.85), 0 0 5px rgba(0, 0, 0, 0.6);
-  font: 700 15px/20px 'Source Sans 3', sans-serif;
+  /* ONE radial gradient draws the fill, the 2px ring and its 1px dark edge.
+     No border / border-radius / box-shadow: on the GPU a thin border on a
+     fully rounded box is drawn in pieces, and at the stage's fractional
+     scale the pieces left a faint dark cross through the circle. Glows go
+     through filter: drop-shadow, which follows the drawn circle. */
+  --pick-fill: rgba(10, 5, 1, 0.72);
+  --pick-ring: #fff5d8;
+  background: radial-gradient(circle closest-side,
+    var(--pick-fill) calc(100% - 3.5px), var(--pick-ring) calc(100% - 3px),
+    var(--pick-ring) calc(100% - 1.5px), rgba(0, 0, 0, 0.85) calc(100% - 1px), rgba(0, 0, 0, 0) 100%);
+  filter: drop-shadow(0 0 2.5px rgba(0, 0, 0, 0.6));
+  font: 700 15px/24px 'Source Sans 3', sans-serif;
   text-align: center;
   color: #0c1f0c;
-  transition: background 0.1s, border-color 0.1s, box-shadow 0.1s;
 }
 .db-pick:hover::before {
-  border-color: #6fe08a;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.85), 0 0 8px rgba(111, 224, 138, 0.9);
+  --pick-ring: #6fe08a;
+  filter: drop-shadow(0 0 4px rgba(111, 224, 138, 0.9));
 }
 .db-card.selected .db-pick::before {
   content: '\2713';
-  background: #6fe08a;
-  border-color: #0c1f0c;
-  box-shadow: 0 0 6px rgba(111, 224, 138, 0.8);
+  --pick-fill: #6fe08a;
+  --pick-ring: #0c1f0c;
+  filter: drop-shadow(0 0 3px rgba(111, 224, 138, 0.8));
 }
 
 
@@ -11658,16 +11664,18 @@ body.prehistory-battle .db-overlay-ip {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--snes-yellow);
+  /* One radial gradient: yellow fill + 2px dark ring (no border-radius
+     border — see .db-pick::before for the cross artifact that caused). */
+  background: radial-gradient(circle closest-side,
+    var(--snes-yellow) calc(100% - 2.5px), #1a0a04 calc(100% - 2px),
+    #1a0a04 calc(100% - 0.75px), rgba(26, 10, 4, 0) 100%);
   color: #1a0a04;
   font-family: var(--font);
   font-size: 15px;
   font-weight: bold;
-  border: 2px solid #1a0a04;
-  border-radius: 50%;
   /* bevel, glow, and a small cast shadow under the overworld's one sun
      (front-left: shadows fall up and to the right — see SUN in overworld.js) */
-  box-shadow: 0 2px 0 #000, 0 0 8px rgba(248, 208, 0, 0.5), 3px -3px 2px rgba(0, 0, 0, 0.35);
+  filter: drop-shadow(0 2px 0 #000) drop-shadow(0 0 4px rgba(248, 208, 0, 0.5)) drop-shadow(3px -3px 2px rgba(0, 0, 0, 0.35));
   z-index: 3;
   pointer-events: none;
 }
@@ -14145,32 +14153,43 @@ body.snap-guiding #battle-hover-popup { visibility: hidden !important; }
   position: absolute;
   box-sizing: border-box;
   transform: translateX(-50%);
-  min-width: 17px;
+  width: 17px;
   height: 17px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: rgba(10, 22, 36, 0.95);
-  border: 1.5px solid #f8d000;
+  /* One radial gradient: fill + 1.5px gold ring (no border-radius border —
+     see .db-pick::before for the cross artifact that caused). */
+  --ob-fill: rgba(10, 22, 36, 0.95);
+  --ob-ring: #f8d000;
+  background: radial-gradient(circle closest-side,
+    var(--ob-fill) calc(100% - 2px), var(--ob-ring) calc(100% - 1.5px),
+    var(--ob-ring) calc(100% - 0.5px), rgba(0, 0, 0, 0) 100%);
   color: #f8d000;
   font-family: 'Source Sans 3', Arial, Helvetica, sans-serif;
   font-size: 12px;
   font-weight: 800;
-  line-height: 14px;
+  line-height: 17px;
   text-align: center;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
   animation: order-badge-in 0.2s ease-out;
 }
 @keyframes order-badge-in { from { opacity: 0; } to { opacity: 1; } }
-.order-badge--move { border-style: dashed; }
+/* A queued move: the ring is dashed — a conic stripe under the fill, both
+   clipped to the circle. */
+.order-badge--move {
+  background:
+    radial-gradient(circle closest-side, var(--ob-fill) calc(100% - 2px), rgba(0, 0, 0, 0) calc(100% - 1.5px)),
+    repeating-conic-gradient(var(--ob-ring) 0deg 22.5deg, rgba(0, 0, 0, 0) 22.5deg 45deg);
+  -webkit-mask: radial-gradient(circle closest-side, #000 calc(100% - 0.5px), rgba(0, 0, 0, 0) 100%);
+          mask: radial-gradient(circle closest-side, #000 calc(100% - 0.5px), rgba(0, 0, 0, 0) 100%);
+}
 .order-badge--waiting { opacity: 0.45; }
 @keyframes order-badge-lit {
-  0%   { box-shadow: 0 0 0 0 rgba(248, 208, 0, 0); }
-  40%  { box-shadow: 0 0 12px 4px rgba(248, 208, 0, 0.9); }
-  100% { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
+  0%   { filter: drop-shadow(0 0 0 rgba(248, 208, 0, 0)); }
+  40%  { filter: drop-shadow(0 0 6px rgba(248, 208, 0, 0.9)); }
+  100% { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)); }
 }
 .order-badge--lit {
   opacity: 1;
-  background: #f8d000;
+  --ob-fill: #f8d000;
   color: #1a0a04;
   animation: order-badge-lit 0.6s ease-out;
 }

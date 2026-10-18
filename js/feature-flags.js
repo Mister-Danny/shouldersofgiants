@@ -33,6 +33,13 @@ window.SOG_FEATURES = {
   // config sets orderBadges too, so false here would leave them in Ötzi only.
   ORDER_BADGES_EVERYWHERE: true,
 
+  // Design pass v2 (proposal, not approved): one signal colour for taps, a
+  // two-size type hierarchy, and three depth planes on home / victory / card
+  // reveal. Every rule lives in css/design-v2.css under html.design-v2, and
+  // js/design-v2.js does nothing without that class. Preview without flipping
+  // this: add ?design=v2 to the URL. Shipping it is one flip to true here.
+  DESIGN_V2: false,
+
   // The maps a player can reach up to and including Kush.
   RELEASED_MAPS: ['eastafrica', 'egypt', 'upper-egypt', 'mesopotamia'],
   // The last boss inside those maps, and the Giants that live past it.
@@ -60,3 +67,10 @@ window.SOG_FEATURES.isMapOpen = function (mapId) {
   return window.SOG_FEATURES.contentPastKushOpen() ||
          window.SOG_FEATURES.RELEASED_MAPS.indexOf(mapId) !== -1;
 };
+
+/* Design pass v2 switch: the flag, or ?design=v2 for a one-off preview. */
+(function () {
+  var on = window.SOG_FEATURES.DESIGN_V2;
+  try { if (/[?&]design=v2\b/.test(location.search)) on = true; } catch (e) {}
+  if (on) document.documentElement.classList.add('design-v2');
+})();

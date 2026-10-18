@@ -1,0 +1,132 @@
+/* ════════════════════════════════════════════════════════════════════
+   DESIGN PASS v2 — the APPROVED subset (behind the flag)
+   Every rule here is scoped to html.design-v2, set only by
+   SOG_FEATURES.DESIGN_V2 (js/feature-flags.js) or a ?design=v2 URL.
+   Without that class this file does nothing. js/design-v2.js splits the
+   turn line into label + number.
+
+   Kept (and only these):
+     1. battle location scores at the large size, vertically centred
+     2. the turn box: large turn and cards-to-play numbers, labels top-aligned
+     3. purple End Turn (enabled)
+     4. result screens: purple Continue / Play Again, neutral other buttons,
+        18px subline and location rows
+     5. purple outline on the map's transition (exit) boxes
+     6. purple ring round the map's objective node
+     7. purple Save Deck button in the deck builder (enabled)
+     8. the learning check popup's frame (bronze edge and rings)
+   The signal colour is the I'M READY purple.
+   ════════════════════════════════════════════════════════════════════ */
+
+html.design-v2 {
+  --tap:        #7a3aab;   /* I'M READY purple (top of its gradient) */
+  --tap-deep:   #5e2890;
+  --tap-hi:     #9450c8;   /* hover */
+  --tap-hi-deep:#6e34a8;
+  --tap-line:   #c79bf2;   /* outlines / rings on dark or busy ground */
+  --tap-text:   #fff5e6;
+  /* Measured from CTGalbite's metrics (canvas measureText): at 44px its digits'
+     ink runs 2.2–33px down a 44px line box, centred 4.4px above the middle;
+     at 16px capitals start 0.8px down, the 44px digits 2.2px down. */
+  --dv2-score-nudge: 8.8px;       /* 2 × 4.4: centring content moves it by half */
+  --dv2-turn-label-nudge: 1.4px;  /* 2.2 − 0.8 */
+  --dv2-cap-label-nudge: 1.4px;
+}
+
+/* ── 1. Battle location scores: large, vertically centred ─────────────
+   The pixel font's digits sit above the middle of their line box (its
+   ascent is taller than its descent), so flex-centring the box leaves the
+   ink high. The nudge moves the ink's centre onto the box's centre. */
+html.design-v2 .battle-loc-score-opp,
+html.design-v2 .battle-loc-score-player {
+  font-size: 44px;
+  width: 60px;
+  line-height: 0;                 /* a zero-height line box adds no height to the row… */
+  padding-top: var(--dv2-score-nudge, 0px);   /* …and the padding drops its centre by 4.4px */
+}
+
+/* ── 2. Turn box: large numbers, labels top-aligned with them ─────────
+   js/design-v2.js splits "TURN 2 / 4" into .dv2-turn-label + .dv2-turn-num.
+   Rows align their items at the top; each small label is pushed down so
+   the top of its letters meets the top of the big number's digits. */
+html.design-v2 .battle-hud-topleft { padding: 8px 18px 10px; }
+html.design-v2 .battle-turn-info {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+html.design-v2 .battle-turn-info .dv2-turn-num { font-size: 44px; line-height: 1; letter-spacing: 0.02em; }
+html.design-v2 .battle-turn-info .dv2-turn-label { line-height: 1; padding-top: var(--dv2-turn-label-nudge, 0px); }
+html.design-v2 .battle-capital-info { flex-direction: row; align-items: flex-start; justify-content: center; gap: 10px; }
+html.design-v2 .battle-capital-label { font-size: 16px; line-height: 1; padding-top: var(--dv2-cap-label-nudge, 0px); }
+html.design-v2 .battle-capital-num { font-size: 44px; line-height: 1; }
+
+/* ── Shared purple button look (items 3, 4, 7) ─────────────────────── */
+html.design-v2 .btn-end-turn:not(:disabled),
+html.design-v2 .result-actions .btn-primary[id$="-continue"],
+html.design-v2 .result-actions .btn-primary[id$="-again"],
+html.design-v2 #result-play-again,
+html.design-v2 .btn-save:not(:disabled) {
+  background: linear-gradient(180deg, var(--tap) 0%, var(--tap-deep) 100%) !important;
+  border: 3px solid var(--tap-line) !important;
+  color: var(--tap-text) !important;
+  text-shadow: 1px 1px 0 #000;
+  box-shadow: 0 4px 0 #2a0f40, 0 5px 0 #000, 0 0 14px rgba(148, 80, 200, 0.35) !important;
+}
+html.design-v2 .btn-end-turn:hover:not(:disabled),
+html.design-v2 .result-actions .btn-primary[id$="-continue"]:hover,
+html.design-v2 .result-actions .btn-primary[id$="-again"]:hover,
+html.design-v2 #result-play-again:hover,
+html.design-v2 .btn-save:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--tap-hi) 0%, var(--tap-hi-deep) 100%) !important;
+  border-color: #e2c6ff !important;
+  color: #fff !important;
+}
+/* End Turn's turn-1 attention pulse: purple, to match the button */
+html.design-v2 .btn-end-turn.adv-pulse:not([disabled]) {
+  box-shadow: 0 0 0 3px var(--tap-line), 0 0 22px 6px rgba(176, 112, 240, 0.85) !important;
+}
+
+/* ── 4. Result screens: the other buttons go neutral; small text 18px ─ */
+html.design-v2 .result-actions .btn-primary:not([id$="-continue"]):not([id$="-again"]):not(#result-play-again) {
+  background: #2e1c0c !important;
+  border: 2px solid #8a6a40 !important;
+  color: #ead9b4 !important;
+  box-shadow: 0 3px 0 #140a02, 0 4px 0 #000 !important;
+}
+html.design-v2 .result-actions .btn-primary:not([id$="-continue"]):not([id$="-again"]):not(#result-play-again):hover {
+  border-color: var(--tap-line) !important;
+  color: #fff !important;
+}
+html.design-v2 .adv-result .result-subline { font-size: 18px; }
+html.design-v2 .adv-result .result-loc-row,
+html.design-v2 .adv-result .result-loc-row * { font-size: 18px !important; }
+html.design-v2 .adv-result .result-actions .btn-primary { font-size: 18px !important; }
+
+/* ── 5. Map transition (exit) boxes: purple outline ────────────────── */
+html.design-v2 .overworld-exit:hover,
+html.design-v2 .overworld-exit--flash {
+  border-color: var(--tap-line) !important;
+  background: rgba(122, 58, 171, 0.12) !important;
+}
+@media (hover: none) {
+  html.design-v2 .overworld-exit { border-color: rgba(199, 155, 242, 0.55) !important; }
+}
+
+/* ── 6. Map objective: purple ground ring (the node's own glow stays gold) */
+html.design-v2 .overworld-node.is-objective::after {
+  border-color: var(--tap-line) !important;
+  border-width: calc(4px / var(--node-s, 1)) !important;
+  box-shadow: 0 0 0 calc(1.5px / var(--node-s, 1)) rgba(30, 8, 50, 0.6),
+              0 0 calc(14px / var(--node-s, 1)) rgba(176, 112, 240, 0.8),
+              inset 0 0 calc(12px / var(--node-s, 1)) rgba(176, 112, 240, 0.5) !important;
+  width: max(124%, calc(96px / var(--node-s, 1))) !important;
+}
+
+/* ── 8. Learning check popup: bronze frame ─────────────────────────── */
+html.design-v2 .learning-check-popup {
+  border-color: #8a6a40 !important;
+  box-shadow: 0 0 0 2px #000, 0 0 0 5px #6b4a1e, 0 8px 30px rgba(0, 0, 0, 0.8) !important;
+}
