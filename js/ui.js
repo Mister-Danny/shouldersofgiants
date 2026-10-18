@@ -89,8 +89,8 @@
      plays, discards, undo). The default (giant/Arcadium) layout is the one
      that overlapped; prehistory + Ötzi keep their own tuned CSS. */
   var HAND_RESERVED     = 230;        // ghost 115 + sep (1+14+4) + pile (82+14)
-  var HAND_ASPECT       = 184 / 123;  // card height / width
-  var HAND_CARD_MAX     = 123;        // comfortable full size
+  var HAND_ASPECT       = 175 / 117;  // card height / width
+  var HAND_CARD_MAX     = 117;        // comfortable full size (CSS .battle-hand-card)
   var HAND_CARD_MIN     = 88;         // smallest still-readable width
   var HAND_GAP_MAX      = 12;         // comfortable gap at low counts
   var HAND_GAP_MIN      = 4;          // tightest gap before cards shrink

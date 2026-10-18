@@ -31,9 +31,10 @@ window.SOG.orderBadges = (function () {
     return !!(window.SOG_FEATURES && window.SOG_FEATURES.ORDER_BADGES_EVERYWHERE && G.config.structure && G.config.structure.locationsCount > 1);
   }
   function _stage() { return document.getElementById('sog-stage'); }
-  // The layer sits INSIDE #screen-battle, after the board and before the hand,
-  // so badges paint over the board but UNDER the hand: a hand card lifted by
-  // hover (or dragged) covers a badge rather than the other way round.
+  // The layer sits INSIDE #screen-battle, after the board and before the hand.
+  // CSS z-index 2 puts it above the hand strip's dark background and the
+  // resting hand cards (z 1), but under a card lifted by hover (z 100) or
+  // dragged, so a lifted card covers a badge rather than the other way round.
   function _layer() {
     var el = document.getElementById('order-badge-layer');
     if (el) return el;
@@ -89,17 +90,21 @@ window.SOG.orderBadges = (function () {
     layer.innerHTML = '';
     if (!enabled()) return;
     var o = _origin();
+    // The hand strip's top edge (the board's lower edge): badges sit just inside
+    // the strip, never half on the board.
+    var hr = _rectIn(document.getElementById('battle-player-hand'));
     (G.playerActionLog || []).forEach(function (a, k) {
       var r = _rectIn(_anchorFor(a));
       if (!r) return;
       var b = document.createElement('div');
       b.className = 'order-badge' + (a.type === 'move' ? ' order-badge--move' : '');
       b.textContent = String(k + 1);
-      // Centred in the strip BELOW the card (between the player's row and the
-      // hand): every corner of a card carries information (Capital, type, IP),
-      // so the badge never sits on the card itself.
+      // Centred under the card, fully inside the dark hand strip: every corner
+      // of a card carries information (Capital, type, IP), so the badge never
+      // sits on the card itself, nor half on the board.
+      var top = Math.max(r.y + r.h + 1, hr ? hr.y + 4 : 0);
       b.style.left = (r.x + r.w / 2 - o.x) + 'px';
-      b.style.top  = (r.y + r.h + 1 - o.y) + 'px';
+      b.style.top  = (top - o.y) + 'px';
       layer.appendChild(b);
     });
   }

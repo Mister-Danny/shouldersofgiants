@@ -2830,7 +2830,7 @@ img    { display: block; }
   align-items: center;
   justify-content: center;
   gap: 5px;
-  height: 160px;
+  height: 145px;   /* was 160: the board sits 15px higher, so the order badges under it clear the hand */
   flex-shrink: 0;
   padding: 0 20px;
   background: rgba(28, 14, 4, 0.68);
@@ -3403,9 +3403,9 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
   align-items: center;
   justify-content: center;
   gap: 0;
-  height: 210px;   /* 280px was for 800px screen; 210px fits within 720px stage */
+  height: 225px;   /* 145 opp band + 350 board + 225 = the 720px stage */
   flex-shrink: 0;
-  padding: 0 20px;
+  padding: 10px 20px 0;   /* the top 10px keeps the cards clear of the order badges under the board */
   background: rgba(28, 14, 4, 0.62);
   border-top: 2px solid rgba(100, 65, 10, 0.45);
   box-shadow: inset 0 10px 20px rgba(8, 4, 0, 0.52);
@@ -3417,8 +3417,8 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
 
 .battle-hand-card {
   position: relative;
-  width: 123px;
-  height: 184px;
+  width: 117px;    /* 123 × 0.95 */
+  height: 175px;   /* 184 × 0.95 */
   flex-shrink: 0;
   cursor: pointer;
   border: 2px solid transparent;
@@ -10816,37 +10816,6 @@ body.otzi-battle .adv-bubble .adv-bubble-hint {
   margin-top: 6px;
 }
 
-/* ── Ötzi strategy hints ─────────────────────────────────────────
-   A hint is an Explorer line shown mid-battle (sog-adventure-otzi.js). The
-   bubble carries .is-hint only while a hint is up: the text turns green and the
-   bubble takes clicks (click = next hint) — normal dialogue never adds the
-   class. The hinted card in hand gets .otzi-hint-card, a matching green glow. */
-body.otzi-battle #adv-bubble-explorer.is-hint {
-  pointer-events: auto;
-  cursor: pointer;
-}
-body.otzi-battle #adv-bubble-explorer.is-hint .adv-bubble-text {
-  color: #1d7a33;
-}
-body.otzi-battle .battle-hand-card.otzi-hint-card {
-  box-shadow: 0 0 0 3px #2fbf4f, 0 0 18px 6px rgba(47, 191, 79, 0.75);
-  animation: otzi-hint-card-pulse 1.4s ease-in-out infinite;
-}
-@keyframes otzi-hint-card-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px #2fbf4f, 0 0 12px 3px rgba(47, 191, 79, 0.55); }
-  50%      { box-shadow: 0 0 0 3px #4fe06d, 0 0 22px 8px rgba(47, 191, 79, 0.90); }
-}
-/* The 2-of-3 reminder on the Ötzi DEFEAT / TIE scoreboard, under the rows. */
-.otzi-hint-reminder {
-  font-family: var(--font);
-  font-size: 1.05rem;
-  color: #5fe07a;
-  text-align: center;
-  letter-spacing: 0.04em;
-  text-shadow: 1px 1px 0 #000, 0 0 4px rgba(0, 0, 0, 0.9);   /* legible on the tan panel */
-  margin-top: 2px;
-}
-
 /* ── Sargon + Hyksos battle speech bubbles — the comic-book treatment, same as
    the Otzi / Gilgamesh battles. Each battle uses its own body class (so the
    otzi-battle bubble rules above don't reach it) and keeps the capital UI (CC
@@ -11390,7 +11359,7 @@ body.prehistory-battle .battle-col[data-loc-id="100"] {
    Height 192px = card height (166px) + 26px breathing room, matching the
    standard game ratio (210px band, 184px card → 26px breathing room).    */
 body.prehistory-battle .battle-opp-hand    { height: 192px; }
-body.prehistory-battle .battle-player-hand { height: 192px; }
+body.prehistory-battle .battle-player-hand { height: 192px; padding-top: 0; }
 
 /* Slot rows: standard Arcadium 3-location height (140px).
    336px board − 2×140px rows − 2×6px gaps = 44px for the location strip.
@@ -14124,7 +14093,7 @@ body.snap-guiding #battle-hover-popup { visibility: hidden !important; }
   user-select: none;
 }
 #otzi-layer { z-index: 9000; }
-#order-badge-layer { z-index: auto; }   /* inside #screen-battle: above the board, below the hand (DOM order) */
+#order-badge-layer { z-index: 2; }   /* inside #screen-battle: above the hand strip + resting hand cards (z 1), below a hovered card (z 100) */
 /* Shared callout layers (js/game/callouts.js): fades. */
 .callout-layer {
   position: absolute;
@@ -14139,8 +14108,8 @@ body.snap-guiding #battle-hover-popup { visibility: hidden !important; }
 .otzi-final-banner { transition: opacity 0.35s ease; }
 .callout-fading { opacity: 0 !important; }
 
-/* Order badges: the action's number, centred in the strip just below the card
-   (between the player's row and the hand), so it never covers a card. */
+/* Order badges: the action's number, centred under the card inside the dark
+   hand strip, so it never covers a card. */
 .order-badge {
   position: absolute;
   box-sizing: border-box;

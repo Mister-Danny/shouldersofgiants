@@ -15,8 +15,8 @@
  * EVERY ATTEMPT until the win: the pinned goal, the score glow, the FINAL TURN
  *   banner with the standings line, and the loss explanation.
  *
- * Driven by js/sog-adventure-otzi.js's script hooks. Interjections never show
- * during a strategy-hint batch (opts.hintsBusy), they wait for it to finish.
+ * Driven by js/sog-adventure-otzi.js's script hooks. A later game run "with
+ * hints" (Yes before the deal) is begun again with first: true.
  */
 window.SOG = window.SOG || {};
 window.SOG.OtziLessons = (function () {
@@ -89,12 +89,9 @@ window.SOG.OtziLessons = (function () {
     S.transient.forEach(_fade);
     S.transient = [];
   }
-  // Wait out a strategy-hint batch before showing anything.
-  function _whenClear(fn, tries) {
-    if (!S) return;
-    if (S.hintsBusy && S.hintsBusy() && (tries || 0) < 60) { _later(function () { _whenClear(fn, (tries || 0) + 1); }, 300); return; }
-    fn();
-  }
+
+  // Run fn only while the battle is still on (a later beat after teardown is a no-op).
+  function _ifLive(fn) { if (S) fn(); }
 
   /* ── Arcs (Cave Art's +1s, Lucy's move) ──────────────────────── */
   function _svg() { return CO.svg(_layer(), 'otzi-arrow'); }
@@ -129,7 +126,7 @@ window.SOG.OtziLessons = (function () {
   /* ── Lifecycle ─────────────────────────────────────────────── */
   function begin(opts) {
     teardown();
-    S = { first: !!opts.first, attempt: opts.attempt || 1, hintsBusy: opts.hintsBusy || null,
+    S = { first: !!opts.first, attempt: opts.attempt || 1,
           once: {}, transient: [], timers: [], observers: [], instr: null,
           lucy: { moved: false, turn: null, flipped: false }, lucyBefore: null };
     document.body.classList.add('otzi-lessons');
@@ -155,7 +152,7 @@ window.SOG.OtziLessons = (function () {
     }
     _watchScores();
     if (!S.first) return;
-    _whenClear(function () {
+    _ifLive(function () {
       _callout('You can play 2 cards each turn.', _counter(), 'right', { ms: 4200 });
       _later(function () {
         if (_G().turn !== 1 || _staged().length) return;
@@ -271,13 +268,13 @@ window.SOG.OtziLessons = (function () {
     _dismiss();
     if (turn === 3 && S.first) {
       _later(function () {
-        _whenClear(function () {
+        _ifLive(function () {
           if (_handCard(LUCY) && _once('lucyDrawn')) _callout('Lucy can move once. Play her now, move her next turn.', _handCard(LUCY), 'top', { ms: 6500 });
         });
       }, 700);
     }
     if (turn === _G().config.structure.turns) {
-      _later(function () { _whenClear(_finalTurn); }, 600);
+      _later(function () { _ifLive(_finalTurn); }, 600);
     }
   }
   function _finalTurn() {
