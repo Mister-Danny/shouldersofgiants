@@ -73,5 +73,5 @@ window.SOG_FEATURES.isMapOpen = function (mapId) {
 (function () {
   var on = window.SOG_FEATURES.DESIGN_V2;
   try { if (/[?&]design=v2\b/.test(location.search)) on = true; } catch (e) {}
-  if (on) document.documentElement.classList.add('design-v2');
+  if (on && typeof document !== 'undefined') document.documentElement.classList.add('design-v2');   // (no document in the node tests)
 })();
