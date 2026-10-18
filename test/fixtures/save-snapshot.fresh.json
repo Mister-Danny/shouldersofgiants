@@ -1,0 +1,198 @@
+{
+ "modules": {
+  "cardHover": {
+   "enabled": true
+  },
+  "collection": {
+   "earned": []
+  },
+  "deckBuilderTutorial": {
+   "complete": false
+  },
+  "decks": {
+   "activeSlot": 1,
+   "decks": [
+    {
+     "cards": [
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      36
+     ],
+     "id": 1,
+     "name": "Deck 1"
+    },
+    {
+     "cards": [],
+     "id": 2,
+     "name": "Deck 2"
+    },
+    {
+     "cards": [],
+     "id": 3,
+     "name": "Deck 3"
+    },
+    {
+     "cards": [],
+     "id": 4,
+     "name": "Deck 4"
+    },
+    {
+     "cards": [],
+     "id": 5,
+     "name": "Deck 5"
+    },
+    {
+     "cards": [],
+     "id": 6,
+     "name": "Deck 6"
+    }
+   ]
+  },
+  "focus": {
+   "focus": 100
+  },
+  "gilgamesh": {
+   "battleComplete": false,
+   "cunTipLossesGiant": 0,
+   "cunTipLossesSerf": 0,
+   "cuneiformGranted": false,
+   "openingSeen": false,
+   "phase1Complete": false,
+   "typesAttempts": 0,
+   "typesSeen": false
+  },
+  "gold": {
+   "gold": 0
+  },
+  "hammurabi": {
+   "battleComplete": false,
+   "openingSeen": false
+  },
+  "hangingGardens": {
+   "battleComplete": false,
+   "floodIntroSeen": false,
+   "openingSeen": false
+  },
+  "home": {
+   "adventureWarningSeen": false,
+   "firstVisitComplete": false,
+   "introSeen": true,
+   "selectedAdventurer": "female"
+  },
+  "learningCheck": {
+   "correct": 0,
+   "total": 0
+  },
+  "music": {
+   "musicVolume": 10
+  },
+  "narmer": {
+   "battleComplete": false,
+   "openingSeen": false
+  },
+  "nodeProgress": {},
+  "otzi": {
+   "battleComplete": false,
+   "cardUnlocked": false,
+   "gameFinished": false,
+   "openingSeen": false
+  },
+  "overworld": {
+   "adventureIntroComplete": true,
+   "akhenatenNodeRevealed": false,
+   "cardLucyUnlocked": false,
+   "cuneiformGranted": false,
+   "deckbuilderUnlocked": false,
+   "eastafricaPostOtziDialogueSeen": false,
+   "egyptArrivalSeen": false,
+   "egyptMarketIntroSeen": false,
+   "egyptMarketState": {
+    "sig": "55,56,70,69,74,71,73,84,87|54,57,59,64,61,80,81,86,85|65,62,60,58,63,66,82,83,79",
+    "tiers": [
+     {
+      "next": 0,
+      "slots": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "next": 0,
+      "slots": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "next": 0,
+      "slots": [
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   },
+   "egyptNodeArrivalSeen": false,
+   "egyptNodeLive": false,
+   "endOfContentSeen": false,
+   "firstMarketInterstitialSeen": false,
+   "hammurabiNodeRevealed": false,
+   "hangingGardensRevealed": false,
+   "kushNodeRevealed": false,
+   "map": "eastafrica",
+   "marketAutoVisitDone": false,
+   "marketFirstVisitDone": false,
+   "marketIntroSeen": false,
+   "mesopotamiaArrivalComplete": false,
+   "metGilgamesh": false,
+   "metNarmer": false,
+   "pos": {
+    "x": 65,
+    "y": 90
+   },
+   "postNeanderthalDialogueSeen": false,
+   "ramsesNodeRevealed": false,
+   "sargonNodeRevealed": false,
+   "toEgyptGoodbyeSeen": false,
+   "visitedMaps": [
+    "eastafrica"
+   ]
+  },
+  "playtime": {
+   "totalSeconds": 2
+  },
+  "prehistory": {
+   "battleComplete": false
+  },
+  "progression": {
+   "explorationCutsceneSeen": false,
+   "explorationUnlocked": false,
+   "giantWins": 0,
+   "religiousCutsceneSeen": false,
+   "religiousUnlocked": false,
+   "serfWins": 0,
+   "totalWins": 0,
+   "victoryMontageSeen": false
+  },
+  "sargon": {
+   "battleComplete": false,
+   "openingSeen": false
+  },
+  "sfx": {
+   "masterVolume": 100,
+   "sfxVolume": 100
+  },
+  "tutorial": {
+   "complete": false
+  }
+ },
+ "version": 1
+}

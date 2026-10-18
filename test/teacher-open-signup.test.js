@@ -23,7 +23,8 @@ const PROJECT = 'demo-shoulders-of-giants';
 const SRC = fs.readFileSync(path.resolve(__dirname, '../js/account.js'), 'utf8');
 const RULES = fs.readFileSync(path.resolve(__dirname, '../firestore.rules'), 'utf8');
 const PW = 'correct-horse-9';
-const GUEST_PROGRESS = { otzi: { battleComplete: true }, gold: { amount: 42 } };
+// The SaveState snapshot shape the /players rules allow ({ version, modules }).
+const GUEST_PROGRESS = { version: 1, modules: { otzi: { battleComplete: true }, gold: { amount: 42 } } };
 
 let firebase, auth, testEnv, api, nextGoogle, popupMode = 'ok';
 
@@ -42,7 +43,8 @@ const docOf = async (p) => {
   return data;
 };
 const pickGoogle = (sub, email, name) => {
-  nextGoogle = firebase.auth.GoogleAuthProvider.credential(JSON.stringify({ sub, email, email_verified: false, name: name || ('G ' + sub) }));
+  // Google sign-ins arrive verified; the /teachers create rule requires it.
+  nextGoogle = firebase.auth.GoogleAuthProvider.credential(JSON.stringify({ sub, email, email_verified: true, name: name || ('G ' + sub) }));
 };
 const call = (fn, ...args) => new Promise(resolve => fn(...args, (err, result) => resolve({ err, result })));
 // Swap the emulator's rules (e.g. to the pre-open-signup ones) and back.
@@ -200,7 +202,7 @@ test('Google account that is already a teacher here: signs in to it (returning),
   const first = await call(api.signUpTeacherGoogleOpen, {});
   assert.ifError(first.err);
   const teacherUid = first.result.uid;
-  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`players/${teacherUid}`).update({ progress: { mine: true } }));
+  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`players/${teacherUid}`).update({ progress: { version: 1, modules: { gold: { amount: 7 } } } }));
   await auth.signOut();
 
   const guestUid = await guest();
@@ -211,7 +213,7 @@ test('Google account that is already a teacher here: signs in to it (returning),
   assert.equal(r.result.uid, teacherUid);
   assert.notEqual(teacherUid, guestUid);
   assert.equal(auth.currentUser.uid, teacherUid);
-  assert.deepEqual((await docOf(`players/${teacherUid}`)).progress, { mine: true }, 'returning teacher keeps their own progress');
+  assert.deepEqual((await docOf(`players/${teacherUid}`)).progress, { version: 1, modules: { gold: { amount: 7 } } }, 'returning teacher keeps their own progress');
 });
 
 test('email already registered: refused cleanly, still the same guest', { skip }, async () => {
@@ -254,13 +256,17 @@ test('site deployed before the rules (invite still required): stops at invite-re
   assert.deepEqual((await docOf(`players/${guestUid}`)).progress, GUEST_PROGRESS, 'progress still carried');
 });
 
-test('an invite-code teacher doc (legacy accounts) is still accepted by the new rules, and logs in', { skip }, async () => {
+test('an existing invite-code teacher (legacy, unverified email) still logs in and keeps their teacher doc', { skip }, async () => {
   await auth.signOut();
   const { user } = await auth.createUserWithEmailAndPassword('legacy@school.org', PW);
-  await firebase.firestore().doc(`teachers/${user.uid}`).set({
-    email: 'legacy@school.org', inviteCode: 'HISTROCK', displayName: 'Ms L', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-  });
+  // Their doc predates the verified-email rule: it already exists, so seed it.
+  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`teachers/${user.uid}`).set({
+    email: 'legacy@school.org', inviteCode: 'HISTROCK', displayName: 'Ms L', createdAt: new Date(),
+  }));
+  // …and editing it (display name, class codes) still works without verification.
+  await firebase.firestore().doc(`teachers/${user.uid}`).set({ displayName: 'Ms Legacy' }, { merge: true });
   assert.equal((await docOf(`teachers/${user.uid}`)).inviteCode, 'HISTROCK');
+  assert.equal((await call(api.checkTeacherVerification)).result.existing, true, 'never asked to verify');
   await auth.signOut();
   const login = await call(api.loginTeacher, 'legacy@school.org', PW);
   assert.ifError(login.err);

@@ -395,18 +395,22 @@ test('student passphrase: written by the student, readable by their teacher only
   });
 });
 
-test('invites: a signed-in user can get one code by exact id, but not list, write, or read signed out', async () => {
+test('invites: unreadable and unwritable from every client (only the /teachers create rule checks them)', async () => {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await ctx.firestore().doc('invites/HISTROCK').set({ active: true, label: 'x' });
   });
   const asGuest = testEnv.authenticatedContext('anon-guest').firestore();
+  const asTeacher = testEnv.authenticatedContext('t-inv', { email_verified: true, firebase: { sign_in_provider: 'password' } }).firestore();
   const signedOut = testEnv.unauthenticatedContext().firestore();
-  await assertSucceeds(asGuest.doc('invites/HISTROCK').get());
-  await assertSucceeds(asGuest.doc('invites/NOPE1234').get());   // a missing code reads as "doesn't exist"
-  await assertFails(asGuest.collection('invites').get());
-  await assertFails(asGuest.doc('invites/NEWCODE1').set({ active: true }));
-  await assertFails(asGuest.doc('invites/HISTROCK').update({ active: false }));
-  await assertFails(signedOut.doc('invites/HISTROCK').get());
+  for (const db of [asGuest, asTeacher, signedOut]) {
+    await assertFails(db.doc('invites/HISTROCK').get());
+    await assertFails(db.doc('invites/NOPE1234').get(), 'a missing code is denied too, not "doesn\'t exist"');
+    await assertFails(db.collection('invites').get());
+    await assertFails(db.doc('invites/NEWCODE1').set({ active: true }));
+    await assertFails(db.doc('invites/HISTROCK').update({ active: false }));
+  }
+  // …while the create rule's own get() still honours a live code.
+  await assertSucceeds(asTeacher.doc('teachers/t-inv').set({ email: 'i@x.org', inviteCode: 'HISTROCK', createdAt: new Date() }));
 });
 
 test('notices: a player can read only their own, cannot list, and nobody can write', async () => {
@@ -427,18 +431,36 @@ test('notices: a player can read only their own, cannot list, and nobody can wri
 });
 
 // ── Open teacher signup (no invite code) ────────────────────────────────────
-const asProvider = (uid, provider) =>
-  testEnv.authenticatedContext(uid, { firebase: { sign_in_provider: provider } }).firestore();
+// A signed-in account; `verified` is the token's email_verified claim (Google
+// sign-ins arrive verified; email/password teachers verify first).
+const asProvider = (uid, provider, verified = true) =>
+  testEnv.authenticatedContext(uid, { email_verified: verified, firebase: { sign_in_provider: provider } }).firestore();
 
 test('open signup: a real (non-guest) account creates its teacher doc with an empty invite code; a guest cannot', async () => {
   const doc = { email: 'a@school.org', inviteCode: '', displayName: '', authProvider: 'password', adultConfirmed: true, createdAt: new Date() };
   await assertSucceeds(asProvider('tPass', 'password').doc('teachers/tPass').set(doc));
   await assertSucceeds(asProvider('tGoog', 'google.com').doc('teachers/tGoog').set({ ...doc, authProvider: 'google' }));
   await assertFails(asProvider('tAnon', 'anonymous').doc('teachers/tAnon').set(doc));
+  await assertFails(asProvider('tAnonV', 'anonymous', true).doc('teachers/tAnonV').set(doc), 'a guest never, even with the claim');
   await assertFails(asProvider('tOther', 'password').doc('teachers/someoneElse').set(doc));
   // inviteCode must be present and a string
   const { inviteCode, ...noCode } = doc;
   await assertFails(asProvider('tNoCode', 'password').doc('teachers/tNoCode').set(noCode));
+});
+
+test('teacher creation needs a verified email: unverified email accounts and students are refused', async () => {
+  const doc = { email: 'u@school.org', inviteCode: '', displayName: '', createdAt: new Date() };
+  await assertFails(asProvider('tUnver', 'password', false).doc('teachers/tUnver').set(doc), 'unverified email/password');
+  await assertFails(asProvider('tGoogU', 'google.com', false).doc('teachers/tGoogU').set(doc), 'unverified Google token');
+  const noClaim = testEnv.authenticatedContext('tNoClaim', { firebase: { sign_in_provider: 'password' } }).firestore();
+  await assertFails(noClaim.doc('teachers/tNoClaim').set(doc), 'no email_verified claim at all');
+  // A student account (username@sog.invalid) can't receive the verification email, so it can't qualify.
+  const student = testEnv.authenticatedContext('kid7', { email: 'kid7@sog.invalid', email_verified: false, firebase: { sign_in_provider: 'password' } }).firestore();
+  await assertFails(student.doc('teachers/kid7').set(doc));
+  // Even with a live invite code.
+  await seed(async (db) => { await db.doc('invites/HISTROCK').set({ active: true }); });
+  await assertFails(asProvider('tUnver2', 'password', false).doc('teachers/tUnver2').set({ ...doc, inviteCode: 'HISTROCK' }));
+  await assertSucceeds(asProvider('tVer', 'password', true).doc('teachers/tVer').set(doc), 'verified: allowed');
 });
 
 test('open signup: a non-empty invite code must still be a live invite', async () => {

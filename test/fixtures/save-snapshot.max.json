@@ -1,0 +1,491 @@
+{
+ "modules": {
+  "cardHover": {
+   "enabled": true
+  },
+  "collection": {
+   "earned": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    33,
+    34,
+    35,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120
+   ]
+  },
+  "deckBuilderTutorial": {
+   "complete": true
+  },
+  "decks": {
+   "activeSlot": 6,
+   "decks": [
+    {
+     "cards": [
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      36,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+     ],
+     "id": 1,
+     "name": "My Big Deck Name 1"
+    },
+    {
+     "cards": [
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29
+     ],
+     "id": 2,
+     "name": "My Big Deck Name 2"
+    },
+    {
+     "cards": [
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36
+     ],
+     "id": 3,
+     "name": "My Big Deck Name 3"
+    },
+    {
+     "cards": [
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43
+     ],
+     "id": 4,
+     "name": "My Big Deck Name 4"
+    },
+    {
+     "cards": [
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50
+     ],
+     "id": 5,
+     "name": "My Big Deck Name 5"
+    },
+    {
+     "cards": [
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57
+     ],
+     "id": 6,
+     "name": "My Big Deck Name 6"
+    }
+   ]
+  },
+  "focus": {
+   "focus": 100
+  },
+  "gilgamesh": {
+   "battleComplete": true,
+   "cunTipLossesGiant": 0,
+   "cunTipLossesSerf": 0,
+   "cuneiformGranted": true,
+   "openingSeen": false,
+   "phase1Complete": true,
+   "typesAttempts": 0,
+   "typesSeen": false
+  },
+  "gold": {
+   "gold": 0
+  },
+  "hammurabi": {
+   "battleComplete": true,
+   "openingSeen": false
+  },
+  "hangingGardens": {
+   "battleComplete": true,
+   "floodIntroSeen": false,
+   "openingSeen": false
+  },
+  "home": {
+   "adventureWarningSeen": true,
+   "firstVisitComplete": true,
+   "introSeen": true,
+   "selectedAdventurer": "female"
+  },
+  "learningCheck": {
+   "correct": 0,
+   "total": 0
+  },
+  "music": {
+   "musicVolume": 10
+  },
+  "narmer": {
+   "battleComplete": true,
+   "openingSeen": false
+  },
+  "nodeProgress": {
+   "sog_node_abraham_giant_beaten": "true",
+   "sog_node_abraham_serf_beaten": "true",
+   "sog_node_akhenaten_giant_beaten": "true",
+   "sog_node_akhenaten_serf_beaten": "true",
+   "sog_node_alexander_giant_beaten": "true",
+   "sog_node_alexander_serf_beaten": "true",
+   "sog_node_augustus_giant_beaten": "true",
+   "sog_node_augustus_serf_beaten": "true",
+   "sog_node_cincinnatus_giant_beaten": "true",
+   "sog_node_cincinnatus_serf_beaten": "true",
+   "sog_node_confucius_giant_beaten": "true",
+   "sog_node_confucius_serf_beaten": "true",
+   "sog_node_constantine_giant_beaten": "true",
+   "sog_node_constantine_serf_beaten": "true",
+   "sog_node_darius_giant_beaten": "true",
+   "sog_node_darius_serf_beaten": "true",
+   "sog_node_david_giant_beaten": "true",
+   "sog_node_david_serf_beaten": "true",
+   "sog_node_encountered_abraham": "true",
+   "sog_node_encountered_akhenaten": "true",
+   "sog_node_encountered_alexander": "true",
+   "sog_node_encountered_augustus": "true",
+   "sog_node_encountered_cincinnatus": "true",
+   "sog_node_encountered_confucius": "true",
+   "sog_node_encountered_constantine": "true",
+   "sog_node_encountered_darius": "true",
+   "sog_node_encountered_david": "true",
+   "sog_node_encountered_gilgamesh": "true",
+   "sog_node_encountered_greatbath": "true",
+   "sog_node_encountered_gupta": "true",
+   "sog_node_encountered_hammurabi": "true",
+   "sog_node_encountered_hanging-gardens": "true",
+   "sog_node_encountered_hannibal": "true",
+   "sog_node_encountered_hatshepsut": "true",
+   "sog_node_encountered_jesus": "true",
+   "sog_node_encountered_julius": "true",
+   "sog_node_encountered_kush": "true",
+   "sog_node_encountered_leonidas": "true",
+   "sog_node_encountered_moses": "true",
+   "sog_node_encountered_narmer": "true",
+   "sog_node_encountered_paul": "true",
+   "sog_node_encountered_pericles": "true",
+   "sog_node_encountered_ramses": "true",
+   "sog_node_encountered_romulus": "true",
+   "sog_node_encountered_sargon": "true",
+   "sog_node_encountered_shihuangdi": "true",
+   "sog_node_encountered_siddhartha": "true",
+   "sog_node_encountered_socrates": "true",
+   "sog_node_encountered_zhangqian": "true",
+   "sog_node_gilgamesh_giant_beaten": "true",
+   "sog_node_gilgamesh_serf_beaten": "true",
+   "sog_node_greatbath_giant_beaten": "true",
+   "sog_node_greatbath_serf_beaten": "true",
+   "sog_node_gupta_giant_beaten": "true",
+   "sog_node_gupta_serf_beaten": "true",
+   "sog_node_hammurabi_giant_beaten": "true",
+   "sog_node_hammurabi_serf_beaten": "true",
+   "sog_node_hanging-gardens_giant_beaten": "true",
+   "sog_node_hanging-gardens_serf_beaten": "true",
+   "sog_node_hannibal_giant_beaten": "true",
+   "sog_node_hannibal_serf_beaten": "true",
+   "sog_node_hatshepsut_giant_beaten": "true",
+   "sog_node_hatshepsut_serf_beaten": "true",
+   "sog_node_jesus_giant_beaten": "true",
+   "sog_node_jesus_serf_beaten": "true",
+   "sog_node_julius_giant_beaten": "true",
+   "sog_node_julius_serf_beaten": "true",
+   "sog_node_kush_giant_beaten": "true",
+   "sog_node_kush_serf_beaten": "true",
+   "sog_node_leonidas_giant_beaten": "true",
+   "sog_node_leonidas_serf_beaten": "true",
+   "sog_node_moses_giant_beaten": "true",
+   "sog_node_moses_serf_beaten": "true",
+   "sog_node_narmer_giant_beaten": "true",
+   "sog_node_narmer_serf_beaten": "true",
+   "sog_node_paul_giant_beaten": "true",
+   "sog_node_paul_serf_beaten": "true",
+   "sog_node_pericles_giant_beaten": "true",
+   "sog_node_pericles_serf_beaten": "true",
+   "sog_node_ramses_giant_beaten": "true",
+   "sog_node_ramses_serf_beaten": "true",
+   "sog_node_romulus_giant_beaten": "true",
+   "sog_node_romulus_serf_beaten": "true",
+   "sog_node_sargon_giant_beaten": "true",
+   "sog_node_sargon_serf_beaten": "true",
+   "sog_node_shihuangdi_giant_beaten": "true",
+   "sog_node_shihuangdi_serf_beaten": "true",
+   "sog_node_siddhartha_giant_beaten": "true",
+   "sog_node_siddhartha_serf_beaten": "true",
+   "sog_node_socrates_giant_beaten": "true",
+   "sog_node_socrates_serf_beaten": "true",
+   "sog_node_zhangqian_giant_beaten": "true",
+   "sog_node_zhangqian_serf_beaten": "true"
+  },
+  "otzi": {
+   "battleComplete": true,
+   "cardUnlocked": false,
+   "gameFinished": false,
+   "openingSeen": false
+  },
+  "overworld": {
+   "adventureIntroComplete": true,
+   "akhenatenNodeRevealed": false,
+   "cardLucyUnlocked": false,
+   "cuneiformGranted": true,
+   "deckbuilderUnlocked": false,
+   "eastafricaPostOtziDialogueSeen": false,
+   "egyptArrivalSeen": false,
+   "egyptMarketIntroSeen": false,
+   "egyptMarketState": {
+    "sig": "55,56,70,69,74,71,73,84,87|54,57,59,64,61,80,81,86,85|65,62,60,58,63,66,82,83,79",
+    "tiers": [
+     {
+      "next": 0,
+      "slots": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "next": 0,
+      "slots": [
+       null,
+       null,
+       null
+      ]
+     },
+     {
+      "next": 0,
+      "slots": [
+       null,
+       null,
+       null
+      ]
+     }
+    ]
+   },
+   "egyptNodeArrivalSeen": false,
+   "egyptNodeLive": true,
+   "endOfContentSeen": false,
+   "firstMarketInterstitialSeen": false,
+   "hammurabiNodeRevealed": true,
+   "hangingGardensRevealed": true,
+   "kushNodeRevealed": false,
+   "map": "eastafrica",
+   "marketAutoVisitDone": false,
+   "marketFirstVisitDone": false,
+   "marketIntroSeen": false,
+   "mesopotamiaArrivalComplete": true,
+   "metGilgamesh": false,
+   "metNarmer": false,
+   "pos": {
+    "x": 65,
+    "y": 90
+   },
+   "postNeanderthalDialogueSeen": true,
+   "ramsesNodeRevealed": false,
+   "sargonNodeRevealed": true,
+   "toEgyptGoodbyeSeen": false,
+   "visitedMaps": [
+    "eastafrica"
+   ]
+  },
+  "playtime": {
+   "totalSeconds": 2
+  },
+  "prehistory": {
+   "battleComplete": true
+  },
+  "progression": {
+   "explorationCutsceneSeen": false,
+   "explorationUnlocked": false,
+   "giantWins": 999,
+   "religiousCutsceneSeen": false,
+   "religiousUnlocked": false,
+   "serfWins": 999,
+   "totalWins": 1998,
+   "victoryMontageSeen": false
+  },
+  "sargon": {
+   "battleComplete": true,
+   "openingSeen": false
+  },
+  "sfx": {
+   "masterVolume": 100,
+   "sfxVolume": 100
+  },
+  "tutorial": {
+   "complete": true
+  }
+ },
+ "version": 1
+}

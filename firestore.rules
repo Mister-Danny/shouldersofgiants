@@ -10,6 +10,70 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/classes/$(code)).data;
     }
 
+    // Size helpers. Rules can't measure a document's bytes, so size limits are
+    // structural: an allow-list of keys, plus caps on string lengths, list
+    // lengths and map entry counts. (Firestore's own 1 MiB per-document limit
+    // still applies underneath.) Each passes when the key is absent.
+    function optStr(d, k, n)   { return !(k in d) || (d[k] is string && d[k].size() <= n); }
+    function optShort(d, k, n) { return !(k in d) || !(d[k] is string) || d[k].size() <= n; }
+    function optList(d, k, n)  { return !(k in d) || d[k] == null || (d[k] is list && d[k].size() <= n); }
+    function optMap(d, k, n)   { return !(k in d) || (d[k] is map && d[k].size() <= n); }
+
+    // /players/{uid}: every field the game has ever written (js/account.js:
+    // signUpStudent, the teacher bootstrap, checkpointSave). progress is the
+    // js/save-state.js snapshot { version, modules } — every module name it
+    // has ever had, each capped well above a fully-played save
+    // (test/fixtures/save-snapshot.max.json).
+    function playerOk(d) {
+      return d.keys().hasOnly(['username', 'classCode', 'teacherUid', 'passphrase', 'progress', 'createdAt', 'lastActive'])
+          && optStr(d, 'username', 200) && optStr(d, 'classCode', 12) && optStr(d, 'teacherUid', 128) && optStr(d, 'passphrase', 64)
+          && (!('progress' in d) || progressOk(d.progress));
+    }
+    function progressOk(p) {
+      return p is map
+          && p.keys().hasOnly(['version', 'modules'])
+          && (!('modules' in p) || modulesOk(p.modules));
+    }
+    function modulesOk(m) {
+      return m is map
+          && m.keys().hasOnly(['decks', 'progression', 'collection', 'gold', 'focus', 'tutorial', 'deckBuilderTutorial',
+                               'overworld', 'gilgamesh', 'otzi', 'hammurabi', 'hangingGardens', 'narmer', 'sargon',
+                               'prehistory', 'nodeProgress', 'cardHover', 'sfx', 'music', 'home', 'learningCheck', 'playtime'])
+          && optMap(m, 'decks', 10) && optMap(m, 'progression', 50) && optMap(m, 'collection', 10) && optMap(m, 'gold', 10)
+          && optMap(m, 'focus', 10) && optMap(m, 'tutorial', 10) && optMap(m, 'deckBuilderTutorial', 10)
+          && optMap(m, 'overworld', 200) && optMap(m, 'gilgamesh', 50) && optMap(m, 'otzi', 50) && optMap(m, 'hammurabi', 50)
+          && optMap(m, 'hangingGardens', 50) && optMap(m, 'narmer', 50) && optMap(m, 'sargon', 50) && optMap(m, 'prehistory', 50)
+          && optMap(m, 'nodeProgress', 1000) && optMap(m, 'cardHover', 10) && optMap(m, 'sfx', 10) && optMap(m, 'music', 10)
+          && optMap(m, 'home', 20) && optMap(m, 'learningCheck', 20) && optMap(m, 'playtime', 10)
+          && (!('decks' in m) || optList(m.decks, 'decks', 12))
+          && (!('collection' in m) || optList(m.collection, 'earned', 1000))
+          && (!('overworld' in m) || optList(m.overworld, 'visitedMaps', 100));
+    }
+
+    // /sessions/{id}: game sessions and funnel events from js/analytics.js —
+    // every field either has written, the writer's own uid always stamped,
+    // strings and lists capped (the client already caps lists at 40).
+    function sessionOk(d) {
+      return d.keys().hasOnly(['uid', 'sessionId', 'timestamp', 'startedAtClient', 'clientTzOffsetMin', 'clientTimeZone',
+                               'isTestSession', 'difficulty', 'gameMode', 'completed', 'outcome', 'turnDurations',
+                               'locationScores', 'logVersion', 'battleId', 'tier', 'locations', 'turns', 'playerTotal',
+                               'aiTotal', 'usedTiebreaker', 'board', 'finishedAt', 'finishedAtClient', 'abandonedAt',
+                               'type', 'event', 'tz', 'createdAt', 'src', 'method', 'classCode', 'teacherUid', 'step',
+                               'turn', 'choice', 'attempt', 'lucyMoved', 'lucyTurn', 'lucyFlipped', 'lessonShown',
+                               'lessonDone', 'tapMs'])
+          && d.uid == request.auth.uid
+          && optShort(d, 'sessionId', 64) && optShort(d, 'startedAtClient', 64) && optShort(d, 'clientTimeZone', 64)
+          && optShort(d, 'difficulty', 64) && optShort(d, 'gameMode', 64) && optShort(d, 'outcome', 64)
+          && optShort(d, 'battleId', 64) && optShort(d, 'tier', 64) && optShort(d, 'finishedAtClient', 64)
+          && optShort(d, 'abandonedAt', 64) && optShort(d, 'type', 64) && optShort(d, 'event', 64) && optShort(d, 'tz', 64)
+          && optShort(d, 'src', 64) && optShort(d, 'method', 64) && optShort(d, 'classCode', 64) && optShort(d, 'teacherUid', 64)
+          && optShort(d, 'step', 64) && optShort(d, 'turn', 64) && optShort(d, 'choice', 64) && optShort(d, 'attempt', 64)
+          && optShort(d, 'lucyMoved', 64) && optShort(d, 'lucyTurn', 64) && optShort(d, 'lucyFlipped', 64)
+          && optShort(d, 'lessonShown', 64) && optShort(d, 'lessonDone', 64) && optShort(d, 'tapMs', 64)
+          && optList(d, 'turnDurations', 60) && optList(d, 'locationScores', 40) && optList(d, 'locations', 40)
+          && optList(d, 'turns', 40) && optList(d, 'board', 40);
+    }
+
     // Notices: a one-off message for a single player, read by that player only.
     // The doc id IS the uid, so nobody can read anyone else's, list is denied so
     // the collection can't be walked, and writes are console/admin only — the
@@ -20,14 +84,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Invite codes: fetchable by exact ID only, so Teacher Sign Up can check
-    // a code on its first screen (same model as classes below). list is
-    // denied, so codes cannot be enumerated, and nothing is writable. The
-    // real gate is still the get() inside the /teachers create rule.
+    // Invite codes: no client reads or writes them. The only check is the
+    // get() inside the /teachers create rule, which runs with the rules' own
+    // access, so codes can't be probed one at a time from the client.
     match /invites/{code} {
-      allow get:   if signedIn();
-      allow list:  if false;
-      allow write: if false;
+      allow read, write: if false;
     }
 
     // Classes: fetchable by exact ID so the student can see
@@ -45,8 +106,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Teachers: open signup. Any real (non-guest) account may create its own
-    // teacher doc with an empty inviteCode; a non-empty code must still be a
+    // Teachers: open signup. A real (non-guest) account with a VERIFIED email
+    // may create its own teacher doc with an empty inviteCode — Google sign-ins
+    // arrive verified; email/password teachers verify first (js/account.js
+    // checkTeacherVerification). Student accounts (@sog.invalid) can never
+    // verify, so they can't become teachers. A non-empty code must still be a
     // live invite (that's how the original invite-code teachers keep their
     // marker, and the game's dev tools are gated on it client-side). devTools
     // is console-only: never set at create, never changed by the owner.
@@ -56,6 +120,7 @@ service cloud.firestore {
       allow create: if signedIn()
                     && request.auth.uid == uid
                     && request.auth.token.firebase.sign_in_provider != 'anonymous'
+                    && request.auth.token.email_verified == true
                     && request.resource.data.inviteCode is string
                     && (request.resource.data.inviteCode == ''
                         || get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.active == true)
@@ -77,6 +142,7 @@ service cloud.firestore {
 
       allow create: if signedIn()
                     && request.auth.uid == uid
+                    && playerOk(request.resource.data)
                     && (
                          // ungrouped play
                          (request.resource.data.classCode == ''
@@ -92,30 +158,27 @@ service cloud.firestore {
       // another teacher's roster mid-year.
       allow update: if signedIn()
                     && request.auth.uid == uid
+                    && playerOk(request.resource.data)
                     && request.resource.data.classCode == resource.data.classCode
                     && request.resource.data.teacherUid == resource.data.teacherUid
                     && request.resource.data.username == resource.data.username;
 
-      allow delete: if request.auth.uid == uid;
+      // No deletes: delete-then-recreate would let a student leave their
+      // class, join another, or change their pinned username.
+      allow delete: if false;
     }
 
-    // Sessions: pre-existing analytics telemetry (js/analytics.js), predates
-    // this spec. Write-only — no client ever reads it back; the bypass.js
-    // Data Review panel is a teacher-console tool that will need to move
-    // behind a Cloud Function or admin SDK rather than a client-side get/list.
-    // Session docs carry a `uid` field (the authenticated writer's uid) set
-    // at creation, and the owner may update their own doc thereafter (turn
-    // durations, outcome, etc. get merged in as the game progresses) — a doc
-    // created without a uid can never satisfy resource.data.uid == auth.uid
-    // for anyone, so it's permanently update-locked. This makes session docs
-    // client-writable by their owner: analytics data is NOT tamper-proof
-    // (a student could, in principle, rewrite their own session's outcome),
-    // which is an accepted tradeoff for now since nothing reads this data
-    // back client-side and it isn't used for grading or progress-gating.
+    // Sessions: analytics telemetry (js/analytics.js). Write-only — no client
+    // ever reads it back. Every doc carries the writer's own uid (set at
+    // creation, can't be changed), only known fields, and capped strings and
+    // lists (sessionOk). The owner may update their own doc as the game goes
+    // on (turn durations, outcome …). Analytics data is still NOT tamper-proof:
+    // a player can rewrite their own session's outcome — accepted, since
+    // nothing reads it back client-side and it isn't used for grading.
     match /sessions/{sessionId} {
       allow read:   if false;
-      allow create: if signedIn();
-      allow update: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && sessionOk(request.resource.data);
+      allow update: if signedIn() && resource.data.uid == request.auth.uid && sessionOk(request.resource.data);
       allow delete: if false;
     }
   }

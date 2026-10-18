@@ -52,6 +52,10 @@ const teacherDoc = async (uid) => {
 };
 
 // The Google account the user "picks" in the next popup.
+// `trusted` sets the Google token's email_verified, which is also how the Auth
+// emulator decides whether Google may take over a same-email password account.
+// A brand-new Google teacher must be verified: the /teachers create rule
+// requires it (real Google sign-ins arrive verified).
 const pickGoogle = (sub, email, { trusted }) => {
   nextGoogle = firebase.auth.GoogleAuthProvider.credential(JSON.stringify({ sub, email, email_verified: trusted, name: 'G ' + sub }));
 };
@@ -114,14 +118,15 @@ beforeEach(async () => {
   await testEnv.withSecurityRulesDisabled(c => c.firestore().doc('invites/HISTROCK').set({ active: true }));
 });
 
-// A legacy invite-code password teacher, with one class: the account and
-// /teachers doc the old invite signup made (rules enforced on the write).
+// An existing password teacher, with one class: the account plus the
+// /teachers doc an earlier signup left (seeded directly — these predate the
+// verified-email rule, and the account's own verified state is what these
+// Google-linking tests turn on).
 async function passwordTeacher(email, { verified = false } = {}) {
   const { user } = await auth.createUserWithEmailAndPassword(email, PW);
-  await firebase.firestore().doc(`teachers/${user.uid}`).set({
-    email, inviteCode: 'HISTROCK', displayName: 'Ms ' + email[0], createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-  });
-  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`teachers/${user.uid}`).set({ classCodes: ['CLS' + email[0].toUpperCase() + '1'] }, { merge: true }));
+  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`teachers/${user.uid}`).set({
+    email, inviteCode: 'HISTROCK', displayName: 'Ms ' + email[0], createdAt: new Date(), classCodes: ['CLS' + email[0].toUpperCase() + '1'],
+  }));
   if (verified) await rest(`/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`, 'POST', { localId: user.uid, emailVerified: true });
   await auth.signOut();
   await auth.signInAnonymously();
@@ -277,13 +282,13 @@ test('dashboard link picks a Google account left over from an unfinished sign-in
 test('dashboard link picks a Google account that is another teacher: refused, nothing deleted', { skip }, async () => {
   const pwEmail = 'p.teacher@gmail.com', gEmail = 'q@district.org';
   const uid = await passwordTeacher(pwEmail);
-  pickGoogle('g-q', gEmail, { trusted: false });
+  pickGoogle('g-q', gEmail, { trusted: true });
   const other = (await call(api.signInTeacherWithGoogle, '')).result.uid;
   assert.ifError((await call(api.finishTeacherGoogleSignup, 'HISTROCK')).err);
   await auth.signOut();
 
   assert.ifError((await call(api.loginTeacher, pwEmail, PW)).err);
-  pickGoogle('g-q', gEmail, { trusted: false });
+  pickGoogle('g-q', gEmail, { trusted: true });
   const r = await call(api.linkGoogleToCurrentUser);
   assert.equal(r.err.code, 'google-is-other-teacher');
   assert.equal(await providersOf(other), 'google.com');
@@ -292,21 +297,21 @@ test('dashboard link picks a Google account that is another teacher: refused, no
 });
 
 test('brand-new Google teacher still signs up normally, and is never flagged as a lost password', { skip }, async () => {
-  pickGoogle('g-n', 'new@district.org', { trusted: false });
+  pickGoogle('g-n', 'new@district.org', { trusted: true });
   const first = await call(api.signInTeacherWithGoogle, '');
   assert.equal(first.err.code, 'invite-required');
   const done = await call(api.finishTeacherGoogleSignup, 'HISTROCK');
   assert.ifError(done.err);
   assert.equal((await teacherDoc(done.result.uid)).authProvider, 'google');
   await auth.signOut();
-  pickGoogle('g-n', 'new@district.org', { trusted: false });
+  pickGoogle('g-n', 'new@district.org', { trusted: true });
   const again = await call(api.signInTeacherWithGoogle, '');
   assert.equal(again.result.existing, true);
   assert.equal(again.result.passwordLost, false);
 });
 
 test('Teacher Sign Up with a checked code: first-time Google creates the teacher account with no second prompt', { skip }, async () => {
-  pickGoogle('g-s', 'signup@district.org', { trusted: false });
+  pickGoogle('g-s', 'signup@district.org', { trusted: true });
   const r = await call(api.signInTeacherWithGoogle, 'HISTROCK');
   assert.ifError(r.err);
   assert.equal(r.result.existing, false);
@@ -316,7 +321,7 @@ test('Teacher Sign Up with a checked code: first-time Google creates the teacher
 });
 
 test('Teacher Sign Up code refused by the create rule: still signed in, fallback invite step can finish', { skip }, async () => {
-  pickGoogle('g-x', 'x@district.org', { trusted: false });
+  pickGoogle('g-x', 'x@district.org', { trusted: true });
   const r = await call(api.signInTeacherWithGoogle, 'WRONG123');
   assert.equal(r.err.code, 'invite-invalid');
   assert.equal(auth.currentUser.uid, r.result.uid, 'session kept');
