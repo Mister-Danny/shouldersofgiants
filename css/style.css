@@ -5156,10 +5156,12 @@ button,
 }
 
 .battle-avatar-opponent {
-  /* Opp-hand zone = 160px. Avatar = 120px. Equal inner+outer padding:
-     (160 − 120) / 2 = 20px on each side. */
-  top: 20px;
-  right: 20px;
+  /* The portrait spans exactly the turn box's height (top 14, 112 tall),
+     measured on its outer ring (5px box-shadow): frame 102 (border-box, border
+     included) + 2×5 ring = 112, so top = 14 + 5. The ring's right gap (18)
+     mirrors the box's left gap. Fits the 145px opp band. */
+  top: 19px;
+  right: 23px;
 }
 
 .battle-avatar-frame {
@@ -5185,6 +5187,8 @@ button,
     0 4px 20px rgba(0, 0, 0, 0.85);
 }
 .battle-avatar-opponent .battle-avatar-frame {
+  width: 102px;
+  height: 102px;
   border-color: var(--snes-red);
   box-shadow:
     0 0 0 2px #000,
@@ -10660,10 +10664,12 @@ body.prehistory-battle .battle-player-hand .battle-hand-card:first-child {
    Applied by SOG.OtziBattle.start(); removed on teardown.
    ════════════════════════════════════════════════════════════ */
 
-/* Avatar positioning — centred in the 160 px opp-hand zone: (160−120)/2 = 20 px each side */
-body.otzi-battle .battle-avatar-opponent {
-  top: 20px;
-  right: 20px;
+/* Opponent portrait: the base rule (fitted to the turn box). */
+/* The opponent's hand sits under the goal banner ("Win 2 of 3 locations!",
+   .snap-goal at top 8), as the Neanderthal battle's does. */
+body.otzi-battle .battle-opp-hand {
+  align-items: flex-start;
+  padding-top: 60px;   /* cards 60–132: ~10px under the banner, 13px above the board */
 }
 
 /* Face zoom on Otzi's avatar circle (matches dialogue portrait) — see override below */
@@ -11429,6 +11435,10 @@ body.prehistory-battle .battle-card-slot.occupied {
 body.prehistory-battle .battle-avatar-opponent {
   top:   36px;
   right: 36px;
+}
+body.prehistory-battle .battle-avatar-opponent .battle-avatar-frame {
+  width:  120px;   /* its own 192px band: keeps the full-size portrait */
+  height: 120px;
 }
 
 /* Flip the portrait image so Neanderthal faces LEFT (toward the board).
