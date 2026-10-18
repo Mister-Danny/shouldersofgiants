@@ -12440,7 +12440,11 @@ body[data-screen="overworld"] #overworld-overlay {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.12s, filter 0.12s;
+  /* opacity is listed too: this rule comes after the shared HUD fade
+     (#adv-hud-btn-options { transition: opacity 0.25s } above) and would
+     otherwise replace it, so the button snapped out in dialogue mode instead
+     of fading with gold + deck. */
+  transition: opacity 0.25s ease, transform 0.12s, filter 0.12s;
 }
 #adv-hud-btn-options img {
   width: 100%;

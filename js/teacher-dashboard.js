@@ -68,6 +68,39 @@ window.TeacherDashboard = (function () {
     { key: 'narmer',         bossName: 'Narmer',         unitName: 'Egypt' }
   ];
 
+  // Every boss after Narmer comes from data/map-data.js instead of a list:
+  // its battle nodes, in the story order of the milestone that reveals each
+  // one (`showFrom`), keeping those revealed after Narmer's own milestone.
+  // These bosses have no save module of their own — a win is the generic
+  // sog_node_<hook>_<tier>_beaten flag (js/game.js endGame), carried in the
+  // `nodeProgress` snapshot. Built on first use: map-data.js loads after
+  // this file, and the map data never changes at runtime.
+  var _nodeProgression = null;
+  function _getNodeProgression() {
+    if (_nodeProgression) return _nodeProgression;
+    var data = window.SOG_MAP_DATA;
+    if (!data || !data.maps || !data.milestones) return [];
+    var order = {};
+    data.milestones.forEach(function (m, i) { order[m.id] = i; });
+    var after = null, nodes = [];
+    Object.keys(data.maps).forEach(function (mapId) {
+      var map = data.maps[mapId];
+      (map.nodes || []).forEach(function (n) {
+        if (n.kind !== 'battle' || !n.hook) return;
+        if (n.hook === 'narmer') after = order[n.showFrom];
+        // A node whose showFrom isn't a known milestone can't be placed.
+        if (order[n.showFrom] === undefined) return;
+        nodes.push({ hook: n.hook, bossName: n.name, unitName: map.displayName || '',
+                     rank: order[n.showFrom], seq: nodes.length });
+      });
+    });
+    if (after === undefined || after === null) return [];
+    _nodeProgression = nodes
+      .filter(function (e) { return e.rank > after; })
+      .sort(function (a, b) { return (a.rank - b.rank) || (a.seq - b.seq); });
+    return _nodeProgression;
+  }
+
   var _teacherDoc = null;
   var _lastRoster = { players: [], classes: [] };
 
@@ -236,6 +269,14 @@ window.TeacherDashboard = (function () {
     PROGRESSION_ORDER.forEach(function (entry) {
       if (modules[entry.key] && modules[entry.key].battleComplete === true) {
         furthest = entry;   // walk in canonical order — last true wins
+      }
+    });
+    // Either tier counts: a one-tier boss (Darius, Hannibal) stamps Giant.
+    var flags = modules.nodeProgress || {};
+    _getNodeProgression().forEach(function (entry) {
+      var k = 'sog_node_' + entry.hook + '_';
+      if (flags[k + 'serf_beaten'] === 'true' || flags[k + 'giant_beaten'] === 'true') {
+        furthest = entry;
       }
     });
 
