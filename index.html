@@ -60,7 +60,6 @@
       <nav class="home-nav">
         <!-- State 1 buttons -->
         <button class="btn-snes btn-home-uniform btn-home-ready" id="btn-ready">I'm Ready</button>
-        <button class="btn-home-uniform btn-home-learn" id="btn-learn">I'm Ready To Learn</button>
         <button class="btn-home-uniform btn-home-about" id="btn-about">About the Game</button>
 
         <!-- State 2 buttons (hidden initially) -->
@@ -830,7 +829,8 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
-       TUTORIAL OVERLAYS  (rendered above all screens via z-index)
+       TUTORIAL OVERLAYS  (rendered above all screens via z-index) — used by
+       the deck-builder tutorial (js/dbtutorial.js)
   ════════════════════════════════════════════════════════════════ -->
 
   <!-- Dim layer — blocks clicks on non-highlighted elements when locked -->
@@ -839,13 +839,7 @@
   <!-- Skip button — always visible while tutorial is active -->
   <button id="tut-skip" style="display:none">SKIP TUTORIAL</button>
 
-  <!-- Lucy comic speech bubble (battle tutorial only — shown to the right of her avatar) -->
-  <div id="tut-lucy-bubble" style="display:none">
-    <div id="tut-lucy-text" class="tut-bubble-text"></div>
-    <div id="tut-lucy-hint" class="tut-bubble-hint">&#9654; Click to continue</div>
-  </div>
-
-  <!-- Lucy dialogue box (home screen intro only) -->
+  <!-- Lucy dialogue box -->
   <div id="tut-box" style="display:none">
     <div class="tut-portrait">
       <img loading="lazy" src="images/portraits/lucy.jpeg" alt="Lucy" class="tut-lucy-img">
@@ -937,17 +931,6 @@
     </div>
   </div>
 
-  <!-- Tutorial completion panel -->
-  <div id="tut-end" style="display:none">
-    <div class="tut-end-box">
-      <div id="tut-end-text" class="tut-end-text"></div>
-      <div class="tut-end-btns">
-        <button id="tut-btn-ready" class="btn-snes">I'm Ready!</button>
-        <button id="tut-btn-again" class="btn-snes">Show Me Again</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ── Global screen navigation (available to all modules) ──── -->
   <script>
     /**
@@ -971,16 +954,6 @@
        Fixed overlay — sits above all game screens (z-index 8000).
        Entirely managed by legend.js + GSAP.
   ════════════════════════════════════════════════════════════════ -->
-  <!-- ══ Unlock Cutscene ══════════════════════════════════════ -->
-  <div id="screen-unlock" style="display:none">
-    <div id="unlock-curtain-left" class="unlock-curtain"></div>
-    <div id="unlock-curtain-right" class="unlock-curtain"></div>
-    <div id="unlock-stage"></div>
-    <div id="unlock-title-wrap">
-      <span id="unlock-title"></span>
-    </div>
-  </div>
-
   <div id="screen-legend" style="display:none">
 
     <!-- Solid black fill — fades in first -->
@@ -1358,10 +1331,6 @@
         <section class="bypass-section">
           <h3 class="bypass-section-title">Tutorial Controls</h3>
           <div class="bypass-btn-row">
-            <button class="btn-snes bypass-btn-action" id="bypass-skip-tut">Skip Tutorial</button>
-            <span class="bypass-btn-desc">Marks tutorial complete and goes to Deck Builder</span>
-          </div>
-          <div class="bypass-btn-row">
             <button class="btn-snes btn-snes-close bypass-btn-action" id="bypass-reset-tut">Reset Tutorials</button>
             <span class="bypass-btn-desc">Clears all tutorial flags so they play again on next visit</span>
           </div>
@@ -1388,32 +1357,8 @@
         <section class="bypass-section">
           <h3 class="bypass-section-title">Progression Controls</h3>
           <div class="bypass-btn-row">
-            <button class="btn-snes bypass-btn-action" id="bypass-play-religious">&#9654; Play Religious Unlock Cutscene</button>
-            <span class="bypass-btn-desc">Preview the Religious card unlock cinematic</span>
-          </div>
-          <div class="bypass-btn-row">
-            <button class="btn-snes bypass-btn-action" id="bypass-play-exploration">&#9654; Play Exploration Unlock Cutscene</button>
-            <span class="bypass-btn-desc">Preview the Exploration card unlock cinematic</span>
-          </div>
-          <div class="bypass-btn-row">
-            <button class="btn-snes bypass-btn-action" id="bypass-play-montage">&#9654; Play Victory Montage</button>
-            <span class="bypass-btn-desc">Preview the 10-win victory montage placeholder</span>
-          </div>
-          <div class="bypass-btn-row">
-            <button class="btn-snes bypass-btn-action" id="bypass-unlock-religious">Unlock Religious Cards</button>
-            <span class="bypass-btn-desc">Grant access to Religious cards in the Deck Builder.</span>
-          </div>
-          <div class="bypass-btn-row">
-            <button class="btn-snes bypass-btn-action" id="bypass-unlock-exploration">Unlock Exploration Cards</button>
-            <span class="bypass-btn-desc">Grant access to Exploration cards in the Deck Builder.</span>
-          </div>
-          <div class="bypass-btn-row">
-            <button class="btn-snes bypass-btn-action" id="bypass-unlock-all">Unlock All Cards</button>
-            <span class="bypass-btn-desc">Grant access to every card type at once (bumps win counters to keep state consistent).</span>
-          </div>
-          <div class="bypass-btn-row">
             <button class="btn-snes btn-snes-remove bypass-btn-action" id="bypass-reset-progress">&#9888; Reset All Progress</button>
-            <span class="bypass-btn-desc">Clears all win counts, unlock flags, and cutscene-seen flags</span>
+            <span class="bypass-btn-desc">Clears the Arcadium win counts and their old unlock flags</span>
           </div>
         </section>
 

@@ -21,7 +21,7 @@
  * reassigned — aliasing them via SOG.input wouldn't work across modules.
  * No code outside this module needs to read them.
  *
- * Reads:  SOG.state.G + constants, window.CARDS, window.tutorialActive
+ * Reads:  SOG.state.G + constants, window.CARDS
  * Calls:  SOG.board.{ getSlotEl, buildCardFace, clearSlotDOM,
  *                     compactPlayerSlots, syncPlayerSlots, compactOppSlots,
  *                     syncOppSlots, effectiveCost, effectiveIP, addIPMod,
@@ -220,7 +220,6 @@
 
   function onHandCardKeyDown(e) {
     if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
-    if (window.tutorialActive) return;  // tutorial owns its own keyboard flow
     if (G.phase !== 'select') return;
     var cardId = parseInt(this.dataset.id, 10);
     if (isNaN(cardId)) return;
@@ -480,7 +479,6 @@
      Single-click only (e.detail === 1) for the popup branches; dblclick
      handled separately. */
   boardEl.addEventListener('click', function (e) {
-    if (window.tutorialActive) return;     // tutorial owns its own flow
     if (_dialogueActive()) return;         // HUD dialogue in progress — no placement
     // Allow 'over' phase through for board review popups; block all other non-select phases
     if (G.phase !== 'select' && G.phase !== 'over') return;
@@ -549,7 +547,6 @@
   /* Delegated dblclick handler on the board. Toggles select-for-undo
      on own face-down slots, and select-for-move on .moveable slots. */
   boardEl.addEventListener('dblclick', function (e) {
-    if (window.tutorialActive) return;
     if (G.phase !== 'select') return;
     if (pendingPopupTimer) { clearTimeout(pendingPopupTimer); pendingPopupTimer = null; }
     var slotEl = e.target.closest('.battle-card-slot[data-owner="player"]');
@@ -587,7 +584,6 @@
 
   /* Click on the hand area while a face-down slot is selected → undo. */
   playerHandEl.addEventListener('click', function (e) {
-    if (window.tutorialActive) return;
     if (G.phase !== 'select') return;
     if (dragInfo) return;
     if (selectedSource !== 'slot') return;
@@ -614,7 +610,6 @@
      commit. Browser handles the actual focus traversal — we only react
      to Enter on a focused element and global Escape. */
   document.addEventListener('keydown', function (e) {
-    if (window.tutorialActive) return;
     if (_dialogueActive()) return;         // HUD dialogue in progress — no placement
     if (G.phase !== 'select') return;
     if (e.key === 'Escape') {
@@ -1383,7 +1378,6 @@
 
     /* Find the draggable element (if any) under an initial touch target */
     function findSource(el) {
-      if (window.tutorialActive) return null;  // tutorial handles its own touch drag
       if (_dialogueActive())     return null;  // HUD dialogue in progress — no placement
       if (G.phase !== 'select') return null;
       if (!el || !el.closest) return null;

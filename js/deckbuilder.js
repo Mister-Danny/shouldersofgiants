@@ -975,7 +975,6 @@
     }
   });
 
-  // Export so tutorial.js can re-enter the deck builder after tutorial ends
   window.initDeckBuilder = initDeckBuilder;
 
   // Expose deck music so HomeFlow can start it when routing to the deck builder
@@ -1006,39 +1005,6 @@
     });
   }
 
-  document.getElementById('btn-learn').addEventListener('click', function () {
-    window.multiplayerMode = false;
-    localStorage.removeItem('sog_tutorial_complete');
-    // Silence the home-screen music before the tutorial intro begins
-    if (window.HomeFlow && typeof window.HomeFlow.stopMusic === 'function') {
-      window.HomeFlow.stopMusic(500);
-    }
-    if (typeof window.startHomeIntro === 'function') {
-      window.startHomeIntro(function () {
-        var video = document.getElementById('intro-video');
-        video.currentTime = 0;
-        video.play().catch(function () {});
-        showScreen('screen-video');
-      });
-    }
-  });
-
-  // Video ended → matchup screen → battle + tutorial
-  // (Skipped when HomeFlow is playing the video for the Adventure path,
-  //  signaled via window._adventureVideoMode.)
-  document.getElementById('intro-video').addEventListener('ended', function () {
-    if (window._adventureVideoMode) return;
-    if (typeof window.showMatchupScreen === 'function') {
-      window.showMatchupScreen(function () {
-        showScreen('screen-battle');
-        if (typeof window.startTutorial === 'function') window.startTutorial();
-      });
-    } else {
-      showScreen('screen-battle');
-      if (typeof window.startTutorial === 'function') window.startTutorial();
-    }
-  });
-
   document.getElementById('coming-soon-close').addEventListener('click', function () {
     document.getElementById('coming-soon-backdrop').classList.remove('visible');
   });
@@ -1048,9 +1014,6 @@
   });
 
   // Page always lands on the home screen (the HTML default is
-  // <div id="screen-home" class="screen active">). Returning players
-  // still skip the Lucy intro + video — that's handled inside the
-  // "I'm Ready" handler via the sog_tutorial_complete flag — but the
-  // initial landing is now always Home, regardless of prior progress.
+  // <div id="screen-home" class="screen active">), regardless of prior progress.
 
 })();

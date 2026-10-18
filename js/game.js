@@ -390,11 +390,6 @@
     resetTurnBtn.disabled      = false;
     resetTurnBtn.style.display = '';
     document.getElementById('btn-back-results').style.display = 'none';
-    // Bug 19: tutorial.js hides Play Again at the end of the tutorial battle
-    // via inline style.display = 'none' but never restores it. Reset on every
-    // fresh game so subsequent battles show Play Again again.
-    var _resultPlayAgainBtn = document.getElementById('result-play-again');
-    if (_resultPlayAgainBtn) _resultPlayAgainBtn.style.display = '';
 
     updateHeader();
     refreshMoveableCards();
@@ -635,7 +630,7 @@
 
       if (_timerSecs <= 0) {
         _stopSelectionTimer();
-        if (G.phase === 'select' && !window.tutorialActive) {
+        if (G.phase === 'select') {
           if (typeof SFX !== 'undefined') SFX.endTurn();
           onEndTurn();
         }
@@ -987,7 +982,6 @@
   ═══════════════════════════════════════════════════════════════ */
 
   endTurnBtn.addEventListener('click', function () {
-    if (window.tutorialActive) return;  // tutorial owns this button
     if (G.phase !== 'select')   return;
     if (_endTurnNudgeNeeded()) { _showEndTurnNudge(); return; }
     if (typeof SFX !== 'undefined') SFX.endTurn();
@@ -2258,13 +2252,8 @@
 
     showResult(result);
 
-    /* Progression: track wins for card unlocking (single-player only).
-       Scripted battles (G.config.scriptHook set — Adventure narrative battles
-       like Prehistory) do NOT feed Arcadium progression: recordWin both
-       increments the win counters and arms the victory montage
-       (window._pendingMontage), so skipping it suppresses every progression
-       side-effect. Arcadium has scriptHook null → the guard is unreached and it
-       records exactly as today. */
+    /* Progression: count Arcadium wins (single-player only). Scripted
+       battles (G.config.scriptHook set — every Adventure battle) don't count. */
     if (result.outcome === 'player' &&
         typeof Progression !== 'undefined' &&
         !(G.config && G.config.scriptHook) &&
@@ -2520,56 +2509,25 @@
      RESULT SCREEN BUTTONS
   ═══════════════════════════════════════════════════════════════ */
 
-  /**
-   * Chain any pending unlock cutscene → victory montage → then call finalCb.
-   * Plays unlock cutscene first (if pending), then montage (if pending), then destination.
-   */
-  function _playPendingCelebrations(finalCb) {
-    if (typeof Progression === 'undefined') { finalCb(); return; }
-
-    // Step 1: unlock cutscene?
-    function step1() {
-      if (Progression.hasPendingCutscene()) {
-        var unlockType = Progression.hasPendingCutscene();
-        Progression.playCutscene(unlockType, step2);
-      } else {
-        step2();
-      }
-    }
-    // Step 2: victory montage?
-    function step2() {
-      if (Progression.hasPendingMontage()) {
-        Progression.playMontage(finalCb);
-      } else {
-        finalCb();
-      }
-    }
-    step1();
-  }
-
   document.getElementById('result-play-again').addEventListener('click', function () {
     // A battle config may supply a replay() to re-run THE SAME battle (e.g. the
     // Narmer advance-board battle rebuilds a fresh config). Arcadium / 2P set
     // none → fall through to the default (re-resolve a new Arcadium game).
     var _replay = G.config && typeof G.config.replay === 'function' ? G.config.replay : null;
-    _playPendingCelebrations(function () {
-      if (_replay) { _replay(); return; }
-      showScreen('screen-battle');
-      initGame();
-    });
+    if (_replay) { _replay(); return; }
+    showScreen('screen-battle');
+    initGame();
   });
 
   document.getElementById('result-home').addEventListener('click', function () {
     SOG.ui.stopBgMusic();
-    _playPendingCelebrations(function () {
-      showScreen('screen-home');
-      if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') {
-        window.HomeFlow.reset();   // re-sync home-state (btn-account opacity/display, etc.)
-      }
-      if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
-        window.HomeFlow.playMusic();
-      }
-    });
+    showScreen('screen-home');
+    if (window.HomeFlow && typeof window.HomeFlow.reset === 'function') {
+      window.HomeFlow.reset();   // re-sync home-state (btn-account opacity/display, etc.)
+    }
+    if (window.HomeFlow && typeof window.HomeFlow.playMusic === 'function') {
+      window.HomeFlow.playMusic();
+    }
   });
 
   document.getElementById('result-return-lobby').addEventListener('click', function () {

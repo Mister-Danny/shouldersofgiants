@@ -307,7 +307,6 @@ img    { display: block; }
    this section), not sized to match the three wood-plank buttons. */
 .btn-home-ready,
 .btn-home-versus,
-.btn-home-learn,
 .btn-home-about,
 .btn-home-arcadium,
 .btn-home-adventure-new {
@@ -322,7 +321,6 @@ img    { display: block; }
    `background` below so each button has its own colour identity. */
 .btn-home-ready,
 .btn-home-versus,
-.btn-home-learn,
 .btn-home-about,
 .btn-home-arcadium,
 .btn-home-adventure-new {
@@ -351,7 +349,6 @@ img    { display: block; }
 /* Shared hover/tap — same border brighten + warm halo for all */
 .btn-home-ready:hover,
 .btn-home-versus:hover,
-.btn-home-learn:hover,
 .btn-home-about:hover,
 .btn-home-arcadium:hover,
 .btn-home-adventure-new:hover {
@@ -366,7 +363,6 @@ img    { display: block; }
 /* Shared pressed state — flatten the drop shadow */
 .btn-home-ready:active,
 .btn-home-versus:active,
-.btn-home-learn:active,
 .btn-home-about:active,
 .btn-home-arcadium:active,
 .btn-home-adventure-new:active {
@@ -389,23 +385,6 @@ img    { display: block; }
   background: linear-gradient(180deg, #9450c8 0%, #6e34a8 100%);
 }
 
-/* "I'm Ready To Learn" — warm amber/orange-gold + emphasis halo.
-   Same gold border as the others; the small outer glow + warm fill
-   is what marks this as the recommended starting point. */
-.btn-home-learn {
-  background: linear-gradient(180deg, #b86a1c 0%, #8a4f12 100%);
-  box-shadow:
-    0 4px 0 #1a0c04,
-    0 5px 0 #000,
-    0 0 14px rgba(240, 207, 108, 0.40);
-}
-.btn-home-learn:hover {
-  background: linear-gradient(180deg, #d68228 0%, #a86018 100%);
-  box-shadow:
-    0 4px 0 #1a0c04,
-    0 5px 0 #000,
-    0 0 22px rgba(240, 207, 108, 0.60);
-}
 
 /* "Multiplayer" — saturated teal (social / outward play) */
 .btn-home-versus {
@@ -1100,7 +1079,6 @@ img    { display: block; }
 #rename-deck-save {
   border-color: #f0cf6c;
 }
-
 
 
 /* ── Body: filter column (320px, 25%) + cards (960px, 75%) ───────── */
@@ -5238,27 +5216,6 @@ button,
   animation: turn-first-pulse-opp 0.9s ease-in-out infinite;
 }
 
-/* Lucy speaking glow — added/removed by tutorial.js during typeText */
-.battle-avatar-ally.tut-speaking .battle-avatar-frame {
-  animation: lucy-speak-glow 1.6s ease-in-out infinite;
-}
-
-@keyframes lucy-speak-glow {
-  0%, 100% {
-    box-shadow:
-      0 0 0 2px #000,
-      0 0 0 5px #1d6f72,
-      0 4px 20px rgba(0, 0, 0, 0.85);
-  }
-  50% {
-    box-shadow:
-      0 0 0 2px #000,
-      0 0 16px 6px rgba(64, 224, 224, 0.60),
-      0 4px 20px rgba(0, 0, 0, 0.85);
-  }
-}
-
-
 /* Draggable battle elements — JS owns all touch events (play, take-back, move) */
 .battle-hand-card,
 .battle-card-slot.unplayed[data-owner="player"],
@@ -5281,7 +5238,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
 /* ══════════════════════════════════════════════════════════════════
    RESPONSIVE — MOBILE / TABLET  (< 768 px wide)
 ══════════════════════════════════════════════════════════════════ */
-
 
 
 /* ══════════════════════════════════════════════════════════════════
@@ -5430,63 +5386,9 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
   animation: tut-hint-blink 1.4s ease-in-out infinite;
 }
 
-/* When Lucy is waiting for a specific action, swap hint colour */
-.tut-hint.tut-hint-action {
-  color: var(--snes-cyan);
-  animation: none;
-}
-
 @keyframes tut-hint-blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.35; }
-}
-
-/* ── Highlight (tut-lit) ──────────────────────────────────────── */
-/* Applied to the element Lucy is pointing at. Raises it above
-   the dim layer and pulses a gold outline.                       */
-.tut-lit {
-  position: relative;
-  z-index: 950 !important;
-  border-radius: 3px;
-  animation: tut-pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes tut-pulse {
-  /* Solid ring is inset so it draws INSIDE the slot box and is never
-     clipped by parent overflow:hidden on the location column.
-     The soft glow (second shadow) is outset but fuzzy — its clipping
-     at slot edges is imperceptible. */
-  0%, 100% { box-shadow: inset 0 0 0 2px var(--snes-yellow), 0 0 10px 3px rgba(248,208,0,0.45); }
-  50%       { box-shadow: inset 0 0 0 3px var(--snes-yellow), 0 0 18px 6px rgba(248,208,0,0.70); }
-}
-
-/* ── Number highlight box (CC / IP tutorial callout) ─────────── */
-/* Fixed-positioned overlay that tracks exactly over a db-overlay-cc
-   or db-overlay-ip element.  Positioned by JS via pinNumHighlight(). */
-.tut-num-highlight {
-  position: fixed;
-  pointer-events: none;
-  z-index: 1050;           /* above tut-lit but below dialogue box */
-  border-radius: 2px;
-  box-sizing: border-box;
-  animation: tut-num-pulse 0.8s ease-in-out infinite;
-}
-
-@keyframes tut-num-pulse {
-  0%, 100% {
-    box-shadow:
-      0 0 0 2px var(--snes-yellow),
-      0 0 8px  3px rgba(248,208,0,0.6);
-    outline: 2px solid var(--snes-yellow);
-    outline-offset: 2px;
-  }
-  50% {
-    box-shadow:
-      0 0 0 3px var(--snes-yellow),
-      0 0 16px 6px rgba(248,208,0,0.85);
-    outline: 3px solid var(--snes-yellow);
-    outline-offset: 3px;
-  }
 }
 
 /* ── Selected hand card (click-to-play phase 1) ──────────────── */
@@ -5501,62 +5403,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
   z-index: 10;
 }
 
-/* ── Valid placement slots (shown after card is selected) ────── */
-.tut-valid-slot {
-  box-shadow: inset 0 0 0 2px var(--snes-cyan), 0 0 8px 2px rgba(64,224,224,0.4) !important;
-}
-
-/* ── Lock — suppress all non-lit interactive elements ────────── */
-/* When body has .tut-locked, everything on the battle screen
-   that is NOT currently lit becomes non-interactive and dimmed. */
-body.tut-locked .battle-hand-card:not(.tut-lit),
-body.tut-locked .battle-card-slot:not(.tut-lit),
-body.tut-locked #battle-end-turn:not(.tut-lit),
-body.tut-locked #battle-reset-turn {
-  pointer-events: none !important;
-  opacity: 0.45;
-  transition: opacity 0.2s;
-}
-
-/* ── Completion panel ─────────────────────────────────────────── */
-#tut-end {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
-}
-
-.tut-end-box {
-  background: var(--bg-dialog);
-  border: 3px solid var(--border-bright);
-  box-shadow:
-    0 0 0 3px var(--border-dark),
-    0 0 0 6px var(--border-mid),
-    0 0 0 7px var(--border-dark);
-
-  padding: 36px 48px;
-  text-align: center;
-  max-width: 480px;
-  width: 1232px;
-}
-
-.tut-end-text {
-  font-family: var(--font);
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--text-white);
-  margin-bottom: 28px;
-}
-
-.tut-end-btns {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
 
 /* ══════════════════════════════════════════════════════════════════
    ANALYTICS  — home title + test-mode badge
@@ -5619,391 +5465,6 @@ body.tut-locked #battle-reset-turn {
   pointer-events: none;
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   MATCHUP SCREEN  — cinematic character intro between video + battle
-   Built dynamically by tutorial.js → showMatchupScreen().
-   Earth-toned, ancient stone / crumbling parchment aesthetic.
-══════════════════════════════════════════════════════════════════ */
-
-#matchup-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 5000;
-  overflow: hidden;
-}
-
-/* Ancient stone / worn map texture + scanline overlay */
-#matchup-screen::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    /* horizontal scanlines */
-    repeating-linear-gradient(
-      0deg,
-      transparent 0px, transparent 2px,
-      rgba(0,0,0,0.20) 2px, rgba(0,0,0,0.20) 3px
-    ),
-    /* diagonal stone grain veins */
-    repeating-linear-gradient(
-      152deg,
-      transparent 0px,  transparent 55px,
-      rgba(0,0,0,0.07)  55px, rgba(0,0,0,0.07) 57px,
-      transparent 57px, transparent 120px,
-      rgba(255,255,255,0.025) 120px, rgba(255,255,255,0.025) 121px
-    ),
-    /* warm deep-earth stone base */
-    linear-gradient(
-      158deg,
-      #1c0e05 0%,
-      #3a2010 18%,
-      #2c1a08 38%,
-      #3e2812 58%,
-      #2a1808 76%,
-      #1a0c04 100%
-    );
-  pointer-events: none;
-}
-
-/* Lucy group — upper-left pulled inward */
-.matchup-lucy-group {
-  position: absolute;
-  top: 80px;
-  left: 160px;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 44px;
-  z-index: 1;
-}
-
-/* Ötzi group — lower-right, mirrors Lucy's inset */
-.matchup-otzi-group {
-  position: absolute;
-  bottom: 160px;
-  right: 160px;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 44px;
-  z-index: 1;
-}
-
-
-/* Portrait column — fixed to portrait circle height only;
-   name card is absolute so it doesn't inflate the flex height.
-   This lets align-items:center on the group land the dialogue box
-   exactly on the vertical midpoint of the portrait circle. */
-.matchup-portrait-col {
-  position: relative;
-  width: 210px;
-  height: 210px;
-  flex-shrink: 0;
-}
-
-/* Circular portrait with layered aged-gold / bronze trim */
-.matchup-portrait-frame {
-  width: 210px;
-  height: 210px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #2a1808;
-  flex-shrink: 0;
-  box-shadow:
-    0 0 0 4px  #c8a040,    /* inner gold ring    */
-    0 0 0 6px  #000,       /* black gap          */
-    0 0 0 10px #8a6018,    /* bronze ring        */
-    0 0 0 12px #000,       /* black gap          */
-    0 0 0 16px #c8a040,    /* outer gold ring    */
-    0 0 0 18px #000,       /* outer black edge   */
-    0 4px 24px rgba(0,0,0,0.7);
-}
-
-.matchup-portrait-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top center;
-  display: block;
-}
-
-/* Ancient scroll / stone-tablet name label —
-   absolutely positioned below the portrait circle so it doesn't
-   inflate the portrait-col's flex height */
-.matchup-name-card {
-  position: absolute;
-  top: 226px;    /* 210px portrait + 16px gap */
-  left: 0;
-  right: 0;
-  background: #120a04;
-  border: 2px solid #8a6018;
-  box-shadow:
-    0 0 0 1px #000,
-    0 0 0 3px #c8a040,
-    0 0 0 4px #000,
-    inset 0 0 14px rgba(0,0,0,0.55);
-  padding: 9px 18px;
-  text-align: center;
-  letter-spacing: 0.07em;
-}
-
-.matchup-name-text {
-  font-family: var(--font);
-  font-size: 24px;
-  color: #f0d080;
-  line-height: 1.35;
-}
-
-.matchup-name-sub {
-  display: block;
-  font-size: 16px;
-  font-weight: 400;
-  color: #c8a040;
-  opacity: 0.9;
-  margin-top: 2px;
-}
-
-/* VS graphic — centered absolutely in the screen */
-.matchup-vs-wrap {
-  position: absolute;
-  top: 36%;
-  left: 0;
-  right: 0;
-  text-align: center;
-  pointer-events: none;
-  z-index: 2;
-  /* GSAP controls opacity / scale; no CSS transform here */
-}
-
-.matchup-vs-text {
-  font-family: var(--font);
-  font-size: 130px;
-  line-height: 1;
-  color: #c8a040;
-  letter-spacing: 0.1em;
-  text-shadow:
-    5px  5px 0 #7a4808,
-    -3px -3px 0 #3a1e00,
-    8px  8px 0 rgba(0,0,0,0.55),
-    0 0 40px  rgba(200,160,64,0.55),
-    0 0 90px  rgba(180,100,20,0.28);
-}
-
-/* Dialogue box — SNES style, inline beside portrait */
-.matchup-dialogue {
-  width: 480px;
-
-  background: #050015;
-  border: 3px solid #8898ff;
-  box-shadow:
-    0 0 0 3px #000,
-    0 0 0 6px #3848c0,
-    0 0 0 7px #000;
-
-  padding: 18px 28px 14px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.matchup-dialogue-speaker {
-  font-family: var(--font);
-  font-size: 23px;
-  color: #f8d000;
-  letter-spacing: 0.08em;
-  margin-bottom: 8px;
-}
-
-.matchup-dialogue-text {
-  font-family: var(--font);
-  font-size: 24px;
-  line-height: 1.55;
-  color: #ffffff;
-  min-height: 58px;
-}
-
-.matchup-dialogue-hint {
-  font-family: var(--font);
-  font-size: 13px;
-  color: #8888b8;
-  margin-top: 10px;
-  letter-spacing: 0.06em;
-  animation: tut-hint-blink 1.4s ease-in-out infinite;
-}
-
-/* White-flash overlay for lightning transition */
-.matchup-flash {
-  position: absolute;
-  inset: 0;
-  background: #ffffff;
-  z-index: 10;
-  pointer-events: none;
-}
-
-
-/* ── Comic speech bubbles (tutorial battle) ──────────────────── */
-
-/* Lucy's bubble — to the right of her avatar (bottom-left)       */
-#tut-click-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 150;
-  pointer-events: none; /* JS toggles to 'auto' during dialogue-wait */
-  background: transparent;
-  cursor: pointer;
-}
-
-#tut-lucy-bubble {
-  position: fixed;
-  /* Side-center anchor: bubble is vertically centered on Lucy's portrait centre.
-     Portrait centre Y = 720 − avatar_bottom(40) − radius(60) = 620px from top.
-     transform: translateY(-50%) keeps the midpoint pinned at 620px as the
-     bubble grows or shrinks with content; the tail stays at mid-side.
-     Left: avatar right edge (40+120=160px) + 12px gap = 172px.            */
-  top: 620px;
-  transform: translateY(-50%);
-  left: 172px;
-  max-width: 200px; /* constrained to dead-space left of hand cards */
-  background: #fffef5;
-  border: 3px solid #111;
-  border-radius: 12px;
-  padding: 14px 16px 10px;
-  box-shadow: 4px 4px 0 #111;
-  z-index: 200;
-  cursor: pointer;
-}
-/* Tail pointing left toward Lucy — emerges from the LEFT-CENTER of the bubble.
-   top:50% + translateY(-50%) keeps the tip at the bubble's vertical midpoint,
-   which stays pinned to Lucy's portrait centre as bubble height changes.    */
-#tut-lucy-bubble::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: -21px;
-  transform: translateY(-50%);
-  border: 10px solid transparent;
-  border-right-color: #111;
-}
-#tut-lucy-bubble::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: -14px;
-  transform: translateY(-50%);
-  border: 8px solid transparent;
-  border-right-color: #fffef5;
-}
-
-/* Ötzi's bubble — to the left of his avatar (top-right).
-   This element is created dynamically and appended to #sog-stage (not body)
-   so that position:fixed is relative to the 1280×720 stage coordinate system,
-   matching the avatar's absolute-positioned layout coordinates.      */
-#tut-otzi-box {
-  position: fixed;
-  /* Side-center anchor: bubble is vertically centered on Ötzi's portrait centre.
-     Portrait centre Y = avatar_top(20) + radius(60) = 80px from stage top.
-     transform: translateY(-50%) keeps the midpoint pinned at 80px as the
-     bubble grows or shrinks with content; the tail stays at mid-side.
-     Right: avatar left edge (1280−20−120=1140px) − 12px gap = 1128px
-            → right = 1280−1128 = 152px.
-     NOTE: appended to #sog-stage in tutorial.js so that position:fixed
-     resolves against the 1280×720 stage coordinate space. */
-  top: 80px;
-  transform: translateY(-50%);
-  right: 152px;
-  max-width: 330px;
-  background: #f0ebe0;
-  border: 3px solid #111;
-  border-radius: 12px;
-  padding: 14px 16px 10px;
-  box-shadow: -4px 4px 0 #111;
-  z-index: 200;
-  cursor: pointer;
-}
-/* Tail pointing right toward Ötzi — emerges from the RIGHT-CENTER of the bubble.
-   top:50% + translateY(-50%) keeps the tip at the bubble's vertical midpoint,
-   which stays pinned to Ötzi's portrait centre as bubble height changes.   */
-#tut-otzi-box::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  right: -21px;
-  transform: translateY(-50%);
-  border: 10px solid transparent;
-  border-left-color: #111;
-}
-#tut-otzi-box::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  right: -14px;
-  transform: translateY(-50%);
-  border: 8px solid transparent;
-  border-left-color: #f0ebe0;
-}
-
-.tut-bubble-text {
-  font-family: var(--font);
-  font-size: 18px;
-  line-height: 1.45;
-  color: #111;
-  min-height: 32px;
-}
-
-.tut-bubble-hint {
-  font-family: var(--font);
-  font-size: 11px;
-  color: #888;
-  margin-top: 8px;
-  text-align: right;
-  letter-spacing: 0.05em;
-  animation: tut-hint-blink 1.4s ease-in-out infinite;
-}
-.tut-bubble-hint.tut-hint-action {
-  color: #1a6a3a;
-  animation: none;
-  text-align: left;
-}
-
-.tut-otzi-speaker {
-  display: block;
-  font-family: var(--font);
-  font-size: 13px;
-  font-weight: 700;
-  color: #3a2200;
-  letter-spacing: 0.1em;
-  margin-bottom: 6px;
-}
-#tut-otzi-text { min-height: 32px; }
-
-/* ── Location ability text: hidden during turns 1-2 ──────────── */
-.tut-ability-hidden { visibility: hidden; }
-
-/* ── T3 ability card glow ─────────────────────────────────────── */
-@keyframes tut-ability-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(200,160,32,0.4), 4px 4px 0 #111; }
-  50%       { box-shadow: 0 0 16px 8px rgba(200,160,32,0.7), 4px 4px 0 #111; }
-}
-.tut-ability-glow { animation: tut-ability-pulse 1.2s ease-in-out infinite; }
-
-/* ── White pulsing glow (Rift Valley tile + capital counter) ──── */
-@keyframes tut-white-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 0 10px 3px rgba(255,255,255,0.3); }
-  50%       { box-shadow: 0 0 0 3px rgba(255,255,255,0.9), 0 0 22px 8px rgba(255,255,255,0.55); }
-}
-.tut-white-glow {
-  position: relative;
-  z-index: 950 !important;
-  border-radius: 4px;
-  animation: tut-white-pulse 1.0s ease-in-out infinite;
-}
-
-/* ── T4 location nameplate glow ───────────────────────────────── */
-@keyframes tut-loc-nameplate-glow {
-  0%, 100% { color: var(--snes-yellow); }
-  50%       { color: #fff; text-shadow: 0 0 12px rgba(200,160,32,0.9); }
-}
-.tut-loc-glow { animation: tut-loc-nameplate-glow 0.7s ease-in-out 3; }
-
 /* ── Napata At-Once stamp: the nameplate glows light gold as a Political card
    reveals there and takes its +1 (abilities.applyNapataStampForCard). ──── */
 @keyframes napata-stamp-glow {
@@ -6012,10 +5473,6 @@ body.tut-locked #battle-reset-turn {
   100% { color: var(--snes-yellow); text-shadow: 1px 1px 3px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.8); }
 }
 .battle-loc-name.napata-stamp-glow { animation: napata-stamp-glow 1.0s ease-out 1; }
-
-/* ── Magellan moveable board slot ─────────────────────────────── */
-.tut-moveable { cursor: grab; }
-.tut-moveable:active { cursor: grabbing; }
 
 
 /* ══════════════════════════════════════════════════════════════════
@@ -8527,102 +7984,6 @@ body.tut-locked #battle-reset-turn {
 .chooser-loc-region { font-size: 11px; opacity: 0.8; text-transform: none; letter-spacing: 0; }
 
 
-/* ================================================================
-   UNLOCK CUTSCENE
-   ================================================================ */
-
-#screen-unlock {
-  position: fixed;
-  inset: 0;
-  z-index: 8500;
-  background: #0a0a0a;
-  overflow: hidden;
-}
-.unlock-curtain {
-  position: absolute;
-  top: 0;
-  width: 50%;
-  height: 100%;
-  z-index: 10;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.08) 0px,
-      transparent 3px,
-      transparent 18px
-    ),
-    linear-gradient(
-      180deg,
-      #3a0505 0%,
-      #6b1010 20%,
-      #8b1a1a 40%,
-      #a52020 55%,
-      #8b1a1a 70%,
-      #6b1010 85%,
-      #3a0505 100%
-    );
-}
-#unlock-curtain-left  { left: 0; }
-#unlock-curtain-right { right: 0; }
-
-#unlock-stage {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-}
-.unlock-card {
-  position: absolute;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 3px solid gold;
-  box-shadow: 0 0 20px rgba(255, 215, 0, 0.4), 0 0 40px rgba(255, 215, 0, 0.15);
-  /* Container query unit source for the CC / IP overlays */
-  container-type: inline-size;
-}
-.unlock-card .db-card-img-wrap {
-  position: absolute;
-  inset: 0;
-  background: #1a1a2e;
-}
-.unlock-card .db-card-img {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  z-index: 1;
-}
-.unlock-card .db-card-img-placeholder {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 48px;
-  color: rgba(255,255,255,0.04);
-  pointer-events: none;
-  z-index: 0;
-}
-/* CC / IP overlays scale automatically via cqw — base styles cover
-   the unlock-cutscene cards via the shared .db-overlay-cc/ip rules. */
-
-#unlock-title-wrap {
-  position: absolute;
-  top: 8%;
-  width: 100%;
-  text-align: center;
-  z-index: 5;
-  pointer-events: none;
-}
-#unlock-title {
-  font-family: 'CT Galbite', monospace;
-  font-size: 42px;
-  font-weight: 700;
-  text-shadow:
-    0 0 30px currentColor,
-    0 2px 6px rgba(0, 0, 0, 0.8);
-  letter-spacing: 0.04em;
-}
-
 /* ══════════════════════════════════════════════════════════════════
    ABOUT SCREEN — "About the Game"
    Full-screen page linked from the home menu. Wood-and-parchment
@@ -8867,7 +8228,6 @@ body.tut-locked #battle-reset-turn {
   text-shadow: 1px 1px 0 #000;
   letter-spacing: 0.05em;
 }
-
 
 
 /* ══════════════════════════════════════════════════════════════════

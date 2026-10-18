@@ -669,7 +669,7 @@ function loadCardIds() {
 var ABILITY_KEY_FILES = [
   'js/game/abilities.js', 'js/game/board.js', 'js/game/state.js',
   'js/game/ai.js', 'js/game/input.js', 'js/locations.js',
-  'js/game.js', 'js/tutorial.js'
+  'js/game.js'
 ];
 function discoverAbilityKeys() {
   var keys = {};

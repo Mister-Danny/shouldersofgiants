@@ -6853,7 +6853,7 @@ var Overworld = (function () {
       if (/-battle$/.test(c)) document.body.classList.remove(c);
     });
     ['otzi-pre-deal', 'otzi-lessons', 'prehistory-pre-coaching', 'snap-guiding', 'snap-scripted',
-     'overworld-away-from-home', 'tut-locked'].forEach(function (c) {
+     'overworld-away-from-home'].forEach(function (c) {
       document.body.classList.remove(c);
     });
 
@@ -6876,7 +6876,6 @@ var Overworld = (function () {
 
     // --- Clear stale window mode flags (left at last-session values). ---
     window.deckBuilderFromOverworld = false;
-    window._adventureVideoMode      = false;
     window.versusStudentMode        = false;
     window.multiplayerMode          = false;
   }

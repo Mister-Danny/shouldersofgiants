@@ -152,8 +152,7 @@ SOG.cardHover = (function () {
   function show(card, sd, anchorEl) {
     if (_pinned) return;       // a pinned panel ignores hover until unpinned
     if (!isEnabled() || !_canHover() || _suppressed || !card || !anchorEl) return;
-    // Never compete with the modal, the tutorial's scripted popups, or boss dialogue.
-    if (window.tutorialActive) return;
+    // Never compete with the modal or boss dialogue.
     var modal = document.getElementById('battle-popup-backdrop');
     if (modal && modal.classList.contains('visible')) return;
     if (!SOG.ui || typeof SOG.ui.fillPopupContent !== 'function') return;

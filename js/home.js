@@ -3,12 +3,12 @@
  * Shoulders of Giants — Home Screen Entry Flow
  *
  * Three states:
- *   1. Initial         — "I'm Ready" (+ "I'm Ready to Learn" if returning visitor)
+ *   1. Initial         — "I'm Ready"
  *   2. Path choice     — Arcadium | Adventure | Online Versus
  *   3. Adventure pick  — female / male adventurers walk in; pick one → door/iris → video → overworld
  *
  * localStorage:
- *   sog_first_visit_complete   — once true, returning visitor gets the Learn button
+ *   sog_first_visit_complete   — stamped on the first "I'm Ready" (kept in the save snapshot)
  *   sog_selected_adventurer    — 'female' or 'male'
  */
 
@@ -32,7 +32,7 @@ var HomeFlow = (function () {
 
   /* ── Elements ──────────────────────────────────────────────── */
   var screenHomeEl, homeContentEl, adventureStageEl;
-  var btnReady, btnLearn, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback, btnAccount, btnTeacherDashboard;
+  var btnReady, btnAbout, btnArcadium, btnAdventureNew, btnVersus, btnState2Back, btnFeedback, btnAccount, btnTeacherDashboard;
   var homeOnboardEl = null;
   var _skipIntroOnce = false;   // teacher link: straight to the map, no intro video
   var advDevWarningEl, advDevProceedBtn, advDevGoBackBtn;
@@ -194,7 +194,6 @@ var HomeFlow = (function () {
     homeContentEl        = document.getElementById('home-content');
     adventureStageEl     = document.getElementById('home-adventure-stage');
     btnReady             = document.getElementById('btn-ready');
-    btnLearn             = document.getElementById('btn-learn');
     btnAbout             = document.getElementById('btn-about');
     btnArcadium          = document.getElementById('btn-arcadium');
     btnAdventureNew      = document.getElementById('btn-adventure-new');
@@ -227,7 +226,7 @@ var HomeFlow = (function () {
     doorEl               = document.getElementById('home-secret-door');
     irisEl               = document.getElementById('home-iris-wipe');
 
-    // First-visit vs returning-visitor: show/hide Learn button
+    // First-visit vs returning-visitor menu
     applyVisitState();
 
     // Initial subtitle visible
@@ -364,7 +363,6 @@ var HomeFlow = (function () {
       // doesn't preserve it), which otherwise strands a logged-out student
       // on this exact first-visit state with no way back into their account.
       btnReady.style.display = '';
-      btnLearn.style.display = 'none';
       btnAbout.style.display = 'none';
       _refreshFeedbackButton();   // hidden for a brand-new guest; a signed-in account still sees it
       if (btnAccount)  btnAccount.style.display = '';
@@ -373,7 +371,6 @@ var HomeFlow = (function () {
       // Returning visitor — normal home menu.
       btnReady.style.display = '';
       btnAbout.style.display = '';
-      btnLearn.style.display = localStorage.getItem(KEY_FIRST_VISIT) ? '' : 'none';
       if (btnAccount) btnAccount.style.display = '';
       if (btnTeacherDashboard) btnTeacherDashboard.style.display = teacherDisplay;
       _refreshFeedbackButton();
@@ -414,15 +411,14 @@ var HomeFlow = (function () {
     markVisited();
 
     // Returning visitor — reveal the State-2 menu.
-    // Fade out intro subtitle + Ready + Learn buttons
+    // Fade out intro subtitle + Ready button
     if (typeof gsap === 'undefined') { showPathChoice(); return; }
 
-    gsap.to([subtitleIntroEl, btnReady, btnLearn, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard, homeOnboardEl].filter(Boolean), {
+    gsap.to([subtitleIntroEl, btnReady, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard, homeOnboardEl].filter(Boolean), {
       opacity: 0, duration: 0.3, ease: 'power2.out',
       onComplete: function () {
         if (homeOnboardEl) { homeOnboardEl.style.display = 'none'; gsap.set(homeOnboardEl, { opacity: 1 }); }
         btnReady.style.display = 'none';
-        btnLearn.style.display = 'none';
         btnAbout.style.display = 'none';
         if (btnFeedback) btnFeedback.style.display = 'none';
         if (btnAccount)  btnAccount.style.display = 'none';
@@ -516,7 +512,7 @@ var HomeFlow = (function () {
   function restoreState1() {
     btnReady.style.display = '';
     btnAbout.style.display = '';
-    applyVisitState();           // restores btn-learn + btn-account per first-visit rule
+    applyVisitState();           // restores btn-account per first-visit rule
     _updateAccountButtonLabel();
     // Re-evaluate Feedback button (see _refreshFeedbackButton)
     if (window.Feedback && typeof window.Feedback.refreshHomeButton === 'function') {
@@ -524,7 +520,7 @@ var HomeFlow = (function () {
     }
     subtitleIntroEl.classList.add('is-visible');
     if (typeof gsap !== 'undefined') {
-      gsap.fromTo([btnReady, btnLearn, btnAbout, btnAccount, btnTeacherDashboard, subtitleIntroEl],
+      gsap.fromTo([btnReady, btnAbout, btnAccount, btnTeacherDashboard, subtitleIntroEl],
         { opacity: 0 },
         { opacity: 1, duration: 0.4, ease: 'power2.out', stagger: 0.05 });
       if (btnFeedback && btnFeedback.style.display !== 'none') {
@@ -941,9 +937,6 @@ var HomeFlow = (function () {
     var screen = document.getElementById('screen-video');
     if (!video || !screen) { if (onEnd) onEnd(); return; }
 
-    // Flag so deckbuilder's global 'ended' listener skips the tutorial route
-    window._adventureVideoMode = true;
-
     // Safety: music should already be fading/stopped from the character pick,
     // but ensure it's silenced before the video plays.
     stopHomeMusic(200);
@@ -965,7 +958,6 @@ var HomeFlow = (function () {
       if (skipBtn) skipBtn.removeEventListener('click', finishIntro);
       document.removeEventListener('keydown', onKey);
       try { video.pause(); } catch (e) {}
-      window._adventureVideoMode = false;
       if (onEnd) onEnd();
     }
     function onKey(e) {
@@ -1033,8 +1025,7 @@ var HomeFlow = (function () {
     btnAbout.style.display = '';
     gsap.set(btnReady, { opacity: 1 });
     gsap.set(btnAbout, { opacity: 1 });
-    gsap.set(btnLearn, { opacity: 1 });   // Learn faded to 0 in onReadyClick but never restored — un-stick it
-    if (btnAccount) gsap.set(btnAccount, { opacity: 1 });  // same fade-out in onReadyClick, same fix
+    if (btnAccount) gsap.set(btnAccount, { opacity: 1 });  // faded to 0 in onReadyClick but never restored — un-stick it
     if (btnTeacherDashboard) gsap.set(btnTeacherDashboard, { opacity: 1 });  // same fade-out, same fix
     applyVisitState();
     _updateAccountButtonLabel();   // auth state may have changed since this button was last shown
@@ -1060,7 +1051,7 @@ var HomeFlow = (function () {
     if (opts.skipIntro) _skipIntroOnce = true;
     markVisited();
     try { localStorage.setItem(KEY_ADV_WARNING, 'true'); } catch (e) {}
-    [btnReady, btnLearn, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard, homeOnboardEl, btnState2Back].forEach(function (b) {
+    [btnReady, btnAbout, btnFeedback, btnAccount, btnTeacherDashboard, homeOnboardEl, btnState2Back].forEach(function (b) {
       if (b) b.style.display = 'none';
     });
     [btnArcadium, btnAdventureNew, btnVersus].forEach(function (b) { if (b) b.classList.remove('btn-visible'); });
@@ -1116,7 +1107,7 @@ var HomeFlow = (function () {
       homeMusicEnabled = true;
       startHomeMusic();
     },
-    stopMusic:      stopHomeMusic,    // exposed so other flows (Learn tutorial) can silence it
+    stopMusic:      stopHomeMusic,    // exposed so other flows (the dev panel) can silence it
     toggleMusic:    toggleHomeMusic,  // bug 14: global widget play/pause
     pauseMusic:     pauseHomeMusic,   // bug 14
     resumeMusic:    resumeHomeMusic,  // bug 14
