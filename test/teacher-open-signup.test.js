@@ -109,13 +109,40 @@ async function guest() {
   return cred.user.uid;
 }
 
-test('email: the guest is upgraded in place — same uid, teacher doc with no invite, guest progress carried', { skip }, async () => {
+const verifyEmailsTo = async (email) => ((await rest(`/emulator/v1/projects/${PROJECT}/oobCodes`)).oobCodes || [])
+  .filter(c => c.email === email && c.requestType === 'VERIFY_EMAIL').length;
+const markVerified = (uid) => rest(`/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`, 'POST', { localId: uid, emailVerified: true });
+
+test('email: guest upgraded in place, verification email sent, teacher doc waits for the verified address', { skip }, async () => {
   const guestUid = await guest();
   const r = await call(api.signUpTeacherOpen, { email: 'open@school.org', password: PW, src: 'newsletter-oct' });
   assert.ifError(r.err);
   assert.equal(r.result.uid, guestUid, 'same uid as the guest');
-  assert.equal(r.result.created, true);
+  assert.equal(r.result.verifyPending, true);
+  assert.equal(r.result.emailSent, true);
   assert.equal(await providersOf(guestUid), 'password');
+  assert.equal(await verifyEmailsTo('open@school.org'), 1, 'one verification email');
+  assert.equal(await docOf(`teachers/${guestUid}`), null, 'no teacher doc before verification');
+  const early = await docOf(`players/${guestUid}`);
+  assert.deepEqual(early.progress, GUEST_PROGRESS, 'progress saved while they wait');
+  assert.equal(api.isPendingTeacherUser(auth.currentUser), true);
+
+  const notYet = await call(api.checkTeacherVerification);
+  assert.ifError(notYet.err);
+  assert.equal(notYet.result.verified, false);
+  assert.equal(await docOf(`teachers/${guestUid}`), null);
+
+  const again = await call(api.resendTeacherVerification);
+  assert.ifError(again.err);
+  assert.equal(await verifyEmailsTo('open@school.org'), 2, 'RESEND sends another');
+
+  await markVerified(guestUid);
+  api.setSignupSource('newsletter-oct');
+  const done = await call(api.checkTeacherVerification);
+  assert.ifError(done.err);
+  assert.equal(done.result.verified, true);
+  assert.equal(done.result.created, true);
+  assert.equal(done.result.uid, guestUid);
   const t = await docOf(`teachers/${guestUid}`);
   assert.equal(t.inviteCode, '');
   assert.equal(t.src, 'newsletter-oct');
@@ -127,6 +154,28 @@ test('email: the guest is upgraded in place — same uid, teacher doc with no in
   assert.deepEqual(p.progress, GUEST_PROGRESS, 'guest progress carried over');
   assert.equal(p.teacherUid, '');
   assert.equal(p.classCode, '');
+
+  // Checked again later (another page load): the existing doc is left alone.
+  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`teachers/${guestUid}`).update({ displayName: 'Ms Open', classCodes: ['ABC123'] }));
+  const later = await call(api.checkTeacherVerification);
+  assert.equal(later.result.existing, true);
+  assert.deepEqual((await docOf(`teachers/${guestUid}`)).classCodes, ['ABC123']);
+});
+
+test('pending-teacher check ignores guests, students and Google teachers', { skip }, async () => {
+  await guest();
+  assert.equal(api.isPendingTeacherUser(auth.currentUser), false, 'guest');
+  await auth.signOut();
+  await auth.createUserWithEmailAndPassword('otzi7@sog.invalid', PW);
+  assert.equal(api.isPendingTeacherUser(auth.currentUser), false, 'student');
+  assert.equal((await call(api.checkTeacherVerification)).result.notPending, true);
+  await auth.signOut();
+  await guest();
+  pickGoogle('g-pend', 'g@district.org', 'Ms G');
+  const g = await call(api.signUpTeacherGoogleOpen, {});
+  assert.ifError(g.err);
+  assert.equal(g.result.created, true, 'Google: teacher made straight away, no email step');
+  assert.equal(api.isPendingTeacherUser(auth.currentUser), false);
 });
 
 test('Google: guest upgraded in place via linkWithPopup, name from Google, progress carried', { skip }, async () => {
@@ -191,7 +240,10 @@ test('popup blocked: reported as popup-blocked, nothing changed, no redirect att
 test('site deployed before the rules (invite still required): stops at invite-required signed in, a code finishes it', { skip }, async () => {
   await setRules(OLD_RULES);
   const guestUid = await guest();
-  const r = await call(api.signUpTeacherOpen, { email: 'early@school.org', password: PW });
+  const pending = await call(api.signUpTeacherOpen, { email: 'early@school.org', password: PW });
+  assert.equal(pending.result.verifyPending, true);
+  await markVerified(guestUid);
+  const r = await call(api.checkTeacherVerification);
   assert.equal(r.err.code, 'invite-required');
   assert.equal(auth.currentUser.uid, guestUid, 'account kept (upgraded), nothing orphaned');
   assert.equal(auth.currentUser.isAnonymous, false);

@@ -597,10 +597,98 @@ window.SogAccountUI = (function () {
       return;
     }
     if (result && result.passwordLost) { _stepRestorePassword(result); return; }
+    if (result && result.verifyPending) {
+      _teacherPrefill = { email: '', adult: false };
+      _verifyPending = true;   // returning to the tab re-checks from now on
+      _stepCheckEmail(result.email, result.emailSent ? '' : _verifyErrorMessage(result.sendError));
+      return;
+    }
     _teacherPrefill = { email: '', adult: false };
     _close();
     if (window.TeacherOnboard) window.TeacherOnboard.afterTeacherSignup(result, method);
     else location.reload();
+  }
+
+  /* ── Email teacher signup: "check your email" ───────────────────────────
+     The account exists and progress saves; the teacher doc and "My Class"
+     wait for the verification link (js/account.js checkTeacherVerification).
+     KEEP PLAYING closes this; the check also runs on return to the tab and on
+     every page load, so following the link anywhere finishes it. */
+  function _verifyErrorMessage(code) {
+    if (code === 'auth/too-many-requests') return 'Too many emails just now. Wait a minute, then press RESEND.';
+    if (code === 'auth/network-request-failed') return 'Couldn’t reach the server. Check your connection, then press RESEND.';
+    return 'The email didn’t send. Press RESEND to try again.';
+  }
+
+  function _stepCheckEmail(email, msg, isInfo) {
+    _render(
+      'CHECK YOUR EMAIL',
+      '<p><strong>Check your email to finish setting up your class.</strong></p>' +
+      '<p>We sent a link to <strong>' + _escapeHtml(email || 'your email') + '</strong>. Open it, then come back here. ' +
+        'You can keep playing meanwhile — your progress is saved.</p>' +
+      (msg ? '<div class="' + (isInfo ? 'account-flow-info' : 'account-flow-error') + '">' + _escapeHtml(msg) + '</div>' : ''),
+      '<button class="btn-snes" id="af-verify-check">I’VE OPENED THE LINK</button>' +
+      '<button class="btn-snes" id="af-verify-resend">RESEND</button>' +
+      '<button class="btn-snes btn-snes-close" id="af-verify-later">KEEP PLAYING</button>'
+    );
+    _byId('af-verify-check').addEventListener('click', function () {
+      _render('ONE MOMENT', '<p>Checking…</p>', '');
+      _checkPendingTeacher(function (state) {
+        if (state === 'unverified') _stepCheckEmail(email, 'Not verified yet. Open the link in the email first (check spam too).');
+        else if (state === 'error') _stepCheckEmail(email, 'Couldn’t check just now. Try again in a moment.');
+      });
+    });
+    _byId('af-verify-resend').addEventListener('click', function () {
+      _render('ONE MOMENT', '<p>Sending…</p>', '');
+      window.SogAccount.resendTeacherVerification(function (err) {
+        if (err) { _stepCheckEmail(email, _verifyErrorMessage(err.code)); return; }
+        _stepCheckEmail(email, 'Sent again. Check your inbox (and spam).', true);
+      });
+    });
+    _byId('af-verify-later').addEventListener('click', _close);
+  }
+
+  // Runs the verification check; on success makes the teacher doc, then the
+  // class-link screen makes "My Class". done(state): 'finished' | 'unverified'
+  // | 'existing' | 'not-pending' | 'error'.
+  var _verifyCheckBusy = false, _verifyPending = false;
+  function _checkPendingTeacher(done) {
+    done = done || function () {};
+    if (!window.SogAccount || typeof window.SogAccount.checkTeacherVerification !== 'function') { done('not-pending'); return; }
+    if (_verifyCheckBusy) { done('busy'); return; }
+    _verifyCheckBusy = true;
+    window.SogAccount.setSignupSource(_teacherSrc());
+    window.SogAccount.checkTeacherVerification(function (err, r) {
+      _verifyCheckBusy = false;
+      if (err) {
+        if (err.code === 'invite-required') { _verifyPending = false; _stepTeacherFinishInvite(); done('invite'); return; }
+        done('error');
+        return;
+      }
+      if (r && r.notPending) { _verifyPending = false; done('not-pending'); return; }
+      if (r && r.existing)   { _verifyPending = false; done('existing'); return; }
+      if (!r || !r.verified) { _verifyPending = true; done('unverified'); return; }
+      _verifyPending = false;
+      _close();
+      if (window.TeacherOnboard) window.TeacherOnboard.afterTeacherSignup(r, 'password');
+      done('finished');
+    });
+  }
+
+  // On load (once auth settles) and on return to the tab: finish a pending
+  // email teacher signup. A still-unverified one gets the reminder once per
+  // browser session (e.g. after logging in on another device), never a nag.
+  function _watchPendingTeacher() {
+    var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
+    if (!user || !window.SogAccount.isPendingTeacherUser(user)) return;
+    _checkPendingTeacher(function (state) {
+      if (state !== 'unverified') return;
+      var shown = false;
+      try { shown = sessionStorage.getItem('sog_verify_reminder_shown') === '1'; } catch (e) {}
+      if (shown || (_els() && backdrop.classList.contains('visible'))) return;   // never over another step
+      try { sessionStorage.setItem('sog_verify_reminder_shown', '1'); } catch (e) {}
+      _stepCheckEmail(user.email);
+    });
   }
 
   /* Popup blocked: never fall back to a redirect (it loses the sign-in on
@@ -1045,6 +1133,11 @@ window.SogAccountUI = (function () {
     if (!window.SogAccount) return;
     _wirePrivacyLink();
 
+    if (window.SogAuth && typeof window.SogAuth.ready === 'function') window.SogAuth.ready(_watchPendingTeacher);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && _verifyPending) _watchPendingTeacher();
+    });
+
     // Login-card QR (#login=name.passphrase): wipe it from the address bar
     // and this tab's history entry at once, then pre-fill the login form —
     // the student just taps LOG IN.
@@ -1095,6 +1188,14 @@ window.SogAccountUI = (function () {
     var user = window.SogAuth && typeof window.SogAuth.getUser === 'function' ? window.SogAuth.getUser() : null;
     if (!user || user.isAnonymous) { _pendingClassInfo = null; _stepLoginForm(); return; }
     var isTeacher = window.TeacherDashboard && typeof window.TeacherDashboard.isTeacher === 'function' && window.TeacherDashboard.isTeacher();
+    if (!isTeacher && window.SogAccount.isPendingTeacherUser(user)) {
+      _render('ONE MOMENT', '<p>Checking your account…</p>', '');
+      _checkPendingTeacher(function (state) {
+        if (state === 'unverified' || state === 'error') _stepCheckEmail(user.email);
+        else if (state !== 'finished' && state !== 'invite') _close();
+      });
+      return;
+    }
     var email = user.email || '', name = '';
     if (email.slice(-12) === '@sog.invalid') name = email.slice(0, -12);
     else if (isTeacher) { var d = window.TeacherDashboard.getTeacherDoc(); name = (d && d.displayName) || ''; }

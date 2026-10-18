@@ -620,6 +620,28 @@ window.SogAccount = (function () {
     return p ? p.displayName : '';
   }
 
+  // The teacher's own ungrouped /players doc, so their adventure progress
+  // round-trips across devices. An in-place upgrade carries the guest's
+  // progress (captured before the link); otherwise the doc starts clean. An
+  // existing doc's progress is never overwritten with an empty one.
+  function _bootstrapTeacherPlayerDoc(user, name) {
+    var carried = _signup.progress;
+    var playerData = {
+      username:   name || 'Teacher',
+      classCode:  '',
+      teacherUid: '',
+      createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
+      lastActive: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (carried && Object.keys(carried).length) playerData.progress = carried;
+    var ref = _db().collection('players').doc(user.uid);
+    return _withTimeout(ref.get().then(function (snap) {
+      if (!snap.exists && !playerData.progress) playerData.progress = {};
+      if (snap.exists) { delete playerData.createdAt; delete playerData.username; delete playerData.classCode; delete playerData.teacherUid; }
+      return ref.set(playerData, { merge: true });
+    }), WRITE_TIMEOUT_MS).then(function () { _signup.progress = null; });
+  }
+
   function _createTeacherDocFor(user, isNew, inviteCode, cb) {
     var name = _bestName(user);
     var teacherData = {
@@ -635,27 +657,8 @@ window.SogAccount = (function () {
     if (_signup.src) teacherData.src = _signup.src;
     _withTimeout(_db().collection('teachers').doc(user.uid).set(teacherData), WRITE_TIMEOUT_MS).then(function () {
       _pendingGoogleSignup = null;
-      // Same ungrouped /players doc the email signup bootstraps, so a
-      // teacher's own adventure progress round-trips across devices. An
-      // in-place upgrade carries the guest's progress (captured before the
-      // link); otherwise the doc starts clean as before. An existing doc's
-      // progress is never overwritten with an empty one.
-      var carried = _signup.progress;
-      var playerData = {
-        username:   name || 'Teacher',
-        classCode:  '',
-        teacherUid: '',
-        createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
-        lastActive: firebase.firestore.FieldValue.serverTimestamp()
-      };
-      if (carried && Object.keys(carried).length) playerData.progress = carried;
-      var ref = _db().collection('players').doc(user.uid);
-      _withTimeout(ref.get().then(function (snap) {
-        if (!snap.exists && !playerData.progress) playerData.progress = {};
-        if (snap.exists) { delete playerData.createdAt; delete playerData.username; delete playerData.classCode; delete playerData.teacherUid; }
-        return ref.set(playerData, { merge: true });
-      }), WRITE_TIMEOUT_MS)
-        .then(function () { _signup.progress = null; cb(null, _teacherGoogleResult(user, false)); })
+      _bootstrapTeacherPlayerDoc(user, name)
+        .then(function () { cb(null, _teacherGoogleResult(user, false)); })
         .catch(function (playerWriteErr) {
           console.warn('[Account] /players/{uid} bootstrap failed for teacher — will self-heal on next checkpoint', playerWriteErr);
           cb(null, _teacherGoogleResult(user, false));
@@ -673,7 +676,9 @@ window.SogAccount = (function () {
      checkbox the UI requires. The guest account is UPGRADED IN PLACE (same
      uid), exactly like student signup, so whatever the teacher played before
      signing up carries straight over:
-       email   linkWithCredential(EmailAuthProvider) on the anonymous user
+       email   linkWithCredential(EmailAuthProvider) on the anonymous user,
+               then a verification email; the teacher doc waits for it
+               (see "Email teacher signup" below)
        Google  linkWithPopup on the anonymous user
      then /teachers/{uid} (inviteCode '') and the ungrouped /players/{uid}
      with the captured progress. Edge cases:
@@ -739,11 +744,110 @@ window.SogAccount = (function () {
       // Local-only boot (the anonymous sign-in never happened): a fresh account.
       : firebase.auth().createUserWithEmailAndPassword(email, password).then(function (c) { return c.user; });
     _withTimeout(step, LINK_TIMEOUT_MS).then(function (u) {
-      _afterTeacherAuth(u, cb);
+      if (u.emailVerified) { _afterTeacherAuth(u, cb); return; }
+      _startTeacherVerification(u, cb);
     }).catch(function (err) {
       console.error('[Account] Open teacher signup (email) failed', err);
       cb(err, null);
     });
+  }
+
+  /* ── Email teacher signup: verify the address first ─────────────────────
+     The /teachers create rule requires a verified email, so an email/password
+     signup stops here: the account exists (the guest was upgraded in place),
+     the teacher's own /players doc is written so their progress saves while
+     they wait, and Firebase emails a verification link. The teacher doc and
+     "My Class" follow once the address is verified — checkTeacherVerification
+     runs on return to the tab, on every page load, and from the "check your
+     email" step (js/account-ui.js). Google sign-in never comes through here:
+     Google addresses arrive already verified. */
+  function _verificationSettings() {
+    try {
+      if (typeof location !== 'undefined' && /^https?:$/.test(location.protocol)) {
+        return { url: location.origin + location.pathname };
+      }
+    } catch (e) {}
+    return undefined;
+  }
+  function _sendVerification(user) {
+    var settings = _verificationSettings();
+    return user.sendEmailVerification(settings).catch(function (err) {
+      // A continue URL on a domain Firebase doesn't list as authorized is
+      // refused; the plain email still verifies, it just has no "Continue" link.
+      if (settings && err && /continue-uri|unauthorized-domain/.test(err.code || '')) return user.sendEmailVerification();
+      throw err;
+    });
+  }
+  function _pendingResult(user, sendErr) {
+    return { uid: user.uid, email: user.email || '', displayName: '', verifyPending: true,
+             emailSent: !sendErr, sendError: sendErr ? (sendErr.code || 'unknown') : null };
+  }
+  function _startTeacherVerification(user, cb) {
+    if (window.SogAuth && typeof window.SogAuth.refresh === 'function') window.SogAuth.refresh();
+    _stampProgressOwner(user.uid);
+    var send = function () {
+      _sendVerification(user).then(function () { cb(null, _pendingResult(user, null)); }, function (err) {
+        console.warn('[Account] Verification email not sent', err);
+        cb(null, _pendingResult(user, err));
+      });
+    };
+    _bootstrapTeacherPlayerDoc(user, '').then(send, function (err) {
+      console.warn('[Account] /players/{uid} bootstrap failed for a pending teacher — will self-heal on next checkpoint', err);
+      send();
+    });
+  }
+
+  // A signed-in email/password account that isn't a student: the shape of a
+  // teacher who may still be waiting on verification. Whether they already
+  // have a teacher doc is checked by checkTeacherVerification itself.
+  function isPendingTeacherUser(user) {
+    user = user || firebase.auth().currentUser;
+    if (!user || user.isAnonymous) return false;
+    var email = (user.email || '').toLowerCase();
+    if (!email || email.slice(-EMAIL_DOMAIN.length) === EMAIL_DOMAIN) return false;
+    return (user.providerData || []).some(function (p) { return p && p.providerId === 'password'; });
+  }
+
+  /**
+   * Finishes an email teacher signup once the address is verified: reloads
+   * the user, and if verified writes /teachers/{uid} (fresh token first, so
+   * the rules see email_verified). Never touches an existing teacher doc.
+   * cb(err, { verified:false, email }) | cb(null, { verified:true, existing:true })
+   *   | cb(null, { verified:true, created:true, uid, email, displayName })
+   */
+  function checkTeacherVerification(cb) {
+    var user = firebase.auth().currentUser;
+    if (!isPendingTeacherUser(user)) { cb(null, { verified: false, notPending: true }); return; }
+    _withTimeout(_db().collection('teachers').doc(user.uid).get(), WRITE_TIMEOUT_MS).then(function (snap) {
+      if (snap.exists) { cb(null, { verified: true, existing: true }); return; }
+      return user.reload().then(function () {
+        var u = firebase.auth().currentUser;
+        if (!u || !u.emailVerified) { cb(null, { verified: false, email: (u && u.email) || '' }); return; }
+        var go = function () {
+          _signup.provider = 'password';
+          _createTeacherDocFor(u, true, '', function (err, result) {
+            if (err && err.code === 'invite-invalid') {
+              var need = new Error('This site still needs an invite code to finish teacher sign-up.');
+              need.code = 'invite-required';
+              cb(need, result);
+              return;
+            }
+            if (!err && result) { result.created = true; result.verified = true; }
+            cb(err, result);
+          });
+        };
+        return u.getIdToken(true).then(go, go);
+      });
+    }).catch(function (err) {
+      console.warn('[Account] Teacher verification check failed', err);
+      cb(err, null);
+    });
+  }
+
+  function resendTeacherVerification(cb) {
+    var user = firebase.auth().currentUser;
+    if (!isPendingTeacherUser(user)) { cb(new Error('No pending teacher signup.')); return; }
+    _sendVerification(user).then(function () { cb(null); }, function (err) { cb(err); });
   }
 
   /**
@@ -1176,6 +1280,9 @@ window.SogAccount = (function () {
     getMyLogin:        getMyLogin,
     setSignupSource:   setSignupSource,
     signUpTeacherOpen: signUpTeacherOpen,
+    isPendingTeacherUser: isPendingTeacherUser,
+    checkTeacherVerification: checkTeacherVerification,
+    resendTeacherVerification: resendTeacherVerification,
     signUpTeacherGoogleOpen: signUpTeacherGoogleOpen,
     finishTeacherSetup: finishTeacherSetup,
     signUpStudent:     signUpStudent,
