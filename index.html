@@ -64,7 +64,7 @@
 
         <!-- State 2 buttons (hidden initially) -->
         <button class="btn-snes btn-home-uniform btn-home-arcadium"     id="btn-arcadium">Arcadium</button>
-        <button class="btn-snes btn-home-uniform btn-home-adventure-new adventure-mode-in-development" id="btn-adventure-new">Adventure</button>
+        <button class="btn-snes btn-home-uniform btn-home-adventure-new" id="btn-adventure-new">Adventure</button>
         <button class="btn-snes btn-home-uniform btn-home-versus"       id="btn-versus">&#9876; Multiplayer</button>
 
         <!-- State 2 back arrow — returns to State 1 -->
@@ -115,18 +115,6 @@
         </div>
         <div class="popup-actions">
           <button class="btn-snes btn-snes-close" id="arcadium-locked-close">Got It</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Coming Soon popup -->
-    <div id="coming-soon-backdrop" class="popup-backdrop">
-      <div class="card-popup">
-        <div class="popup-card-name">Tutorial</div>
-        <div class="popup-divider"></div>
-        <div class="popup-ability-text">Coming Soon</div>
-        <div class="popup-actions">
-          <button class="btn-snes btn-snes-close" id="coming-soon-close">CLOSE</button>
         </div>
       </div>
     </div>
@@ -227,9 +215,6 @@
     <button id="intro-skip-btn" class="intro-skip-btn" type="button" aria-label="Skip intro">Skip &#9656;</button>
   </div>
 
-  <!-- Radial wipe overlay (covers all screens during transition) -->
-  <div id="radial-wipe"></div>
-
   <!-- Test mode badge — visible only when test mode is active -->
   <div id="test-mode-indicator" style="display:none">TEST MODE</div>
 
@@ -295,9 +280,6 @@
       </section>
 
     </div>
-
-    <!-- Save confirmation toast -->
-    <div class="save-toast" id="save-toast">&#10003;&nbsp; Deck Saved</div>
 
     <!-- Difficulty selection popup -->
     <div id="difficulty-backdrop" class="popup-backdrop">
@@ -1297,19 +1279,6 @@
 
     </div><!-- /.teacher-lobby-dialog -->
   </div><!-- /#teacher-lobby-backdrop -->
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       BYPASS ACCESS NOTICE
-       Fixed overlay — shown on triple-click when the user is not a signed-in
-       teacher (js/bypass.js BypassAuth). Teachers go straight to the menu.
-  ════════════════════════════════════════════════════════════════ -->
-  <div id="bypass-pw-backdrop" style="display:none">
-    <div id="bypass-pw-box">
-      <div class="bypass-pw-title">RESTRICTED ZONE</div>
-      <div class="bypass-pw-divider"></div>
-      <div id="bypass-pw-msg" class="bypass-pw-msg"></div>
-    </div>
-  </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
        TEACHER BYPASS MENU

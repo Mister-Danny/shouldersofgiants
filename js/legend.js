@@ -1,8 +1,8 @@
 /**
- * legend.js — Shoulders of Giants · 5-Win Milestone Victory Screen
+ * legend.js — Shoulders of Giants · Legend Victory Screen
  *
- * Triggers when the player wins their 5th game in a browser session.
- * Win count is a plain JS variable — resets automatically when the tab closes.
+ * Plays for a tournament champion (game.js, the knockout final win) and from
+ * the dev menu's preview button. (The old 5-wins-in-a-session trigger is gone.)
  *
  * Sequence:
  *   1. Blackout
@@ -14,15 +14,10 @@
  *   7. Subtitle → click to continue
  *
  * Exposes: window.LegendScreen
- *   .recordWin()           → increments counter; returns true on the 5th
  *   .show(onComplete)      → plays sequence, calls onComplete when clicked through
  */
 (function () {
   'use strict';
-
-  /* ── Session win tracking (plain var — no localStorage) ─────── */
-  var WIN_THRESHOLD = 3;
-  var _sessionWins  = 0;
 
   /* ── Slide lists ─────────────────────────────────────────────── */
   var LOCATION_SLIDES = [
@@ -348,19 +343,6 @@
      Public API
   ══════════════════════════════════════════════════════════════ */
   window.LegendScreen = {
-
-    /**
-     * Call this after every player win.
-     * @returns {boolean}  true if this is the 5th win (milestone reached)
-     */
-    recordWin: function () {
-      _sessionWins++;
-      if (_sessionWins >= WIN_THRESHOLD) {
-        _sessionWins = 0;   // reset so milestone can fire again after 5 more wins
-        return true;
-      }
-      return false;
-    },
 
     /**
      * Play the full legend sequence.

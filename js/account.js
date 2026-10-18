@@ -499,12 +499,8 @@ window.SogAccount = (function () {
      create rule's get() is what actually enforces the code).
 
      Students never touch this: their credentials are @sog.invalid, which no
-     Google account can be. Popups are blocked on plenty of locked-down
-     Chromebooks, so a blocked/unsupported popup falls back to a redirect,
-     with the invite code parked in sessionStorage across the round trip
-     (sessionStorage, not localStorage: it is per-tab and short-lived, and an
-     invite code is not a credential). */
-  var PENDING_INVITE_KEY = 'sog_pending_teacher_invite';
+     Google account can be. Popup only — see _popupBlocked below for why a
+     blocked popup is reported rather than retried as a redirect. */
 
   // Google sign-in succeeded but this account has no /teachers doc yet, so the
   // invite code is still outstanding. The user STAYS signed in while the UI
@@ -900,30 +896,6 @@ window.SogAccount = (function () {
     });
   }
 
-  /**
-   * Call once at boot: finishes a redirect-based Google sign-in if one is
-   * pending. cb(err, result) runs ONLY when there was something to finish, so
-   * a normal page load stays silent.
-   */
-  function completeTeacherGoogleRedirect(cb) {
-    if (!firebase.auth().getRedirectResult) return;
-    firebase.auth().getRedirectResult().then(function (userCred) {
-      if (!userCred || !userCred.user) return;   // nothing pending — ordinary load
-      var code = '';
-      try { code = sessionStorage.getItem(PENDING_INVITE_KEY) || ''; } catch (e) {}
-      try { sessionStorage.removeItem(PENDING_INVITE_KEY); } catch (e) {}
-      _finishTeacherGoogle(userCred, code, cb);
-    }).catch(function (err) {
-      try { sessionStorage.removeItem(PENDING_INVITE_KEY); } catch (e) {}
-      if (err && err.code === 'auth/account-exists-with-different-credential') { _needsPasswordToLink(err, cb); return; }
-      if (err && err.code === 'auth/credential-already-in-use' && err.credential) {
-        _googleBelongsToAnotherUser(err.credential, (firebase.auth().currentUser || {}).email || '', cb);
-        return;
-      }
-      console.error('[Account] Google redirect result failed', err);
-      cb(err, null);
-    });
-  }
 
   /* ── Link Google to an existing password account ─────────────────────
      One uid, all classes kept: the teacher logs in with their password once
@@ -1212,7 +1184,6 @@ window.SogAccount = (function () {
     signInTeacherWithGoogle:      signInTeacherWithGoogle,
     finishTeacherGoogleSignup:    finishTeacherGoogleSignup,
     cancelTeacherGoogleSignup:    cancelTeacherGoogleSignup,
-    completeTeacherGoogleRedirect: completeTeacherGoogleRedirect,
     startLinkToExistingAccount:   startLinkToExistingAccount,
     cancelGoogleLink:             cancelGoogleLink,
     linkGoogleWithPassword:       linkGoogleWithPassword,

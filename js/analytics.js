@@ -343,13 +343,6 @@
     applyTestModeUI();
   }
 
-  function toggleTestMode() {
-    isTestSession = !isTestSession;
-    try { localStorage.setItem(TEST_MODE_KEY, isTestSession ? 'true' : 'false'); } catch (e) {}
-    applyTestModeUI();
-    console.log('[Analytics] Test mode:', isTestSession ? 'ON' : 'OFF');
-  }
-
   function applyTestModeUI() {
     var el = document.getElementById('test-mode-indicator');
     if (el) el.style.display = isTestSession ? 'block' : 'none';
@@ -370,7 +363,6 @@
         clearTimeout(timer);
         count = 0;
         if (window.BattleLobby) window.BattleLobby.prompt();
-        else if (window.BypassAuth) window.BypassAuth.prompt();
       }
     });
   }

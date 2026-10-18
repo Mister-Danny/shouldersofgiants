@@ -162,11 +162,6 @@
 
   function getActiveCards() { return _decks[_active - 1].cards.slice(); }
 
-  function getCardCount(slot) {
-    var d = getDeck(slot || _active);
-    return d ? d.cards.length : 0;
-  }
-
   function _save() { persistDecks(_decks); }
 
   // The deck-size cap (15) — the hard MAXIMUM a deck can hold, used by addCard's
@@ -231,20 +226,6 @@
     try { localStorage.removeItem(LEGACY_KEY); } catch (e) {}
   }
 
-  /**
-   * Filter every slot's cards through a predicate (e.g. drop locked types).
-   * Mutates state and persists if anything changed.
-   */
-  function filterAllCards(predicate) {
-    var changed = false;
-    _decks.forEach(function (d) {
-      var orig = d.cards.length;
-      d.cards = d.cards.filter(predicate);
-      if (d.cards.length !== orig) changed = true;
-    });
-    if (changed) _save();
-  }
-
   function wasMigrated() { return _migrated; }
 
   /* ── Snapshot (save-state.js) ── */
@@ -280,14 +261,12 @@
     getAllDecks:    getAllDecks,
     getActive:      getActive,
     getActiveCards: getActiveCards,
-    getCardCount:   getCardCount,
     addCard:        addCard,
     setDeckCards:   setDeckCards,
     removeCard:     removeCard,
     hasCard:        hasCard,
     rename:         rename,
     clearAll:       clearAll,
-    filterAllCards: filterAllCards,
     sanitizeName:   sanitizeName,
     defaultName:    defaultName,
     wasMigrated:    wasMigrated,

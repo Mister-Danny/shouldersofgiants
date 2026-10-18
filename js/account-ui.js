@@ -1037,27 +1037,13 @@ window.SogAccountUI = (function () {
   }
 
   /**
-   * Boot hook: finishes a redirect-based teacher Google sign-in, then opens
-   * the join flow if this page was opened from a class link. Safe to call on
-   * every load — both branches no-op when there's nothing to do.
+   * Boot hook: opens the join flow if this page was opened from a class link,
+   * or pre-fills the login form from a login-card QR. Safe to call on every
+   * load — it no-ops when there's nothing to do.
    */
   function init() {
     if (!window.SogAccount) return;
     _wirePrivacyLink();
-
-    window.SogAccount.completeTeacherGoogleRedirect(function (err, result) {
-      if (err) {
-        if (err.code === 'invite-required') { _stepGoogleInvite(result); return; }
-        if (err.code === 'google-needs-password') { _stepGoogleLinkPassword(result); return; }
-        if (err.code === 'google-is-other-teacher') { _stepLoginForm(_linkErrorMessage(err)); return; }
-        if (err.code === 'invite-invalid' && result) { _stepGoogleInvite(result, _teacherErrorMessage(err)); return; }
-        _stepLoginForm(_teacherErrorMessage(err));
-        return;
-      }
-      if (!result) return;
-      if (!result.existing && !result.linked) { _close(); if (window.TeacherOnboard) window.TeacherOnboard.afterTeacherSignup(result, 'google'); return; }
-      _afterGoogleSignIn(result);
-    });
 
     // Login-card QR (#login=name.passphrase): wipe it from the address bar
     // and this tab's history entry at once, then pre-fill the login form —

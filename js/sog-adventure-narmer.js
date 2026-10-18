@@ -509,7 +509,6 @@ SOG.NarmerBattle = (function () {
   });
   function runLines(lines, onAllDone) { _runner.runLines(lines, onAllDone); }
   function hideBubbles()              { _runner.hideBubbles(); }
-  function getBubbleEl(id)            { return _runner.getBubbleEl(id); }
 
   /* Opening dialogue → rules popup → play. First-time only (skipped after seen
      or after a win). Mirrors Sargon's dialogue→rules→onComplete. */

@@ -14,7 +14,6 @@
  *   .runLines(lines, onDone)              — run lines (assumes already in dialogue mode)
  *   .enterDialogueMode(config, onReady)   — transition to State B (config optional)
  *   .exitDialogueMode(onDone)             — transition back to State A
- *   .showDialogueLine(line)               — alias for single-line via runLines
  *   .swapNpcPortrait(config, onDone)      — crossfade NPC portrait in-slot
  *   .slideOutNpc(onDone)                  — slide NPC slot down (mid-dialogue exit)
  *   .applyBattleAvatars(presentation)     — set both battle-screen avatar slots
@@ -536,15 +535,6 @@ SOG.HUD = (function () {
     _next();
   }
 
-  /**
-   * showDialogueLine(line)
-   * Single-line shorthand. line = { who, text }.
-   * Assumes dialogue mode is active.
-   */
-  function showDialogueLine(line) {
-    runLines([line], null);
-  }
-
   /* ── Internal per-line handler ────────────────────────────── */
 
   function _runSingleLine(line, onDone) {
@@ -967,7 +957,6 @@ SOG.HUD = (function () {
     setName:            setName,
     runDialogue:        runDialogue,
     runLines:           runLines,
-    showDialogueLine:   showDialogueLine,
     enterDialogueMode:  enterDialogueMode,
     exitDialogueMode:   exitDialogueMode,
     swapNpcPortrait:    swapNpcPortrait,

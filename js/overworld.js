@@ -484,7 +484,6 @@ var Overworld = (function () {
   ];
   var D2C_AUTO_DISMISS_MS    = 1500;
   var KEY_GILGAMESH_PHASE1   = 'sog_gilgamesh_phase1_complete';
-  var KEY_CUNEIFORM_GRANTED  = 'sog_cuneiform_granted';
 
   var PHASE2_DIALOGUE = [
     { who: 'lucy',     text: "Mmmhm... I'm standing right here." },
@@ -781,7 +780,6 @@ var Overworld = (function () {
   var isMoving       = false;
   var isTransitioning = false;
   var isDialogueLocked = false;   // set true during the adventure intro
-  var walkInterval   = null;
   var idleTimer      = null;
   var idleRoutineTimer = null;
 
@@ -956,7 +954,6 @@ var Overworld = (function () {
      is pinned like the walk frames (standingSideDx, applied after the mirror), so
      the stop plants her feet with no shift. */
   function setStanding(facing) {
-    if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
     var ch = _char();
     charEl.src = SOG.Adventurers.standingUrl(ch, facing);
     var side = (facing === 'left' || facing === 'right') && ch.standingSide;
@@ -4010,54 +4007,6 @@ var Overworld = (function () {
 
   /* ── Phase D2c helpers ─────────────────────────────────────────── */
 
-  /* ── Iris primitive (#adv-radial-wipe) ───────────────────────────
-     Shared close: grows the black clip-circle to cover the screen and
-     calls onClosed() at full black. Reused by _d2cIris and the candle
-     transition below. */
-  function _irisClose(onClosed) {
-    var wipeEl = document.getElementById('adv-radial-wipe');
-    var cx = 50, cy = 50;
-    var maxR = Math.max(window.innerWidth, window.innerHeight) * 1.4;
-    if (typeof gsap === 'undefined' || !wipeEl) { if (onClosed) onClosed(); return; }
-    wipeEl.style.opacity  = '1';
-    wipeEl.style.clipPath = 'circle(0px at ' + cx + '% ' + cy + '%)';
-    wipeEl.classList.add('active');
-    var proxy = { r: 0 };
-    gsap.to(proxy, {
-      r: maxR, duration: 0.7, ease: 'power2.inOut',
-      onUpdate: function () { wipeEl.style.clipPath = 'circle(' + proxy.r + 'px at ' + cx + '% ' + cy + '%)'; },
-      onComplete: function () { if (onClosed) onClosed(); }
-    });
-  }
-
-  /* Iris transition: close → onClosed(reveal) at full black → reveal reopens
-     and calls onOpened(). (D2c primitive; retained for reuse.) */
-  function _d2cIris(onClosed, onOpened) {
-    var wipeEl = document.getElementById('adv-radial-wipe');
-    var cx = 50, cy = 50;
-    var maxR = Math.max(window.innerWidth, window.innerHeight) * 1.4;
-
-    function reveal() {
-      if (typeof gsap === 'undefined' || !wipeEl) { _clearWipe(); if (onOpened) onOpened(); return; }
-      var p = { r: maxR };
-      gsap.to(p, {
-        r: 0, duration: 0.7, ease: 'power2.inOut', delay: 0.2,
-        onUpdate: function () { wipeEl.style.clipPath = 'circle(' + p.r + 'px at ' + cx + '% ' + cy + '%)'; },
-        onComplete: function () { _clearWipe(); if (onOpened) onOpened(); }
-      });
-    }
-
-    if (typeof gsap === 'undefined' || !wipeEl) {
-      if (onClosed) onClosed(function () { if (onOpened) onOpened(); });
-      else if (onOpened) onOpened();
-      return;
-    }
-    _irisClose(function () {
-      if (onClosed) onClosed(reveal);
-      else reveal();
-    });
-  }
-
   /* Candle-color ramp for the transition: white → warm yellow → orange →
      orange-red as t goes 0→1. Returns [r,g,b]. */
   function _candleColor(t) {
@@ -4176,35 +4125,6 @@ var Overworld = (function () {
     });
   }
 
-  /* Grant a single card: unlock (idempotent) + card-acquisition reveal that
-     auto-dismisses after ~1.5s (player can still click early). */
-  function _d2cGrantCard(id, cb) {
-    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') {
-      SOG.Cards.unlock(id);   // locked:false + persist to sog_unlocked_cards
-    }
-    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === id; });
-    var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
-    if (card && preh && typeof preh.showCardAcquisition === 'function') {
-      preh.showCardAcquisition(card, null, function () { if (cb) cb(); },
-                               { autoDismissMs: D2C_AUTO_DISMISS_MS });
-    } else {
-      if (cb) cb();
-    }
-  }
-
-  /* Grant several cards back-to-back (the Soldier/Scribe/Priest cluster):
-     each auto-shows ~1.5s, dismisses, then the next appears immediately. */
-  function _d2cGrantCards(ids, cb) {
-    var i = 0;
-    (function next() {
-      if (i >= ids.length) { if (cb) cb(); return; }
-      _d2cGrantCard(ids[i++], next);
-    })();
-  }
-
-  /* Full Farmer return sequence: candle transition (portrait swap behind the
-     black hold) → dialogue with the 5 interleaved card grants → sets the
-     starter-granted flag. */
   /* ── Phase D3a — Gilgamesh encounter + battle launch ─────────────── */
 
   /* Run a Gilgamesh/Explorer encounter exchange via the HUD, then onDone. */
@@ -5916,7 +5836,6 @@ var Overworld = (function () {
   var KEY_EGYPT_MARKET = 'sog_egypt_market_state';
   function _egyptMarketState()  { return _tieredMarketState(KEY_EGYPT_MARKET, _egyptTiers()); }
   function _saveEgyptMarketState(st) { _saveTieredMarketState(KEY_EGYPT_MARKET, st); }
-  function _restockEgyptMarket() { return _restockTieredMarket(KEY_EGYPT_MARKET, _egyptTiers()); }
   function _egyptShelves() { return _tieredShelves(KEY_EGYPT_MARKET, _egyptTiers(), EGYPT_GRID); }
 
   /* ══ TRADER SPEECH BUBBLE — reusable, MARKET TRADERS ONLY ═══════════════════
@@ -6620,17 +6539,6 @@ var Overworld = (function () {
     }
   }
 
-  /* Grant Cuneiform (id 46): idempotent flag + unlock + acquisition reveal. */
-  function _grantCuneiform(cb) {
-    try { localStorage.setItem(KEY_CUNEIFORM_GRANTED, 'true'); } catch (e) {}
-    if (window.SOG && SOG.Cards && typeof SOG.Cards.unlock === 'function') SOG.Cards.unlock([46]);
-    var card = (typeof CARDS !== 'undefined') && CARDS.find(function (c) { return c.id === 46; });
-    var preh = window.SOG && SOG.Adventure && SOG.Adventure.Prehistory;
-    if (card && preh && typeof preh.showCardAcquisition === 'function') {
-      preh.showCardAcquisition(card, null, function () { if (cb) cb(); }, { autoDismissMs: D2C_AUTO_DISMISS_MS });
-    } else if (cb) { cb(); }
-  }
-
   /* Tear down and re-place all node elements for the current map.
      Used after a flag change (e.g. post-victory) so newly-unlocked
      nodes like the Egypt signpost appear without a full map reload. */
@@ -6697,34 +6605,6 @@ var Overworld = (function () {
     });
   }
 
-  /* Inject the Otzi portrait sprite onto the overlay, positioned
-     slightly southeast of the signpost (between explorer and sign). */
-  function _spawnOtziSprite(node) {
-    _removeOtziSprite();
-    var sprite = document.createElement('img');
-    sprite.id        = 'overworld-otzi-sprite';
-    sprite.src       = 'images/Otzi.jpg';
-    sprite.alt       = 'Otzi';
-    sprite.draggable = false;
-    // Just right of the signpost, feet on its base line, so he stands
-    // visually between the explorer and the sign. (Same screen spot as the
-    // old +4%/+7% from the sign's centre, before nodes stood on their base.)
-    sprite.style.left = (node.x + 3.47) + '%';
-    sprite.style.top  = (node.y - 0.07) + '%';
-    overlayEl.appendChild(sprite);
-    if (typeof gsap !== 'undefined') {
-      gsap.fromTo(sprite, { opacity: 0, scale: 0.7 },
-                          { opacity: 1, scale: 1, duration: 0.35, ease: 'back.out(1.4)' });
-    } else {
-      sprite.style.opacity = '1';
-    }
-  }
-
-  function _removeOtziSprite() {
-    var existing = document.getElementById('overworld-otzi-sprite');
-    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-  }
-
   /* Generic radial wipe centred on a named overworld node element.
      Replicates the same clip-path GSAP technique used in
      sog-adventure-prehistory.js without modifying that module.     */
@@ -6774,14 +6654,6 @@ var Overworld = (function () {
      removed — all dialogue now routes through SOG.HUD (Phase H2). */
 
   /* ── Prehistory node urgent-pulse escalation ───────────────── */
-  function scheduleUrgentPulse() {
-    clearUrgentPulse();
-    urgentPulseTimer = setTimeout(function () {
-      var nodeEl = overlayEl && overlayEl.querySelector('[data-id="prehistory"]');
-      if (!nodeEl) return;
-      nodeEl.classList.add('overworld-node-urgent');
-    }, 30000);
-  }
   function clearUrgentPulse() {
     if (urgentPulseTimer) { clearTimeout(urgentPulseTimer); urgentPulseTimer = null; }
     if (overlayEl) {
@@ -6800,7 +6672,6 @@ var Overworld = (function () {
     cancelIdle();
     _idlePendingOffMap = false;
     clearUrgentPulse();
-    if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
     stopFootsteps();
     isMoving = false;
     isTransitioning = false;
@@ -6993,8 +6864,8 @@ var Overworld = (function () {
     startPostVictorySequence: startPostVictorySequence,
     // Otzi encounter — exposed so the battle module can call back if needed
     startOtziEncounter: startOtziEncounter,
-    // Phase D1 — Otzi→Mesopotamia travel cinematic. Called by sog-adventure-otzi.js
-    // after the player wins the Otzi battle and clicks "Back to Map" for the first time.
+    // Phase D1 — Otzi→Mesopotamia travel cinematic. sog-adventure-otzi.js no
+    // longer triggers it; kept for the playD1 dev helper below.
     startMesopotamiaArrival: startMesopotamiaArrival,
     // First-return-to-East-Africa dialogue (after beating Otzi). Called by
     // sog-adventure-otzi.js when the player returns to the overworld and stays

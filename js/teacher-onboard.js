@@ -39,7 +39,6 @@
   var KEY_STUDENT_DEVICE = 'sog_student_device';
   var KEY_CARD_SHOWN     = 'sog_teacher_card_shown';
   var KEY_BANNER_HIDDEN  = 'sog_teacher_banner_dismissed';
-  var KEY_LOGIN_SEEN     = 'sog_login_card_seen';
 
   /* ── Pure parsing (unit-tested in test/onboarding.test.js) ─────────────── */
   function parseTeacherLink(search) {
@@ -322,7 +321,6 @@
     document.getElementById('lcf-name').textContent = creds.username || '';
     document.getElementById('lcf-pass').textContent = creds.passphrase || 'Ask your teacher (it’s on their class list)';
     el.classList.add('visible');
-    if (opts.firstTime) _set(KEY_LOGIN_SEEN, '1');
   }
   function hideLoginCard() { var el = document.getElementById('login-card-float'); if (el) el.classList.remove('visible'); }
   function showMyLogin() {

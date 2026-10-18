@@ -109,17 +109,11 @@
      SOG.ui.startBgMusic / SOG.ui.stopBgMusic. */
 
   /* ── Selection timer state ──────────────────────────────────── */
-  var _timerEl         = null;   /* kept for compat — legacy HUD box, never shown */
-  var _timerValEl      = null;
   var _timerBarWrapEl  = null;
   var _timerBarEl      = null;
   var _timerInterval   = null;
   var _timerSecs       = 0;
   var _timerTotal      = 0;
-
-  /* ── Undo-end-turn state ─────────────────────────────────────── */
-  var _undoEndTurnTimer    = null;
-  var _undoEndTurnCountdown = 0;
 
   /* ── DOM refs ────────────────────────────────────────────────── */
   var headerPhaseEl    = document.getElementById('battle-phase-info');
@@ -207,16 +201,10 @@
 
     /* Dev/testing: window.__forceTier ('serf' | 'giant') bakes an AI tier into THIS
        battle's config and self-clears, so the chosen brain is used for one battle
-       only (no leakage into the next). Set by the dev-menu tier launchers.
-       window.__forceSerfTier stays as a back-compat alias for the Serf launchers. */
-    var __traceForceTier = window.__forceTier;   // TEMP TRACE: capture before clear
+       only (no leakage into the next). Set by the dev-menu tier launchers. */
     if (window.__forceTier && cfg.ai) {
       cfg.ai.tier = window.__forceTier;
       window.__forceTier = null;
-    }
-    if (window.__forceSerfTier) {
-      if (cfg.ai) cfg.ai.tier = 'serf';
-      window.__forceSerfTier = false;
     }
 
     /* flagTier — the "flag slot" a win stamps + the tier SOG.rewards gates gold/card on.
@@ -589,8 +577,6 @@
 
   function _timerRefs() {
     if (!_timerBarWrapEl) {
-      _timerEl       = document.getElementById('battle-timer');      /* legacy */
-      _timerValEl    = document.getElementById('battle-timer-val');  /* legacy */
       _timerBarWrapEl = document.getElementById('battle-timer-bar-wrap');
       _timerBarEl     = document.getElementById('battle-timer-bar');
     }
@@ -1072,7 +1058,6 @@
   }
 
   function _cancelUndoEndTurn() {
-    if (_undoEndTurnTimer) { clearInterval(_undoEndTurnTimer); _undoEndTurnTimer = null; }
     var undoBtn = document.getElementById('battle-undo-endturn');
     if (undoBtn) { undoBtn.style.display = 'none'; undoBtn.onclick = null; }
   }
@@ -1114,97 +1099,6 @@
 
   /* refreshMoveableCards moved to game/input.js (Pass 3c). Aliased above. */
 
-  function executeMove(owner, fromLocId, fromSlotIndex, toLocId) {
-    /* NO_MOVE_HERE (The Cataracts): the LAST line of defence. Every real
-       relocation — player, AI, ability-driven, either side — passes through this
-       function or executeMoveAnimated below, so blocking here catches paths the
-       UI gate and the AI choosers cannot see. */
-    if (isMoveBlockedInto(toLocId)) return;
-    var slots   = owner === 'player' ? G.playerSlots : G.aiSlots;
-    var sd      = slots[fromLocId][fromSlotIndex];
-    if (!sd) return;
-    var cardId  = sd.cardId;
-    var toIndex = slots[toLocId].indexOf(null);
-    if (toIndex === -1) return;
-
-    slots[fromLocId][fromSlotIndex] = null;
-    clearSlotDOM(owner, fromLocId, fromSlotIndex);
-    if (owner === 'player') { compactPlayerSlots(fromLocId); syncPlayerSlots(fromLocId); }
-    else                    { compactOppSlots(fromLocId);    syncOppSlots(fromLocId);    }
-
-    // Track ipMod added by this move so resetTurn can reverse it
-    var ipModAdded = 0;
-    var ipModSourcesAdded = [];
-
-    // Apply MOVE_IN_GAINS_IP at destination
-    var dl = G.locations.find(function (l) { return l.id === toLocId; });
-    if (dl && dl.abilityKey === 'MOVE_IN_GAINS_IP') {
-      addIPMod(sd, 1, dl);
-      ipModAdded += 1;
-      ipModSourcesAdded.push({ source: dl.name, delta: 1, type: 'location', id: dl.id });
-    }
-
-    toIndex = slots[toLocId].indexOf(null);
-    if (toIndex === -1) return;
-    slots[toLocId][toIndex] = sd;
-
-    var card   = CARDS.find(function (c) { return c.id === cardId; });
-    var toSlotEl = getSlotEl(owner, toLocId, toIndex);
-    if (toSlotEl && card) {
-      toSlotEl.dataset.cardId = cardId;
-      toSlotEl.className      = 'battle-card-slot occupied face-up';
-      toSlotEl.removeAttribute('draggable');
-      buildCardFace(toSlotEl, faceCard(sd, card), effectiveIP(sd), SOG.board.SLOT_ART);
-    }
-
-    // Magellan: +1 IP per move
-    if (cardId === 24) {
-      addIPMod(sd, 1, 24);
-      ipModAdded += 1;
-      ipModSourcesAdded.push({ source: 'Magellan', delta: 1, type: 'card', id: 24 });
-      if (owner === 'player') G.movedThisTurn[24]   = true;
-      else                    G.aiMovedThisTurn[24]  = true;
-      refreshSlotIPDisplays();
-    }
-
-    // Log player moves so resetTurn can undo them
-    if (owner === 'player') {
-      G.moveLog.push({
-        cardId:            cardId,
-        fromLocId:         fromLocId,
-        toLocId:           toLocId,
-        toSlotIdx:         toIndex,
-        ipModAdded:        ipModAdded,
-        ipModSourcesAdded: ipModSourcesAdded,
-        isColumbus:        cardId === 25
-      });
-    }
-
-    // Location-ability moves (Scandinavia / Timbuktu): track so each card moves at most once per turn
-    if (owner === 'player' && cardId !== 24 && cardId !== 25) {
-      G.movedThisTurn[cardId] = true;
-    }
-
-    // Columbus: one-time move; -1 IP to opponent's Cultural and Political cards at destination
-    if (cardId === 25) {
-      var flag = owner === 'player' ? 'columbusMoved' : 'aiColumbusMoved';
-      if (!G[flag]) {
-        G[flag] = true;
-        var oppSlots = owner === 'player' ? G.aiSlots : G.playerSlots;
-        oppSlots[toLocId].forEach(function (s) {
-          if (!s || !s.revealed) return;
-          var c = CARDS.find(function (x) { return x.id === s.cardId; });
-          if (c && (c.type === 'Cultural' || c.type === 'Political')) addIPMod(s, -1, 25);
-        });
-        refreshSlotIPDisplays();
-        updateScores();
-      }
-    }
-
-    refreshMoveableCards();
-    updateScores();
-  }
-
   /* queueMove moved to game/input.js (Pass 3c). */
 
   /**
@@ -1225,8 +1119,10 @@
     if (typeof opts === 'function') { done = opts; opts = {}; }
     opts = opts || {};
     done = done || function () {};
-    // NO_MOVE_HERE — same last line of defence as executeMove. done() still fires
-    // so a caller waiting on the move (the reveal pipeline) is never stranded.
+    // NO_MOVE_HERE (The Cataracts): the LAST line of defence — every real
+    // relocation, either side, passes through here, so this catches paths the UI
+    // gate and the AI choosers cannot see. done() still fires so a caller waiting
+    // on the move (the reveal pipeline) is never stranded.
     if (isMoveBlockedInto(toLocId)) { done(); return; }
 
     var slots = owner === 'player' ? G.playerSlots : G.aiSlots;
@@ -2303,10 +2199,7 @@
                                 window.currentKORound  === 'final' &&
                                 typeof LegendScreen !== 'undefined';
 
-    /* 5-win session milestone — disabled; replaced by 10-win victory montage in Progression */
-    var _isSessionMilestone = false;
-
-    var _isLegendMilestone = _isTournamentChampion || _isSessionMilestone;
+    var _isLegendMilestone = _isTournamentChampion;
 
     /* Outcome hooks (async script): the engine has determined the result and
        run all rules/bookkeeping above; this final block is the PRESENTATION.
@@ -2568,10 +2461,9 @@
        • Backwards-compat pass-throughs for ai.js / ui.js / board.js
          (most are aliased from sibling modules at the top of this
          IIFE — kept on SOG.game so older sibling code doesn't break).
-       • executeMove and executeMoveAnimated — cross-cutting reveal
-         pipeline helpers that game.js owns; called by ai.js's
-         runAiMovements (executeMove) and abilities.js's Wu push
-         (executeMoveAnimated). */
+       • executeMoveAnimated — the cross-cutting move helper game.js
+         owns; called by ai.js's runAiMovements and abilities.js's Wu
+         push. */
   /* ── Snapshot (save-state.js) ──────────────────────────────────
      Covers the per-node "encountered" stamps and per-tier "beaten" flags
      this file stamps generically in endGame (see the win-reward /
@@ -2612,7 +2504,6 @@
     setSlotFaceDown:       setSlotFaceDown,
     effectiveIP:           effectiveIP,
     isKenteProtected:      isKenteProtected,
-    executeMove:           executeMove,
     executeMoveAnimated:   executeMoveAnimated,
     findSlotEl:            findSlotEl,
     refreshMoveableCards:  refreshMoveableCards,

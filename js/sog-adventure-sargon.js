@@ -215,7 +215,6 @@ SOG.SargonBattle = (function () {
   });
   function runLines(lines, onAllDone) { _runner.runLines(lines, onAllDone); }
   function hideBubbles()              { _runner.hideBubbles(); }
-  function getBubbleEl(id)            { return _runner.getBubbleEl(id); }
 
   // Swap the shared opponent bubble's portrait to Sargon for the battle, and
   // restore the original (Otzi) on teardown so other battles are unaffected.

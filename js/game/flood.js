@@ -28,7 +28,6 @@
  *   SOG.flood.setFlooded(locId, on)         — flood flag + full flood presentation
  *   SOG.flood.setSeason(locId, on, opts)    — presentation only; opts { suffix,
  *                                             abilityText, sfx, tint }
- *   SOG.flood.isFlooded(locId) / floodedIds()
  *   SOG.flood.clear()                       — every flag/state off, all flood DOM stripped
  */
 (function () {
@@ -121,11 +120,6 @@
       rush: false, tint: !!opts.tint, block: false
     });
   }
-  function isFlooded(locId) { var loc = _loc(locId); return !!(loc && loc.flooded); }
-  function floodedIds() {
-    var G = _G();
-    return (G && G.locations) ? G.locations.filter(function (l) { return l.flooded; }).map(function (l) { return l.id; }) : [];
-  }
 
   /* Reset everything so nothing lingers past a battle: every flag off, every
      crossfade class and overlay element gone. Idempotent. (Arcadium picks its
@@ -145,8 +139,6 @@
   window.SOG.flood = {
     setFlooded: setFlooded,
     setSeason:  setSeason,
-    isFlooded:  isFlooded,
-    floodedIds: floodedIds,
     clear:      clear
   };
 })();

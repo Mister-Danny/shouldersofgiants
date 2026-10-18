@@ -73,8 +73,6 @@ window.SOG.Adventure.Prehistory = (function () {
   var TYPE_SPEED_MS      = 32;     // ms per character (slightly slower
                                    // than overworld dialogue's 28 — these
                                    // are short shouts, give them weight)
-  var POST_TYPE_HOLD_MS  = 900;    // hold after each line types out before
-                                   // auto-advancing
   var POST_DIALOGUE_MS   = 2000;   // 2-second beat after both bubbles
                                    // before the wipe fires (per spec step 2)
   var WIPE_DURATION_MS   = 1000;   // 1s radial expansion (per spec step 3)
@@ -181,33 +179,6 @@ window.SOG.Adventure.Prehistory = (function () {
 
   function getBubbleEl(who) {
     return document.getElementById('adv-bubble-' + who);
-  }
-
-  function showBubbleText(who, text, onDone) {
-    var el = getBubbleEl(who);
-    if (!el) { log('bubble #adv-bubble-' + who + ' missing — skipping'); if (onDone) onDone(); return; }
-    var textEl = el.querySelector('.adv-bubble-text');
-    if (!textEl) { if (onDone) onDone(); return; }
-
-    textEl.textContent = '';
-    el.classList.add('is-visible');
-
-    // Typewriter — char-by-char with bleeps, then hold, then call onDone.
-    var i = 0, bleepCount = 0;
-    var timer = setInterval(function () {
-      i++;
-      textEl.textContent = text.slice(0, i);
-      var c = text.charAt(i - 1);
-      if (c && c !== ' ' && c !== '\n') {
-        var profile = BLEEP_PROFILES[who] || BLEEP_PROFILES.otzi;
-        bleepCount++;
-        if (bleepCount >= profile.every) { bleepCount = 0; playBleep(who); }
-      }
-      if (i >= text.length) {
-        clearInterval(timer);
-        setTimeout(onDone, POST_TYPE_HOLD_MS);
-      }
-    }, TYPE_SPEED_MS);
   }
 
   function hideAllBubbles() {
@@ -361,9 +332,8 @@ window.SOG.Adventure.Prehistory = (function () {
        handPadding seeds G.aiDeck with 5 cosmetic cards (faces never shown,
        no overlap with the play order) so the opp-hand display starts
        hand=4 / deck=5, matching the player.
-     • scriptHook 'prehistory' is the target; the script module is registered
-       in the deferred Stage 3, so it is INERT this session (no script is
-       registered → the BattleHooks seam resolves to null and falls through).
+     • scriptHook 'prehistory' routes the engine's lifecycle hooks to the
+       'prehistory' script registered below.
   ══════════════════════════════════════════════════════════════ */
   var BATTLE_CONFIG = {
     structure: { turns: 4, locationsCount: 1, slotsPerLocation: 4,
@@ -1507,17 +1477,8 @@ window.SOG.Adventure.Prehistory = (function () {
      (battleComplete || introSeenThisSession); the outcome dialogue and the
      card-acquisition reveal fire EVERY play.
 
-     ── INERT THIS SESSION ──
-     The registry holds this script, but the entry point
-     (startNeanderthalBattle) still runs the bespoke loop and
-     BATTLE_CONFIG.scriptHook is null — so nothing resolves to this script
-     yet and no hook fires (proven: Prehistory + Arcadium play identically).
-     The deferred cutover flips scriptHook to 'prehistory' and routes the
-     entry through game.js's initGame lifecycle, at which point these hooks
-     drive the battle. Board-presentation timing (body classes / hidden-
-     until-coaching state, currently in setupBattleBoard) is reconciled at
-     that cutover; the hooks below mirror the bespoke sequence so the move
-     is mechanical.
+     BATTLE_CONFIG.scriptHook is 'prehistory', so startNeanderthalBattle's
+     initGame run resolves to this script and these hooks drive the battle.
   ════════════════════════════════════════════════════════════ */
   function _scriptSkipIntro() {
     return isBattleComplete() || neanderthalIntroSeenThisSession;
@@ -2254,9 +2215,7 @@ window.SOG.Adventure.Prehistory = (function () {
     }
   };
 
-  // Register the script (name 'prehistory'). Dormant until the deferred
-  // cutover points BATTLE_CONFIG.scriptHook at it and routes the entry
-  // through game.js's lifecycle.
+  // Register the script (name 'prehistory'; BATTLE_CONFIG.scriptHook points here).
   if (window.SOG && SOG.BattleHooks && typeof SOG.BattleHooks.register === 'function') {
     SOG.BattleHooks.register('prehistory', PREHISTORY_SCRIPT);
   }

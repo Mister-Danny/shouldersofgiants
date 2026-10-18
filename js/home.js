@@ -451,13 +451,12 @@ var HomeFlow = (function () {
     });
   }
 
-  /* After the player's first run, Adventure is a normal, primary option: drop the
-     in-development greyscale and float it ahead of Arcadium so it's the FIRST path
-     button. Idempotent — safe to call on every State-2 reveal. The State-2 menu is
-     only ever shown to returning visitors (introSeen), i.e. after the first play. */
+  /* After the player's first run, Adventure is a normal, primary option: float it
+     ahead of Arcadium so it's the FIRST path button. Idempotent — safe to call on
+     every State-2 reveal. The State-2 menu is only ever shown to returning
+     visitors (introSeen), i.e. after the first play. */
   function _promoteAdventureButton() {
     if (!btnAdventureNew) return;
-    btnAdventureNew.classList.remove('adventure-mode-in-development');
     if (btnArcadium && btnAdventureNew.parentNode === btnArcadium.parentNode) {
       btnArcadium.parentNode.insertBefore(btnAdventureNew, btnArcadium);   // Adventure first
     }

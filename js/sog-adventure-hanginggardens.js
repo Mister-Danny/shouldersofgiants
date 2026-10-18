@@ -593,7 +593,6 @@ SOG.HangingGardensBattle = (function () {
   });
   function runLines(lines, onAllDone) { _runner.runLines(lines, onAllDone); }
   function hideBubbles()              { _runner.hideBubbles(); }
-  function getBubbleEl(id)            { return _runner.getBubbleEl(id); }
 
   /* Opening dialogue (first-time only; skipped → immediate onComplete on re-entry). */
   function _runOpeningDialogue(onComplete) {

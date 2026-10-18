@@ -686,9 +686,8 @@
   }
   function _cardsPlayedThisTurn() {
     // Cards placed but not yet revealed this turn — the canonical per-turn
-    // signal both the engine flow and the bespoke Prehistory loop maintain.
-    // (playerRevealQueue is NOT per-turn in the bespoke loop: it never resets
-    // between turns, so it accumulates across the whole battle.)
+    // signal. (The old bespoke Prehistory loop never reset playerRevealQueue
+    // between turns, which is why this counts slots instead.)
     var n = 0;
     for (var locId in G.playerSlots) {
       var slots = G.playerSlots[locId];
@@ -728,15 +727,6 @@
     if (riftLoc && G.turn === 1 && G.playerRevealQueue.length === 0 && locId !== riftLoc.id) {
       return false;
     }
-    return true;
-  }
-
-  /* Is the player's slot at (locId, slotIndex) currently un-playable? */
-  function isLegalUndoTarget(locId, slotIndex) {
-    if (G.phase !== 'select') return false;
-    if (!G.playerSlots[locId]) return false;
-    var sd = G.playerSlots[locId][slotIndex];
-    if (!sd || sd.revealed) return false;
     return true;
   }
 

@@ -69,8 +69,6 @@ SOG.GilgameshBattle = (function () {
   });
   function runLines(lines, onAllDone) { _runner.runLines(lines, onAllDone); }
   function hideBubbles()              { _runner.hideBubbles(); }
-  function getBubbleEl(who)           { return _runner.getBubbleEl(who); }
-  function playBleep(who)             { _runner.playBleep(who); }
   function getBleepCtx()              { return _runner.getBleepCtx(); }
 
   /* ── Turn counter ────────────────────────────────────────────
@@ -975,25 +973,15 @@ SOG.GilgameshBattle = (function () {
   }
 
   /* ════════════════════════════════════════════════════════════════
-     BATTLE-CONFIG MIGRATION (Stage 2) — DORMANT
+     BATTLE CONFIG + SCRIPT
      ────────────────────────────────────────────────────────────────
-     The engine-resident half of this battle: a config-builder + a registered
-     'gilgamesh' script that map the bespoke flow onto game.js's initGame
-     lifecycle + the Stage-1 heuristic-AI seam (cfg.ai.profile 'heuristic' +
-     cfg.ai.movement 'adventure'). REUSES the bespoke helpers (dialogue, popup,
-     AI heuristics, post-battle sequences) — it calls them, it does not
+     The battle runs on the engine: start() calls
+     initGame(buildGilgameshConfig()), and the registered 'gilgamesh' script
+     (scriptHook) drives the narrative through game.js's lifecycle hooks, with
+     the heuristic-AI seam (cfg.ai.profile 'heuristic' + cfg.ai.movement
+     'adventure'). It REUSES this module's helpers (dialogue, popup, AI
+     heuristics, post-battle sequences) — it calls them, it does not
      re-implement.
-
-     ── DORMANT THIS SESSION ──
-     The registry holds the script, but the entry point (start) still runs the
-     bespoke loop and NEVER assigns buildGilgameshConfig() to G.config — so the
-     'gilgamesh' scriptHook never resolves and no hook fires (the shared input.js
-     onPlayerPlayed / isInputBlocked call sites resolve the active script from
-     G.config.scriptHook, which bespoke Gilgamesh leaves untouched). The Stage-3
-     cutover flips start() to initGame(buildGilgameshConfig()),
-     reconciles board-presentation timing (the engine's _initGameBuild deals the
-     hand the bespoke dealCards/setupBattleBoard does today), and removes the
-     bespoke loop.
   ════════════════════════════════════════════════════════════════ */
 
   // Cedar Forest / Uruk / Mount Mashu, no abilities — setupBattleBoard's inline
@@ -1072,7 +1060,7 @@ SOG.GilgameshBattle = (function () {
     };
   }
 
-  /* ── 'gilgamesh' script (registered; dormant until the Stage-3 cutover) ── */
+  /* ── 'gilgamesh' script (registered; the battle's scriptHook) ── */
   var _gBattleSkippedOpening = false;   // decide-once, captured in onIntro
   var _gScriptDialogueActive = false;   // drives isInputBlocked during the opening
 

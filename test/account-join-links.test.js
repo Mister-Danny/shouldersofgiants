@@ -29,7 +29,6 @@ function load({ currentUser = { uid: 'anon-1', isAnonymous: true, email: null } 
   const auth = () => ({
     currentUser,
     signOut: () => Promise.resolve(),
-    getRedirectResult: () => Promise.resolve(null),
   });
   auth.EmailAuthProvider = { credential: (email, password) => ({ email, password }) };
   auth.GoogleAuthProvider = function () { this.addScope = () => {}; this.setCustomParameters = () => {}; };

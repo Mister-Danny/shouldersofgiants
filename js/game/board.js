@@ -99,8 +99,8 @@
      movers, and any ability-driven relocation (the Merchant's trade, a Chariot's
      roll). Enforced at the UI gate so the affordance never offers it, at the AI's
      destination choosers so a Chariot cannot burn its once-per-battle move on a
-     refusal, and finally inside executeMove / executeMoveAnimated, which every real
-     relocation passes through.
+     refusal, and finally inside executeMoveAnimated, which every real relocation
+     passes through.
 
      WHAT IT DOES NOT BLOCK — three things, all deliberately:
        • PLAYING a card here from hand. It says cards cannot MOVE here.
@@ -108,7 +108,7 @@
          Joan's summon). A card appearing is not a card moving.
        • The HYKSOS (67) side-crossing. He crosses to the opponent's side OF HIS OWN
          LOCATION — he is already here, and his transfer never goes through
-         executeMove at all (it is an array-to-array move inside abilityHyksos). So a
+         executeMoveAnimated at all (it is an array-to-array move inside abilityHyksos). So a
          Hyksos played at the Cataracts still defects. This is the ruling, and it
          falls out of the architecture rather than needing a special case.
      Inert in every battle whose locations don't carry the key. */
@@ -193,8 +193,8 @@
      the same sd.cc via abilities.effectiveCC(sd) (Juvenal, Hammurabi, AI scoring), and
      IP flows through effectiveIP(sd) everywhere — so inherited stats are honored in
      both rendering and rules. */
-  /* Exported as SOG.board.faceCard: the MOVE re-render paths (game.js executeMove /
-     applyMove, input.js queueMove) rebuild a slot's face from the card DEFINITION,
+  /* Exported as SOG.board.faceCard: the MOVE re-render paths (game.js
+     executeMoveAnimated / applyMove, input.js queueMove) rebuild a slot's face from the card DEFINITION,
      which for a Mummy (72) is 0/0 — so a moved Mummy's CC badge dropped to 0 while
      its real sd.cc was untouched. Those paths now route through here too. */
   function _faceCard(sd, card) {

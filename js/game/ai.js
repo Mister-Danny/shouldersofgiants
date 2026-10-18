@@ -16,7 +16,7 @@
  *
  * Reads:  SOG.state.G, SOG.state.CAPITAL, window.CARDS, window.aiDifficulty
  * Calls:  SOG.game.{ shuffle, getSlotEl, setSlotFaceDown, effectiveIP,
- *                    isKenteProtected, executeMove }
+ *                    isKenteProtected, executeMoveAnimated }
  * Exposes: SOG.ai.{ runAiSelection, runAiMovements }
  *
  * NOTE: This module was extracted from game.js as part of the
@@ -167,8 +167,8 @@
        card-aware logic (hold rules, synergy targeting, anti-stacking). commitPlay
        no-ops on a full slot or unknown card, so a malformed/over-long return is
        self-limiting. Keyed off cfg.ai.profile (NOT window.aiDifficulty), so every
-       other profile takes the legacy branches below unchanged. Dormant until a
-       config sets profile 'heuristic'. */
+       other profile takes the legacy branches below unchanged. Every tiered
+       boss sets profile 'heuristic'. */
     if (_aiProfile === 'heuristic') {
       var _hSettings    = (G.config.ai.settings) || {};
       // Tier routing (cfg.ai.tier): 'serf' → the shared generic Serf brain (Stage A);
@@ -302,21 +302,6 @@
     var pIP = G.playerSlots[locId].reduce(function (s, x) { return s + (x && x.revealed ? helpers.effectiveIP(x) : 0); }, 0);
     var aIP = G.aiSlots[locId].reduce(   function (s, x) { return s + (x && x.revealed ? helpers.effectiveIP(x) : 0); }, 0);
     return pIP - aIP;
-  }
-
-  /**
-   * _aiWinLocs(n)
-   * Returns the IDs of the n locations the AI is best positioned to win,
-   * sorted by lowest gap (most negative = largest AI lead).
-   *
-   * NOTE: Defined but currently unused. Preserved during extraction for
-   * possible future use; safe to delete if confirmed dead code.
-   */
-  function _aiWinLocs(n) {
-    return G.locations.slice()
-      .sort(function (a, b) { return _aiLocGap(a.id) - _aiLocGap(b.id); })
-      .slice(0, n)
-      .map(function (l) { return l.id; });
   }
 
   /* ═══════════════════════════════════════════════════════════════

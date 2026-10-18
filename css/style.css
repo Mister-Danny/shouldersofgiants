@@ -110,17 +110,6 @@ img    { display: block; }
 .screen           { position: absolute; inset: 0; display: none; }
 .screen.active    { display: block; }
 
-.placeholder-msg {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  font-family: var(--font);
-  font-size: 18px;
-  color: var(--snes-yellow);
-  text-shadow: 2px 2px 0 #000;
-}
-
 
 /* ── Shared SNES button ─────────────────────────────────────────── */
 /*
@@ -157,14 +146,6 @@ img    { display: block; }
   box-shadow: 0 0 0 var(--border-mid), 0 1px 0 #000;
 }
 
-/* Semantic colour overrides */
-.btn-snes.btn-snes-add {
-  border-color: var(--snes-yellow);
-  color: var(--snes-yellow);
-}
-.btn-snes.btn-snes-add:hover {
-  background: #1e1000;
-}
 
 .btn-snes.btn-snes-remove {
   border-color: var(--snes-red);
@@ -185,8 +166,7 @@ img    { display: block; }
   color: var(--text-white);
 }
 
-.btn-snes:disabled,
-.btn-snes.btn-snes-disabled {
+.btn-snes:disabled {
   background: #0a0020;
   border-color: #333358;
   color: var(--text-muted);
@@ -259,34 +239,6 @@ img    { display: block; }
   height: 100%;
 }
 
-/* "Player 1" — large chunky pixel text with black outline */
-.home-player-label {
-  font-family: var(--font);
-  font-size: 110px;
-  color: #ffffff;
-  line-height: 1;
-  text-align: center;
-  text-shadow:
-    3px  3px 0 #000,
-   -3px -3px 0 #000,
-    3px -3px 0 #000,
-   -3px  3px 0 #000,
-    5px  5px 0 rgba(0,0,0,0.5);
-}
-
-/* "Are you ready to make history?" */
-.home-question {
-  font-family: var(--font);
-  font-size: 44px;
-  color: #ffffff;
-  line-height: 1.45;
-  text-align: center;
-  text-shadow:
-    2px  2px 0 #000,
-   -1px -1px 0 #000,
-    2px -1px 0 #000,
-   -1px  2px 0 #000;
-}
 
 .home-nav {
   display: flex;
@@ -397,17 +349,6 @@ img    { display: block; }
 /* "About the Game" — neutral dark, no tint (quietest button by design).
    Inherits the shared base fill + shared hover. */
 
-/* "Create Account / Login" / "Logout" (AUTH_SPEC.md Phase 2/3 placeholder) —
-   deliberately NOT part of the wood-plank family above: a small, auto-width
-   .btn-snes pill (same family as the CREATE ACCOUNT modal's YES/NO), sized
-   to content via .btn-snes's own padding. Only the font-size is overridden,
-   small enough to keep the longer label on one line. No margin here — the
-   parent .home-nav's flex `gap` already spaces every button uniformly;
-   adding one would open a bigger gap above this button than between the
-   other three. */
-.btn-home-account {
-  font-size: 11px;
-}
 
 /* ── Home-screen Feedback button ─────────────────────────────────
    Conditional 5th button. Hidden by inline style="display:none" until
@@ -673,27 +614,6 @@ img    { display: block; }
   border-color: #fff;
 }
 
-/* ── Radial wipe transition overlay ──────────────────────────── */
-
-#radial-wipe {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: #000;
-  clip-path: circle(0% at 50% 50%);
-  pointer-events: none;
-}
-
-#radial-wipe.animating {
-  animation: radial-wipe-expand 0.65s ease-in forwards;
-  pointer-events: all;
-}
-
-@keyframes radial-wipe-expand {
-  from { clip-path: circle(0%   at 50% 50%); }
-  to   { clip-path: circle(150% at 50% 50%); }
-}
-
 
 /* ══════════════════════════════════════════════════════════════════
    DECK BUILDER SCREEN
@@ -912,27 +832,6 @@ img    { display: block; }
   border-color: #7fcf5a;
   color: #e8ffd8;
   box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 16px rgba(127, 207, 90, 0.45);
-}
-
-/* Deselect All button — warm muted red accent */
-.btn-deselect-all {
-  padding: 7px 14px;
-  font-size: 11px;
-  letter-spacing: 0.07em;
-  font-family: var(--font);
-  background: rgba(22, 12, 4, 0.85);
-  border: 2px solid rgba(180, 60, 40, 0.55);
-  border-radius: 2px;
-  color: rgba(220, 110, 80, 0.85);
-  text-shadow: 1px 1px 0 #000;
-  box-shadow: 0 2px 0 rgba(0,0,0,0.5);
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-}
-.btn-deselect-all:hover {
-  background: rgba(40, 8, 4, 0.95);
-  border-color: rgba(210, 80, 55, 0.80);
-  color: rgba(240, 140, 100, 1);
 }
 
 
@@ -1801,34 +1700,6 @@ img    { display: block; }
   filter: brightness(1.15);
   box-shadow: 0 0 12px rgba(248, 208, 0, 0.5);
 }
-.battle-avatar-opponent.gilgamesh-portrait-glow .battle-avatar-frame {
-  animation: gilg-portrait-glow 1.1s ease-in-out infinite;
-}
-@keyframes gilg-portrait-glow {
-  0%, 100% { box-shadow: 0 0 6px 2px rgba(248, 208, 0, 0.40); }
-  50%      { box-shadow: 0 0 20px 7px rgba(248, 208, 0, 0.90); }
-}
-.gilgamesh-clickhere {
-  position: absolute;
-  left: 50%;
-  bottom: -26px;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  font-family: var(--font);
-  font-size: 13px;
-  color: #f8d000;
-  background: rgba(20, 10, 2, 0.88);
-  border: 1px solid #f8d000;
-  border-radius: 3px;
-  padding: 3px 8px;
-  pointer-events: none;
-  z-index: 5;
-  animation: gilg-clickhere-bob 0.9s ease-in-out infinite;
-}
-@keyframes gilg-clickhere-bob {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50%      { transform: translateX(-50%) translateY(-3px); }
-}
 
 /* Card name — displayed as the "NPC speaker" header */
 .popup-card-name {
@@ -2598,38 +2469,6 @@ img    { display: block; }
    SAVE TOAST
 ══════════════════════════════════════════════════════════════════ */
 
-.save-toast {
-  position: absolute;
-  bottom: 32px;
-  left: 50%;
-  transform: translateX(-50%) translateY(16px);
-  /* SNES dialogue border */
-  background: var(--bg-dialog);
-  border: 2px solid var(--snes-green);
-  box-shadow:
-    0 0 0 2px #000,
-    0 0 0 4px #1a4020,
-    0 0 10px rgba(72,216,72,0.4);
-  color: var(--snes-green);
-  font-family: var(--font);
-  font-size: 14px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 10px 28px;
-  opacity: 0;
-  pointer-events: none;
-  z-index: 300;
-}
-
-.save-toast.show { animation: toast-in 2.6s ease forwards; }
-
-@keyframes toast-in {
-  0%   { opacity: 0; transform: translateX(-50%) translateY(16px); }
-  12%  { opacity: 1; transform: translateX(-50%) translateY(0);    }
-  80%  { opacity: 1; transform: translateX(-50%) translateY(0);    }
-  100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
-}
-
 
 /* ══════════════════════════════════════════════════════════════════
    BATTLE SCREEN
@@ -2767,14 +2606,6 @@ img    { display: block; }
   text-shadow: 1px 1px 0 #000, 0 0 12px rgba(200, 160, 0, 0.35);
   padding-bottom: 6px;
   border-bottom: 1px solid rgba(200, 160, 32, 0.32);
-}
-
-.battle-phase-info {
-  font-size: 13px;
-  color: var(--text-dim);
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.85);
 }
 
 .battle-capital-info {
@@ -3029,9 +2860,6 @@ img    { display: block; }
   z-index: -1;
 }
 
-/* Gilgamesh battle — Mesopotamia location art. Reuses loc-ids 8/7/2 (shared
-   with the Otzi battle), so scope to body.gilgamesh-battle to override only
-   here and leave the Otzi battle + standard game untouched. */
 /* ── ARCADIUM location art for the boss locations now in the LOCATIONS catalog
    (js/locations.js). The boss battles paint the same ids under their own
    body.<boss>-battle selectors below, which win on specificity where the two
@@ -3079,10 +2907,8 @@ body.sargon-battle .battle-col[data-loc-id="8"]::before { background: url('../im
 body.sargon-battle .battle-col[data-loc-id="7"]::before { background: url('../images/locations/akkad.jpg')    center / cover no-repeat; } /* Akkad */
 body.sargon-battle .battle-col[data-loc-id="2"]::before { background: url('../images/locations/lowersea.jpg') center / cover no-repeat; } /* Lower Sea  (Persian Gulf Coast) */
 
-/* Hammurabi battle — 3 ability-carrying locations (ids 101/102/103). PLACEHOLDER
-   art (reusing the Sargon Mesopotamia backgrounds) — swap these for the real
-   Euphrates / Fertile Crescent / Tigris art when it lands (also update the `image`
-   field in _hammurabiLocations()). */
+/* Hammurabi battle — 3 ability-carrying locations (ids 101/102/103):
+   Euphrates / Fertile Crescent / Tigris. */
 /* Hammurabi locations use pseudo-ids 101/102/103, which have NO base
    .battle-col[data-loc-id]::before rule — so these must declare the full pseudo
    (content/position/inset/opacity/z-index), not just the background, or the strip
@@ -3433,8 +3259,7 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
 }
 
 .battle-hand-card.selected {
-  border-color: var(--snes-green);
-  box-shadow: 0 0 0 1px #000, 0 0 0 3px var(--snes-green);
+  border-color: var(--snes-green);   /* its box-shadow comes from the shared .selected rule below */
 }
 
 /* Card name — hidden at rest, fades in on hover */
@@ -3542,12 +3367,6 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
 
 /* ── Header left section (review button + turn info) ──────────── */
 
-.battle-header-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
 
 /* Back to Results — shown only during gameboard review */
 .btn-back-results {
@@ -3576,13 +3395,6 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
   box-shadow: 0 0 0 var(--border-mid), 0 1px 0 #000;
 }
 
-/* ── Header right section (capital + end-turn button) ─────────── */
-
-.battle-header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
 
 /* ── End Turn button ───────────────────────────────────────────── */
 
@@ -3645,15 +3457,6 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
 
 /* ── Animations ────────────────────────────────────────────────── */
 
-/* Card reveal — face-down flips to face-up */
-@keyframes flip-in {
-  from { transform: scale(0.75); opacity: 0; }
-  to   { transform: scale(1);    opacity: 1; }
-}
-
-.flip-in {
-  animation: flip-in 0.30s ease-out forwards;
-}
 
 /* Deny flash — invalid action (not enough capital / slot occupied) */
 @keyframes flash-deny {
@@ -3925,11 +3728,6 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
   box-shadow: 0 0 0 1px #000, 0 0 0 3px var(--snes-yellow);
 }
 
-/* Francis auto-selected state — highlighted without hover required */
-.discard-card-option.auto-selected {
-  border-color: var(--snes-yellow);
-  box-shadow: 0 0 0 1px #000, 0 0 0 3px var(--snes-yellow);
-}
 
 /* CC / IP overlays scale automatically via cqw — no per-context
    override needed for the discard chooser cards. */
@@ -4247,27 +4045,6 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
    SNES ABILITY ANIMATIONS
    ════════════════════════════════════════════════════════════════ */
 
-/* ── Keyframes ───────────────────────────────────────────────── */
-
-@keyframes pulse-yellow {
-  0%   { box-shadow: 0 0 0 0 rgba(248, 208, 0, 0.95); }
-  50%  { box-shadow: 0 0 0 14px rgba(248, 208, 0, 0.5); }
-  100% { box-shadow: 0 0 0 0 rgba(248, 208, 0, 0); }
-}
-
-@keyframes ripple-out {
-  0%   { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.80); }
-  100% { box-shadow: 0 0 0 16px rgba(255, 255, 255, 0); }
-}
-
-@keyframes card-shake {
-  0%   { transform: translateX(0); }
-  20%  { transform: translateX(-5px); }
-  40%  { transform: translateX(5px); }
-  60%  { transform: translateX(-4px); }
-  80%  { transform: translateX(3px); }
-  100% { transform: translateX(0); }
-}
 
 /* Sargon (id 37) reveal flourish — a gold beam of light from his card to each
    ADJACENT location he boosts (+3), and a glow around those full location boxes for
@@ -4300,44 +4077,9 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
   50%      { box-shadow: 0 0 30px 9px rgba(255, 228, 125, 0.95), inset 0 0 20px 5px rgba(255, 212, 85, 0.60); }
 }
 
-@keyframes loc-win-glow {
-  0%   { background-color: transparent; }
-  25%  { background-color: rgba(255, 215, 0, 0.32); }
-  75%  { background-color: rgba(255, 215, 0, 0.32); }
-  100% { background-color: transparent; }
-}
-
-@keyframes celebrate-bounce {
-  0%   { transform: scale(1); }
-  20%  { transform: scale(1.18); }
-  45%  { transform: scale(0.94); }
-  65%  { transform: scale(1.08); }
-  82%  { transform: scale(0.97); }
-  100% { transform: scale(1); }
-}
-
-@keyframes sad-shake {
-  0%   { transform: translateX(0); }
-  18%  { transform: translateX(-8px); }
-  36%  { transform: translateX(8px); }
-  54%  { transform: translateX(-5px); }
-  72%  { transform: translateX(5px); }
-  100% { transform: translateX(0); }
-}
 
 /* ── Animation classes ───────────────────────────────────────── */
 
-.anim-pulse-yellow {
-  animation: pulse-yellow 0.55s ease-out;
-}
-
-.anim-ripple {
-  animation: ripple-out 0.55s ease-out;
-}
-
-.anim-shake {
-  animation: card-shake 0.42s ease-in-out;
-}
 
 /* Floating IP number */
 .anim-float-num {
@@ -4391,19 +4133,6 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
               0 0 10px 2px rgba(64, 224, 224, 0.2);
 }
 
-/* Location tile win flash */
-.anim-loc-win {
-  animation: loc-win-glow 1.6s ease-in-out;
-}
-
-/* Results screen animations */
-.anim-celebrate {
-  animation: celebrate-bounce 0.85s ease-in-out;
-}
-
-.anim-sad {
-  animation: sad-shake 0.65s ease-in-out;
-}
 
 /* Ensure slots and hand cards are position:relative for floatNumber */
 .battle-card-slot {
@@ -4414,29 +4143,6 @@ body.gupta-battle      .battle-col[data-loc-id="179"].hg-flooded::after { opacit
   position: relative;
 }
 
-/* ── Jesus Christ ability animations ────────────────────────── */
-
-@keyframes jesus-ascend {
-  0%   { opacity: 1;   transform: translateY(0)     scale(1);    }
-  60%  { opacity: 0.6; transform: translateY(-60px) scale(1.06); }
-  100% { opacity: 0;   transform: translateY(-120px) scale(0.9); }
-}
-
-@keyframes jesus-return {
-  0%   { box-shadow: 0 0 0   0   rgba(255, 215, 0, 0);   opacity: 0.3; transform: scale(0.85); }
-  35%  { box-shadow: 0 0 28px 10px rgba(255, 215, 0, 0.95); opacity: 1;   transform: scale(1.08); }
-  70%  { box-shadow: 0 0 14px 4px  rgba(255, 215, 0, 0.55); opacity: 1;   transform: scale(1.0);  }
-  100% { box-shadow: 0 0 0   0   rgba(255, 215, 0, 0);   opacity: 1;   transform: scale(1.0);  }
-}
-
-.anim-jesus-ascend {
-  animation: jesus-ascend 1.4s ease-out forwards;
-  pointer-events: none;
-}
-
-.anim-jesus-return {
-  animation: jesus-return 0.75s ease-out forwards;
-}
 
 /* ── Global music player widget (always-visible, contextually adapts) ───────────
  * SNES-themed: solid dialog background, periwinkle border, yellow accents, with
@@ -4666,13 +4372,6 @@ body[data-screen="overworld"] .guest-status-strip {
   color: var(--snes-red);
 }
 
-.account-flow-warning {
-  font-family: var(--font-ui, 'Source Sans 3', sans-serif);
-  font-size: 13px;
-  color: var(--snes-red);
-  border-left: 3px solid var(--snes-red);
-  padding-left: 10px;
-}
 
 /* Non-error info messages on the login form (forgot-password outcomes):
  * reset sent, "enter your email first", etc. — distinct from
@@ -5391,18 +5090,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
   50%       { opacity: 0.35; }
 }
 
-/* ── Selected hand card (click-to-play phase 1) ──────────────── */
-/* Applied when the player has clicked a card to "pick it up".
-   Distinct from tut-lit (Lucy's pointer) — this is the player's choice. */
-.tut-selected {
-  outline: 3px solid var(--snes-cyan) !important;
-  outline-offset: 2px;
-  transform: translateY(-6px) scale(1.07);
-  transition: transform 0.12s ease, outline 0.1s;
-  position: relative;
-  z-index: 10;
-}
-
 
 /* ══════════════════════════════════════════════════════════════════
    ANALYTICS  — home title + test-mode badge
@@ -5480,78 +5167,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
    Fixed overlay — shown on triple-click to a non-teacher (see js/bypass.js).
    Matches the SNES double-border of .card-popup exactly.
 ══════════════════════════════════════════════════════════════════ */
-
-#bypass-pw-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 9500;    /* above bypass menu (9000) so it sits on top if needed */
-  background: rgba(0, 0, 14, 0.82);
-  display: none;    /* shown by JS */
-  align-items: center;
-  justify-content: center;
-}
-
-/* The prompt box — mirrors .card-popup border technique exactly */
-#bypass-pw-box {
-  width: 380px;
-  padding: 28px 30px 26px;
-  background: var(--bg-dialog);
-
-  border: 3px solid var(--border-bright);
-  box-shadow:
-    0 0 0 3px var(--border-dark),
-    0 0 0 6px var(--border-mid),
-    0 0 0 7px var(--border-dark);
-
-  /* Pop-in — same cubic as .card-popup */
-  animation: bypass-pw-popin 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes bypass-pw-popin {
-  from { transform: scale(0.88); opacity: 0; }
-  to   { transform: scale(1);    opacity: 1; }
-}
-
-/* "RESTRICTED ZONE" header — same style as .popup-card-name */
-.bypass-pw-title {
-  font-family: var(--font);
-  font-size: 26px;
-  color: var(--snes-yellow);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  text-shadow: 1px 1px 0 #000;
-  margin-bottom: 14px;
-  text-align: center;
-}
-
-/* Divider — same as .popup-divider */
-.bypass-pw-divider {
-  height: 2px;
-  background: var(--border-bright);
-  box-shadow: 0 0 4px var(--border-bright);
-  margin-bottom: 20px;
-}
-
-.bypass-pw-msg {
-  font-family: var(--font);
-  font-size: 13px;
-  text-align: center;
-  min-height: 22px;
-  margin-top: 14px;
-  letter-spacing: 0.06em;
-  transition: color 0.12s;
-}
-
-.bypass-pw-denied {
-  color: var(--snes-red);
-  text-shadow: 0 0 6px rgba(240, 64, 48, 0.55);
-  animation: bypass-pw-msg-in 0.18s ease both;
-}
-
-@keyframes bypass-pw-msg-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0);    }
-}
 
 
 /* ══════════════════════════════════════════════════════════════════
@@ -5862,57 +5477,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
   max-width: 1075px;
 }
 
-/* ── Portrait area ─────────────────────────────────────────────── */
-#legend-portrait-area {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  padding: 50px 7%;
-  z-index: 3;
-}
-
-#legend-lucy-portrait,
-#legend-otzi-portrait {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 22px;
-  max-width: 360px;
-  /* No transform — GSAP animates x on these elements */
-}
-
-.legend-portrait-img {
-  width: 230px;
-  height: 230px;
-  object-fit: cover;
-  object-position: top center;
-  border: 4px solid var(--snes-yellow);
-  box-shadow:
-    0 0 0 3px #000,
-    0 0 0 5px var(--border-mid),
-    0 0 35px rgba(248, 208, 0, 0.45);
-  display: block;
-}
-
-/* SNES dialogue-box speech bubbles */
-.legend-speech-bubble {
-  background: var(--bg-dialog);
-  border: 2px solid var(--border-bright);
-  box-shadow:
-    0 0 0 2px var(--border-dark),
-    0 0 0 4px var(--border-mid),
-    0 0 0 5px var(--border-dark);
-  padding: 14px 18px;
-  font-family: var(--font);
-  font-size: 15px;
-  color: var(--text-white);
-  text-align: center;
-  line-height: 1.65;
-  max-width: 300px;
-  text-shadow: 1px 1px 0 #000;
-}
 
 /* ── "LEGEND" burst ────────────────────────────────────────────── */
 /* Wrapper fills screen, centers text via flex.
@@ -7949,22 +7513,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
   font-size: 28px;
   line-height: 1;
 }
-.lock-text {
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 11px;
-  color: #ccc;
-  margin-top: 4px;
-  text-align: center;
-  padding: 0 4px;
-}
-.db-type-lock-badge {
-  font-size: 12px;
-  color: #999;
-  margin-left: 8px;
-  font-family: 'Source Sans 3', sans-serif;
-}
-.db-type-group.locked .db-type-label { color: #666; }
-.db-type-group.locked .db-type-pip   { opacity: 0.3; }
 
 /* Grayscale popup for locked card preview */
 .popup-locked .card-popup { filter: grayscale(1); }
@@ -8448,28 +7996,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
   background: linear-gradient(180deg, #5ca050 0%, #3c6a30 100%);
 }
 
-/* ── Adventure Mode: in-development treatment ────────────────────
-   Apply this single class to #btn-adventure-new to signal the mode
-   is not production-ready. Remove the class when ready to ship.
-   The original .btn-home-adventure-new values above are untouched —
-   one class removal restores the full-colour appearance instantly. */
-.adventure-mode-in-development {
-  opacity: 0.6;
-  filter: grayscale(100%);
-}
-/* Suppress the hover glow so the button doesn't look fully active */
-.adventure-mode-in-development:hover {
-  border-color: #d4aa50;        /* reset to base gold, no brighten */
-  color: #f0cf6c;               /* reset to base text colour */
-  box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000;  /* no halo */
-  background: linear-gradient(180deg, #4a8540 0%, #2c5224 100%);
-  filter: grayscale(100%);      /* keep fully greyscale on hover */
-}
-/* Suppress the press animation */
-.adventure-mode-in-development:active {
-  transform: none;
-  box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000;
-}
 
 /* ── Adventure in-development warning popup ──────────────────────
    Reuses .popup-backdrop + .card-popup; just widens the body text
@@ -8849,19 +8375,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
   top:  var(--stamp-giant-cy);
   transform: translate(-50%, -50%) rotate(calc(-1 * var(--stamp-tilt)));   /* mirror lean for the giant flag */
 }
-/* SHADOWS — one sun (overworld.js SUN). Every node, prop and the Explorer get
-   a CONTACT shadow (tight and dark at the base: the "touching the ground" cue)
-   and a CAST shadow (the art's own silhouette, flattened and leaning away from
-   the sun). overworld.js sizes and places both; these are the only looks.
-   Plain images and gradients under cheap transforms — no CSS filters/blur. */
-.ow-contact-shadow {
-  position: absolute;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center,
-              rgba(20, 12, 4, 0.55) 0%, rgba(20, 12, 4, 0.36) 42%, rgba(20, 12, 4, 0) 72%);
-}
 .ow-cast-shadow {
   position: absolute;
   left: 0;
@@ -8939,26 +8452,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
   object-fit: cover;
 }
 
-/* ── Otzi battle placeholder screen ─────────────────────────────
-   Simple centred layout; styled to match the game's dark palette.
-   display:none is inherited from .screen; only override to flex when
-   the screen is active so it doesn't bleed through on other screens. */
-#screen-otzi-battle.active {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: #160d06;
-  gap: 32px;
-}
-.otzi-placeholder-text {
-  font-family: var(--font);
-  font-size: 28px;
-  color: #f0cf6c;
-  text-shadow: 2px 2px 0 #000;
-  text-align: center;
-  letter-spacing: 0.06em;
-}
 @keyframes overworld-node-pulse {
   /* Gold halo with a thin WARM DARK rim under it: the rim gives the gold an
      edge to read against pale sand, where gold-on-yellow alone vanishes; on
@@ -9266,36 +8759,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
   100% { transform: scale(1);    color: rgba(255, 255, 255, 0.75); }
 }
 
-/* ── End-of-turn gain shimmer (Megalith 31 + future end-of-turn cards) ──
-   A warm band of light sweeps across the card; the IP number pops UP in sync
-   (green-gold, mirroring the cc-drop pattern but positive). The wrap clips the
-   band to the card face. */
-.reveal-fx-eot-shimmer {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 5;
-}
-.reveal-fx-eot-shimmer-band {
-  position: absolute;
-  top: -20%;
-  left: 0;
-  width: 55%;
-  height: 140%;
-  transform: translateX(-120%) skewX(-18deg);
-  background: linear-gradient(90deg,
-    rgba(255, 245, 200, 0)    0%,
-    rgba(255, 245, 200, 0.55) 45%,
-    rgba(255, 255, 255, 0.85) 50%,
-    rgba(255, 245, 200, 0.55) 55%,
-    rgba(255, 245, 200, 0)    100%);
-  animation: revealFxEotSweep 0.75s ease-in-out 1 both;
-}
-@keyframes revealFxEotSweep {
-  0%   { transform: translateX(-120%) skewX(-18deg); }
-  100% { transform: translateX(300%)  skewX(-18deg); }
-}
 /* The IP number ticking UP as the light crosses it. */
 .db-overlay-ip.reveal-fx-ip-gain {
   animation: revealFxIpGain 0.52s ease-out 1 both;
@@ -9322,8 +8785,6 @@ html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent
   /* Own compositing layer: she is repositioned every frame of a walk. */
   will-change: transform;
 }
-
-/* (Back-to-home button removed — its action lives in the Options panel.) */
 
 /* ================================================================
    ADVENTURE MODE — HUD State B: Dialogue mode (Phase H2)
@@ -11105,17 +10566,6 @@ body.prehistory-battle .db-overlay-ip {
    plaque — beside the post it read as floating in empty grass. */
 .overworld-node[data-id="egypt-signpost"] { --badge-x: 74%; --badge-y: 41%; }
 
-/* Home-screen Adventure Mode button — warm gold accent */
-.btn-home-adventure {
-  background: linear-gradient(180deg, #3a2810 0%, #2a1c08 100%);
-  border-color: #a88040;
-  color: #ffe39a;
-}
-.btn-home-adventure:hover {
-  background: linear-gradient(180deg, #4a3418 0%, #3a2410 100%);
-  border-color: #d8a860;
-  color: #ffffff;
-}
 
 /* ════════════════════════════════════════════════════════════════
    DECK BUILDER TUTORIAL — spotlight overlay
@@ -11250,17 +10700,6 @@ body.prehistory-battle .db-overlay-ip {
   padding: 0 14px 6px;
 }
 
-/* ── "To Egypt" navigation box (overworld — East Africa) ───────────
-   Vertical strip to the right of the egypt-signpost node.
-   Only rendered when sog_battle_otzi_complete === 'true'.           */
-/* To Egypt map-path trail (SVG element) */
-.overworld-to-egypt-box {
-  position: absolute;
-  pointer-events: none;   /* individual SVG children handle events */
-}
-.overworld-to-egypt-box:hover path[stroke="#f8d000"] {
-  opacity: 1;             /* brighten trail on hover */
-}
 
 /* ═══════════════════════════════════════════════════════════════════
    LOCATION NAMEPLATE — clickable affordance
@@ -11479,12 +10918,6 @@ body.prehistory-battle .db-overlay-ip {
 /* Show when the overworld screen is active */
 body[data-screen="overworld"] #adv-hud {
   display: flex;
-}
-
-/* Hide the floating music widget while the HUD is visible — the HUD
-   provides its own compact music strip in the centre-bottom zone. */
-body[data-screen="overworld"] #music-ctrl {
-  display: none;
 }
 
 /* ── Map area: constrain to 600 px (720 − 120 HUD) ───────────────
@@ -12718,14 +12151,6 @@ body[data-screen="overworld"] #overworld-overlay {
   display: flex;
   flex-direction: column;
   padding: 6px 22px 16px;
-}
-.slideshow-heading {
-  text-align: center;
-  font-family: var(--font, monospace);
-  font-size: 18px;
-  color: #e8c060;
-  text-shadow: 2px 2px 0 #000;
-  margin-bottom: 10px;
 }
 /* Reserved image area — drop a slide image in later (slide.image → background). */
 .slideshow-image {

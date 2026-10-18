@@ -1005,14 +1005,6 @@
     });
   }
 
-  document.getElementById('coming-soon-close').addEventListener('click', function () {
-    document.getElementById('coming-soon-backdrop').classList.remove('visible');
-  });
-
-  document.getElementById('coming-soon-backdrop').addEventListener('click', function (e) {
-    if (e.target === this) this.classList.remove('visible');
-  });
-
   // Page always lands on the home screen (the HTML default is
   // <div id="screen-home" class="screen active">), regardless of prior progress.
 

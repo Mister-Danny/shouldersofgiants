@@ -90,18 +90,6 @@ SOG.RevealFx = (function () {
     if (n && n !== slotEl && n.classList.contains('occupied')) flashClass(n, opts.glowClass || 'reveal-fx-neighbor-glow', 850);
   }
 
-  function neighborGlow(ctx, glowClass, sfxSrc) {
-    if (sfxSrc) playSfx(sfxSrc);
-    [ctx.slotIndex - 1, ctx.slotIndex + 1].forEach(function (adjIdx) {
-      if (adjIdx < 0 || adjIdx >= SLOTS_PER_LOC) return;
-      if (adjIdx === ctx.slotIndex) return;   // never glow the source card itself
-      var el = ctx.getSlotEl(ctx.owner, ctx.locId, adjIdx);
-      if (el && el !== ctx.slotEl && el.classList.contains('occupied')) {
-        flashClass(el, glowClass, 850);
-      }
-    });
-  }
-
   // A handful of glowing embers that rise from the card's CENTRE, drift slightly
   // OUTWARD as they rise, flicker, and fade — layered over Fire's illuminate.
   // Pure overlay: a container of particle divs appended to the slot, each driven
@@ -341,8 +329,6 @@ SOG.RevealFx = (function () {
       return holdFor(2340);   // caveart.m4a ~1.89s scribble + 0.45s fade-out
     },
 
-    // Domesticated Animal (32): adjacent occupied neighbors' borders glow GREEN,
-    // then fade (shared neighborGlow helper + its own sfx).
     // Domesticated Animal (32) / Enkidu (44): the howl itself is EDGE-driven now
     // (abilities.js pulseNeighborHowls → neighborHowl below) — it fires toward a
     // side that just gained a neighbour, on reveal or later. The reveal handler
@@ -3008,41 +2994,6 @@ SOG.RevealFx = (function () {
       .to(slotEl, { y: 0, duration: 0.55, ease: 'back.out(1.6)' });
   }
 
-  /* ── End-of-turn gain shimmer (generic — no current consumer; Megalith and
-     Obelisk moved to megalithEarthRise above. Kept for future EOT cards.) ──
-     A band of light sweeps ACROSS the card (adapted from the Neb shimmer's
-     cause-and-effect pacing): overlay div clipped to the slot, gradient band
-     translates left→right (~750ms). At the sweep's midpoint opts.onTick() fires
-     — the ability applies its real effect there (e.g. addIPMod +1) and the
-     slot's IP number pops via .reveal-fx-ip-gain, so the change reads as CAUSED
-     by the light. onDone releases the end-of-turn queue (sequential firing). */
-  function endOfTurnShimmer(slotEl, opts, onDone) {
-    opts   = opts || {};
-    onDone = typeof onDone === 'function' ? onDone : function () {};
-    if (!slotEl) { if (typeof opts.onTick === 'function') opts.onTick(); onDone(); return; }
-
-    // Clipped overlay so the band never paints outside the card.
-    var wrap = document.createElement('div');
-    wrap.className = 'reveal-fx-eot-shimmer';
-    var band = document.createElement('div');
-    band.className = 'reveal-fx-eot-shimmer-band';
-    wrap.appendChild(band);
-    slotEl.appendChild(wrap);
-
-    // Midpoint of the sweep: apply the real effect + pop the IP number.
-    setTimeout(function () {
-      if (typeof opts.onTick === 'function') opts.onTick();
-      var ip = slotEl.querySelector('.db-overlay-ip');
-      if (ip) flashClass(ip, 'reveal-fx-ip-gain', 520);
-    }, 380);
-
-    // Sweep done → clean up + release the queue.
-    setTimeout(function () {
-      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
-      onDone();
-    }, 820);
-  }
-
   /* Imhotep (65) — the sand-sculpting mint. He tips over like a poured vessel, sand
      streams out, the pour gathers into a card-shaped outline that FILLS bottom-up,
      the filled block cross-dissolves into the Pyramid's face, Imhotep rights himself
@@ -3224,6 +3175,5 @@ SOG.RevealFx = (function () {
            neighborHowl: neighborHowl,
            gilgameshRally: gilgameshRally,
            imhotepSandSculpt: imhotepSandSculpt,
-           megalithEarthRise: megalithEarthRise,
-           endOfTurnShimmer: endOfTurnShimmer };
+           megalithEarthRise: megalithEarthRise };
 })();

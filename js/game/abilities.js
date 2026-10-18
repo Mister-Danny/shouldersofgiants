@@ -5283,20 +5283,10 @@ function abilityHarvestCapital(owner, locId, slotIndex, sd, done) {
     }
   }
 
-  /* True if a next-turn effect with `key` is ACTIVE for `owner` THIS turn (i.e.
-     declared on the owner's previous turn). Active window = exactly the turn after
-     the declaring turn. Kept as general infrastructure for future "Next Turn:"
-     cards, even though nothing currently pushes onto G.nextTurnEffects. */
-  function nextTurnEffectActive(owner, key) {
-    if (!G.nextTurnEffects) return false;
-    return G.nextTurnEffects.some(function (e) {
-      return e.owner === owner && e.key === key && e.turnDeclared === G.turn - 1;
-    });
-  }
-
   /* Called from the reveal pipeline for EACH card as it reveals (after its own
      At-Once). Applies any active next-turn reveal effects to the just-revealed
-     card, keyed by G.nextTurnEffects entries (see nextTurnEffectActive above).
+     card, keyed by G.nextTurnEffects entries (active the turn after the
+     declaring turn).
      Currently a no-op — nothing pushes an entry since Ramses II's old CULTURAL_2X
      ability was replaced — kept as the reveal-pipeline hook for future
      "Next Turn:" cards. */
