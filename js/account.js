@@ -25,10 +25,8 @@
  *      `progress` — this write IS the "checkpoint at account creation".
  *   7. UI layer shows the credential card.
  *
- * Teacher signup (signUpTeacher, below) follows §4 "Teacher signup" exactly
- * instead — create-then-rollback. The Sign Up flow pre-checks the invite
- * code (checkInviteCode), but the create rule is still the real gate, so a
- * code rejected there is rolled back. See that function's doc.
+ * Teacher signup (signUpTeacherOpen / signUpTeacherGoogleOpen, below) is
+ * open — no invite code. See "Open teacher signup".
  *
  * Checkpoint saves (checkpointSave()) fire from exactly three places in the
  * app: after a battle win (js/game.js endGame()), the account-creation write
@@ -479,21 +477,11 @@ window.SogAccount = (function () {
     });
   }
 
-  /* ── Teacher signup (AUTH_SPEC.md §4 "Teacher signup", Phase 4) ────────
-     The Sign Up flow pre-checks the code (checkInviteCode above), but the
-     code is only enforced server-side, inside the /teachers/{uid} create
-     rule's get(). That means a bad/deactivated code is only enforced
-     AFTER the Auth user already exists, so this follows the
-     spec's create-then-rollback order exactly:
-       1. createUserWithEmailAndPassword — a clean account, NOT linked to
-          the current anonymous session (teachers don't carry over guest
-          progress; real email+password so Firebase's password reset works).
-       2. Attempt the /teachers/{uid} write.
-       3. If that write fails, delete the just-created Auth user so no
-          orphan is left behind, and surface a friendly invite-code message
-          for the specific case the rules would deny (permission-denied) —
-          any other failure (network, timeout) is passed through as-is
-          rather than being mislabeled as a bad code. */
+  /* A /teachers/{uid} write the rules refuse (permission-denied) is the
+     invite-code case — legacy invite teachers, or deployed rules that still
+     demand a code — so it gets a friendly invite-code error. Any other
+     failure (network, timeout) is passed through as-is rather than being
+     mislabeled as a bad code. */
   function _friendlyTeacherSignupError(writeErr) {
     if (writeErr && writeErr.code === 'permission-denied') {
       var err = new Error("That code isn't valid.");
@@ -501,104 +489,6 @@ window.SogAccount = (function () {
       return err;
     }
     return writeErr;
-  }
-
-  /* ── Invite check (Teacher Sign Up, first screen) ──────────────────────
-     Reads /invites/{code} by exact id (rules: get only, no list). It's a
-     courtesy check so a wrong code is caught before any account exists; the
-     /teachers create rule still enforces the code on the actual write.
-     cb(err, { code, valid, unverified }) — unverified:true means the rules
-     in production don't allow the read yet (permission-denied), so the code
-     is let through and the create rule decides, exactly as before. */
-  function checkInviteCode(raw, cb) {
-    var code = (raw || '').trim().toUpperCase();
-    if (!/^[A-Z0-9]{4,12}$/.test(code)) { cb(null, { code: code, valid: false }); return; }
-    _withTimeout(_db().collection('invites').doc(code).get(), WRITE_TIMEOUT_MS).then(function (snap) {
-      cb(null, { code: code, valid: !!(snap.exists && snap.data().active === true) });
-    }).catch(function (err) {
-      if (err && err.code === 'permission-denied') {
-        console.warn('[Account] Invite read not allowed by the deployed rules — the teacher create rule will check it instead');
-        cb(null, { code: code, valid: true, unverified: true });
-        return;
-      }
-      cb(err, null);
-    });
-  }
-
-  /**
-   * @param {object} opts  { email, password, displayName, inviteCode }
-   * @param {function(err, result)} cb  result = { uid, email, displayName }
-   */
-  function signUpTeacher(opts, cb) {
-    var email       = (opts.email || '').trim();
-    var password    = opts.password || '';
-    var displayName = (opts.displayName || '').trim();
-    var inviteCode  = (opts.inviteCode || '').trim().toUpperCase();
-
-    _withTimeout(firebase.auth().createUserWithEmailAndPassword(email, password), LINK_TIMEOUT_MS)
-      .then(function (userCred) {
-        var user = userCred.user;
-
-        var teacherData = {
-          email:       email,
-          inviteCode:  inviteCode,
-          displayName: displayName,
-          createdAt:   firebase.firestore.FieldValue.serverTimestamp()
-        };
-
-        _withTimeout(_db().collection('teachers').doc(user.uid).set(teacherData), WRITE_TIMEOUT_MS)
-          .then(function () {
-            // createUserWithEmailAndPassword reliably fires onAuthStateChanged
-            // (a genuinely different signed-in user, unlike linkWithCredential
-            // above) but refresh() explicitly anyway per this file's established
-            // "don't assume, verify" rule for auth-state notifications.
-            if (window.SogAuth && typeof window.SogAuth.refresh === 'function') {
-              window.SogAuth.refresh();
-            }
-
-            // Bootstrap the teacher's OWN /players/{uid} doc — same ungrouped
-            // shape a classless student gets (empty classCode/teacherUid) —
-            // so their own adventure progress gets cloud-saved too. Clean
-            // start, not the local device's guest progress: this is a brand
-            // new Auth user (never linked to the anonymous session), so
-            // whatever's in localStorage right now belongs to whichever
-            // guest was last using this device, not this teacher.
-            var playerData = {
-              username:   displayName,
-              classCode:  '',
-              teacherUid: '',
-              progress:   {},
-              createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
-              lastActive: firebase.firestore.FieldValue.serverTimestamp()
-            };
-            _withTimeout(_db().collection('players').doc(user.uid).set(playerData), WRITE_TIMEOUT_MS)
-              .then(function () {
-                cb(null, { uid: user.uid, email: email, displayName: displayName });
-              })
-              .catch(function (playerWriteErr) {
-                // Never fail teacher signup over this — the real account
-                // (Auth user + /teachers/{uid}) already exists. A later
-                // checkpointSave() merge-write self-heals the missing doc
-                // (same trick student signup relies on), so this teacher
-                // just starts without cloud save until the next checkpoint.
-                console.warn('[Account] /players/{uid} bootstrap write failed for teacher — will self-heal on next checkpoint', playerWriteErr);
-                cb(null, { uid: user.uid, email: email, displayName: displayName });
-              });
-          })
-          .catch(function (writeErr) {
-            console.error('[Account] /teachers/{uid} write failed — rolling back the Auth user', writeErr);
-            user.delete().then(function () {
-              cb(_friendlyTeacherSignupError(writeErr), null);
-            }).catch(function (deleteErr) {
-              console.error('[Account] Teacher signup rollback delete failed — an orphaned Auth user may remain', deleteErr);
-              cb(_friendlyTeacherSignupError(writeErr), null);
-            });
-          });
-      })
-      .catch(function (createErr) {
-        console.error('[Account] Teacher createUserWithEmailAndPassword failed', createErr);
-        cb(createErr, null);
-      });
   }
 
   /* ── Teacher Google sign-in (Phase 4, alongside email/password) ─────────
@@ -1241,7 +1131,7 @@ window.SogAccount = (function () {
 
   /* ── Checkpoint save — one of exactly 3 call sites in the whole app:
      after a battle win (js/game.js endGame()), account creation (the write
-     inside signUpStudent OR signUpTeacher above), and logout() below. Never
+     inside signUpStudent OR the teacher signups above), and logout() below. Never
      on map transitions, purchases, deck edits, or turn ends. No-ops silently
      for guests (anonymous users never get a Firestore write) and on any
      error — gameplay must never block on this. */
@@ -1316,10 +1206,8 @@ window.SogAccount = (function () {
     signUpTeacherOpen: signUpTeacherOpen,
     signUpTeacherGoogleOpen: signUpTeacherGoogleOpen,
     finishTeacherSetup: finishTeacherSetup,
-    checkInviteCode:   checkInviteCode,
     signUpStudent:     signUpStudent,
     loginStudent:      loginStudent,
-    signUpTeacher:     signUpTeacher,
     loginTeacher:      loginTeacher,
     signInTeacherWithGoogle:      signInTeacherWithGoogle,
     finishTeacherGoogleSignup:    finishTeacherGoogleSignup,

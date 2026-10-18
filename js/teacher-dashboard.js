@@ -305,7 +305,7 @@ window.TeacherDashboard = (function () {
   }
 
   // Teachers also get their own /players/{uid} doc now (js/account.js
-  // signUpTeacher) so their adventure progress cloud-saves too — but it's
+  // _createTeacherDocFor) so their adventure progress cloud-saves too — but it's
   // written with teacherUid: '' (ungrouped, same as a classless student), so
   // it can never match this where('teacherUid','==',uid) query, including
   // for the teacher's own uid. No extra filtering needed here.

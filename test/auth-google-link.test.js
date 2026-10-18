@@ -114,16 +114,18 @@ beforeEach(async () => {
   await testEnv.withSecurityRulesDisabled(c => c.firestore().doc('invites/HISTROCK').set({ active: true }));
 });
 
-// A password teacher made through the game's own signup, with one class.
+// A legacy invite-code password teacher, with one class: the account and
+// /teachers doc the old invite signup made (rules enforced on the write).
 async function passwordTeacher(email, { verified = false } = {}) {
-  await auth.signInAnonymously();   // the game always starts as a guest
-  const { err, result } = await call(api.signUpTeacher, { email, password: PW, displayName: 'Ms ' + email[0], inviteCode: 'HISTROCK' });
-  assert.ifError(err);
-  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`teachers/${result.uid}`).set({ classCodes: ['CLS' + email[0].toUpperCase() + '1'] }, { merge: true }));
-  if (verified) await rest(`/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`, 'POST', { localId: result.uid, emailVerified: true });
+  const { user } = await auth.createUserWithEmailAndPassword(email, PW);
+  await firebase.firestore().doc(`teachers/${user.uid}`).set({
+    email, inviteCode: 'HISTROCK', displayName: 'Ms ' + email[0], createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`teachers/${user.uid}`).set({ classCodes: ['CLS' + email[0].toUpperCase() + '1'] }, { merge: true }));
+  if (verified) await rest(`/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`, 'POST', { localId: user.uid, emailVerified: true });
   await auth.signOut();
   await auth.signInAnonymously();
-  return result.uid;
+  return user.uid;
 }
 const passwordWorks = async (email) => {
   await auth.signOut();
@@ -301,16 +303,6 @@ test('brand-new Google teacher still signs up normally, and is never flagged as 
   const again = await call(api.signInTeacherWithGoogle, '');
   assert.equal(again.result.existing, true);
   assert.equal(again.result.passwordLost, false);
-});
-
-test('checkInviteCode: active code valid, wrong / inactive / malformed codes not', { skip }, async () => {
-  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc('invites/OLDCODE1').set({ active: false }));
-  await auth.signInAnonymously();   // guests are signed in, which the invites get rule requires
-  const check = async (code) => (await call(api.checkInviteCode, code)).result;
-  assert.deepEqual({ ...await check(' histrock ') }, { code: 'HISTROCK', valid: true });
-  assert.equal((await check('WRONG123')).valid, false);
-  assert.equal((await check('OLDCODE1')).valid, false, 'deactivated');
-  assert.equal((await check('../x')).valid, false, 'malformed never hits Firestore');
 });
 
 test('Teacher Sign Up with a checked code: first-time Google creates the teacher account with no second prompt', { skip }, async () => {

@@ -202,11 +202,17 @@ test('site deployed before the rules (invite still required): stops at invite-re
   assert.deepEqual((await docOf(`players/${guestUid}`)).progress, GUEST_PROGRESS, 'progress still carried');
 });
 
-test('rules deployed before the site: the old invite-code signup still works under the new rules', { skip }, async () => {
-  await guest();
-  const r = await call(api.signUpTeacher, { email: 'legacy@school.org', password: PW, displayName: 'Ms L', inviteCode: 'HISTROCK' });
-  assert.ifError(r.err);
-  assert.equal((await docOf(`teachers/${r.result.uid}`)).inviteCode, 'HISTROCK');
+test('an invite-code teacher doc (legacy accounts) is still accepted by the new rules, and logs in', { skip }, async () => {
+  await auth.signOut();
+  const { user } = await auth.createUserWithEmailAndPassword('legacy@school.org', PW);
+  await firebase.firestore().doc(`teachers/${user.uid}`).set({
+    email: 'legacy@school.org', inviteCode: 'HISTROCK', displayName: 'Ms L', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  assert.equal((await docOf(`teachers/${user.uid}`)).inviteCode, 'HISTROCK');
+  await auth.signOut();
+  const login = await call(api.loginTeacher, 'legacy@school.org', PW);
+  assert.ifError(login.err);
+  assert.equal(auth.currentUser.uid, user.uid);
 });
 
 test('a signed-in (non-guest) account is not silently converted', { skip }, async () => {
