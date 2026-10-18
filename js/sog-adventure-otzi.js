@@ -248,7 +248,8 @@ SOG.OtziBattle = (function () {
     scoring: { rule: 'most-locations', winThreshold: 2, tiebreaker: 'total-ip', exactTie: 'tie' },  // tie-as-loss
     ai: { profile: 'heuristic', settings: { selectPlays: _otziPlays, cardsPerTurn: 2 } },
     presentation: {
-      bodyClass:        'otzi-battle',
+      bodyClass:        'otzi-battle',                       // Ötzi-only CSS
+      bodyClassExtra:   'adv-shared-battle',                 // styling shared with Gilgamesh
       preCoachingClass: 'otzi-pre-deal',
       allyAvatar:       'player',   // selected adventurer, resolved at render time
       opponentAvatar:   'images/Otzi.jpg',
@@ -886,6 +887,7 @@ SOG.OtziBattle = (function () {
     // A teardown while the hints prompt is up closes it without dealing.
     if (document.querySelector('#battle-rules-backdrop .otzi-hints-prompt') && SOG.BattleRulesPopup) SOG.BattleRulesPopup.hide();
     document.body.classList.remove('otzi-battle');
+    document.body.classList.remove('adv-shared-battle');
     document.body.classList.remove('otzi-pre-deal');
     if (SOG.HUD && SOG.HUD.restoreBattleAvatars) SOG.HUD.restoreBattleAvatars();
     hideBubbles();
@@ -982,6 +984,7 @@ SOG.OtziBattle = (function () {
   function _otziApplyPresentationClasses(p) {
     if (!p) return;
     if (p.bodyClass)        document.body.classList.add(p.bodyClass);
+    if (p.bodyClassExtra)   document.body.classList.add(p.bodyClassExtra);
     if (p.preCoachingClass) document.body.classList.add(p.preCoachingClass);
   }
   // Park the side locations off-screen (Desert left, GRV right) — the cinematic

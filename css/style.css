@@ -2838,7 +2838,10 @@ img    { display: block; }
   gap: 5px;
   height: 145px;   /* was 160: the board sits 15px higher, so the order badges under it clear the hand */
   flex-shrink: 0;
-  padding: 0 20px;
+  /* The 15px top pad keeps the cards where they sat in the old 160px band
+     (top at 43.5px): the band got shorter, the hand did not move. The Ötzi
+     battle drops its hand further, under its goal banner (otzi-lessons rule). */
+  padding: 15px 20px 0;
   background: rgba(28, 14, 4, 0.68);
   border-bottom: 1px solid rgba(100, 65, 10, 0.50);
 }
@@ -10671,14 +10674,21 @@ body.prehistory-battle .battle-player-hand .battle-hand-card:first-child {
 }
 
 /* ════════════════════════════════════════════════════════════
-   OTZI BATTLE — CSS context class mirrors prehistory-battle.
-   Applied by SOG.OtziBattle.start(); removed on teardown.
+   SHARED ADVENTURE-BATTLE STYLING — body.adv-shared-battle
+   Worn by the Ötzi AND Gilgamesh battles (each config's
+   presentation.bodyClassExtra; removed on teardown): no CC numerals, no
+   location ability text, spread hand, plain location plates, the comic
+   speech bubbles, the popping ally avatar, the opponent portrait crop.
+   One battle's own tweaks go on its own class instead:
+   body.otzi-battle (Ötzi only) · body.gilgamesh-battle (Gilgamesh only).
    ════════════════════════════════════════════════════════════ */
 
 /* Opponent portrait: the base rule (fitted to the turn box). */
 /* The opponent's hand sits under the goal banner ("Win 2 of 3 locations!",
-   .snap-goal at top 8), as the Neanderthal battle's does. */
-body.otzi-battle .battle-opp-hand {
+   .snap-goal at top 8), as the Neanderthal battle's does. Keyed on
+   body.otzi-lessons — set only while the Ötzi battle shows that banner — not
+   on a battle class. */
+body.otzi-lessons .battle-opp-hand {
   align-items: flex-start;
   padding-top: 60px;   /* cards 60–132: ~10px under the banner, 13px above the board */
 }
@@ -10686,7 +10696,7 @@ body.otzi-battle .battle-opp-hand {
 /* Face zoom on Otzi's avatar circle (matches dialogue portrait) — see override below */
 
 /* Explorer avatar (bottom-left) — starts hidden, pops in via adv-active */
-body.otzi-battle .battle-avatar-ally {
+body.adv-shared-battle .battle-avatar-ally {
   bottom: 36px;
   left:   36px;
   opacity: 0;
@@ -10694,7 +10704,7 @@ body.otzi-battle .battle-avatar-ally {
   transform-origin: center bottom;
   transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-body.otzi-battle .battle-avatar-ally.adv-active {
+body.adv-shared-battle .battle-avatar-ally.adv-active {
   opacity: 1;
   transform: scale(1);
 }
@@ -10703,32 +10713,32 @@ body.otzi-battle .battle-avatar-ally.adv-active {
    exactly as in capital battles (SOG.board.updateHeader). */
 
 /* Hide CC numerals (spec: no CC numbers shown in this battle) */
-body.otzi-battle .db-overlay-cc { display: none; }
+body.adv-shared-battle .db-overlay-cc { display: none; }
 
 /* Hide location ability text in Otzi battle */
-body.otzi-battle .battle-loc-ability { display: none; }
+body.adv-shared-battle .battle-loc-ability { display: none; }
 
 /* Spread hand cards with positive gap (4 cards, no heavy overlap) */
-body.otzi-battle .battle-hand-card { margin-left: 8px; }
-body.otzi-battle .battle-player-hand .battle-hand-card:first-child { margin-left: 0; }
+body.adv-shared-battle .battle-hand-card { margin-left: 8px; }
+body.adv-shared-battle .battle-player-hand .battle-hand-card:first-child { margin-left: 0; }
 
 /* Remove purple double-ring from location nameplate; cap its height */
-body.otzi-battle .battle-location {
+body.adv-shared-battle .battle-location {
   border-color: transparent;
   box-shadow: none;
   max-height: 80px;
 }
 
 /* Remove purple occupied-slot border on played cards */
-body.otzi-battle .battle-card-slot.occupied {
+body.adv-shared-battle .battle-card-slot.occupied {
   border-color: transparent;
 }
 
 /* overflow:visible no longer needed — rings are gone — but keep for safety */
-body.otzi-battle .battle-col { overflow: visible; }
+body.adv-shared-battle .battle-col { overflow: visible; }
 
 /* Otzi avatar portrait: zoom out 20% more and raise */
-body.otzi-battle .battle-avatar-opponent .battle-avatar-frame img {
+body.adv-shared-battle .battle-avatar-opponent .battle-avatar-frame img {
   object-position: 50% 12%;
   transform: scale(1.36);
   transform-origin: 50% 12%;
@@ -10749,7 +10759,7 @@ body.otzi-battle.otzi-pre-deal .battle-hud-bottomright {
    Avatar: top:20px right:20px frame 120×120px
    Avatar centre Y = 20+60 = 80px from stage top.
    Avatar left edge = 1280 − 20 − 120 = 1140px. Bubble right = 1280 − (1140 − 12) = 152px. */
-body.otzi-battle #adv-bubble-otzi {
+body.adv-shared-battle #adv-bubble-otzi {
   top: 80px;
   transform: translateY(-50%);
   right: 152px;
@@ -10766,7 +10776,7 @@ body.otzi-battle #adv-bubble-otzi {
   box-shadow: -4px 4px 0 #111;
 }
 /* Tail → right toward Otzi avatar */
-body.otzi-battle #adv-bubble-otzi::before {
+body.adv-shared-battle #adv-bubble-otzi::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -10775,7 +10785,7 @@ body.otzi-battle #adv-bubble-otzi::before {
   border: 10px solid transparent;
   border-left-color: #111;
 }
-body.otzi-battle #adv-bubble-otzi::after {
+body.adv-shared-battle #adv-bubble-otzi::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -10789,7 +10799,7 @@ body.otzi-battle #adv-bubble-otzi::after {
    Avatar: bottom:36px left:36px frame 120×120px
    Avatar centre Y = 720−36−60 = 624px from stage top.
    left = avatar right (36+120=156px) + 12px gap = 168px.              */
-body.otzi-battle #adv-bubble-explorer {
+body.adv-shared-battle #adv-bubble-explorer {
   top: 624px;
   transform: translateY(-50%);
   left: 168px;
@@ -10809,7 +10819,7 @@ body.otzi-battle #adv-bubble-explorer {
   box-shadow: 4px 4px 0 #111;
 }
 /* Tail → left toward Explorer avatar */
-body.otzi-battle #adv-bubble-explorer::before {
+body.adv-shared-battle #adv-bubble-explorer::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -10818,7 +10828,7 @@ body.otzi-battle #adv-bubble-explorer::before {
   border: 10px solid transparent;
   border-right-color: #111;
 }
-body.otzi-battle #adv-bubble-explorer::after {
+body.adv-shared-battle #adv-bubble-explorer::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -10839,24 +10849,24 @@ body.sargon-battle    #adv-bubble-explorer { width: 200px; }
 
 /* In battle context: portrait is handled by the avatar circle — hide the
    inline portrait inside the bubble itself. */
-body.otzi-battle .adv-bubble .adv-bubble-portrait { display: none; }
+body.adv-shared-battle .adv-bubble .adv-bubble-portrait { display: none; }
 
 /* Match tutorial text size/colour in battle context */
-body.otzi-battle .adv-bubble .adv-bubble-text {
+body.adv-shared-battle .adv-bubble .adv-bubble-text {
   font-size: 18px;
   line-height: 1.45;
   color: #111;
   text-shadow: none;
   min-height: 28px;
 }
-body.otzi-battle .adv-bubble .adv-bubble-hint {
+body.adv-shared-battle .adv-bubble .adv-bubble-hint {
   color: #666;
   margin-top: 6px;
 }
 
 /* ── Sargon + Hyksos battle speech bubbles — the comic-book treatment, same as
    the Otzi / Gilgamesh battles. Each battle uses its own body class (so the
-   otzi-battle bubble rules above don't reach it) and keeps the capital UI (CC
+   adv-shared-battle bubble rules above don't reach it) and keeps the capital UI (CC
    overlays), so we mirror ONLY the bubble styling here. Avatars sit in their
    default spots (opponent top-right 20/20, ally bottom-left 40/40), matching
    these anchors.
@@ -10987,7 +10997,7 @@ body.kush-battle .adv-bubble .adv-bubble-hint {
 }
 
 /* ── Hammurabi battle speech bubbles — same comic-book treatment as Sargon
-   (its own body class, so the otzi-battle bubble rules don't reach it). */
+   (its own body class, so the adv-shared-battle bubble rules don't reach it). */
 body.hammurabi-battle #adv-bubble-otzi {
   top: 80px;
   transform: translateY(-50%);
@@ -11154,7 +11164,7 @@ body.hanging-gardens-battle .adv-bubble .adv-bubble-hint {
 
 /* ── Narmer (Egypt) battle speech bubbles — same comic-book treatment as
    Hammurabi / Sargon / Hanging Gardens (its own body class, so the default
-   top-right .adv-bubble box + otzi-battle rules don't reach it). Narmer's
+   top-right .adv-bubble box + adv-shared-battle rules don't reach it). Narmer's
    in-battle dialogue (intro / win / loss / tie) all render through the shared
    #adv-bubble-otzi (opponent) + #adv-bubble-explorer bubbles, exactly like the
    other bosses — this block is what styles them as bubbles rather than the
@@ -11242,7 +11252,7 @@ body.narmer-battle .adv-bubble .adv-bubble-hint {
 
 /* ── Hatshepsut (Egypt) battle speech bubbles — same comic-book treatment as
    Narmer / Hammurabi / Sargon / Hanging Gardens (its own body class, so the
-   default top-right .adv-bubble box + otzi-battle rules don't reach it).
+   default top-right .adv-bubble box + adv-shared-battle rules don't reach it).
    Hatshepsut's in-battle dialogue (intro / win / loss / tie) all render
    through the shared #adv-bubble-otzi (opponent) + #adv-bubble-explorer
    bubbles, exactly like the other bosses — this block is what styles them as
@@ -11396,7 +11406,7 @@ body.prehistory-battle .battle-col[data-loc-id="100"] {
    bottom (player band): 192px — Lucy portrait + player hand + HUD buttons
    Height 192px = card height (166px) + 26px breathing room, matching the
    standard game ratio (210px band, 184px card → 26px breathing room).    */
-body.prehistory-battle .battle-opp-hand    { height: 192px; }
+body.prehistory-battle .battle-opp-hand    { height: 192px; padding-top: 0; }
 body.prehistory-battle .battle-player-hand { height: 192px; padding-top: 0; }
 
 /* Slot rows: standard Arcadium 3-location height (140px).

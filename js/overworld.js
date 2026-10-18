@@ -6806,7 +6806,7 @@ var Overworld = (function () {
     // --- Strip stale battle/mode body classes (FORWARD-PLAY corruption: a new
     //     battle inheriting a leftover class → wrong location art). ---
     ['gilgamesh-battle', 'hammurabi-battle', 'hanging-gardens-battle', 'sargon-battle',
-     'otzi-battle', 'otzi-pre-deal', 'prehistory-battle', 'prehistory-pre-coaching',
+     'otzi-battle', 'adv-shared-battle', 'otzi-pre-deal', 'prehistory-battle', 'prehistory-pre-coaching',
      'overworld-away-from-home', 'tut-locked'].forEach(function (c) {
       document.body.classList.remove(c);
     });

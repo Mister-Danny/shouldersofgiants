@@ -98,9 +98,10 @@
 
   function layoutHand() {
     if (!playerHandEl) return;
-    // Prehistory + Ötzi battles tune the hand via their own CSS — leave them be.
+    // Prehistory, Ötzi and Gilgamesh battles tune the hand via their own CSS
+    // (prehistory-battle / adv-shared-battle) — leave them be.
     if (document.body.classList.contains('prehistory-battle') ||
-        document.body.classList.contains('otzi-battle')) return;
+        document.body.classList.contains('adv-shared-battle')) return;
 
     var cards = playerHandEl.querySelectorAll('.battle-hand-card');
     var n = cards.length;

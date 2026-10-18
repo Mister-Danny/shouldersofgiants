@@ -6,7 +6,8 @@
    turn line into label + number.
 
    Kept (and only these):
-     1. battle location scores at the large size, vertically centred
+     1. battle location scores at the large size (sized to each battle's
+        location bar), vertically centred
      2. the turn box: two columns (TURN over 1/4 | CARDS TO PLAY over its
         number), a thin vertical rule between them
      3. purple End Turn (enabled)
@@ -26,29 +27,23 @@ html.design-v2 {
   --tap-hi-deep:#6e34a8;
   --tap-line:   #c79bf2;   /* outlines / rings on dark or busy ground */
   --tap-text:   #fff5e6;
-  /* Measured from CTGalbite's metrics (canvas measureText): at 44px its digits'
-     ink runs 2.2–33px down a 44px line box, centred 4.4px above the middle. */
-  --dv2-score-nudge: 8.8px;       /* 2 × 4.4: centring content moves it by half */
 }
 
-/* ── 1. Battle location scores: large, vertically centred ─────────────
-   The pixel font's digits sit above the middle of their line box (its
-   ascent is taller than its descent), so flex-centring the box leaves the
-   ink high. The nudge moves the ink's centre onto the box's centre. */
+/* ── 1. Battle location scores: large, vertically centred, sized to the bar
+   44px where the bar is 44px tall (most battles). Where a battle's bar is
+   shorter (the Neanderthal camp: 30px) js/design-v2.js shrinks the digits so
+   their ink is ~75% of it: it sets --dv2-score-size / --dv2-score-nudge on
+   each .battle-location from its bar's measured height.
+   The pixel font's digits sit above the middle of their line box (at any size
+   the ink's centre is 0.1 × the font size high), so flex-centring leaves the
+   ink high: a zero-height line box adds no height to the row, and a top pad of
+   0.2 × the size drops the ink's centre onto the box's centre. */
 html.design-v2 .battle-loc-score-opp,
 html.design-v2 .battle-loc-score-player {
-  font-size: 44px;
+  font-size: var(--dv2-score-size, 44px);
   width: 60px;
-  line-height: 0;                 /* a zero-height line box adds no height to the row… */
-  padding-top: var(--dv2-score-nudge, 0px);   /* …and the padding drops its centre by 4.4px */
-}
-/* The Neanderthal battle's single location (The Camp) has a 30px bar, not
-   44px: 32px digits put their ink (~22.5px) at 75% of it, the same nudge
-   scaled to the size (4.4 × 32/44 = 3.2px, padded 6.4px). */
-html.design-v2 body.prehistory-battle .battle-loc-score-opp,
-html.design-v2 body.prehistory-battle .battle-loc-score-player {
-  font-size: 32px;
-  --dv2-score-nudge: 6.4px;
+  line-height: 0;
+  padding-top: var(--dv2-score-nudge, 8.8px);
 }
 
 /* ── 2. Turn box: two columns, label over number ─────────────────────

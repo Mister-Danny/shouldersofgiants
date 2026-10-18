@@ -922,7 +922,7 @@ SOG.GilgameshBattle = (function () {
 
   /* ── Teardown ─────────────────────────────────────────────────── */
   function teardown() {
-    document.body.classList.remove('otzi-battle');
+    document.body.classList.remove('adv-shared-battle');
     document.body.classList.remove('gilgamesh-battle');
     document.body.classList.remove('otzi-pre-deal');
     if (SOG.HUD && SOG.HUD.restoreBattleAvatars) SOG.HUD.restoreBattleAvatars();
@@ -1055,7 +1055,7 @@ SOG.GilgameshBattle = (function () {
       ai:        { profile: 'heuristic', tier: _aiTier, movement: 'adventure' },
       presentation: {
         bodyClass:        'gilgamesh-battle',                  // Mesopotamia location art
-        bodyClassExtra:   'otzi-battle',                       // shared adventure-battle styling
+        bodyClassExtra:   'adv-shared-battle',                 // styling shared with Ötzi (Ötzi-only CSS stays on .otzi-battle)
         allyAvatar:       'player',   // selected adventurer, resolved at render time
         opponentAvatar:   'images/portraits/gilgameshportrait.jpeg',
         popAlly:          true
