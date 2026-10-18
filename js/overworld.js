@@ -69,8 +69,7 @@ var Overworld = (function () {
   var PHASE1_DIALOGUE = [
     { who: 'explorer', text: "Jumpin' jackrabbits..." },
     { who: 'explorer', text: "I don't think that was a normal doorway." },
-    { who: 'explorer', text: 'Where am I?' },
-    { who: 'explorer', text: 'What do I do?' },
+    { who: 'explorer', text: 'Where am I? What do I do?' },
     { who: 'explorer', text: "I think I'm gonna be late to soccer practice." }
   ];
 
@@ -489,30 +488,21 @@ var Overworld = (function () {
   var KEY_CUNEIFORM_GRANTED  = 'sog_cuneiform_granted';
 
   var PHASE2_DIALOGUE = [
-    { who: 'lucy',     text: 'Mmmhm...' },
-    { who: 'lucy',     text: "I'm standing right here." },
-    { who: 'explorer', text: 'Woah, you can talk?!' },
-    { who: 'explorer', text: 'I thought you were an ape!' },
+    { who: 'lucy',     text: "Mmmhm... I'm standing right here." },
+    { who: 'explorer', text: 'Woah, you can talk?! I thought you were an ape!' },
     { who: 'lucy',     text: 'Australopithecus, to the uninitiated.' },
     { who: 'explorer', text: 'Australo-what-now?' },
-    { who: 'lucy',     text: "It means I'm one of your earliest bipedal human ancestors to stand on two legs." },
-    { who: 'explorer', text: "My ancestor? Are you saying we're related?" },
+    { who: 'lucy',     text: "I'm one of your earliest bipedal human ancestors to stand on two legs." },
+    { who: 'explorer', text: "My ancestor? We're related?" },
     { who: 'lucy',     text: "I'm like your great aunt a million times over." },
-    { who: 'explorer', text: 'Right. But how are you talking?' },
-    { who: 'explorer', text: 'How am I even HERE?' },
-    { who: 'explorer', text: 'Did I time travel? Is this...' },
-    { who: 'lucy',     text: 'Relax.' },
-    { who: 'lucy',     text: "I might be millions of years old, but I don't have all the answers." },
+    { who: 'explorer', text: 'How am I even HERE? Did I time travel?' },
+    { who: 'lucy',     text: "Relax. I might be millions of years old, but I don't have all the answers." },
     { who: 'explorer', text: "That doesn't help my nerves." },
     { who: 'explorer', text: 'I have to get home for soccer practice.' },
-    { who: 'lucy',     text: 'Huh?' },
-    { who: 'explorer', text: "It's very important." },
-    { who: 'lucy',     text: 'If you say so.' },
-    { who: 'lucy',     text: 'All I know is that by standing upright on my own two feet...' },
-    { who: 'lucy',     text: 'I always get to where I want to go.' },
+    { who: 'lucy',     text: 'Right...' },
+    { who: 'lucy',     text: 'All I know is that by standing on my own two feet, I always get where I want to go.' },
     { who: 'explorer', text: 'Maybe I will find my way home.' },
-    { who: 'lucy',     text: 'You do that.' },
-    { who: 'lucy',     text: "Now, I'm going to use my bipedal powers to get myself a drink." }
+    { who: 'lucy',     text: "You do that. Now, I'm going to use my bipedal powers to get myself a drink." }
   ];
 
   var PHASE1_WAIT_MS = 3000;    // 3s arrival pause before Phase 1 fires

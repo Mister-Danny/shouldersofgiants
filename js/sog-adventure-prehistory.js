@@ -224,8 +224,7 @@ window.SOG.Adventure.Prehistory = (function () {
     var ow = window.Overworld;
     if (ow && typeof ow.runPreBattleLines === 'function') {
       ow.runPreBattleLines([
-        { who: 'explorer',    text: 'This fire seems promising.' },
-        { who: 'explorer',    text: 'Maybe someone here knows something.' },
+        { who: 'explorer',    text: 'This fire seems promising. Maybe someone here knows something.' },
         { who: 'neanderthal', text: 'Ughh...' },
         { who: 'explorer',    text: "Jugglin' jaguars... is that a caveman?" },
         { who: 'neanderthal', text: 'AARRGH!' },
@@ -512,7 +511,7 @@ window.SOG.Adventure.Prehistory = (function () {
   ];
 
   var COACHING_PHASE_2 = [
-    { who: 'lucy', text: "Alright, lets try and avoid an early extinction event." },
+    { who: 'lucy', text: "Alright, let's try and avoid an early extinction event." },
     { who: 'lucy', text: 'See those cards?' },
     { who: 'lucy', text: 'You play one each turn on your side of The Camp.' },
     { who: 'lucy', text: 'See that number?',                  startIPPulse: true },
@@ -527,7 +526,7 @@ window.SOG.Adventure.Prehistory = (function () {
   // The scripted first battle keeps Lucy's story lines only: the system
   // callouts teach the cards, so her instruction lines would compete with them.
   var COACHING_PHASE_2_SCRIPTED = [
-    { who: 'lucy', text: "Alright, lets try and avoid an early extinction event." }
+    { who: 'lucy', text: "Alright, let's try and avoid an early extinction event." }
   ];
 
   /* ── Coaching dialogue runner ──────────────────────────────── */
