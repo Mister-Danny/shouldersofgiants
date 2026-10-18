@@ -501,7 +501,7 @@ var Overworld = (function () {
     { who: 'explorer', text: 'I have to get home for soccer practice.' },
     { who: 'lucy',     text: 'Right...' },
     { who: 'lucy',     text: 'Standing on my own two feet, I always get where I want to go.' },
-    { who: 'explorer', text: "Maybe I'll find my way home." },
+    { who: 'explorer', text: 'Maybe I will find my way home.' },
     { who: 'lucy',     text: "You do that. I'm off to use my bipedal powers to get a drink." }
   ];
 

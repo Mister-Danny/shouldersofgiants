@@ -59,7 +59,7 @@ M1–M4 start on their own **3 s after arrival**, and movement is locked.
 | M16 | Explorer | I have to get home for soccer practice. | map | Yes |
 | M17 | Lucy | Right... | map | Yes |
 | M18 | Lucy | Standing on my own two feet, I always get where I want to go. | map | Yes |
-| M19 | Explorer | Maybe I'll find my way home. | map | Yes |
+| M19 | Explorer | Maybe I will find my way home. | map | Yes |
 | M20 | Lucy | You do that. I'm off to use my bipedal powers to get a drink. | map | Yes |
 
 After M20 the explorer walks to the camp on her own. There is no text during the walk.
@@ -130,9 +130,9 @@ Just past the end of this scope, the next text is "Now press End Turn." It appea
 |---|---|---|---|---|
 | Lines | 47 | 36 | 37 | **37** (A 2 · M 20 · C 5 · B 6 · K 4; 36 if K2 and K3 count as one callout) |
 | Taps to advance (minimum) | 45 | 34 | 34 | **34** |
-| Words | 252 | 230 | 235 | **215** (A 6 · M 149 · C 16 · B 24 · K 20). Split on spaces; "=" is not counted as a word. |
-| Read time at 150 wpm | 1:41 | 1:32 | 1:34 | **1:26** (215 / 150 = 1.43 min) |
-| Map typewriter (HUD) | 28.2 s (1,006 chars × 28 ms) | 25.3 s (905 × 28 ms) | 19.0 s (905 × 21 ms) | **17.7 s** (841 × 21 ms) |
+| Words | 252 | 230 | 235 | **216** (A 6 · M 150 · C 16 · B 24 · K 20). Split on spaces; "=" is not counted as a word. |
+| Read time at 150 wpm | 1:41 | 1:32 | 1:34 | **1:26** (216 / 150 = 1.44 min) |
+| Map typewriter (HUD) | 28.2 s (1,006 chars × 28 ms) | 25.3 s (905 × 28 ms) | 19.0 s (905 × 21 ms) | **17.7 s** (843 × 21 ms) |
 | Battle typewriter (bubbles) | 5.6 s (175 × 32 ms) | 5.6 s (176 × 32 ms) | 5.6 s | **4.2 s** (130 × 32 ms) |
 | Fixed waits | 11.8 s | 11.8 s | 11.8 s | **11.8 s** (8.8 s video + 3 s arrival pause) |
 | **Total to first card** | **≈ 2:26** | **≈ 2:15** | **≈ 2:10** | **≈ 2:00** |
