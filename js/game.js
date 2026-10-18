@@ -1694,8 +1694,16 @@
            tally. Discrete once-per-turn phase (see fireEndOfTurn); fires each
            end-of-turn card sequentially in global reveal order and the turn
            WAITS for the whole phase. No end-of-turn cards on board → no-op. */
+        /* onBetweenTurns (async script hook): after the end-of-turn phase, before
+           the next turn starts (draws, buttons, onTurnStart). A script may run a
+           beat here — Gilgamesh's first-attempt card-types lesson after turn 1 —
+           and calls done() to start the turn. Not after the last turn (endGame).
+           No script hook → the next turn starts exactly as before. */
         var _advance = function () {
-          setTimeout(function () { G.turn >= G.config.structure.turns ? endGame() : nextTurn(); }, POST_REVEAL);
+          setTimeout(function () {
+            if (G.turn >= G.config.structure.turns) { endGame(); return; }
+            SOG.BattleHooks.runAsyncOr('onBetweenTurns', [G.turn], nextTurn);
+          }, POST_REVEAL);
         };
         if (SOG.abilities && typeof SOG.abilities.fireEndOfTurn === 'function') {
           SOG.abilities.fireEndOfTurn(_advance);

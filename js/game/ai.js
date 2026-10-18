@@ -178,6 +178,22 @@
       var _hSelectPlays = (_tier === 'serf')  ? serfSelectPlays
                         : (_tier === 'giant') ? giantSelectPlaysFor(G.config.scriptHook)
                         : _hSettings.selectPlays;
+      // Scripted plays (cfg.ai.settings.scriptedPlays(ctx) → [{cardId, locId}] or
+      // null): a battle's lesson can fix a play (Gilgamesh's first-attempt
+      // Ziggurat on turn 1). Committed FIRST, ahead of the tier brain, which then
+      // fills the rest of the turn from the remaining hand — never past the
+      // per-turn card cap. Battles that don't set it are unchanged.
+      var _scripted = 0;
+      if (typeof _hSettings.scriptedPlays === 'function') {
+        var _sPlays = _hSettings.scriptedPlays({ G: G, turn: G.turn, hand: G.aiHand.slice(), locations: G.locations, capital: budget }) || [];
+        for (var _sp = 0; _sp < _sPlays.length; _sp++) {
+          var _sPlay = _sPlays[_sp];
+          if (_sPlay && _sPlay.cardId != null && _sPlay.locId != null && G.aiHand.indexOf(_sPlay.cardId) !== -1) {
+            commitPlay(_sPlay.cardId, _sPlay.locId);
+            _scripted++;
+          }
+        }
+      }
       if (typeof _hSelectPlays === 'function') {
         // Expose the per-turn capital budget the engine already computed above
         // (CAPITAL + G.aiBonusCapitalNextTurn, with the accumulator then zeroed) so
@@ -186,6 +202,10 @@
         // ignore ctx.capital (Sargon) are unaffected.
         var _hCtx   = { G: G, turn: G.turn, hand: G.aiHand.slice(), locations: G.locations, capital: budget };
         var _hPlays = _hSelectPlays(_hCtx) || [];
+        if (_scripted) {
+          var _cap = (G.config.structure && G.config.structure.cardsPerTurn != null) ? G.config.structure.cardsPerTurn : Infinity;
+          _hPlays = _hPlays.slice(0, Math.max(0, _cap - _scripted));
+        }
         for (var _hp = 0; _hp < _hPlays.length; _hp++) {
           var _hPlay = _hPlays[_hp];
           if (_hPlay && _hPlay.cardId != null && _hPlay.locId != null) {
