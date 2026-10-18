@@ -7,7 +7,8 @@
 
    Kept (and only these):
      1. battle location scores at the large size, vertically centred
-     2. the turn box: large turn and cards-to-play numbers, labels top-aligned
+     2. the turn box: two columns (TURN over 1/4 | CARDS TO PLAY over its
+        number), a thin vertical rule between them
      3. purple End Turn (enabled)
      4. result screens: purple Continue / Play Again, neutral other buttons,
         18px subline and location rows
@@ -26,11 +27,8 @@ html.design-v2 {
   --tap-line:   #c79bf2;   /* outlines / rings on dark or busy ground */
   --tap-text:   #fff5e6;
   /* Measured from CTGalbite's metrics (canvas measureText): at 44px its digits'
-     ink runs 2.2–33px down a 44px line box, centred 4.4px above the middle;
-     at 16px capitals start 0.8px down, the 44px digits 2.2px down. */
+     ink runs 2.2–33px down a 44px line box, centred 4.4px above the middle. */
   --dv2-score-nudge: 8.8px;       /* 2 × 4.4: centring content moves it by half */
-  --dv2-turn-label-nudge: 1.4px;  /* 2.2 − 0.8 */
-  --dv2-cap-label-nudge: 1.4px;
 }
 
 /* ── 1. Battle location scores: large, vertically centred ─────────────
@@ -45,22 +43,54 @@ html.design-v2 .battle-loc-score-player {
   padding-top: var(--dv2-score-nudge, 0px);   /* …and the padding drops its centre by 4.4px */
 }
 
-/* ── 2. Turn box: large numbers, labels top-aligned with them ─────────
-   js/design-v2.js splits "TURN 2 / 4" into .dv2-turn-label + .dv2-turn-num.
-   Rows align their items at the top; each small label is pushed down so
-   the top of its letters meets the top of the big number's digits. */
-html.design-v2 .battle-hud-topleft { padding: 8px 18px 10px; }
-html.design-v2 .battle-turn-info {
-  display: flex;
-  align-items: flex-start;
+/* ── 2. Turn box: two columns, label over number ─────────────────────
+   Left: "TURN" over the large "1/4" (js/design-v2.js splits "TURN 1 / 4"
+   into .dv2-turn-label + .dv2-turn-num). Right: the ticker's label
+   ("CARDS TO PLAY" / "CAPITAL") over its large number. A thin vertical rule
+   between them replaces the old horizontal one (same colour and weight).
+   Both labels: same small size, muted cream. Numbers keep their colours
+   (gold turn, cyan ticker) and the ticker's glow. The pair is centred
+   vertically in the box, whose height stays 112px. Its width grows from 210
+   to ~250: "CARDS TO PLAY" alone is 121px wide at the 16px label size. */
+html.design-v2 .battle-hud-topleft {
+  flex-direction: row;
+  align-items: stretch;
   justify-content: center;
-  gap: 10px;
-  padding-bottom: 4px;
+  gap: 0;
+  box-sizing: border-box;
+  height: 112px;
+  padding: 12px 14px;
 }
-html.design-v2 .battle-turn-info .dv2-turn-num { font-size: 44px; line-height: 1; letter-spacing: 0.02em; }
-html.design-v2 .battle-turn-info .dv2-turn-label { line-height: 1; padding-top: var(--dv2-turn-label-nudge, 0px); }
-html.design-v2 .battle-capital-info { flex-direction: row; align-items: flex-start; justify-content: center; gap: 10px; }
-html.design-v2 .battle-capital-label { font-size: 16px; line-height: 1; padding-top: var(--dv2-cap-label-nudge, 0px); }
+html.design-v2 .battle-turn-info,
+html.design-v2 .battle-capital-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+html.design-v2 .battle-turn-info {
+  border-bottom: none;
+  border-right: 1px solid rgba(200, 160, 32, 0.32);   /* the old horizontal rule's style */
+  padding: 0 14px 0 0;
+  /* Fixed: the widest turn ("4/4", 68px at 44px) + 14 + the 1px rule, so the
+     box keeps one width all game (CTGalbite's digits differ in width). */
+  box-sizing: border-box;
+  width: 83px;
+  flex: 0 0 auto;
+}
+html.design-v2 .battle-capital-info { padding: 0 0 0 14px; }
+html.design-v2 .battle-turn-info .dv2-turn-label,
+html.design-v2 .battle-capital-label {
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  color: #cdbb94;                                     /* muted cream, both labels */
+  text-shadow: 1px 1px 0 #000;
+  white-space: nowrap;
+}
+html.design-v2 .battle-turn-info .dv2-turn-num { font-size: 44px; line-height: 1; letter-spacing: 0.02em; color: var(--snes-yellow); }
 html.design-v2 .battle-capital-num { font-size: 44px; line-height: 1; }
 
 /* ── Shared purple button look (items 3, 4, 7) ─────────────────────── */

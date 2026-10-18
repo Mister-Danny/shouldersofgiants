@@ -6,7 +6,7 @@
  * or ?design=v2 for a preview). It never changes game state.
  *
  *   battle  the turn line "TURN 2 / 4" split into a small "TURN" label and a
- *           large "2/4", so the label can be top-aligned with the number
+ *           large "2/4", stacked as the turn box's left column
  */
 (function () {
   'use strict';

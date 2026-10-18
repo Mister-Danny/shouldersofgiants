@@ -15,11 +15,13 @@
    - At 44px, CTGalbite's digits sit 4.4px above the middle of their line box. The score uses a zero-height line box plus 8.8px of top padding, so the ink's centre lands on the box's centre without making the location bar taller.
    - Checked at 1366×768 and 1280×800: within half a pixel.
    - Screenshots: `compare-scores-and-turnbox-zoom.png`, `compare-score-1280x800-zoom.png`.
-2. **Turn box.**
-   - "TURN 2 / 4" is split into a 16px "TURN" and a 44px "2/4".
-   - "CARDS TO PLAY" is 16px, with a 44px number.
-   - Labels are top-aligned: each row aligns to the top, and the label drops 1.4px so its capitals' tops meet the digits' tops.
-   - Label colours are unchanged.
+2. **Turn box: two columns.**
+   - Left: "TURN" centred over the large gold "1/4". Right: "CARDS TO PLAY" (or "CAPITAL") centred over the large cyan number, which keeps its glow.
+   - A thin vertical rule sits between the columns, in the old horizontal rule's colour and weight; the horizontal rule is gone.
+   - Both labels are 16px muted cream (`#cdbb94`).
+   - The block is centred vertically, and the box height stays 112px.
+   - The width grows from 210 to 250px, because "CARDS TO PLAY" alone is 121px wide at 16px. The turn column is fixed at 83px (the widest turn is "4/4"), so the box never changes width as the turn changes.
+   - Screenshots: `turnbox-1366x768-states.png` and `turnbox-1280x800-states.png` (1/4 and 4/4 × cards 1 and 0), plus `turnbox-in-battle-*.png`.
 3. **End Turn, enabled:** purple (I'M READY gradient, light-purple edge). Its turn-1 attention pulse is purple to match. The disabled state is unchanged.
 4. **Result screens: the scoreboard version.** Big VICTORY, subline and per-location rows, with the subline and rows at 18px.
    - CONTINUE and PLAY AGAIN are purple.
