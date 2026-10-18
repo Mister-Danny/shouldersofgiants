@@ -14,6 +14,7 @@
 1. **Battle location scores at 44px (were 28), vertically centred.**
    - At 44px, CTGalbite's digits sit 4.4px above the middle of their line box. The score uses a zero-height line box plus 8.8px of top padding, so the ink's centre lands on the box's centre without making the location bar taller.
    - Checked at 1366×768 and 1280×800: within half a pixel.
+   - The Neanderthal battle's single location (The Camp) has a shorter 30px bar, so its scores are 32px there. Their ink fills 73–78% of the bar, with 3–4px above and 4px below, and two-digit scores stay 17–20px clear of the name plate. Screenshots: `neanderthal-scores-*.png` (13 / 10 and 8 / 3), `neanderthal-battle-1366x768.png`.
    - Screenshots: `compare-scores-and-turnbox-zoom.png`, `compare-score-1280x800-zoom.png`.
 2. **Turn box: two columns.**
    - Left: "TURN" centred over the large gold "1/4". Right: "CARDS TO PLAY" (or "CAPITAL") centred over the large cyan number, which keeps its glow.

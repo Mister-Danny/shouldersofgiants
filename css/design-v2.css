@@ -42,6 +42,14 @@ html.design-v2 .battle-loc-score-player {
   line-height: 0;                 /* a zero-height line box adds no height to the row… */
   padding-top: var(--dv2-score-nudge, 0px);   /* …and the padding drops its centre by 4.4px */
 }
+/* The Neanderthal battle's single location (The Camp) has a 30px bar, not
+   44px: 32px digits put their ink (~22.5px) at 75% of it, the same nudge
+   scaled to the size (4.4 × 32/44 = 3.2px, padded 6.4px). */
+html.design-v2 body.prehistory-battle .battle-loc-score-opp,
+html.design-v2 body.prehistory-battle .battle-loc-score-player {
+  font-size: 32px;
+  --dv2-score-nudge: 6.4px;
+}
 
 /* ── 2. Turn box: two columns, label over number ─────────────────────
    Left: "TURN" over the large "1/4" (js/design-v2.js splits "TURN 1 / 4"
