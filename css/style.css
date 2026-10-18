@@ -11613,6 +11613,53 @@ body.prehistory-battle .db-overlay-ip {
   /* scale now lives on the wrapper so the IP/CC badges scale too */
 }
 
+/* ✕ close button on the card's top-right corner (44px hit area, 40px circle),
+   centred just outside the corner so it clears the IP number. Same as
+   clicking outside the card. Hidden until the reveal takes clicks (.is-live,
+   set by _wireCardAcquisitionInteractions). One radial gradient for the
+   circle and its ring (no border-radius border); the ✕ is two CSS bars. */
+#adv-card-reveal-close {
+  --close-ring: #f3e6c4;
+  position: absolute;
+  top: -26px;
+  right: -26px;
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  background: radial-gradient(circle closest-side,
+    rgba(18, 10, 4, 0.96) calc(100% - 5px), var(--close-ring) calc(100% - 4.5px),
+    var(--close-ring) calc(100% - 2.5px), rgba(0, 0, 0, 0) calc(100% - 1.5px));
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.12s ease;
+}
+#adv-card-reveal-close.is-live { opacity: 1; pointer-events: auto; }
+#adv-card-reveal-close::before,
+#adv-card-reveal-close::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 3px;
+  margin: -1.5px 0 0 -9px;
+  border-radius: 1px;
+  background: var(--close-ring);
+}
+#adv-card-reveal-close::before { transform: rotate(45deg); }
+#adv-card-reveal-close::after  { transform: rotate(-45deg); }
+#adv-card-reveal-close:hover { --close-ring: #f8d000; transform: scale(1.08); }
+#adv-card-reveal-close:focus-visible { outline: 2px solid #f8d000; outline-offset: 2px; border-radius: 50%; }
+/* Hovering the ✕ is not hovering the card: no card lift / gold card ring. */
+#adv-card-reveal-card-wrap:has(#adv-card-reveal-close:hover) { transform: none; }
+#adv-card-reveal-card-wrap:has(#adv-card-reveal-close:hover) #adv-card-reveal-img {
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.75), 0 0 0 2px rgba(212, 170, 80, 0.5);
+}
+
 /* "New Card Acquired" banner — pixel-art gold ribbon above the card */
 #adv-card-reveal-banner {
   font-family: var(--font);

@@ -937,6 +937,10 @@ window.SOG.Adventure.Prehistory = (function () {
     opts = opts || {};
     var _dismissed = false;
     var _autoTimer = null;
+    // The ✕ in the card's top-right corner: a target players can see, for
+    // those who keep clicking the card (which opens its details) to move on.
+    var closeEl = document.getElementById('adv-card-reveal-close');
+    if (closeEl) closeEl.classList.add('is-live');
 
     // Optional auto-dismiss: used by the D2c Farmer grant sequence so cards
     // advance on their own (~1.5s). The player can still click early to
@@ -960,6 +964,7 @@ window.SOG.Adventure.Prehistory = (function () {
         opacity:  0,
         duration: 0.3,
         onComplete: function () {
+          if (closeEl) closeEl.classList.remove('is-live');
           revealEl.style.display = 'none';
           if (dimEl) { dimEl.style.display = 'none'; dimEl.style.opacity = ''; }
           gsap.set(wrapEl, { clearProps: 'all' });
@@ -973,6 +978,9 @@ window.SOG.Adventure.Prehistory = (function () {
       // If the card-info popup is open, let it handle the click — do nothing.
       var popupEl = document.getElementById('battle-popup-backdrop');
       if (popupEl && popupEl.classList.contains('visible')) return;
+
+      // The ✕ → dismiss (checked first: it sits inside the card wrapper)
+      if (closeEl && closeEl.contains(e.target)) { dismiss(); return; }
 
       // Click anywhere on the card wrapper (img or IP overlay) → open popup
       if (wrapEl.contains(e.target)) {
