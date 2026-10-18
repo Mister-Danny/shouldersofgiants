@@ -33,12 +33,13 @@ window.SOG_FEATURES = {
   // config sets orderBadges too, so false here would leave them in Ötzi only.
   ORDER_BADGES_EVERYWHERE: true,
 
-  // Design pass v2 (proposal, not approved): one signal colour for taps, a
-  // two-size type hierarchy, and three depth planes on home / victory / card
-  // reveal. Every rule lives in css/design-v2.css under html.design-v2, and
-  // js/design-v2.js does nothing without that class. Preview without flipping
-  // this: add ?design=v2 to the URL. Shipping it is one flip to true here.
-  DESIGN_V2: false,
+  // Design pass v2 — the approved set (see reference/design-v2/README.md):
+  // large location scores sized to each bar, the two-column turn box, purple
+  // End Turn / Continue / Play Again / Save Decks, neutral secondary result
+  // buttons, purple map exit outlines and objective ring, the learning check's
+  // bronze frame. Every rule lives in css/design-v2.css under html.design-v2;
+  // js/design-v2.js does nothing without that class. false = the old look.
+  DESIGN_V2: true,
 
   // The maps a player can reach up to and including Kush.
   RELEASED_MAPS: ['eastafrica', 'egypt', 'upper-egypt', 'mesopotamia'],
