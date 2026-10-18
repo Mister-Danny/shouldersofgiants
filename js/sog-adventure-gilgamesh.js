@@ -1109,7 +1109,9 @@ SOG.GilgameshBattle = (function () {
          opening hand. Turn 1: Ziggurat at Uruk, Priest held back
          (cfg.ai.settings.scriptedPlays / holdCards; the Serf brain plays the
          rest of his turn). Turn 2: Priest at Ziggurat's location, so the
-         player sees Ziggurat's +1 to other Religious cards there take effect;
+         player sees Ziggurat's +1 to other Religious cards there take effect
+         — and, after that reveal, a callout on Priest's IP: "Ziggurat gives
+         Religious cards +1 IP." (tap to continue; teaching attempts only);
        · after the turn-1 reveal, before turn 2 starts (engine hook
          onBetweenTurns): the Explorer/Gilgamesh exchange, then three shared
          callouts (js/game/callouts.js) — the type symbol, "tap it" (Ziggurat
@@ -1298,6 +1300,38 @@ SOG.GilgameshBattle = (function () {
       }, function (off) { _types.off.push(off); });
     });
   }
+  // Priest revealed at Ziggurat's location (the turn-2 scripted play): { sd, slotEl }.
+  function _typesPriestBeside() {
+    var G = SOG.state && SOG.state.G;
+    if (!G) return null;
+    var zl = _typesZigLoc(G);
+    var row = zl != null ? (G.aiSlots[zl] || []) : [];
+    for (var i = 0; i < row.length; i++) {
+      if (row[i] && row[i].cardId === PRIEST_ID && row[i].revealed) {
+        var el = SOG.board && SOG.board.getSlotEl && SOG.board.getSlotEl('opp', zl, i);
+        if (el) return { sd: row[i], slotEl: el };
+      }
+    }
+    return null;
+  }
+  // After the turn-2 reveal (lesson attempts only): a callout on Priest's IP —
+  // Ziggurat's +1 just took effect. Tap to continue; done() starts turn 3.
+  function _typesPriestCallout(done) {
+    var CO = window.SOG && SOG.Callouts;
+    var priest = _typesPriestBeside();
+    if (!CO || !priest) { done(); return; }
+    _gScriptDialogueActive = true;
+    _gDisableButtons();
+    var layer = CO.layer('gilgamesh-types-layer');
+    var ipEl = priest.slotEl.querySelector('.db-overlay-ip') || priest.slotEl;
+    var el = CO.callout(layer, 'Ziggurat gives Religious cards +1 IP.', ipEl, 'top', { tap: true, cls: 'gil-types-callout' });
+    CO.waitTap(function () {
+      CO.remove(el);
+      _typesCleanup();
+      _gScriptDialogueActive = false;
+      done();
+    }, function (off) { _types.off.push(off); });
+  }
   function _typesCleanup() {
     _types.off.forEach(function (f) { try { f(); } catch (e) {} });
     _types.off = [];
@@ -1375,10 +1409,12 @@ SOG.GilgameshBattle = (function () {
       _cunTurnStart(turn);
     },
 
-    // After the turn-1 reveal, before turn 2: the card-types lesson (lesson
-    // attempts only, and only if Ziggurat is on the board).
+    // After the turn-1 reveal, before turn 2: the card-types lesson; after the
+    // turn-2 reveal: the Priest +1 callout (teaching attempts only).
     onBetweenTurns: function (ctx, turn, done) {
       if (_types.teach && turn === 1 && _typesFindZiggurat()) { _typesRun(done); return; }
+      // After turn 2: Priest beside Ziggurat — the +1 callout (same attempts).
+      if (_types.teach && _types.shown && turn === 2 && _typesPriestBeside()) { _typesPriestCallout(done); return; }
       done();
     },
 
