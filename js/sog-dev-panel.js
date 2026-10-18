@@ -41,10 +41,12 @@ SOG.DevPanel = (function () {
   /* ── Access gate ───────────────────────────────────────────────────────
      This panel is far more destructive than the teacher bypass menu (it can
      rewrite the collection, gold and every progression flag, and wipe the save),
-     so on the LIVE site the backtick key opens it only for a signed-in TEACHER
-     (a /teachers/{uid} doc, via TeacherDashboard.isTeacher) — checked on every
-     press, nothing persisted; anyone else gets a brief notice. This replaced a
-     plaintext password that was readable in View Source.
+     so on the LIVE site the backtick key opens it only when
+     TeacherDashboard.devToolsAllowed() says so: a teacher whose doc carries an
+     invite code or a console-set devTools:true. Open-signup teachers get the
+     dashboard, not this panel. Checked on every press, nothing persisted;
+     anyone else gets a brief notice. This replaced a plaintext password that
+     was readable in View Source.
 
      On localhost / file:// the gate is skipped entirely so local testing stays
      frictionless — a dev machine is already trusted (devtools can do all of this
@@ -1195,7 +1197,7 @@ SOG.DevPanel = (function () {
       'padding:16px 18px;min-width:260px;text-align:center;color:#e8d8a0;box-shadow:0 6px 28px rgba(0,0,0,.7);';
     box.appendChild(_el('div', null, '🛠 DEV PANEL')).style.cssText =
       'color:#f8d000;font-weight:bold;letter-spacing:1px;margin-bottom:8px;';
-    var msg = _el('div', null, 'TEACHER ACCOUNT REQUIRED');
+    var msg = _el('div', null, 'DEV TOOLS NOT ENABLED FOR THIS ACCOUNT');
     msg.style.cssText = 'font-size:11px;margin-top:7px;color:#f0857a;';
     box.appendChild(msg);
     back.appendChild(box);
@@ -1206,16 +1208,16 @@ SOG.DevPanel = (function () {
     back.addEventListener('click', close);
   }
 
-  function _isTeacher() {
-    return !!(window.TeacherDashboard && typeof window.TeacherDashboard.isTeacher === 'function'
-              && window.TeacherDashboard.isTeacher());
+  function _devToolsAllowed() {
+    return !!(window.TeacherDashboard && typeof window.TeacherDashboard.devToolsAllowed === 'function'
+              && window.TeacherDashboard.devToolsAllowed());
   }
 
   /* The backtick entry point. Closing never needs access; OPENING does —
-     a trusted (local) host, or a signed-in teacher. */
+     a trusted (local) host, or a teacher with dev tools (devToolsAllowed). */
   function _requestToggle() {
     if (isOpen()) { hide(); return; }
-    if (_isTrustedHost() || _isTeacher()) { show(); return; }
+    if (_isTrustedHost() || _devToolsAllowed()) { show(); return; }
     if (document.getElementById(PW_ID)) return;   // notice already up
     _showAccessNotice();
   }
