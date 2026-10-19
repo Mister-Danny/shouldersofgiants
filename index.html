@@ -5,7 +5,27 @@
   <!-- Responsive viewport — scales to device width on phones/tablets,
        preserves 1280px layout on Chromebooks via CSS transform         -->
   <meta name="viewport" content="width=1280, initial-scale=1">
-  <title>Shoulders of Giants</title>
+  <title>Shoulders of Giants – Free History Card Game for Middle School</title>
+  <meta name="description" content="A free, browser-based ancient history strategy card game for grades 6–8. Runs on Chromebooks. No student emails needed.">
+  <link rel="canonical" href="https://playshouldersofgiants.com/">
+
+  <!-- Link previews (email, Google Classroom, Slack, social).
+       og-image.jpg is 1200×630 at the site root; absolute URLs, so no ?v= cache version. -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Shoulders of Giants">
+  <meta property="og:title" content="Shoulders of Giants – Free History Card Game for Middle School">
+  <meta property="og:description" content="A free, browser-based ancient history strategy card game for grades 6–8. Runs on Chromebooks. No student emails needed.">
+  <meta property="og:url" content="https://playshouldersofgiants.com/">
+  <meta property="og:image" content="https://playshouldersofgiants.com/og-image.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Shoulders of Giants: the free history card game for middle school, with the Lucy, Gilgamesh and Ötzi cards">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Shoulders of Giants – Free History Card Game for Middle School">
+  <meta name="twitter:description" content="A free, browser-based ancient history strategy card game for grades 6–8. Runs on Chromebooks. No student emails needed.">
+  <meta name="twitter:image" content="https://playshouldersofgiants.com/og-image.jpg">
+  <meta name="twitter:image:alt" content="Shoulders of Giants: the free history card game for middle school, with the Lucy, Gilgamesh and Ötzi cards">
 
   <!-- Cinzel: historical serif headings | Crimson Text: card names/flavour | Source Sans 3: UI/ability text -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,6 +46,15 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
+
+  <!-- Shown only without JavaScript (and read by crawlers): what the game is. -->
+  <noscript>
+    <p style="margin:16px;font:16px/1.5 sans-serif;color:#fff;background:#3a2210;padding:12px 16px">
+      <strong>Shoulders of Giants</strong> is a free, browser-based strategy card game for middle school world history.
+      Students build decks of historical figures and ideas, from Lucy and &Ouml;tzi to Gilgamesh, and compete for influence across ancient places.
+      It runs on Chromebooks, and students play without email addresses. Turn on JavaScript to play.
+    </p>
+  </noscript>
 
   <div id="sog-stage">
 
