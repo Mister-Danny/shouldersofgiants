@@ -418,9 +418,13 @@ window.TeacherDashboard = (function () {
       var label = code === '' ? 'Ungrouped' : (labelByCode[code] || code);
       html += '<div class="td-roster-group">';
       html += '<div class="td-roster-group-title">' + _escapeHtml(label) + ' (' + byClass[code].length + ')</div>';
-      html += '<table class="td-roster-table"><thead><tr>' +
-        '<th>Username</th><th>Password</th><th>Furthest Progress</th><th>Learning Checks</th><th>Time Played</th><th>Last Active</th>' +
-        '</tr></thead><tbody>';
+      // Progress, learning checks and time played come from the student's own
+      // device (their saved progress), so they can be edited — say so.
+      html += '<table class="td-roster-table"><thead>' +
+        '<tr class="td-roster-note-row"><th colspan="2"></th>' +
+          '<th colspan="3" class="td-self-reported">Self-reported by students</th><th></th></tr>' +
+        '<tr><th>Username</th><th>Password</th><th>Furthest Progress</th><th>Learning Checks</th><th>Time Played</th><th>Last Active</th></tr>' +
+        '</thead><tbody>';
       byClass[code].forEach(function (p) {
         var learningText = p.learningTotal > 0 ? (p.learningCorrect + ' / ' + p.learningTotal) : '—';
         // Hidden until clicked: this is a working login, and a roster is often

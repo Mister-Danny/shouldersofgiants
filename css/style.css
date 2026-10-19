@@ -4765,6 +4765,18 @@ body[data-screen="overworld"] .guest-status-strip {
 .td-roster-table td {
   color: var(--text-white);
 }
+/* "Self-reported by students" over Furthest Progress / Learning Checks / Time Played */
+.td-roster-table .td-roster-note-row th {
+  padding-bottom: 2px;
+  border-bottom: none;
+}
+.td-roster-table .td-self-reported {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 12px;
+  color: var(--text-dim);
+}
 
 /* ── Per-screen palette override: home screen (warm leather + gold) ─────────────
  * The home screen's wood-plank background + .btn-home-* gold-on-brown buttons
