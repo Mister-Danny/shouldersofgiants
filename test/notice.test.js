@@ -119,7 +119,7 @@ test('boot shows the message once auth is ready, without being called directly',
 
 test('waits for another popup to close instead of stacking on it', async () => {
   const { api, els, store, openPopups } = load({ doc: NOTICE });
-  openPopups.list = [{ id: 'guest-notice-backdrop' }];   // the welcome popup is up
+  openPopups.list = [{ id: 'welcome-backdrop' }];   // the welcome popup is up
   const pending = check(api);
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(els['notice-backdrop'].classList.contains('visible'), false, 'held back');

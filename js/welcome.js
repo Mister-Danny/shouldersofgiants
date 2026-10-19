@@ -3,9 +3,15 @@
  *
  * Shows once on the very first visit to the game in a given browser.
  * Skipped silently on every subsequent visit (unless localStorage is cleared).
- * Also skipped for "returning players" who already have any existing
- * progress saved (tutorial complete, saved deck, wins, unlocks) but no
- * welcome flag yet — so we don't pop this on people who pre-date the modal.
+ * Also skipped for "returning players" who already have REAL progress saved
+ * (Arcadium wins / unlocks / tutorial, any completed Adventure battle or beaten
+ * node, Adventure map progress) but no welcome flag yet — so we don't pop this
+ * on people who pre-date the modal.
+ *
+ * NOT progress: the deck keys. js/decks.js creates an empty sog_decks (and
+ * sog_active_deck_slot) the moment it loads, before this runs — counting
+ * sog_decks made every brand-new player look like a returning one, so the
+ * popup silently never showed from 2026-04-26 (4560067) until this fix.
  */
 (function () {
   'use strict';
@@ -13,10 +19,9 @@
   var WELCOME_KEY = 'sog_welcome_seen';
 
   // If any of these existing keys is set, treat the user as a returning player.
-  // (List mirrors the keys cleared by bypass.js "Reset All Data" + progression keys.)
+  // (Arcadium progression keys, plus Adventure progress below.)
   var PROGRESS_KEYS = [
     'sog_tutorial_complete',
-    'sog_decks',
     'sog_serf_wins',
     'sog_giant_wins',
     'sog_total_wins',
@@ -24,15 +29,28 @@
     'sog_exploration_unlocked',
     'sog_religious_cutscene_seen',
     'sog_exploration_cutscene_seen',
-    'sog_victory_montage_seen'
+    'sog_victory_montage_seen',
+    // Adventure: past the map intro, or a map / position saved.
+    'sog_adventure_intro_complete',
+    'sog_overworld_map',
+    'sog_overworld_pos'
+  ];
+  // Adventure battles won / map nodes beaten, by key pattern.
+  var PROGRESS_PATTERNS = [
+    /^sog_battle_[a-z_]+_complete$/,
+    /^sog_node_[a-z0-9_-]+_(serf|giant)_beaten$/
   ];
 
   function hasExistingProgress() {
-    for (var i = 0; i < PROGRESS_KEYS.length; i++) {
-      try {
+    try {
+      for (var i = 0; i < PROGRESS_KEYS.length; i++) {
         if (localStorage.getItem(PROGRESS_KEYS[i])) return true;
-      } catch (e) { return false; }
-    }
+      }
+      for (var k = 0; k < localStorage.length; k++) {
+        var key = localStorage.key(k);
+        if (key && localStorage.getItem(key) && PROGRESS_PATTERNS.some(function (re) { return re.test(key); })) return true;
+      }
+    } catch (e) { return false; }
     return false;
   }
 

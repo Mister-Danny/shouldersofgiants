@@ -95,7 +95,7 @@ window.SogNotice = (function () {
   var WAIT_TRIES = 60;   // ~30s
 
   function _somethingElseIsOpen() {
-    var open = document.querySelectorAll('.guest-modal-backdrop.visible, .card-popup-backdrop.visible, #account-flow-backdrop.visible');
+    var open = document.querySelectorAll('.guest-modal-backdrop.visible, .card-popup-backdrop.visible, #account-flow-backdrop.visible, #welcome-backdrop.visible');
     for (var i = 0; i < open.length; i++) {
       if (open[i].id !== 'notice-backdrop') return true;
     }
