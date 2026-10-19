@@ -481,7 +481,8 @@ window.SogAccountUI = (function () {
      closing it lands back on the form. Delegated (_privacyLinkWired) because
      the modal body is re-rendered on every step. */
   var _PRIVACY_LINE = '<div class="account-privacy-line">Teacher accounts are for adults. ' +
-    '<a href="#" class="account-privacy-link">Privacy &amp; account deletion</a></div>';
+    '<a href="#" class="account-privacy-link">Privacy &amp; account deletion</a> &middot; ' +
+    '<a href="/teachers/" target="_blank" rel="noopener">For teachers</a></div>';
 
   function _showPrivacy() {
     var src = document.getElementById('about-privacy');

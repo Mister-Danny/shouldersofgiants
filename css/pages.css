@@ -1,0 +1,191 @@
+/* pages.css — the static website pages (/teachers/, /privacy/), not the game.
+   Same look as the game's home and About screens: plank-wood background,
+   CT Galbite pixel headings in gold, dark parchment panels with the gold
+   frame. Body text is a system font stack for long-form reading (and no
+   third-party font request). Phones → Chromebooks → projectors: one column
+   that widens, sizes in rem, a larger root size on big screens. */
+
+@font-face {
+  font-family: 'CTGalbite';
+  src: url('../fonts/CT%20Galbite-Regular.ttf') format('truetype');
+  font-display: swap;
+}
+
+:root {
+  --gold:       #e8c060;
+  --gold-hi:    #f4d678;
+  --gold-frame: #d4aa50;
+  --yellow:     #f8d000;
+  --cream:      #f3e6c4;
+  --cream-dim:  #d9c9a3;
+  --panel:      rgba(30, 16, 6, 0.94);
+  --pixel:      'CTGalbite', 'Courier New', monospace;
+  --body:       system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { font-size: 100%; -webkit-text-size-adjust: 100%; }
+@media (min-width: 1600px) { html { font-size: 112.5%; } }   /* projectors / big screens */
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--cream);
+  background-color: #7a4822;
+  /* The home screen's wood: fine grain + plank bands + warm brown base */
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0, transparent 7px, rgba(0,0,0,0.07) 7px, rgba(0,0,0,0.07) 8px),
+    repeating-linear-gradient(0deg, transparent 0, transparent 38px, rgba(255,255,255,0.045) 38px, rgba(255,255,255,0.045) 42px,
+                              transparent 42px, transparent 78px, rgba(0,0,0,0.07) 78px, rgba(0,0,0,0.07) 82px),
+    linear-gradient(180deg, #6e3e1a 0%, #885028 30%, #7a4822 60%, #6e3e1a 100%);
+  background-attachment: scroll;
+}
+
+a { color: var(--gold-hi); }
+a:hover { color: #fff5d8; }
+:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 16px; top: 8px; z-index: 10; background: #1a0c04; padding: 8px 12px; }
+
+.wrap { width: 100%; max-width: 68rem; margin: 0 auto; padding: 0 1.25rem; }
+.wrap-narrow { max-width: 48rem; }
+
+/* ── Top bar ───────────────────────────────────────────────────────── */
+.topbar { padding: 1rem 0; }
+.topbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.brand {
+  font-family: var(--pixel); font-size: 1.35rem; color: var(--yellow); text-decoration: none;
+  letter-spacing: 0.05em; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 2px -1px 0 #000, -1px 2px 0 #000;
+}
+.brand:hover { color: var(--yellow); }
+.topnav { display: flex; gap: 1.25rem; font-weight: 600; }
+.topnav a { color: var(--cream); text-decoration: none; text-shadow: 1px 1px 0 #000; }
+.topnav a:hover, .topnav a[aria-current] { color: var(--gold-hi); text-decoration: underline; }
+
+/* ── Pixel headings ────────────────────────────────────────────────── */
+h1, h2, h3 { font-family: var(--pixel); font-weight: normal; letter-spacing: 0.04em; margin: 0; }
+h1 {
+  font-size: clamp(1.9rem, 4.4vw, 3.1rem); line-height: 1.18; color: var(--yellow);
+  text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 3px -2px 0 #000, -2px 3px 0 #000;
+}
+h2 {
+  font-size: clamp(1.4rem, 2.6vw, 1.85rem); line-height: 1.25; color: var(--gold);
+  text-shadow: 2px 2px 0 #000; padding-bottom: 0.4rem; margin-bottom: 1.1rem;
+  border-bottom: 1px solid rgba(212, 170, 80, 0.32);
+}
+h3 { font-size: 1.2rem; line-height: 1.3; color: var(--gold); text-shadow: 1px 1px 0 #000; margin-bottom: 0.4rem; }
+
+/* ── Panels (the About screen's frame) ─────────────────────────────── */
+.panel {
+  background:
+    radial-gradient(ellipse at 94% 92%, rgba(100, 65, 10, 0.28) 0%, transparent 52%),
+    radial-gradient(ellipse at 8% 10%, rgba(140, 100, 30, 0.18) 0%, transparent 40%),
+    var(--panel);
+  border: 3px solid var(--gold-frame);
+  box-shadow: 0 0 0 3px #1a0c04, 0 0 0 6px #6a4418, 0 0 0 7px #1a0c04, inset 0 0 36px rgba(60, 30, 0, 0.5);
+  padding: clamp(1.25rem, 3.5vw, 2.4rem);
+  margin: 0 0 2.5rem;
+}
+.panel p { margin: 0 0 0.9rem; }
+.panel p:last-child, .panel ul:last-child { margin-bottom: 0; }
+.panel strong { color: #fff3d6; }
+.muted { color: var(--cream-dim); }
+
+ul.gems { list-style: none; padding: 0; margin: 0 0 0.9rem; }
+ul.gems li { position: relative; padding-left: 1.5rem; margin: 0 0 0.45rem; }
+ul.gems li::before { content: '\25C6'; position: absolute; left: 0; top: 0; color: var(--gold-frame); font-size: 0.8em; line-height: 2; }
+
+/* ── Buttons (the home screen's I'M READY / ABOUT pair) ────────────── */
+.btn {
+  display: inline-block; font-family: var(--pixel); font-size: 1.15rem; letter-spacing: 0.05em;
+  padding: 0.75rem 1.6rem; color: #f0cf6c; text-decoration: none; text-align: center;
+  background: #2a1608; border: 3px solid var(--gold-frame); border-radius: 2px;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+  box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.06s;
+}
+.btn:hover { color: #fff5d8; border-color: #f0cf6c; box-shadow: 0 4px 0 #1a0c04, 0 5px 0 #000, 0 0 14px rgba(240, 207, 108, 0.35); }
+.btn:active { transform: translateY(4px); box-shadow: 0 0 0 #1a0c04, 0 1px 0 #000; }
+.btn-primary { background: linear-gradient(180deg, #7a3aab 0%, #5e2890 100%); }
+.btn-primary:hover { background: linear-gradient(180deg, #9450c8 0%, #6e34a8 100%); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 1rem 1.25rem; margin-top: 1.6rem; }
+
+/* ── Hero ──────────────────────────────────────────────────────────── */
+.hero { display: grid; grid-template-columns: 1.25fr 1fr; gap: 2rem; align-items: center; padding: 1.5rem 0 3rem; }
+.hero .sub { font-size: 1.2rem; line-height: 1.55; margin: 1.1rem 0 0; color: #fff3d6; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); max-width: 36rem; }
+.fan { position: relative; height: 20rem; }
+.fan img {
+  position: absolute; top: 1.5rem; width: 9.75rem; height: auto; aspect-ratio: 731 / 1054; object-fit: cover;
+  border-radius: 10px; box-shadow: 0 10px 22px rgba(0,0,0,0.6), 0 0 0 3px #1a0c04;
+}
+.fan img:nth-child(1) { left: 0;  transform: rotate(-8deg); top: 2.4rem; }
+.fan img:nth-child(2) { left: calc(50% - 4.875rem); z-index: 2; }
+.fan img:nth-child(3) { right: 0; transform: rotate(8deg); top: 2.4rem; }
+
+/* ── How it works ──────────────────────────────────────────────────── */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; counter-reset: step; }
+.steps li { counter-increment: step; }
+.steps li::before {
+  content: counter(step); display: inline-flex; align-items: center; justify-content: center;
+  width: 2.4rem; height: 2.4rem; margin-bottom: 0.6rem; font-family: var(--pixel); font-size: 1.3rem; color: #f0cf6c;
+  background: linear-gradient(180deg, #7a3aab 0%, #5e2890 100%); border: 2px solid var(--gold-frame); text-shadow: 1px 1px 0 #000;
+}
+.steps p { margin: 0; }
+
+/* ── Units ─────────────────────────────────────────────────────────── */
+.units { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
+.unit { display: grid; grid-template-columns: 4.6rem 1fr; gap: 0.9rem; align-items: start; }
+.unit img { width: 4.6rem; height: auto; aspect-ratio: 731 / 1054; object-fit: cover; border-radius: 5px; box-shadow: 0 0 0 2px #1a0c04, 0 4px 10px rgba(0,0,0,0.5); }
+.unit ul { margin: 0; }
+.unit li { margin-bottom: 0.2rem; }
+.callout { border-left: 4px solid var(--gold-frame); padding: 0.2rem 0 0.2rem 1rem; margin: 0 0 0.9rem; }
+
+/* ── Two-column fact grid (classrooms, standards) ──────────────────── */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+.cols > .panel { margin-bottom: 0; }
+.stack { margin-bottom: 2.5rem; }
+
+/* ── FAQ ───────────────────────────────────────────────────────────── */
+.faq h3 { font-size: 1.1rem; margin-top: 1.4rem; }
+.faq h3:first-of-type { margin-top: 0; }
+
+/* ── Privacy page ──────────────────────────────────────────────────── */
+.updated { color: var(--cream-dim); margin: 0.75rem 0 0; text-shadow: 1px 1px 0 #000; }
+.panel h2 { margin-top: 2rem; }
+.panel h2:first-child { margin-top: 0; }
+.summary { background: rgba(0,0,0,0.25); border: 1px solid rgba(212,170,80,0.4); padding: 1rem 1.25rem; margin: 0 0 1rem; }
+.summary ul { margin: 0; }
+
+/* ── Footer ────────────────────────────────────────────────────────── */
+.foot { padding: 0.5rem 1rem 2.5rem; display: flex; flex-wrap: wrap; justify-content: center; row-gap: 0.4rem; text-shadow: 1px 1px 0 #000; }
+.foot a { color: var(--cream); font-weight: 600; }
+.foot a:hover { color: var(--gold-hi); }
+.foot .sep { margin: 0 0.6rem; color: var(--gold-frame); }
+
+/* ── Smaller screens ───────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .hero { grid-template-columns: 1fr; padding-bottom: 2rem; }
+  .fan { height: 15rem; max-width: 26rem; width: 100%; margin: 0 auto; }
+  .fan img { width: 8.5rem; }
+  .fan img:nth-child(2) { left: calc(50% - 4.25rem); }
+  .steps, .units, .cols { grid-template-columns: 1fr; }
+  .cols { gap: 2.5rem; }
+}
+@media (max-width: 480px) {
+  .wrap { padding: 0 1rem; }
+  .brand { font-size: 1.1rem; }
+  .topnav { gap: 1rem; }
+  .btn { width: 100%; }
+  .fan { height: 12.5rem; }
+  .fan { max-width: 21rem; }
+  .fan img { width: 6.5rem; top: 1rem; }
+  .fan img:nth-child(1), .fan img:nth-child(3) { top: 1.8rem; }
+  .fan img:nth-child(2) { left: calc(50% - 3.25rem); }
+  .panel { box-shadow: 0 0 0 2px #1a0c04, 0 0 0 4px #6a4418, inset 0 0 24px rgba(60, 30, 0, 0.5); }
+  .summary { padding: 0.75rem 0.85rem; }
+}
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
