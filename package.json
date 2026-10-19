@@ -7,7 +7,8 @@
     "test:rules": "firebase emulators:exec --only auth,firestore,database \"node --test --test-concurrency=1\"",
     "test:boss-extract": "node --test test/boss-extract.test.js test/boss-extract-writeback.test.js",
     "test:overworld-extract": "node --test test/overworld-extract.test.js",
-    "test:wired-nodes": "node --test test/wired-nodes-extract.test.js"
+    "test:wired-nodes": "node --test test/wired-nodes-extract.test.js",
+    "build:learn": "node tools/build-learn-pages.js"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.4",
