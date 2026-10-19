@@ -193,8 +193,12 @@ window.TeacherDashboard = (function () {
 
   /* ── First class (open signup) ──────────────────────────────────────────
      Right after signup the teacher lands on a class-link screen, so their
-     first class is made for them ("My Class", renamable). Idempotent: an
-     existing active class is reused rather than a second one created.
+     first class is made for them ("My Class", renamable) — ONLY when they own
+     no classes at all (an empty classCodes index). Otherwise the first active
+     class is reused; if they have classes but none is active, or none could
+     be read just now, nothing is created and cb gets an error
+     (code 'no-active-class' / 'classes-unavailable') so the caller can point
+     them at the dashboard instead of minting a duplicate.
      cb(err, { code, label, teacherName }) */
   function ensureFirstClass(cb) {
     var user = firebase.auth().currentUser;
@@ -206,6 +210,12 @@ window.TeacherDashboard = (function () {
       _loadClasses(codes, function (classes) {
         var active = classes.filter(function (c) { return c.active; });
         if (active.length) { cb(null, active[0]); return; }
+        if (codes.length) {
+          var e = new Error(classes.length ? 'All of this teacher\'s classes are deactivated.' : 'Couldn\'t load this teacher\'s classes.');
+          e.code = classes.length ? 'no-active-class' : 'classes-unavailable';
+          cb(e, null);
+          return;
+        }
         _generateClassCode('My Class', function (err, code) {
           if (err) { cb(err, null); return; }
           _refreshTeacherDocQuiet();

@@ -21,12 +21,13 @@ const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const skip = !AUTH_HOST && 'needs the Auth emulator (run under emulators:exec --only auth,firestore)';
 const PROJECT = 'demo-shoulders-of-giants';
 const SRC = fs.readFileSync(path.resolve(__dirname, '../js/account.js'), 'utf8');
+const TD_SRC = fs.readFileSync(path.resolve(__dirname, '../js/teacher-dashboard.js'), 'utf8');
 const RULES = fs.readFileSync(path.resolve(__dirname, '../firestore.rules'), 'utf8');
 const PW = 'correct-horse-9';
 // The SaveState snapshot shape the /players rules allow ({ version, modules }).
 const GUEST_PROGRESS = { version: 1, modules: { otzi: { battleComplete: true }, gold: { amount: 42 } } };
 
-let firebase, auth, testEnv, api, nextGoogle, popupMode = 'ok';
+let firebase, auth, testEnv, api, td, nextGoogle, popupMode = 'ok';
 
 const rest = (p, method = 'GET', body) => fetch(`http://${AUTH_HOST}${p}`, {
   method, headers: { 'content-type': 'application/json', authorization: 'Bearer owner' }, body: body && JSON.stringify(body),
@@ -83,11 +84,27 @@ before(async () => {
 
   const store = new Map();
   const localStorage = { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k), get length() { return store.size; }, key: i => [...store.keys()][i] };
-  const window = { SaveState: { getSnapshot: () => JSON.parse(JSON.stringify(GUEST_PROGRESS)), applySnapshot() {} }, SogAuth: { refresh() {} } };
+  const window = { SaveState: { getSnapshot: () => JSON.parse(JSON.stringify(GUEST_PROGRESS)), applySnapshot() {} }, SogAuth: { refresh() {}, ready() {}, onChange() {} } };
   api = new Function('window', 'firebase', 'localStorage', 'sessionStorage', SRC + '\n;return window.SogAccount;')(
     window, firebase, localStorage, localStorage);
   api._store = store;
+
+  // js/teacher-dashboard.js in the same realm, against the emulator — for
+  // ensureFirstClass (the class-link screen's "make my first class" step).
+  const doc = { readyState: 'complete', getElementById: () => null, addEventListener() {}, querySelectorAll: () => [] };
+  td = new Function('window', 'firebase', 'document', 'location', TD_SRC + '\n;return window.TeacherDashboard;')(
+    window, firebase, doc, { hostname: 'example.org', protocol: 'https:', origin: 'https://example.org', pathname: '/' });
 });
+
+const classesOwnedBy = async (uid) => {
+  let out = [];
+  await testEnv.withSecurityRulesDisabled(async c => {
+    const q = await c.firestore().collection('classes').where('ownerUid', '==', uid).get();
+    out = q.docs.map(d => ({ code: d.id, ...d.data() }));
+  });
+  return out.sort((a, b) => a.code.localeCompare(b.code));
+};
+const ensureFirstClass = () => new Promise(resolve => td.ensureFirstClass((err, cls) => resolve({ err, cls })));
 
 after(async () => {
   if (skip) return;
@@ -214,6 +231,71 @@ test('Google account that is already a teacher here: signs in to it (returning),
   assert.notEqual(teacherUid, guestUid);
   assert.equal(auth.currentUser.uid, teacherUid);
   assert.deepEqual((await docOf(`players/${teacherUid}`)).progress, { version: 1, modules: { gold: { amount: 7 } } }, 'returning teacher keeps their own progress');
+});
+
+test('returning Google teacher with existing classes: welcome-back result, no class created or changed', { skip }, async () => {
+  // An existing Google teacher with two classes: one deactivated, one active
+  // but unnamed (label '') with a student in it — the shape that once made the
+  // class-link screen look like it had minted a new "My Class".
+  await guest();
+  pickGoogle('g-has', 'has.classes@district.org', 'Ms Has');
+  const first = await call(api.signUpTeacherGoogleOpen, {});
+  assert.ifError(first.err);
+  const uid = first.result.uid;
+  await testEnv.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await db.doc('classes/OLD001').set({ ownerUid: uid, active: false, label: 'Last year' });
+    await db.doc('classes/OLD002').set({ ownerUid: uid, active: true, label: '' });
+    await db.doc(`teachers/${uid}`).set({ classCodes: ['OLD001', 'OLD002'] }, { merge: true });
+    await db.doc('players/kid1').set({ username: 'kid1', classCode: 'OLD002', teacherUid: uid, progress: {} });
+  });
+  await auth.signOut();
+
+  // Back on another day: Teachers → Continue with Google again.
+  await guest();
+  pickGoogle('g-has', 'has.classes@district.org', 'Ms Has');
+  const r = await call(api.signUpTeacherGoogleOpen, {});
+  assert.ifError(r.err);
+  assert.equal(r.result.existing, true, 'routes to Welcome Back, not the new-teacher screen');
+  assert.notEqual(r.result.created, true);
+  assert.equal(auth.currentUser.uid, uid);
+
+  // Even if the class-link screen is opened, it reuses the active class.
+  const e = await ensureFirstClass();
+  assert.ifError(e.err);
+  assert.equal(e.cls.code, 'OLD002');
+  assert.equal(e.cls.label, '', 'an unnamed class stays unnamed');
+  assert.deepEqual((await classesOwnedBy(uid)).map(c => c.code), ['OLD001', 'OLD002'], 'no new class');
+  assert.deepEqual((await docOf(`teachers/${uid}`)).classCodes, ['OLD001', 'OLD002']);
+  assert.equal((await docOf('players/kid1')).classCode, 'OLD002');
+});
+
+test('ensureFirstClass makes "My Class" only when the teacher owns zero classes', { skip }, async () => {
+  await guest();
+  pickGoogle('g-zero', 'zero@district.org', 'Mr Zero');
+  const t = await call(api.signUpTeacherGoogleOpen, {});
+  assert.ifError(t.err);
+  const uid = t.result.uid;
+
+  // Zero classes: one "My Class" is made, and a second call reuses it.
+  const made = await ensureFirstClass();
+  assert.ifError(made.err);
+  assert.equal(made.cls.label, 'My Class');
+  const again = await ensureFirstClass();
+  assert.equal(again.cls.code, made.cls.code);
+  assert.equal((await classesOwnedBy(uid)).length, 1);
+
+  // All classes deactivated: nothing new, a clear error instead.
+  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`classes/${made.cls.code}`).update({ active: false }));
+  const off = await ensureFirstClass();
+  assert.equal(off.err && off.err.code, 'no-active-class');
+  assert.equal((await classesOwnedBy(uid)).length, 1, 'no duplicate for a teacher whose classes are all off');
+
+  // Classes listed but unreadable just now (here: a code with no doc): no duplicate either.
+  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`teachers/${uid}`).set({ classCodes: ['GONE99'] }, { merge: true }));
+  const gone = await ensureFirstClass();
+  assert.equal(gone.err && gone.err.code, 'classes-unavailable');
+  assert.equal((await classesOwnedBy(uid)).length, 1);
 });
 
 test('email already registered: refused cleanly, still the same guest', { skip }, async () => {

@@ -195,10 +195,13 @@
   }
 
   /* ── After signup: the class-link screen ───────────────────────────────── */
+  // New teachers only. A returning teacher (result.existing) never gets the
+  // "Your class link is ready" screen; callers route them to Welcome Back.
   function afterTeacherSignup(result, method) {
-    if (result && !result.existing) _funnel('teacher_signup_completed', { method: method || '', src: src() });
     _set(KEY_BANNER_HIDDEN, '1');
     refresh();
+    if (result && result.existing) return;
+    _funnel('teacher_signup_completed', { method: method || '', src: src() });
     showClassLink();
   }
 
@@ -211,9 +214,14 @@
     bd.classList.add('visible');
     _classLinkEl('tcl-body').innerHTML = '<p class="tcl-loading">Making your class…</p>';
     var render = function (err, cls) {
+      if (err && err.code === 'no-active-class') {
+        _classLinkEl('tcl-body').innerHTML = '<p class="tcl-loading">All your classes are deactivated. ' +
+          'Open the Teacher Dashboard on the home screen to make a new class code.</p>';
+        return;
+      }
       if (err || !cls) {
         console.error('[TeacherOnboard] Could not prepare the class', err);
-        _classLinkEl('tcl-body').innerHTML = '<p class="tcl-loading">Couldn’t make your class just now. ' +
+        _classLinkEl('tcl-body').innerHTML = '<p class="tcl-loading">Couldn’t load your class just now. ' +
           'Try again from the Teacher Dashboard on the home screen.</p>';
         return;
       }
@@ -252,7 +260,7 @@
             '<label class="tcl-label" for="tcl-name">Your name, as students see it</label>' +
             '<input class="account-flow-input tcl-input" id="tcl-name" maxlength="40" placeholder="e.g. Ms Rivera" value="' + _esc(name) + '">' +
             '<label class="tcl-label" for="tcl-class">Class name</label>' +
-            '<input class="account-flow-input tcl-input" id="tcl-class" maxlength="40" value="' + _esc(c.label || 'My Class') + '">' +
+            '<input class="account-flow-input tcl-input" id="tcl-class" maxlength="40" placeholder="e.g. Period 3" value="' + _esc(c.label || '') + '">' +
           '</div>' +
         '</div>' +
         '<div class="tcl-right"><div class="tcl-qr">' + qr + '</div></div>' +
@@ -271,7 +279,8 @@
       if (v) root.TeacherDashboard.setTeacherName(v);
     });
     _classLinkEl('tcl-class').addEventListener('change', function () {
-      var v = this.value.trim() || 'My Class';
+      var v = this.value.trim();
+      if (v === (c.label || '')) return;
       c.label = v;
       root.TeacherDashboard.renameClass(c.code, v);
     });

@@ -597,6 +597,13 @@ window.SogAccountUI = (function () {
       return;
     }
     if (result && result.passwordLost) { _stepRestorePassword(result); return; }
+    // A teacher who already has a teacher doc (e.g. Google on the Teachers
+    // button): the welcome-back path, never the new-teacher class-link screen.
+    if (result && result.existing) {
+      _teacherPrefill = { email: '', adult: false };
+      _afterGoogleSignIn(result);
+      return;
+    }
     if (result && result.verifyPending) {
       _teacherPrefill = { email: '', adult: false };
       _verifyPending = true;   // returning to the tab re-checks from now on
