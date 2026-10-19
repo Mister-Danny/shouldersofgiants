@@ -1300,7 +1300,8 @@ var server = http.createServer(function (req, res) {
   }
 
   if (url === '/tools/map-editor' || url === '/tools/map-editor/') url = '/tools/map-editor/index.html';
-  if (url === '/') url = '/index.html';
+  // A folder serves its index.html, as GitHub Pages does (/, /teachers/, /privacy/).
+  if (url.slice(-1) === '/') url += 'index.html';
 
   // Contain every read inside the repo. The editor is local-only, but a
   // traversal bug here would expose the whole filesystem over HTTP.
