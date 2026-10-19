@@ -34,7 +34,18 @@ test('teacher params are stripped from the URL, anything else is kept', () => {
 test('projector "go to" label: host + path, no scheme, no index.html', () => {
   assert.equal(onboard.siteLabel('https://mister-danny.github.io', '/shouldersofgiants/'), 'mister-danny.github.io/shouldersofgiants');
   assert.equal(onboard.siteLabel('https://mister-danny.github.io', '/shouldersofgiants/index.html'), 'mister-danny.github.io/shouldersofgiants');
+  assert.equal(onboard.siteLabel('https://playshouldersofgiants.com', '/'), 'playshouldersofgiants.com');
+  assert.equal(onboard.siteLabel('https://playshouldersofgiants.com', '/index.html'), 'playshouldersofgiants.com');
   assert.equal(onboard.siteLabel('http://localhost:8750', '/'), 'localhost:8750');
+});
+
+test('class join links build from the page address, whatever the domain', () => {
+  const doc = { readyState: 'complete', getElementById: () => null, addEventListener() {}, querySelectorAll: () => [] };
+  const tdAt = (origin, pathname) => new Function('window', 'firebase', 'document', 'location',
+    fs.readFileSync(path.resolve(__dirname, '../js/teacher-dashboard.js'), 'utf8') + '\n;return window.TeacherDashboard;')(
+    {}, {}, doc, { hostname: new URL(origin).hostname, protocol: 'https:', origin, pathname });
+  assert.equal(tdAt('https://playshouldersofgiants.com', '/').joinLinkFor('PX8A4P'), 'https://playshouldersofgiants.com/?join=PX8A4P');
+  assert.equal(tdAt('https://mister-danny.github.io', '/shouldersofgiants/').joinLinkFor('PX8A4P'), 'https://mister-danny.github.io/shouldersofgiants/?join=PX8A4P');
 });
 
 test('login-card fragment round-trips and rejects anything else', () => {
