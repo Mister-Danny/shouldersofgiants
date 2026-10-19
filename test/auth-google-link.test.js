@@ -115,7 +115,7 @@ beforeEach(async () => {
   await auth.signOut();
   await rest(`/emulator/v1/projects/${PROJECT}/accounts`, 'DELETE');
   await testEnv.clearFirestore();
-  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc('invites/HISTROCK').set({ active: true }));
+  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc('invites/TESTCODE1').set({ active: true }));
 });
 
 // An existing password teacher, with one class: the account plus the
@@ -125,7 +125,7 @@ beforeEach(async () => {
 async function passwordTeacher(email, { verified = false } = {}) {
   const { user } = await auth.createUserWithEmailAndPassword(email, PW);
   await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`teachers/${user.uid}`).set({
-    email, inviteCode: 'HISTROCK', displayName: 'Ms ' + email[0], createdAt: new Date(), classCodes: ['CLS' + email[0].toUpperCase() + '1'],
+    email, inviteCode: 'TESTCODE1', displayName: 'Ms ' + email[0], createdAt: new Date(), classCodes: ['CLS' + email[0].toUpperCase() + '1'],
   }));
   if (verified) await rest(`/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`, 'POST', { localId: user.uid, emailVerified: true });
   await auth.signOut();
@@ -242,7 +242,7 @@ test('gmail, "Google only" choice is remembered (rules allow the authProvider up
   assert.equal((await call(api.signInTeacherWithGoogle, '')).result.passwordLost, true);
   await new Promise(res => api.keepGoogleOnly(res));
   assert.equal((await teacherDoc(uid)).authProvider, 'google');
-  assert.equal((await teacherDoc(uid)).inviteCode, 'HISTROCK');
+  assert.equal((await teacherDoc(uid)).inviteCode, 'TESTCODE1');
   await auth.signOut();
   pickGoogle('g-k', email, { trusted: true });
   assert.equal((await call(api.signInTeacherWithGoogle, '')).result.passwordLost, false);
@@ -284,7 +284,7 @@ test('dashboard link picks a Google account that is another teacher: refused, no
   const uid = await passwordTeacher(pwEmail);
   pickGoogle('g-q', gEmail, { trusted: true });
   const other = (await call(api.signInTeacherWithGoogle, '')).result.uid;
-  assert.ifError((await call(api.finishTeacherGoogleSignup, 'HISTROCK')).err);
+  assert.ifError((await call(api.finishTeacherGoogleSignup, 'TESTCODE1')).err);
   await auth.signOut();
 
   assert.ifError((await call(api.loginTeacher, pwEmail, PW)).err);
@@ -300,7 +300,7 @@ test('brand-new Google teacher still signs up normally, and is never flagged as 
   pickGoogle('g-n', 'new@district.org', { trusted: true });
   const first = await call(api.signInTeacherWithGoogle, '');
   assert.equal(first.err.code, 'invite-required');
-  const done = await call(api.finishTeacherGoogleSignup, 'HISTROCK');
+  const done = await call(api.finishTeacherGoogleSignup, 'TESTCODE1');
   assert.ifError(done.err);
   assert.equal((await teacherDoc(done.result.uid)).authProvider, 'google');
   await auth.signOut();
@@ -312,11 +312,11 @@ test('brand-new Google teacher still signs up normally, and is never flagged as 
 
 test('Teacher Sign Up with a checked code: first-time Google creates the teacher account with no second prompt', { skip }, async () => {
   pickGoogle('g-s', 'signup@district.org', { trusted: true });
-  const r = await call(api.signInTeacherWithGoogle, 'HISTROCK');
+  const r = await call(api.signInTeacherWithGoogle, 'TESTCODE1');
   assert.ifError(r.err);
   assert.equal(r.result.existing, false);
   const doc = await teacherDoc(r.result.uid);
-  assert.equal(doc.inviteCode, 'HISTROCK');
+  assert.equal(doc.inviteCode, 'TESTCODE1');
   assert.equal(doc.authProvider, 'google');
 });
 
@@ -326,7 +326,7 @@ test('Teacher Sign Up code refused by the create rule: still signed in, fallback
   assert.equal(r.err.code, 'invite-invalid');
   assert.equal(auth.currentUser.uid, r.result.uid, 'session kept');
   assert.equal(await teacherDoc(r.result.uid), null);
-  const done = await call(api.finishTeacherGoogleSignup, 'HISTROCK');
+  const done = await call(api.finishTeacherGoogleSignup, 'TESTCODE1');
   assert.ifError(done.err);
-  assert.equal((await teacherDoc(r.result.uid)).inviteCode, 'HISTROCK');
+  assert.equal((await teacherDoc(r.result.uid)).inviteCode, 'TESTCODE1');
 });

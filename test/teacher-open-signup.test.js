@@ -102,7 +102,7 @@ beforeEach(async () => {
   await rest(`/emulator/v1/projects/${PROJECT}/accounts`, 'DELETE');
   await testEnv.clearFirestore();
   await setRules(RULES);
-  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc('invites/HISTROCK').set({ active: true }));
+  await testEnv.withSecurityRulesDisabled(c => c.firestore().doc('invites/TESTCODE1').set({ active: true }));
 });
 
 async function guest() {
@@ -250,9 +250,9 @@ test('site deployed before the rules (invite still required): stops at invite-re
   assert.equal(auth.currentUser.uid, guestUid, 'account kept (upgraded), nothing orphaned');
   assert.equal(auth.currentUser.isAnonymous, false);
   assert.equal(await docOf(`teachers/${guestUid}`), null);
-  const done = await call(api.finishTeacherSetup, 'histrock');
+  const done = await call(api.finishTeacherSetup, 'testcode1');
   assert.ifError(done.err);
-  assert.equal((await docOf(`teachers/${guestUid}`)).inviteCode, 'HISTROCK');
+  assert.equal((await docOf(`teachers/${guestUid}`)).inviteCode, 'TESTCODE1');
   assert.deepEqual((await docOf(`players/${guestUid}`)).progress, GUEST_PROGRESS, 'progress still carried');
 });
 
@@ -261,11 +261,11 @@ test('an existing invite-code teacher (legacy, unverified email) still logs in a
   const { user } = await auth.createUserWithEmailAndPassword('legacy@school.org', PW);
   // Their doc predates the verified-email rule: it already exists, so seed it.
   await testEnv.withSecurityRulesDisabled(c => c.firestore().doc(`teachers/${user.uid}`).set({
-    email: 'legacy@school.org', inviteCode: 'HISTROCK', displayName: 'Ms L', createdAt: new Date(),
+    email: 'legacy@school.org', inviteCode: 'TESTCODE1', displayName: 'Ms L', createdAt: new Date(),
   }));
   // …and editing it (display name, class codes) still works without verification.
   await firebase.firestore().doc(`teachers/${user.uid}`).set({ displayName: 'Ms Legacy' }, { merge: true });
-  assert.equal((await docOf(`teachers/${user.uid}`)).inviteCode, 'HISTROCK');
+  assert.equal((await docOf(`teachers/${user.uid}`)).inviteCode, 'TESTCODE1');
   assert.equal((await call(api.checkTeacherVerification)).result.existing, true, 'never asked to verify');
   await auth.signOut();
   const login = await call(api.loginTeacher, 'legacy@school.org', PW);

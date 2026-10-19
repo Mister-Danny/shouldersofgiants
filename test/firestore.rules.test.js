@@ -397,20 +397,20 @@ test('student passphrase: written by the student, readable by their teacher only
 
 test('invites: unreadable and unwritable from every client (only the /teachers create rule checks them)', async () => {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
-    await ctx.firestore().doc('invites/HISTROCK').set({ active: true, label: 'x' });
+    await ctx.firestore().doc('invites/TESTCODE1').set({ active: true, label: 'x' });
   });
   const asGuest = testEnv.authenticatedContext('anon-guest').firestore();
   const asTeacher = testEnv.authenticatedContext('t-inv', { email_verified: true, firebase: { sign_in_provider: 'password' } }).firestore();
   const signedOut = testEnv.unauthenticatedContext().firestore();
   for (const db of [asGuest, asTeacher, signedOut]) {
-    await assertFails(db.doc('invites/HISTROCK').get());
+    await assertFails(db.doc('invites/TESTCODE1').get());
     await assertFails(db.doc('invites/NOPE1234').get(), 'a missing code is denied too, not "doesn\'t exist"');
     await assertFails(db.collection('invites').get());
     await assertFails(db.doc('invites/NEWCODE1').set({ active: true }));
-    await assertFails(db.doc('invites/HISTROCK').update({ active: false }));
+    await assertFails(db.doc('invites/TESTCODE1').update({ active: false }));
   }
   // …while the create rule's own get() still honours a live code.
-  await assertSucceeds(asTeacher.doc('teachers/t-inv').set({ email: 'i@x.org', inviteCode: 'HISTROCK', createdAt: new Date() }));
+  await assertSucceeds(asTeacher.doc('teachers/t-inv').set({ email: 'i@x.org', inviteCode: 'TESTCODE1', createdAt: new Date() }));
 });
 
 test('notices: a player can read only their own, cannot list, and nobody can write', async () => {
@@ -458,18 +458,18 @@ test('teacher creation needs a verified email: unverified email accounts and stu
   const student = testEnv.authenticatedContext('kid7', { email: 'kid7@sog.invalid', email_verified: false, firebase: { sign_in_provider: 'password' } }).firestore();
   await assertFails(student.doc('teachers/kid7').set(doc));
   // Even with a live invite code.
-  await seed(async (db) => { await db.doc('invites/HISTROCK').set({ active: true }); });
-  await assertFails(asProvider('tUnver2', 'password', false).doc('teachers/tUnver2').set({ ...doc, inviteCode: 'HISTROCK' }));
+  await seed(async (db) => { await db.doc('invites/TESTCODE1').set({ active: true }); });
+  await assertFails(asProvider('tUnver2', 'password', false).doc('teachers/tUnver2').set({ ...doc, inviteCode: 'TESTCODE1' }));
   await assertSucceeds(asProvider('tVer', 'password', true).doc('teachers/tVer').set(doc), 'verified: allowed');
 });
 
 test('open signup: a non-empty invite code must still be a live invite', async () => {
   await seed(async (db) => {
-    await db.doc('invites/HISTROCK').set({ active: true });
+    await db.doc('invites/TESTCODE1').set({ active: true });
     await db.doc('invites/OLDCODE1').set({ active: false });
   });
   const base = { email: 'b@school.org', displayName: 'B', createdAt: new Date() };
-  await assertSucceeds(asProvider('t1', 'password').doc('teachers/t1').set({ ...base, inviteCode: 'HISTROCK' }));
+  await assertSucceeds(asProvider('t1', 'password').doc('teachers/t1').set({ ...base, inviteCode: 'TESTCODE1' }));
   await assertFails(asProvider('t2', 'password').doc('teachers/t2').set({ ...base, inviteCode: 'OLDCODE1' }));
   await assertFails(asProvider('t3', 'password').doc('teachers/t3').set({ ...base, inviteCode: 'NOSUCH12' }));
 });
@@ -482,7 +482,7 @@ test('devTools is console-only: never set at create, never changed by the teache
   const tc = asProvider('tc', 'password');
   await assertSucceeds(tc.doc('teachers/tc').set({ displayName: 'Ms C', classCodes: ['AB12CD'] }, { merge: true }));
   await assertFails(tc.doc('teachers/tc').set({ devTools: true }, { merge: true }));
-  await assertFails(tc.doc('teachers/tc').set({ inviteCode: 'HISTROCK' }, { merge: true }), 'invite code stays pinned');
+  await assertFails(tc.doc('teachers/tc').set({ inviteCode: 'TESTCODE1' }, { merge: true }), 'invite code stays pinned');
   // A console-granted flag survives the teacher's own edits but can't be removed by them.
   await seed(async (db) => { await db.doc('teachers/tc').set({ devTools: true }, { merge: true }); });
   await assertSucceeds(tc.doc('teachers/tc').set({ displayName: 'Ms C2' }, { merge: true }));
