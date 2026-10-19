@@ -60,10 +60,10 @@ window.SOG_QUESTION_DATA = {
 
     { region: 'ancient', format: 'mc',
       q: "Around what time did early humans learn to make and control fire?",
-      options: ["500,000 years ago",
-               "8,000 years ago",
-               "2,000 years ago",
-               "100 years ago"],
+      options: ["Hundreds of thousands of years ago",
+               "About 8,000 years ago",
+               "About 2,000 years ago",
+               "About 100 years ago"],
       correct: 0 },
 
     { region: 'ancient', format: 'mc',
@@ -100,10 +100,10 @@ window.SOG_QUESTION_DATA = {
 
     { region: 'ancient', format: 'mc',
       q: "Around what year did people begin the practice of agriculture?",
-      options: ["8000 B.C.",
-               "500,000 B.C.",
-               "2340 B.C.",
-               "539 B.C."],
+      options: ["8000 BCE",
+               "500,000 BCE",
+               "2340 BCE",
+               "539 BCE"],
       correct: 0 },
 
     { region: 'ancient', format: 'mc',
@@ -244,7 +244,7 @@ window.SOG_QUESTION_DATA = {
       correct: 0 },
 
     { region: 'ancient', format: 'mc',
-      q: "Most historians believe the first civilization arose around 3300 B.C. in what region?",
+      q: "Most historians believe the first civilization arose around 3300 BCE in what region?",
       options: ["Sumer",
                "Egypt",
                "Babylon",
@@ -324,7 +324,7 @@ window.SOG_QUESTION_DATA = {
       correct: 0 },
 
     { region: 'ancient', format: 'mc',
-      q: "Around 2340 B.C., who conquered Mesopotamia to create the world's first empire?",
+      q: "Around 2340 BCE, who conquered Mesopotamia to create the world's first empire?",
       options: ["Sargon of Akkad",
                "Hammurabi",
                "Nebuchadnezzar",
@@ -504,7 +504,7 @@ window.SOG_QUESTION_DATA = {
 
     /* egypt: Unification & Government */
     { id: 'EGY-019', region: 'egypt', difficulty: 1, format: 'mc',
-      q: "Around 3100 B.C., which king united Upper and Lower Egypt?",
+      q: "Around 3100 BCE, which king united Upper and Lower Egypt?",
       options: ["Narmer",
                "Khufu",
                "Ahmose",
@@ -520,8 +520,8 @@ window.SOG_QUESTION_DATA = {
       correct: 0 },
 
     { id: 'EGY-021', region: 'egypt', difficulty: 2, format: 'mc',
-      q: "What did Narmer's double crown symbolize?",
-      options: ["A united kingdom of Upper and Lower Egypt",
+      q: "Narmer is shown wearing the crowns of both Upper and Lower Egypt. What did this symbolize?",
+      options: ["Uniting the two lands of Upper and Lower Egypt",
                "Rule over both the living and the dead",
                "Victory over the Hyksos",
                "An alliance with Nubia"],
@@ -676,7 +676,7 @@ window.SOG_QUESTION_DATA = {
 
     { id: 'EGY-048', region: 'egypt', difficulty: 2, format: 'mc',
       q: "What made the Rosetta Stone so valuable to scholars?",
-      options: ["It carried the same message in three languages, including Greek",
+      options: ["It carried the same message in three scripts (two languages), including Greek",
                "It was the oldest object ever found in Egypt",
                "It listed all 31 Egyptian dynasties",
                "It was made of solid gold"],
@@ -733,7 +733,7 @@ window.SOG_QUESTION_DATA = {
       correct: 0 },
 
     { id: 'EGY-058', region: 'egypt', difficulty: 2, format: 'mc',
-      q: "What brought the Middle Kingdom to an end around 1670 B.C.?",
+      q: "What brought the Middle Kingdom to an end around 1670 BCE?",
       options: ["An invasion by the Hyksos, along with plotting nobles",
                "A century of failed Nile floods",
                "The Assyrian conquest",
@@ -852,7 +852,7 @@ window.SOG_QUESTION_DATA = {
 
     /* kush: Egyptian Rule */
     { id: 'KSH-008', region: 'kush', difficulty: 3, format: 'mc',
-      q: "Why did Egypt send an army to conquer Kush around 1500 B.C.?",
+      q: "Why did Egypt send an army to conquer Kush around 1500 BCE?",
       options: ["Egypt's rulers feared that a wealthy Kush would grow strong enough to attack",
                "Kush had already invaded the Nile delta",
                "Egypt needed Kushite iron weapons",
@@ -877,7 +877,7 @@ window.SOG_QUESTION_DATA = {
       correct: 0 },
 
     { id: 'KSH-011', region: 'kush', difficulty: 2, format: 'mc',
-      q: "Which Kushite king took advantage of Egypt's weak pharaohs and conquered Upper Egypt around 751 B.C.?",
+      q: "Which Kushite king took advantage of Egypt's weak pharaohs and conquered Upper Egypt around 751 BCE?",
       options: ["Piankhi",
                "Kashta",
                "Shabaka",
