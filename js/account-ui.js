@@ -487,7 +487,8 @@ window.SogAccountUI = (function () {
      text) in an overlay ABOVE the sign-up modal, so nothing typed is lost and
      closing it lands back on the form. Delegated (_privacyLinkWired) because
      the modal body is re-rendered on every step. */
-  var _PRIVACY_LINE = '<div class="account-privacy-line">Teacher accounts are for adults. ' +
+  var _PRIVACY_LINE = '<div class="account-privacy-line">By signing up, you agree to the ' +
+    '<a href="/terms/" target="_blank" rel="noopener">Terms</a>. ' +
     '<a href="#" class="account-privacy-link">Privacy &amp; account deletion</a> &middot; ' +
     '<a href="/teachers/" target="_blank" rel="noopener">For teachers</a></div>';
 
