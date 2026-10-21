@@ -475,6 +475,13 @@ window.SogAccountUI = (function () {
      blocked; if it is anyway, _stepPopupBlocked says exactly what to do. */
   var _teacherPrefill = { email: '', adult: false };
 
+  /* The one sign-up checkbox: adult (18+) AND, for classroom use, the school's
+     permission (or the parent's own). Schools stand in for parental consent
+     for under-13 students in school use (COPPA), so this is the teacher
+     confirming that. js/account.js records it on the teacher doc as
+     adultConfirmed + schoolAuthConfirmed with CONSENT_VERSION. */
+  var _AUTH_LABEL = 'I’m 18+ and have my school’s permission to use this with students (or I’m their parent)';
+
   /* Under the 18+ checkbox on both teacher sign-up forms. The link opens the
      About screen's Privacy section (#about-privacy, the single copy of that
      text) in an overlay ABOVE the sign-up modal, so nothing typed is lost and
@@ -533,7 +540,7 @@ window.SogAccountUI = (function () {
       'GET A FREE CLASS LINK',
       '<p>One step. Students join with a link and pick a game name — no student emails.</p>' +
       '<label class="account-flow-checkbox-row account-adult-row">' +
-        '<input type="checkbox" id="af-adult"' + (_teacherPrefill.adult ? ' checked' : '') + '> I’m a teacher or an adult (18+)' +
+        '<input type="checkbox" id="af-adult"' + (_teacherPrefill.adult ? ' checked' : '') + '> ' + _AUTH_LABEL +
       '</label>' + _PRIVACY_LINE +
       '<button class="btn-snes account-google-btn" id="af-open-google">CONTINUE WITH GOOGLE</button>' +
       '<p class="account-flow-or">or with email</p>' +
@@ -550,7 +557,7 @@ window.SogAccountUI = (function () {
       _teacherPrefill.adult = adult.checked;
       _teacherPrefill.email = email.value.trim();
       if (adult.checked) return false;
-      _stepTeacherOpen('Please tick “I’m a teacher or an adult (18+)” first.');
+      _stepTeacherOpen('Please tick the box above first.');
       return true;
     };
     _byId('af-open-google').addEventListener('click', function () {
@@ -811,7 +818,7 @@ window.SogAccountUI = (function () {
       'ONE MORE STEP',
       '<p>Signed in as <strong>' + _escapeHtml(who) + '</strong>. There’s no teacher account for it here yet.</p>' +
       '<label class="account-flow-checkbox-row account-adult-row">' +
-        '<input type="checkbox" id="af-google-adult"' + (info.adult ? ' checked' : '') + '> I’m a teacher or an adult (18+)' +
+        '<input type="checkbox" id="af-google-adult"' + (info.adult ? ' checked' : '') + '> ' + _AUTH_LABEL +
       '</label>' + _PRIVACY_LINE +
       (info.needInvite
         ? '<input type="text" id="af-google-invite" class="account-flow-input" maxlength="12" ' +
@@ -838,7 +845,7 @@ window.SogAccountUI = (function () {
     });
     function submit() {
       var adult = _byId('af-google-adult');
-      if (!adult.checked) { _stepGoogleInvite(info, 'Please tick “I’m a teacher or an adult (18+)” first.'); return; }
+      if (!adult.checked) { _stepGoogleInvite(info, 'Please tick the box above first.'); return; }
       var codeEl = _byId('af-google-invite');
       var code = codeEl ? codeEl.value : '';
       var next = Object.assign({}, info, { adult: true });

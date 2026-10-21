@@ -166,6 +166,8 @@ test('email: guest upgraded in place, verification email sent, teacher doc waits
   assert.equal(t.inviteCode, '');
   assert.equal(t.src, 'newsletter-oct');
   assert.equal(t.adultConfirmed, true);
+  assert.equal(t.schoolAuthConfirmed, true);
+  assert.equal(typeof t.consentVersion, 'string');
   assert.equal(t.authProvider, 'password');
   assert.equal(t.displayName, '', 'no name invented from the email');
   assert.equal('devTools' in t, false);

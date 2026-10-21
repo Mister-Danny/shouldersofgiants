@@ -47,6 +47,7 @@ window.SogAccount = (function () {
   var OPTIONS_PER_ROLL = 5;             // credential-card "SUMMON" reveal count
   var LINK_TIMEOUT_MS  = 15000;         // linkWithCredential should never hang the "Creating…" step silently
   var WRITE_TIMEOUT_MS = 15000;         // same for the /players/{uid} write
+  var CONSENT_VERSION = '2026-10-20'; // bump when the sign-up checkbox wording changes (js/account-ui.js _AUTH_LABEL)
 
   // Must match js/auth.js's own PROGRESS_OWNER_UID_KEY exactly — that file
   // stamps this on every anonymous bootstrap/restore; this file both reads
@@ -651,7 +652,9 @@ window.SogAccount = (function () {
       // never the email, which must not appear in game UI on a projector.
       displayName:    name,
       authProvider:   _signup.provider || 'google',   // see passwordLost in _finishTeacherGoogle
-      adultConfirmed: true,                            // the signup checkbox ("I'm a teacher or an adult (18+)")
+      adultConfirmed: true,                            // the signup checkbox: 18+ …
+      schoolAuthConfirmed: true,                       // … and the school's (or parent's) permission for student use
+      consentVersion: CONSENT_VERSION,                 // which wording they agreed to (js/account-ui.js _AUTH_LABEL)
       createdAt:      firebase.firestore.FieldValue.serverTimestamp()
     };
     if (_signup.src) teacherData.src = _signup.src;
